@@ -2,6 +2,23 @@
 
 Format: newest first. Versions follow `0.<phase>.<patch>` until 1.0.0.
 
+## 1.4.0 (2026-10-28): smoothness
+
+- **Watch her write.** When she writes a file, a live card shows the path and the code growing line
+  by line instead of "thinking" until the whole file arrives; several files at once each get a card,
+  and the activity bar shows which file she's writing. Works with model services that send tool calls
+  in pieces (OpenAI, Anthropic, ChatGPT plan, xAI, OpenRouter and other OpenAI-compatible APIs).
+  Ollama sends each call whole, so with Ollama models the card appears when the file is done, as
+  before. Nothing runs until the call is complete; approvals and safety are unchanged.
+- **Her portrait talks with 9 mouth shapes** (closed, m/b/p, f/v, teeth, half, ah, wide, round, ee)
+  read from the sound of her voice, smoothed so it doesn't flicker; calmer with reduced motion.
+  Custom looks with frames get them too.
+- **Server logs:** `SARA_LOG_FORMAT=json` for one JSON object per line, `SARA_LOG_LEVEL`, and an
+  extra log file that Sara rotates herself (`SARA_LOG_FILE`, `SARA_LOG_MAX_MB`, `SARA_LOG_KEEP`).
+  Secrets are now hidden on the console too, not only in the file; message contents are never
+  logged. See INSTALL.md → Logs.
+- New README coding screenshot.
+
 ## 1.3.0 (2026-10-28): smarter checks in every language
 
 - **Her honesty check now works in Spanish, French, German, Portuguese and Italian**, not just

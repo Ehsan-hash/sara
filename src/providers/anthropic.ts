@@ -142,6 +142,8 @@ export class AnthropicProvider implements Provider {
         case 'content_block_start':
           if (json.content_block?.type === 'tool_use') {
             tools.set(json.index ?? 0, { id: json.content_block.id ?? '', name: json.content_block.name ?? '', json: '' });
+            // Phase 63: the app shows the call from its first moment.
+            yield { type: 'tool_delta', index: json.index ?? 0, ...(json.content_block.id ? { id: json.content_block.id } : {}), name: json.content_block.name ?? '', args: '' };
           }
           break;
         case 'content_block_delta':
@@ -150,6 +152,7 @@ export class AnthropicProvider implements Provider {
             const t = tools.get(json.index ?? 0);
             if (t) {
               t.json += json.delta.partial_json ?? '';
+              if (json.delta.partial_json) yield { type: 'tool_delta', index: json.index ?? 0, ...(t.id ? { id: t.id } : {}), name: t.name, args: json.delta.partial_json };
               // Long arguments (a big file): report progress every ~2 KB.
               if (t.json.length - (t.reported ?? 0) >= 2048) {
                 t.reported = t.json.length;

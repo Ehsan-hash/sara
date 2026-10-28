@@ -98,7 +98,7 @@ export class ChatGptProvider implements Provider {
     if (!res.body) throw new ProviderError('ChatGPT returned no body');
     let completed = false;
     for await (const ev of sseEvents(res.body)) {
-      let j: { type?: string; delta?: string; item?: { type?: string; call_id?: string; name?: string; arguments?: string }; response?: { error?: { code?: string; message?: string }; incomplete_details?: { reason?: string }; usage?: { input_tokens?: number; output_tokens?: number; input_tokens_details?: { cached_tokens?: number } } } };
+      let j: { type?: string; delta?: string; output_index?: number; item?: { type?: string; call_id?: string; name?: string; arguments?: string }; response?: { error?: { code?: string; message?: string }; incomplete_details?: { reason?: string }; usage?: { input_tokens?: number; output_tokens?: number; input_tokens_details?: { cached_tokens?: number } } } };
       try {
         j = JSON.parse(ev.data);
       } catch {
@@ -107,6 +107,13 @@ export class ChatGptProvider implements Provider {
       switch (j.type) {
         case 'response.output_text.delta':
           if (j.delta) yield { type: 'text', text: j.delta };
+          break;
+        // Phase 63: a function call taking shape (shown in the app; run only once it's done).
+        case 'response.output_item.added':
+          if (j.item?.type === 'function_call') yield { type: 'tool_delta', index: j.output_index ?? 0, ...(j.item.call_id ? { id: j.item.call_id } : {}), name: j.item.name ?? '', args: j.item.arguments ?? '' };
+          break;
+        case 'response.function_call_arguments.delta':
+          if (j.delta) yield { type: 'tool_delta', index: j.output_index ?? 0, args: j.delta };
           break;
         case 'response.output_item.done':
           if (j.item?.type === 'function_call') yield { type: 'tool_call', call: { id: j.item.call_id ?? '', name: j.item.name ?? '', arguments: parseToolArguments(j.item.arguments ?? '') } };

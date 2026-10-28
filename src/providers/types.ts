@@ -47,6 +47,11 @@ export type StreamEvent =
   | { type: 'tool_call'; call: ToolCall }
   /** A long tool call is still arriving (e.g. a big file being written): how much so far. */
   | { type: 'tool_progress'; name: string; chars: number; path?: string }
+  /**
+   * Phase 63: a raw piece of a tool call's arguments as the model writes it (`args` is only the
+   * new part). `index` tells parallel calls apart. Only for showing: never run anything from it.
+   */
+  | { type: 'tool_delta'; index: number; id?: string; name?: string; args: string }
   /** Phase 52: the token counts the provider reported for this call (once, at the end). */
   | { type: 'usage'; input: number; output: number; cached?: number };
 

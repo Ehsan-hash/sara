@@ -3,7 +3,13 @@
 // mouth follows the loudness of the audio (Web Audio analyser on the voice element). Phase 11: three
 // mouth shapes ("ah", rounded "oo", wide "ee") picked from the sound's brightness, and a gentle
 // head sway with small nods while talking (none when the system asks for reduced motion).
+// Phase 63: nine mouth shapes (closed, pressed m/b/p, f/v, teeth s/z, half-open, "ah", wide "aa",
+// rounded "oo", "ee") chosen from the sound (web/mouth.js) and drawn from the same frames: each shape
+// is a frame, sometimes squeezed or stretched around the mouth (no new pictures needed, so custom
+// looks get them too). Reduced motion: only closed / half / open, changing slowly.
 // No external libraries; a custom uploaded picture just breathes and glows (no frames for it).
+
+import { MouthShaper, soundFeatures } from './mouth.js';
 
 const EXPRESSIONS = ['default', 'happy', 'caring', 'sleepy', 'hurt', 'playful'];
 const all = new Set();
@@ -101,6 +107,24 @@ async function findRegions(base, blink, talk) {
   return regionCache.get(key);
 }
 
+/**
+ * How each mouth shape is drawn: which frame, and how it is squeezed or stretched around the mouth
+ * (sx/sy scale; oy moves the anchor: -1 = the upper lip, so a squeeze lifts the lower lip; grow = how far
+ * around the mouth the frame shows, smaller for reshaped frames).
+ * A frame a custom look doesn't have falls back to the "ah" frame, reshaped (FRAME_STANDIN).
+ */
+const DRAW = {
+  mbp: { frame: 'base', sx: 1.03, sy: 0.92, grow: 1.25 },
+  fv: { frame: 'half', sy: 0.78, oy: -1, grow: 1.35 },
+  teeth: { frame: 'ee', sy: 0.82, grow: 1.4 },
+  half: { frame: 'half' },
+  round: { frame: 'oo', sx: 0.95, sy: 1.03, grow: 1.5 },
+  ee: { frame: 'ee' },
+  open: { frame: 'talk' },
+  wide: { frame: 'talk', sx: 1.03, sy: 1.08, oy: -1, grow: 1.4 },
+};
+const FRAME_STANDIN = { half: { sy: 0.6, oy: -1 }, oo: { sx: 0.86 }, ee: { sx: 1.08, sy: 0.8 } };
+
 function maskTo(img, r, grow) {
   const m = `radial-gradient(ellipse ${(r.rx * grow).toFixed(1)}% ${(r.ry * grow * 1.15).toFixed(1)}% at ${r.x.toFixed(1)}% ${r.y.toFixed(1)}%, #000 60%, transparent 100%)`;
   img.style.maskImage = m;
@@ -118,22 +142,33 @@ export class Presence {
     this.head.className = 'presence-head';
     this.base = this.#layer('presence-base');
     this.blinkImg = this.#layer('presence-blink');
-    this.halfImg = this.#layer('presence-half');
-    this.talkImg = this.#layer('presence-talk');
-    this.ooImg = this.#layer('presence-oo');
-    this.eeImg = this.#layer('presence-ee');
-    // A custom look made before these shapes existed has no "oo"/"ee"/half-open: then only "ah" is used.
-    for (const img of [this.halfImg, this.ooImg, this.eeImg]) {
-      img.addEventListener('error', () => (img.dataset.missing = '1'));
+    // Phase 63: one layer per mouth shape (see DRAW).
+    this.mouths = {};
+    // Each shape is a frame inside a box: the box is masked to the mouth (and fades), the frame
+    // inside is squeezed or stretched, so the reshaping never drags the chin or nose along.
+    const boxes = [];
+    for (const shape of Object.keys(DRAW)) {
+      const box = document.createElement('div');
+      box.className = `presence-mouth presence-${shape}`;
+      const img = this.#layer('');
+      img.dataset.shape = shape;
+      box.append(img);
+      boxes.push(box);
+      // A custom look made before a frame existed doesn't have it: the "ah" frame stands in, reshaped.
+      img.addEventListener('error', () => {
+        if (img.dataset.frame === 'talk' || img.dataset.frame === 'base' || !img.getAttribute('src')) return void (img.dataset.missing = '1');
+        img.dataset.standin = img.dataset.frame;
+        this.#shapeLayer(img, 'talk');
+      });
       img.addEventListener('load', () => delete img.dataset.missing);
+      this.mouths[shape] = img;
     }
-    this.head.append(this.base, this.blinkImg, this.halfImg, this.talkImg, this.ooImg, this.eeImg);
+    this.head.append(this.base, this.blinkImg, ...boxes);
     root.append(this.ring, this.head);
-    this.oo = 0;
-    this.ee = 0;
     this.nod = 0;
     this.phase = Math.random() * 10;
     this.still = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
+    this.shaper = new MouthShaper({ calm: this.still });
     this.expression = null;
     this.custom = null;
     this.level = 0;
@@ -160,25 +195,49 @@ export class Presence {
     this.custom = customUrl;
     if (customUrl) {
       this.base.src = customUrl;
-      for (const img of [this.blinkImg, this.halfImg, this.talkImg, this.ooImg, this.eeImg]) img.removeAttribute('src');
+      for (const img of [this.blinkImg, ...Object.values(this.mouths)]) img.removeAttribute('src');
     } else {
       this.base.src = (x === 'default' ? '/sara-portrait.jpg' : `/sara/portrait-${x}.jpg`) + version;
       this.blinkImg.src = `/sara/frames/${x}-blink.jpg${version}`;
-      this.halfImg.src = `/sara/frames/${x}-half.jpg${version}`;
-      this.talkImg.src = `/sara/frames/${x}-talk.jpg${version}`;
-      this.ooImg.src = `/sara/frames/${x}-oo.jpg${version}`;
-      this.eeImg.src = `/sara/frames/${x}-ee.jpg${version}`;
+      this.regions = null;
+      for (const img of Object.values(this.mouths)) {
+        delete img.dataset.standin;
+        delete img.dataset.missing;
+        this.#shapeLayer(img, DRAW[img.dataset.shape].frame);
+      }
       const want = this.base.src;
-      findRegions(this.base.src, this.blinkImg.src, this.talkImg.src).then((r) => {
+      findRegions(this.base.src, this.blinkImg.src, this.#frameSrc('talk')).then((r) => {
         if (this.base.src !== want) return;
         this.regions = r;
         maskTo(this.blinkImg, r.eyes, 1.6);
-        maskTo(this.halfImg, r.mouth, 1.7);
-        maskTo(this.talkImg, r.mouth, 1.7);
-        maskTo(this.ooImg, r.mouth, 1.7);
-        maskTo(this.eeImg, r.mouth, 1.7);
+        for (const img of Object.values(this.mouths)) {
+          maskTo(img.parentElement, r.mouth, DRAW[img.dataset.shape].grow ?? 1.7);
+          this.#shapeLayer(img);
+        }
       });
     }
+  }
+
+  #frameSrc(frame) {
+    if (frame === 'base') return this.base.src;
+    return `/sara/frames/${this.expression}-${frame}.jpg${version}`;
+  }
+
+  /** Points a mouth layer at its frame (or a stand-in) and squeezes/stretches it around the mouth. */
+  #shapeLayer(img, frame) {
+    if (frame) {
+      img.dataset.frame = frame;
+      const src = this.#frameSrc(frame);
+      if (img.getAttribute('src') !== src) img.src = src;
+    }
+    const d = DRAW[img.dataset.shape];
+    const fix = img.dataset.standin ? FRAME_STANDIN[img.dataset.standin] ?? {} : {};
+    const sx = (d.sx ?? 1) * (fix.sx ?? 1);
+    const sy = (d.sy ?? 1) * (fix.sy ?? 1);
+    const oy = fix.oy ?? d.oy ?? 0;
+    const r = this.regions?.mouth ?? FALLBACK.mouth;
+    img.style.transformOrigin = `${r.x.toFixed(1)}% ${(r.y + oy * r.ry * 0.45).toFixed(1)}%`;
+    img.style.transform = sx === 1 && sy === 1 ? '' : `scale(${sx}, ${sy})`;
   }
 
   /** Listens to an <audio> element (Sara's voice). Needs a user gesture first (e.g. starting a call). */
@@ -237,7 +296,8 @@ export class Presence {
     this.mouth = 0;
     this.level = 0;
     this.lastFrame = undefined;
-    for (const img of [this.halfImg, this.talkImg, this.ooImg, this.eeImg, this.blinkImg]) img.style.opacity = '0';
+    this.shaper = new MouthShaper({ calm: this.still });
+    for (const el of [...Object.values(this.mouths).map((img) => img.parentElement), this.blinkImg]) el.style.opacity = '0';
     this.head.style.transform = '';
   }
 
@@ -250,26 +310,13 @@ export class Presence {
     const now = performance.now();
     const dt = Math.min(0.1, ((now - (this.lastFrame ?? now)) || 16) / 1000);
     this.lastFrame = now;
-    let level = 0;
-    let bright = -1;
+    let sound = { level: 0, centroid: -1, low: 0, high: 0 };
     if (this.analyser) {
       this.analyser.getByteTimeDomainData(this.data);
-      let sum = 0;
-      for (const v of this.data) sum += (v - 128) * (v - 128);
-      level = Math.sqrt(sum / this.data.length) / 128;
-      // Brightness of the voice (spectral centroid, 250 Hz – 4 kHz): low = rounded "oo", high = "ee".
-      if (this.freq && level > 0.03) {
-        this.analyser.getByteFrequencyData(this.freq);
-        const hz = this.analyser.context.sampleRate / this.analyser.fftSize;
-        let w = 0;
-        let m = 0;
-        for (let i = Math.ceil(250 / hz); i < Math.min(this.freq.length, 4000 / hz); i++) {
-          w += this.freq[i];
-          m += this.freq[i] * i * hz;
-        }
-        if (w > 0) bright = m / w;
-      }
+      if (this.freq) this.analyser.getByteFrequencyData(this.freq);
+      sound = soundFeatures(this.data, this.freq, this.analyser.context.sampleRate / this.analyser.fftSize);
     }
+    const level = sound.level;
     // Envelope: opens over ~3 frames, closes over ~8, so syllables blend instead of snapping.
     this.level += (level - this.level) * Math.min(1, (level > this.level ? 20 : 7) * dt);
     const talking = this.level > 0.03;
@@ -282,22 +329,16 @@ export class Presence {
       const step = (target - (this.mouth ?? 0)) * Math.min(1, 14 * dt);
       const max = 5 * dt;
       this.mouth = (this.mouth ?? 0) + Math.max(-max, Math.min(max, step));
-      // Mouth shape: blend toward "oo" for dark sounds and "ee" for bright ones (eased, ~100 ms).
-      const ooT = bright < 0 || this.ooImg.dataset.missing ? 0 : Math.min(1, Math.max(0, (1150 - bright) / 450));
-      const eeT = bright < 0 || this.eeImg.dataset.missing ? 0 : Math.min(1, Math.max(0, (bright - 1650) / 650));
-      const k = Math.min(1, 10 * dt);
-      this.oo += (ooT - this.oo) * k;
-      this.ee += (eeT - this.ee) * k;
-      const show = (img, v) => (img.style.opacity = v < 0.02 ? '0' : v.toFixed(3));
-      // Opening goes closed → half-open → open (each a real picture), instead of fading one open
-      // mouth over a closed one (which shows both faintly halfway).
-      if (this.halfImg.dataset.missing || !this.halfImg.src) show(this.talkImg, this.mouth);
-      else {
-        show(this.halfImg, Math.min(1, this.mouth / 0.4));
-        show(this.talkImg, Math.min(1, Math.max(0, (this.mouth - 0.35) / 0.5)));
+      // Phase 63: the shape (web/mouth.js), held and blended so it never flickers. Open shapes show
+      // as far as the jaw is open; the near-closed ones (m/b/p, f/v, teeth) as long as she's talking.
+      const w = this.shaper.update(sound, dt);
+      const open = Math.min(1, this.mouth / 0.3);
+      const voiced = Math.min(1, this.level / 0.05);
+      for (const [shape, img] of Object.entries(this.mouths)) {
+        const v = img.dataset.missing ? 0 : w[shape] * (shape === 'mbp' || shape === 'fv' || shape === 'teeth' ? voiced : open);
+        img.parentElement.style.opacity = v < 0.02 ? '0' : v.toFixed(3);
       }
-      show(this.ooImg, this.mouth * this.oo);
-      show(this.eeImg, this.mouth * this.ee);
+      this.root.dataset.mouth = this.shaper.shape;
     }
     // Head: a slow, slightly irregular sway, and small nods with the voice.
     if (!this.still) {

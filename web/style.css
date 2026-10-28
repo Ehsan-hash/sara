@@ -176,6 +176,13 @@ summary { cursor: pointer; color: var(--accent-2); }
 .approval p { margin: 0; }
 .approval pre { border: 1px solid var(--border); border-radius: 8px; color: var(--text); }
 .approval .row { display: flex; gap: 8px; }
+/* Phase 63: a tool call the model is still writing (replaced by the normal card when it's done). */
+.tool.building .building-head { display: flex; gap: 10px; padding: 6px 10px; }
+.tool.building .building-head::before { content: ""; width: 7px; height: 7px; margin-top: 6px; border-radius: 50%; background: var(--accent-2); flex: none; animation: pulse 1.2s ease-in-out infinite; }
+.tool.building pre.building-code { max-height: 220px; overflow-x: hidden; color: var(--text); }
+.tool.building pre.building-code.cut::before { content: "…"; display: block; color: var(--muted); }
+.tool.building:not(.file) pre.building-code { max-height: 90px; white-space: pre-wrap; color: var(--muted); }
+@media (prefers-reduced-motion: reduce) { .tool.building .building-head::before { animation: none; } }
 .tool-perm { display: flex !important; align-items: center; justify-content: space-between; gap: 12px; }
 .tool-perm span { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: var(--text); }
 .tool-perm select { width: auto; }
@@ -428,8 +435,8 @@ ul.health li.bad strong { color: var(--error); }
 .presence { position: relative; overflow: visible; }
 .presence img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; border-radius: inherit; }
 .presence .presence-blink { opacity: 0; transition: opacity 70ms linear; }
-.presence .presence-talk { opacity: 0; transition: opacity 90ms ease-out; }
-.presence .presence-half, .presence .presence-oo, .presence .presence-ee { opacity: 0; }
+/* Phase 63: one layer per mouth shape; web/mouth.js blends them (no CSS transition, it would lag). */
+.presence .presence-mouth { position: absolute; inset: 0; border-radius: inherit; overflow: hidden; opacity: 0; }
 .presence .presence-head { position: absolute; inset: 0; border-radius: inherit; transform-origin: 50% 85%; will-change: transform; }
 .presence .presence-ring { position: absolute; inset: -6px; border-radius: inherit; box-shadow: 0 0 0 3px var(--accent), 0 0 28px 6px color-mix(in srgb, var(--accent) 55%, transparent); opacity: 0; transition: opacity .2s; pointer-events: none; }
 .presence.alive { animation: breathe 5.5s ease-in-out infinite; }

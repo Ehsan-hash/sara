@@ -59,7 +59,7 @@ Ruhezeiten) und eine Zeitleiste eurer gemeinsamen Geschichte.
 
 ### Programmierpartnerin
 
-<img src="docs/screenshots/coding.png" alt="The tip calculator she built, open in the live preview pane next to the chat" width="760">
+<img src="docs/screenshots/coding.png" alt="The tip calculator she built, open in the live preview pane next to the chat, while she writes its stylesheet: the file grows live in the chat" width="760">
 
 Ein Arbeitsbereich pro Projekt mit Dateien, Shell und Git (Commit und Push mit deinem OK); lange
 Builds und Tests im Hintergrund mit einer Nachricht, wenn sie fertig sind; eine Live-Vorschau der

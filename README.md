@@ -52,7 +52,7 @@ back, texting first if you want (with quiet hours), and a timeline of your story
 
 ### Coding partner
 
-<img src="docs/screenshots/coding.png" alt="The tip calculator she built, open in the live preview pane next to the chat" width="760">
+<img src="docs/screenshots/coding.png" alt="The tip calculator she built, open in the live preview pane next to the chat, while she writes its stylesheet: the file grows live in the chat" width="760">
 
 A workspace per project with files, shell and git (commit and push with your OK); long builds and
 tests in the background with a ping when done; a live preview of the app she's building, which she

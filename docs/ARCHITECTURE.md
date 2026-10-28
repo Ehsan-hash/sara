@@ -43,7 +43,8 @@ Every module in `src/`, roughly in the order they were added (the phase is noted
 | `src/auth.ts` | Owner token (hash only stored), HMAC-signed session cookies, login rate limit; `setupPending` until the first owner sign-in (Phase 59) |
 | `src/claim.ts` | Phase 59: first sign-in in the browser on a new server (`/api/claim`): setup code from the log or, behind a login proxy (`SARA_SETUP=browser`, Umbrel), one click; time window, private addresses only, one-time; see THREAT_MODEL.md |
 | `src/chat.ts` | One turn: disclosure → safety checks → provider routing → agent loop (stream → tool calls → approvals → results → repeat) → persist |
-| `src/providers/*` | Adapter interface; OpenAI-compatible and Anthropic adapters; presets |
+| `src/providers/*` | Adapter interface; OpenAI-compatible and Anthropic adapters; presets. Phase 63: adapters also pass on each raw piece of a tool call's arguments (`tool_delta`: OpenAI `tool_calls[].function.arguments`, Anthropic `input_json_delta`, ChatGPT `function_call_arguments.delta`); the CLI agents keep sending whole calls |
+| `src/tool-stream.ts` | Phase 63: reads half-written tool-call JSON (`partialArgs`) and turns the pieces into throttled (≤10/s), size-capped, redacted `tool_building` events (path, the newest lines of a file being written, a line count). Shown only: nothing runs until the provider sends the finished call, which goes through approvals and safety as before |
 | `src/model-catalog.ts` | Phase 56: always-current model lists per provider (`<data>/model-lists.json`): first seen / New, retired only after two good checks, daily background check + Refresh, the whole Ollama Cloud catalog through an Ollama daemon with pull-before-first-use, retired models in use switched to a replacement with a notice |
 | `src/vault.ts` | AES-256-GCM secret store with per-install master key |
 | `src/settings.ts` | Non-secret owner settings (JSON) |
@@ -107,6 +108,7 @@ Every module in `src/`, roughly in the order they were added (the phase is noted
 | `deploy/sara`, `deploy/lib-access.sh` | Server admin command on Linux (`sara status/doctor/update/check-updates/backup/backups/restore/logs/reset-token/access/uninstall`) and the "how you reach her" setup (Tailscale, Caddy) |
 | `src/voice.ts` | Voice engines: local sherpa-onnx CLI (Parakeet/Kokoro/Piper), OpenAI-compatible, ElevenLabs; speech text cleanup |
 | `web/voice.js`, `web/recorder-worklet.js` | Browser mic capture (16 kHz WAV), sentence-by-sentence speaker, call mode (VAD + interruption) |
+| `web/presence.js`, `web/mouth.js` | Her animated portrait (frames per expression: blink, half, talk, oo, ee). Phase 63: `mouth.js` picks one of nine mouth shapes (closed, m/b/p, f/v, teeth, half, ah, wide, round, ee) from the voice's loudness and spectrum (brightness, hum and hiss shares), held and blended so it never flickers (closed/half/open only with reduced motion); `presence.js` draws each from the same frames, squeezed or stretched inside a mouth-masked box (a look missing a frame uses the reshaped "ah" frame) |
 | `deploy/install-voice.sh` | Optional local voice bundle (pinned, checksummed) into `/opt/sara-voice` |
 | `test/sandbox.linux.test.ts` | Sandbox nasty fixture (Linux + bubblewrap; run on the server) |
 | `web/` | Dependency-free web client |
@@ -159,7 +161,7 @@ Every module in `src/`, roughly in the order they were added (the phase is noted
 | `src/bridges/rules.ts`, `src/bridges/pace.ts` | Phase 43: shared bridge rules (who is an owner, when she answers in a group); typing-pace replies |
 | `src/apns.ts` | Phase 17: iPhone notifications through Apple's push service, sent by the server itself |
 | `src/webauthn.ts`, `src/totp.ts`, `src/qr.ts` | Phase 24: passkeys and two-step sign-in written with Node's crypto only; the QR code maker for pairing |
-| `src/log.ts`, `src/health-history.ts`, `src/doctor.ts`, `src/status.ts` | Phase 30/46: her own log file (secrets hidden, rotated), health history, `sara doctor` and `sara status` |
+| `src/log.ts`, `src/health-history.ts`, `src/doctor.ts`, `src/status.ts` | Phase 30/46: her own log file (secrets hidden, rotated), health history, `sara doctor` and `sara status`. Phase 63: `SARA_LOG_FORMAT` (text/json lines on the console), `SARA_LOG_LEVEL`, an extra in-process rotated file (`SARA_LOG_FILE`, `SARA_LOG_MAX_MB`, `SARA_LOG_KEEP`); the Redactor and token rule apply to every line everywhere |
 | `src/offsite.ts`, `src/offsite-run.ts` | Phase 8: encrypted off-server backup copies (folder or S3-compatible storage) |
 | `src/updates.ts` | Phase 23/46: updates from Settings (the root updater on Linux; the release page on Windows and macOS) |
 | `src/reports.ts` | Phase 19: "Report this reply": kept on the server and, unless unticked, sent to the developer's report inbox |

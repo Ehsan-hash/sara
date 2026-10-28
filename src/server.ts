@@ -803,6 +803,11 @@ export function createSaraServer(opts: ServerOptions): Server {
         turn.status = 'writing';
         turn.detail = ev.path ? `writing ${ev.path} (${Math.round(ev.chars / 1024)} KB so far)` : `preparing ${ev.name} (${Math.round(ev.chars / 1024)} KB so far)`;
         break;
+      case 'tool_building':
+        // Phase 63: a call still being written (another device watching sees what).
+        turn.status = 'writing';
+        turn.detail = ev.path ? `writing ${ev.path}${ev.lines ? ` (${ev.lines} lines so far)` : ''}` : `preparing ${ev.name}`;
+        break;
       case 'approval':
         turn.status = 'waiting';
         turn.detail = ev.summary;

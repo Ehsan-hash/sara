@@ -63,6 +63,8 @@ interface PartialCall {
   args: string;
   /** Length at the last progress report. */
   reported?: number;
+  /** Phase 63: its first piece went out as a `tool_delta`. */
+  announced?: boolean;
 }
 
 export class OpenAICompatibleProvider implements Provider {
@@ -149,6 +151,13 @@ export class OpenAICompatibleProvider implements Provider {
         if (tc.function?.name) cur.name += tc.function.name;
         if (tc.function?.arguments) cur.args += tc.function.arguments;
         calls.set(index, cur);
+        // Phase 63: the piece itself, so the app can show the call taking shape.
+        // (Pieces that came before the name are sent with the first one that has it.)
+        if (cur.name) {
+          const piece = cur.announced ? (tc.function?.arguments ?? '') : cur.args;
+          cur.announced = true;
+          yield { type: 'tool_delta', index, ...(cur.id ? { id: cur.id } : {}), name: cur.name, args: piece };
+        }
         // Long arguments (a big file): report progress every ~2 KB so the app isn't silent.
         if (cur.name && cur.args.length - (cur.reported ?? 0) >= 2048) {
           cur.reported = cur.args.length;

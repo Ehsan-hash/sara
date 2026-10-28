@@ -58,7 +58,7 @@ uma linha do tempo da história de vocês.
 
 ### Parceira de programação
 
-<img src="docs/screenshots/coding.png" alt="The tip calculator she built, open in the live preview pane next to the chat" width="760">
+<img src="docs/screenshots/coding.png" alt="The tip calculator she built, open in the live preview pane next to the chat, while she writes its stylesheet: the file grows live in the chat" width="760">
 
 Um espaço de trabalho por projeto com arquivos, terminal e git (commit e push com o seu OK); builds
 e testes longos em segundo plano, com um aviso quando terminam; uma prévia ao vivo do app que ela

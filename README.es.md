@@ -58,7 +58,7 @@ de silencio) y una línea de tiempo de vuestra historia juntos.
 
 ### Compañera de programación
 
-<img src="docs/screenshots/coding.png" alt="The tip calculator she built, open in the live preview pane next to the chat" width="760">
+<img src="docs/screenshots/coding.png" alt="The tip calculator she built, open in the live preview pane next to the chat, while she writes its stylesheet: the file grows live in the chat" width="760">
 
 Un espacio de trabajo por proyecto con archivos, terminal y git (commit y push con tu permiso);
 compilaciones y pruebas largas en segundo plano, con un aviso al terminar; una vista previa en

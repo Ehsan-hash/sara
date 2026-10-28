@@ -76,6 +76,10 @@ merged, however good the feature.
 1. Open an issue first for anything bigger than a small fix, so we can agree on the approach.
 2. Make a branch, keep the change focused, and add or update tests and docs.
 3. Run `npm run check` and `node scripts/public-export.ts --check-only`. Both must pass.
+   If some tests also fail on an untouched `main` on your computer (a different Node version or
+   operating system, a sandbox without network), that's not your change: open the pull request
+   anyway, list those tests, and say they fail without your change too. The full suite is run on
+   Linux with Node 24 before anything is merged.
 4. Open a pull request and fill in the template. Screenshots help for anything visible.
 
 Evals that need a real model (`scripts/eval-*.ts`, `scripts/bench-coding.ts`) are not part of

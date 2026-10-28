@@ -71,7 +71,7 @@ import { createScrapbookTool, Scrapbook } from './scrapbook.ts';
 import { migrateProviderLabels, SettingsStore, StartupError } from './settings.ts';
 import { Store } from './store.ts';
 import { Vault } from './vault.ts';
-import { guard, Log } from './log.ts';
+import { guard, Log, logOptions } from './log.ts';
 import { ModelCatalog } from './model-catalog.ts';
 import { createProvider } from './providers/registry.ts';
 import { HealthHistory } from './health-history.ts';
@@ -251,7 +251,8 @@ if (sandbox.mode === 'user') {
 }
 const redactor = new Redactor(() => vaultSecretValues(vault.values()));
 // Phase 30: a copy of everything Sara prints goes to <data>/logs/sara.log (secrets hidden).
-const log = new Log(dataDir, (s) => redactor.redact(s));
+// Phase 63: SARA_LOG_FORMAT / SARA_LOG_LEVEL / SARA_LOG_FILE (+ _MAX_MB, _KEEP), see src/log.ts.
+const log = new Log(dataDir, (s) => redactor.redact(s), undefined, logOptions());
 log.captureConsole();
 const isDemo = process.env.SARA_DEMO === '1';
 // The demo lets anyone in without signing in, so it must never run on a real owner's data.

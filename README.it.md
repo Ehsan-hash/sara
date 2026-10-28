@@ -58,7 +58,7 @@ orari di silenzio) e una linea del tempo della vostra storia insieme.
 
 ### Compagna di programmazione
 
-<img src="docs/screenshots/coding.png" alt="The tip calculator she built, open in the live preview pane next to the chat" width="760">
+<img src="docs/screenshots/coding.png" alt="The tip calculator she built, open in the live preview pane next to the chat, while she writes its stylesheet: the file grows live in the chat" width="760">
 
 Uno spazio di lavoro per progetto con file, terminale e git (commit e push con il tuo OK); build e
 test lunghi in background, con un avviso quando finiscono; un'anteprima dal vivo dell'app che sta

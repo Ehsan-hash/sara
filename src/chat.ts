@@ -39,6 +39,7 @@ import { projectSection } from './projectknow.ts';
 import { librarySection } from './library/use.ts';
 import { recipesSection } from './recipes.ts';
 import { CHANGES_FILES } from './codemap/tools.ts';
+import { ToolStreamTracker, type ToolBuilding } from './tool-stream.ts';
 import { docsNote, type SharedDoc } from './library/intake.ts';
 import { importedName, type Conversation, type StoredMessage, type Store } from './store.ts';
 import type { ApprovalBroker, ToolRegistry } from './tools/registry.ts';
@@ -196,6 +197,8 @@ export type ChatEvent =
   | { type: 'tool_call'; id: string; name: string; summary: string; args: Record<string, unknown> }
   /** A long tool call is still being written by the model (chars so far). */
   | { type: 'tool_progress'; name: string; chars: number; path?: string }
+  /** Phase 63: a tool call the model is still writing (throttled; see src/tool-stream.ts). Shown only, never run. */
+  | ToolBuilding
   | { type: 'approval'; approvalId: string; id: string; name: string; summary: string; args: Record<string, unknown> }
   /** An approved tool has started running. */
   | { type: 'tool_running'; id: string; name: string; summary: string }
@@ -923,6 +926,8 @@ export async function* runTurn(app: AppContext, conversationId: string, userText
 
     let reply = '';
     const calls: ToolCall[] = [];
+    // Phase 63: calls being written show up live (throttled, secrets hidden, same minors pattern check as her words).
+    const building = new ToolStreamTracker({ redact: (x) => app.redactor.redact(x), withhold: (x) => Boolean(minorSexualMatch(x)) });
     try {
       const p = provider;
       const m = model;
@@ -933,10 +938,14 @@ export async function* runTurn(app: AppContext, conversationId: string, userText
           yield { type: 'token', text: ev.text };
         } else if (ev.type === 'tool_progress') {
           yield { type: 'tool_progress', name: ev.name, chars: ev.chars, ...(ev.path ? { path: ev.path } : {}) };
+        } else if (ev.type === 'tool_delta') {
+          const shown = building.add(ev);
+          if (shown) yield shown;
         } else if (ev.type === 'tool_call') {
           calls.push(ev.call);
         }
       }
+      yield* building.flush();
     } catch (err) {
       if (tools.length && !reply && !calls.length && isToolsUnsupported(err)) {
         noTools.add(`${provider.config.id}/${model}`);

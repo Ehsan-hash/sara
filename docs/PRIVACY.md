@@ -54,6 +54,18 @@ separate modes you won't run unless you set them up on purpose.
 | Docker (optional) | Docker Hub (the `node:24-slim` image, and `ollama/ollama` with the Ollama profile) |
 | Tailscale (optional) | Tailscale, if you install it |
 
+## Her logs
+
+Her logs stay on your server (`<data>/logs/sara.log`, the system journal or `docker logs`, and a
+`SARA_LOG_FILE` if you set one); nothing sends them anywhere. They record what the server does
+(started, which model failed and why, backups, updates, connections), never what you say: your
+messages, her replies, memories, documents, photos and tool output are not logged. Every line, on
+the console and in every log file, first has your saved keys and anything shaped like a key or token
+replaced. The owner token and setup code are printed once at start-up straight to the console (the journal or
+`docker logs` on a server), never into her log files. Before
+you share a log (for a bug report), still read it: it can name your server's folders, models and
+connected services. See [INSTALL.md → Logs](INSTALL.md#logs).
+
 ## Turning everything off at once
 
 To run Sara with nothing leaving the server: a local model (Ollama on the same machine or your own

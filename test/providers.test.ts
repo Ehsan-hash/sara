@@ -132,7 +132,7 @@ test('OpenAI-compatible: assembles streamed tool calls and sends tools + tool hi
     }),
   );
   assert.equal(out.text, 'Checking.');
-  assert.deepEqual(out.calls, [
+  assert.deepEqual(out.calls.filter((e) => e.type !== 'tool_delta'), [
     { type: 'tool_call', call: { id: 'call_1', name: 'read_file', arguments: { path: 'a.txt' } } },
     { type: 'tool_call', call: { id: 'call_2', name: 'list_dir', arguments: {} } },
   ]);
@@ -164,7 +164,7 @@ test('Anthropic: streams tool_use blocks and converts tool results to user tool_
     }),
   );
   assert.equal(out.text, 'On it.');
-  assert.deepEqual(out.calls, [{ type: 'tool_call', call: { id: 'toolu_1', name: 'shell', arguments: { command: 'ls -la' } } }]);
+  assert.deepEqual(out.calls.filter((e) => e.type !== 'tool_delta'), [{ type: 'tool_call', call: { id: 'toolu_1', name: 'shell', arguments: { command: 'ls -la' } } }]);
   const body = JSON.parse(seen.at(-1)!.body);
   assert.deepEqual(body.tools[0], { name: 'read_file', description: 'read', input_schema: tools[0].parameters });
   assert.deepEqual(body.messages[1].content, [

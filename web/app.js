@@ -1298,6 +1298,12 @@ async function runStream(path, body, userBubble) {
   let reply = null;
   let pendingTyped = null;
   const toolBlocks = new Map();
+  // Phase 63: tool calls still being written, by their place in the model step.
+  const building = new Map();
+  const dropBuilding = () => {
+    for (const card of building.values()) card.remove();
+    building.clear();
+  };
   const controller = new AbortController();
   state.streaming = controller;
   setComposerBusy(true);
@@ -1335,12 +1341,32 @@ async function runStream(path, body, userBubble) {
           else append(n);
         } else if (ev.type === 'tool_progress') {
           setActivity('writing', ev.path ? `writing ${ev.path} · ${Math.round(ev.chars / 1024)} KB so far` : `preparing ${ev.name} · ${Math.round(ev.chars / 1024)} KB so far`);
+        } else if (ev.type === 'tool_building') {
+          // Phase 63: the call as the model writes it; the finished call replaces it.
+          if (voiceOn()) speaker.flush();
+          endReply();
+          const box = $('#messages');
+          const near = box.scrollHeight - box.scrollTop - box.clientHeight < 120;
+          let card = building.get(ev.index);
+          if (!card) {
+            card = buildingCard();
+            building.set(ev.index, card);
+            append(card);
+          }
+          fillBuildingCard(card, ev);
+          if (near) box.scrollTop = box.scrollHeight;
+          setActivity('writing', ev.path || ev.name);
         } else if (ev.type === 'tool_call') {
           if (voiceOn()) speaker.flush();
           endReply();
           const block = toolBlock({ name: ev.name, summary: ev.summary, status: 'running' });
           toolBlocks.set(ev.id, block);
-          append(block);
+          // The live card of this call (same id, else the oldest one) makes way for the real one.
+          const live = [...building.entries()].find(([, c]) => c.dataset.call === ev.id) ?? [...building.entries()].sort((x, y) => x[0] - y[0])[0];
+          if (live) {
+            building.delete(live[0]);
+            live[1].replaceWith(block);
+          } else append(block);
           setActivity('running', ev.summary);
         } else if (ev.type === 'approval') {
           const card = approvalCard(ev, toolBlocks.get(ev.id));
@@ -1406,13 +1432,17 @@ async function runStream(path, body, userBubble) {
           endReply();
           append(bubble('assistant', '', 'photo', undefined, [`/api/uploads/${ev.id}`]));
         } else if (ev.type === 'error') {
+          dropBuilding();
           append(bubble('error', ev.message));
         }
+        // A call that was dropped (a fallback, a blocked reply) never stays half-written.
+        if (ev.type === 'notice' || ev.type === 'replace' || ev.type === 'claim_check' || ev.type === 'done') dropBuilding();
       }
     }
   } catch (err) {
     if (err.name !== 'AbortError') append(bubble('error', err.message));
   } finally {
+    dropBuilding();
     if (voiceOn()) speaker.flush();
     // A typed reply finishes typing before the chat is redrawn (stopping shows it all at once).
     if (!controller.signal.aborted) await Promise.all([typedOut(reply), typedOut(pendingTyped)]);
@@ -1561,6 +1591,35 @@ function toolBlock({ name, summary, status, output, ms, snapshotId }) {
   d.append(sum, pre);
   fillToolBlock(d, { status, output, ms, snapshotId });
   return d;
+}
+
+/** Phase 63: the live card of a tool call being written (file path, the text growing, a line count). */
+function buildingCard() {
+  const d = document.createElement('div');
+  d.className = 'tool running building';
+  const head = el('div', 'building-head');
+  head.append(el('span', 'tool-summary'), el('span', 'tool-status'));
+  const pre = el('pre', 'building-code');
+  pre.append(document.createElement('code'));
+  d.append(head, pre);
+  return d;
+}
+
+function fillBuildingCard(d, ev) {
+  if (ev.id) d.dataset.call = ev.id;
+  d.classList.toggle('file', ev.kind === 'file');
+  const plain = Boolean(ev.name && !CODE_TOOL.test(ev.name));
+  const label = d.querySelector('.tool-summary');
+  label.classList.toggle('plain', plain);
+  // A file shows its path (the tool's name until the path can be read); other tools their name.
+  label.textContent = `${plain ? `${TOOL_ICON[ev.name] ?? '⚙️'} ` : ''}${ev.kind === 'file' && ev.path ? ev.path : ev.name}`;
+  label.title = `${ev.name}${ev.path ? ` ${ev.path}` : ''}`;
+  d.querySelector('.tool-status').textContent = ev.kind === 'file' && ev.lines ? (ev.lines === 1 ? t('writing… 1 line') : t('writing… {n} lines', { n: ev.lines })) : t('writing…');
+  const pre = d.querySelector('.building-code');
+  pre.hidden = !ev.preview;
+  pre.classList.toggle('cut', Boolean(ev.cut));
+  pre.firstChild.textContent = ev.preview;
+  pre.scrollTop = pre.scrollHeight;
 }
 
 function addUndo(d, snapshotId) {
