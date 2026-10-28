@@ -21,6 +21,25 @@
     <form id="login-form" class="card">
       <img class="login-portrait" src="/sara-avatar.jpg" alt="">
       <h1>Sara</h1>
+      <!-- Phase 59: first sign-in in the browser on a new server (src/claim.ts) -->
+      <div id="claim" class="claim" hidden>
+        <h2>Welcome! Set up Sara</h2>
+        <p id="claim-intro" class="muted">This server has no owner yet. Set it up now to become its owner.</p>
+        <label id="claim-code-row" class="claim-code-row">Setup code <button type="button" class="tip" data-tip="An 8-character code Sara prints in her log at every start, next to the words &quot;setup code&quot;. It only works on a new server, for a while after she starts, from this machine or your home network.">?</button>
+          <input id="claim-code" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="12"></label>
+        <details id="claim-help" class="login-help muted small">
+          <summary>Where do I find the setup code?</summary>
+          <p>Open the app's log in your server's dashboard and look for &quot;setup code&quot;:</p>
+          <p>CasaOS or ZimaOS: the app's menu (⋮), then Logs.</p>
+          <p>TrueNAS: Apps, then Sara, then the logs icon under Workloads.</p>
+          <p>Unraid: Docker, click Sara's icon, then Logs.</p>
+          <p>Docker: <code>docker compose logs sara</code></p>
+          <p>The code is new at every start. If it timed out, restart the app and use the new one.</p>
+        </details>
+        <button id="claim-go" type="button">Set up Sara</button>
+        <p id="claim-closed" class="muted small" hidden></p>
+        <p class="or-divider"><span>Or sign in with the owner token</span></p>
+      </div>
       <p class="muted" id="login-intro">Enter the owner token printed in the server log on first start.</p>
       <input id="login-token" type="password" autocomplete="current-password" placeholder="Owner token" required>
       <input id="login-code" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="6-digit code from your authenticator app" hidden>
@@ -44,6 +63,18 @@
       </div>
       <p id="login-error" class="error" role="alert"></p>
     </form>
+  </section>
+
+  <!-- Phase 59: the owner token after setting up in the browser, shown once -->
+  <section id="claimed" class="screen card-screen" hidden>
+    <div class="card">
+      <h1>You're Sara's owner</h1>
+      <p>This is your owner token. It is shown only now: save it in your password manager. You need it to sign in on another device, or here again after signing out.</p>
+      <code id="claimed-token" class="claimed-token" data-raw></code>
+      <button id="claimed-copy" type="button" class="ghost small">Copy</button>
+      <label class="claimed-saved"><input id="claimed-saved" type="checkbox"> I saved it <button type="button" class="tip" data-tip="Sara keeps only a fingerprint of the token, so nobody can show it to you again. Lost it? Make a new one in Settings → Devices and sign-in while you're signed in, or with sara reset-token on the server.">?</button></label>
+      <button id="claimed-done" type="button" disabled>Continue</button>
+    </div>
   </section>
 
   <!-- Required disclosure -->

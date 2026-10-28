@@ -88,6 +88,7 @@ async function boot() {
   }
   if (!session.authenticated) {
     offerPhoneApp(session);
+    showClaim(session.claim);
     return show('login');
   }
   const langChanged = await applyLanguage(session.language, session.appLanguage);
@@ -191,6 +192,61 @@ $('#login-passkey').addEventListener('click', async () => {
   } catch (err) {
     $('#login-error').textContent = err.name === 'NotAllowedError' ? t('Passkey sign-in was cancelled.') : err.message;
   }
+});
+
+// ---------- Phase 59: first sign-in in the browser (a new server, src/claim.ts) ----------
+function showClaim(c) {
+  const box = $('#claim');
+  box.hidden = !c || (!c.open && !c.closed);
+  if (box.hidden) {
+    if (box.dataset.shown) $('#login-intro').textContent = t('Enter the owner token printed in the server log on first start.');
+    delete box.dataset.shown;
+    return;
+  }
+  box.dataset.shown = '1';
+  const browser = c.mode === 'browser';
+  $('#claim-code-row').hidden = $('#claim-help').hidden = browser || !c.open;
+  $('#claim-go').hidden = !c.open;
+  $('#claim-intro').textContent = browser
+    ? t('This server has no owner yet. Your server already checked who you are, so one click makes you her owner.')
+    : t('This server has no owner yet. Enter the setup code from her log to become her owner.');
+  $('#claim-closed').hidden = c.open;
+  $('#claim-closed').textContent = c.closed === 'locked' ? t('Too many wrong setup codes. Restart Sara for a new code, or sign in with the owner token from her log.') : t('Setup in the browser has timed out. Restart Sara to open it again (with a new setup code), or sign in with the owner token from her log.');
+  $('#login-intro').textContent = t('Already have the owner token? Enter it here.');
+}
+async function claimServer() {
+  $('#login-error').textContent = '';
+  const code = $('#claim-code-row').hidden ? undefined : $('#claim-code').value.trim();
+  if (code === '') {
+    $('#login-error').textContent = t('Enter the setup code from her log.');
+    return $('#claim-code').focus();
+  }
+  try {
+    const { token } = await api('/claim', { method: 'POST', body: code ? { code } : {} });
+    $('#claim-code').value = '';
+    $('#claimed-token').textContent = token;
+    $('#claimed-saved').checked = false;
+    $('#claimed-done').disabled = true;
+    show('claimed');
+  } catch (err) {
+    $('#login-error').textContent = err.message;
+    // Setup may have closed meanwhile (timed out, too many codes): show why.
+    api('/claim').then((c) => c.open || showClaim(c.closed ? c : null), () => {});
+  }
+}
+$('#claim-go').addEventListener('click', claimServer);
+$('#claim-code').addEventListener('keydown', (e) => {
+  if (e.key !== 'Enter') return;
+  e.preventDefault();
+  claimServer();
+});
+$('#claimed-copy').addEventListener('click', () => copyText($('#claimed-token').textContent, $('#claimed-copy')));
+$('#claimed-saved').addEventListener('change', () => {
+  $('#claimed-done').disabled = !$('#claimed-saved').checked;
+});
+$('#claimed-done').addEventListener('click', async () => {
+  $('#claimed-token').textContent = '';
+  await boot();
 });
 
 $('#disclosure-accept').addEventListener('click', async () => {

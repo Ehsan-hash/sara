@@ -40,6 +40,12 @@ interface OwnerFile {
   passkeys?: StoredPasskey[];
   /** Phase 24: two-step sign-in (authenticator app). `pending` until the first code is confirmed. */
   totp?: { secret: string; enabledAt: string | null; lastCounter: number };
+  /**
+   * Phase 59: set on a brand-new server until the owner first signs in (or claims it in the
+   * browser, src/claim.ts). Owner files from before Phase 59, and every token reset, don't have it,
+   * so browser setup never reopens on a server that already has an owner.
+   */
+  setupPending?: true;
 }
 
 export interface DeviceView {
@@ -84,6 +90,7 @@ export class OwnerAuth {
   readonly #now: () => Date;
   /** Set only when a new token was generated during this process start. */
   readonly newToken: string | undefined;
+  #fresh = false;
 
   constructor(dataDir: string, now: () => Date = () => new Date()) {
     this.#path = join(dataDir, FILE);
@@ -99,8 +106,21 @@ export class OwnerAuth {
       const { owner, token } = OwnerAuth.#generate();
       this.#owner = owner;
       this.newToken = token;
+      this.#fresh = true;
       this.#save();
     }
+  }
+
+  /** Phase 59: a new server nobody has signed in to yet (browser setup may be open, src/claim.ts). */
+  get setupPending(): boolean {
+    return this.#owner.setupPending === true;
+  }
+
+  /** Phase 59: the owner signed in for the first time: browser setup closes for good. */
+  markSignedIn(): void {
+    if (!this.#owner.setupPending) return;
+    delete this.#owner.setupPending;
+    this.#save();
   }
 
   static #generate(): { owner: OwnerFile; token: string } {
@@ -109,6 +129,11 @@ export class OwnerAuth {
   }
 
   #save(): void {
+    if (this.#fresh) {
+      // Phase 59: only the very first owner file of a server waits for its owner (see setupPending).
+      this.#owner.setupPending = true;
+      this.#fresh = false;
+    }
     writeFileSync(this.#path, JSON.stringify(this.#owner, null, 2) + '\n', { mode: 0o600 });
   }
 

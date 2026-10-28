@@ -2,9 +2,15 @@
 # published multi-arch image for linux/amd64 + linux/arm64 at ghcr.io/farena-ai/sara).
 #
 # NODE_VERSION is the same pinned Node.js release as deploy/install.sh (test/packaging.test.ts
-# checks they match), so a container and a native install run the same runtime.
+# checks they match), so a container and a native install run the same runtime. NODE_DIGEST pins
+# that tag's multi-arch index (one digest for every platform; each platform pulls its own image
+# from it), so a rebuilt tag upstream can't change what we ship. Change both together; the
+# digest comes from: docker buildx imagetools inspect node:<version>-slim (the top "Digest:" line).
+# Multi-arch safe: Node comes from the base image and Sara has no native npm packages, so nothing
+# below downloads anything for one architecture only.
 ARG NODE_VERSION=24.22.1
-FROM node:${NODE_VERSION}-slim
+ARG NODE_DIGEST=sha256:55fb5f5a527ea2c5c4a95f963e48ef90aa38c7b346054fdc8ee9957a2b55d205
+FROM node:${NODE_VERSION}-slim@${NODE_DIGEST}
 
 ARG SARA_VERSION=dev
 LABEL org.opencontainers.image.title="Sara" \

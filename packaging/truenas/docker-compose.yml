@@ -1,10 +1,12 @@
 # Sara as a TrueNAS SCALE custom app (Phase 57), for TrueNAS 24.10 "Electric Eel" and newer (apps
 # run on Docker). Apps → Discover Apps → ⋮ → Install via YAML, name it "sara", paste this file.
 # Before installing, create a dataset for her data (for example tank/apps/sara) and change the
-# host path below to it.
+# host path below to it. First start: open http://<truenas address>:7860 within an hour and enter
+# the setup code from the app's logs (Apps → sara → Workloads → logs icon), or the owner token printed
+# there; restart the app for a new code.
 services:
   sara:
-    image: ghcr.io/farena-ai/sara:0.55.5
+    image: ghcr.io/farena-ai/sara:1.0.0
     restart: unless-stopped
     ports:
       - "7860:7860"

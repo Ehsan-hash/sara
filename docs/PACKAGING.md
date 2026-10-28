@@ -10,21 +10,37 @@ script below only builds or prints until a step is explicitly marked as publishi
 
 | Path | What |
 |---|---|
-| `Dockerfile` | the container image: Node.js pinned to the same release as `deploy/install.sh`, OCI labels, health check on `/api/health`, data volume `/data`, port 7860 |
-| `scripts/release-docker.sh` | builds the image with `docker buildx`; pushes `ghcr.io/farena-ai/sara:<version>` and `:latest` (linux/amd64 + linux/arm64) **only with `--push`** |
+| `Dockerfile` | the container image: Node.js pinned to the same release as `deploy/install.sh` and by that tag's multi-arch digest (`NODE_DIGEST`), OCI labels, health check on `/api/health`, data volume `/data`, port 7860; nothing in it is tied to one architecture |
+| `scripts/release-docker.sh` | builds the image with Docker buildx or Podman (`--engine`); `--all` builds linux/amd64 + linux/arm64 locally; pushes one multi-arch manifest `ghcr.io/farena-ai/sara:<version>` and `:latest` **only with `--push`** |
 | `scripts/release-assets.sh` | collects installers, source tarball and VS Code extension into `outputs/release/<version>/`, writes `SHA256SUMS` and `notes.md`, prints the `gh release create` command |
 | `scripts/update-packaging.ts` | fills version + checksums into the cask and winget manifests, and the image tag/version into the app templates |
 | `packaging/homebrew/` | Homebrew cask for the Mac DMG (tap `farena-ai/homebrew-tap`) |
 | `packaging/winget/` | winget manifests in `manifest/` (`BackstageCoding.Sara`, schema 1.10) |
 | `packaging/unraid/` | Unraid Community Applications template |
 | `packaging/casaos/` | CasaOS / ZimaOS app (compose + `x-casaos`) |
-| `packaging/umbrel/` | Umbrel app (`umbrel-app.yml` + compose) |
+| `packaging/umbrel/` | Umbrel app (`umbrel-app.yml` + compose + `data/.gitkeep`; browser setup behind Umbrel's login) |
 | `packaging/truenas/` | TrueNAS SCALE custom app (Install via YAML) |
 | `packaging/proxmox/` | Proxmox VE helper script (Debian 12 LXC + `get-sara.sh`) |
 
-Each `packaging/*/README.md` explains how to test and submit that one. `test/packaging.test.ts`
-checks they all agree on image name, port and version, and that the release scripts can't push by
-accident.
+Each `packaging/*/README.md` explains how to test and submit that one (exact PR target, fields,
+which checks run where). `test/packaging.test.ts` checks they all agree on image name, port and
+version, that browser setup without a code is only in the Umbrel template, and that the release
+scripts can't push by accident.
+
+Ready-to-push submission folders (gitignored, made from the files above; copy again after a change):
+
+| Folder | For |
+|---|---|
+| `outputs/umbrel/sara/` + `outputs/umbrel/pr-assets/` | the `sara/` folder for getumbrel/umbrel-apps; gallery `1.jpg`–`3.jpg` and icon for the PR description |
+| `outputs/casaos/Apps/Sara/` | the `Apps/Sara/` folder for IceWhaleTech/CasaOS-AppStore (compose, icon, thumbnail, screenshots) |
+| `outputs/unraid-templates/` | the repository farena-ai/unraid-templates (`ca_profile.xml`, `templates/sara.xml`, icon, screenshots) |
+| `outputs/hacs-sara/` | the repository farena-ai/hacs-sara (the Home Assistant integration with its `brand/` icons, `hacs.json`, README, info.md, LICENSE, tests) |
+| `outputs/brands/custom_integrations/sara/` | icons for home-assistant/brands (legacy route; HA 2026.3+ and HACS read `custom_components/sara/brand/`) |
+| `outputs/homebrew-tap/` | the repository farena-ai/homebrew-tap (`Casks/sara.rb`, README, LICENSE) |
+| `outputs/release/<v>/winget/…` and `…/homebrew/sara.rb` | written by `update-packaging.ts` |
+
+The gallery pictures are real screenshots of a throwaway server (example owner "Alex", a stand-in
+local model answering with fixed replies, no personal data), 1440×900.
 
 ## Release steps, in order
 
@@ -70,9 +86,16 @@ repository root on the dev PC (git-bash) unless a step says Mac.
    gh auth refresh -s write:packages
    gh auth token | docker login ghcr.io -u <github user> --password-stdin
    bash scripts/release-docker.sh                 # local build + try it first (port 7860)
+   bash scripts/release-docker.sh --all           # both architectures build (nothing pushed)
    bash scripts/release-docker.sh --push          # amd64 + arm64 → ghcr.io/farena-ai/sara:X.Y.Z and :latest
    docker buildx imagetools inspect ghcr.io/farena-ai/sara:X.Y.Z   # shows the digest
    ```
+
+   With Podman (for example on a Linux server without Docker; register QEMU for the other
+   architecture first: `podman run --privileged --rm docker.io/tonistiigi/binfmt --install arm64`): the same
+   with `--engine podman` and `podman login`; the digest is the top one of
+   `podman manifest inspect docker://ghcr.io/farena-ai/sara:X.Y.Z`. Both list linux/amd64 and
+   linux/arm64.
 
    First push only: on GitHub, *Packages → sara → Package settings*: make it **public** and link it
    to the `farena-ai/sara` repository.
@@ -92,13 +115,46 @@ repository root on the dev PC (git-bash) unless a step says Mac.
      `farena-ai/homebrew-tap`, `brew audit --cask --strict --online`, push.
    - **winget:** PR the folder `outputs/release/X.Y.Z/winget/manifests/b/BackstageCoding/Sara/X.Y.Z`
      to [microsoft/winget-pkgs](https://github.com/microsoft/winget-pkgs) (or `wingetcreate submit`).
-   - **Unraid:** publish the template and submit it at https://ca.unraid.net/submit/new (first
-     time); later releases need nothing (`:latest`).
-   - **CasaOS:** PR `Apps/Sara/` to IceWhaleTech/CasaOS-AppStore.
-   - **Umbrel:** PR `sara/` to getumbrel/umbrel-apps.
+   - **Unraid:** push `outputs/unraid-templates/` to farena-ai/unraid-templates and submit it at
+     https://ca.unraid.net/submit/new (first time); later releases need nothing (`:latest`).
+   - **CasaOS:** PR `outputs/casaos/Apps/Sara/` as `Apps/Sara/` to IceWhaleTech/CasaOS-AppStore.
+   - **Umbrel:** PR `outputs/umbrel/sara/` as `sara/` to getumbrel/umbrel-apps (multi-arch image
+     and browser setup needed, so from 1.1).
+   - **Home Assistant (HACS):** push `outputs/hacs-sara/` to farena-ai/hacs-sara and make a GitHub
+     Release; later, PR it into hacs/default (see `integrations/home-assistant/README.md`).
    - **TrueNAS:** the custom-app YAML needs no submission; the catalog is optional (see its README).
    - **Proxmox:** the script runs from the public repository; listing it in community-scripts is
      optional (see its README).
+
+## Home Assistant: HACS and brands
+
+`outputs/hacs-sara/` is the repository **farena-ai/hacs-sara** in the layout HACS requires
+(one integration under `custom_components/sara/`, `hacs.json` with `name` and the minimum Home
+Assistant version, README, MIT LICENSE). Brand icons now ship inside the integration
+(`custom_components/sara/brand/icon.png` 256×256 and `icon@2x.png` 512×512): Home Assistant 2026.3+
+shows them from there, and HACS's "brands" check looks there first. The
+home-assistant/brands repository calls its `custom_integrations/` folder legacy since then, so
+`outputs/brands/custom_integrations/sara/` is kept only in case a reviewer asks for it.
+
+Checked here: **hassfest** (Home Assistant's validator, its official container
+`ghcr.io/home-assistant/hassfest`, run with Podman on the Linux server against the folder):
+"Invalid integrations: 0" after moving the example URLs in the setup form into description
+placeholders (it rejected URLs in `strings.json`). The integration's own tests (pytest with
+`pytest-homeassistant-custom-component`) are in `tests/`.
+
+Publish (owner):
+
+1. Create the public repository `farena-ai/hacs-sara` (description, topics such as
+   `home-assistant`, `hacs`, `integration`, `ai`; issues on), push `outputs/hacs-sara/` to `main`.
+2. Make a GitHub Release (tag `v<manifest version>`, now `v0.2.0`). Users can then add it in HACS as a
+   custom repository right away.
+3. For the HACS default list: add the [HACS action](https://github.com/hacs/action) and
+   [hassfest action](https://github.com/home-assistant/actions#hassfest) workflows to *that*
+   repository (GitHub Actions: needs the maintainer's yes), let them pass, make a new
+   release, then PR the line `farena-ai/hacs-sara` (alphabetical) into the `integration` file of
+   [hacs/default](https://github.com/hacs/default) from a personal (not organization) fork, filling
+   in their PR template. Their bots then check brands, manifest, hacs.json, releases, license,
+   repository description/topics/issues.
 
 ## Notes
 
@@ -107,8 +163,19 @@ repository root on the dev PC (git-bash) unless a step says Mac.
   (keys, database). Every capability except six is dropped and `no-new-privileges` is set (in
   `docker-compose.yml` and every template). Running the container as a plain user works too, but
   then her commands can read her keys. TrueNAS's catalog and Umbrel reviewers may ask about this.
-- **Owner token in app stores:** the first owner token is printed in the container log. App-store
-  users read it from their platform's log view; Umbrel's store asks for browser-only setup, which
-  would need a change in Sara.
-- **Nothing works before the repository is public:** release URLs, raw template URLs and the icon
-  URL point at `github.com/farena-ai/sara`, which is private until 1.0.
+- **First sign-in in app stores (Phase 59):** a new server can be set up in the browser.
+  Umbrel's template uses `SARA_SETUP=browser` (one click, because Umbrel's login guards
+  `/api/claim`); every other template uses the default: the short setup code from the container
+  log, which CasaOS, TrueNAS and Unraid all show in their dashboard. Never set `SARA_SETUP=browser`
+  in a template without a login proxy. Threat analysis: [THREAT_MODEL.md](THREAT_MODEL.md).
+- **ARM64 (Phase 59):** the Dockerfile has nothing architecture-specific (Node comes from the
+  pinned multi-arch base image; Sara has no native npm packages). Built for real for linux/arm64 on
+  an x86_64 server with Podman 4.9 + QEMU (`tonistiigi/binfmt --install arm64`, removed
+  afterwards): `SARA_IMAGE=localhost/sara-p59 bash scripts/release-docker.sh --engine podman
+  --platform linux/arm64` (2 min 22 s). Run on port 7880 with the usual hardening flags:
+  `uname -m` = aarch64, `node -p process.arch` = arm64 (v24.22.1), `podman healthcheck run` healthy,
+  `/api/health` ok, the log showed the owner token and the setup code, and `/api/claim` worked
+  (wrong code 401, cross-origin 403, right code 200 + new token + signed-in cookie, again 404).
+  `--all` built one manifest list with linux/amd64 and linux/arm64/v8. Podman notes now in the
+  script: `--format docker` (OCI drops the HEALTHCHECK) and pulling the pinned base per platform
+  first (Podman 4.x otherwise fails the second platform with "image not known").

@@ -48,7 +48,11 @@ test('Dockerfile: pinned Node as deploy/install.sh, OCI labels, health check, da
   const pinned = /^NODE_VERSION=v([\d.]+)$/m.exec(read('deploy/install.sh'))?.[1];
   assert.ok(pinned, 'deploy/install.sh pins NODE_VERSION');
   assert.equal(/^ARG NODE_VERSION=([\d.]+)$/m.exec(df)?.[1], pinned, 'the image uses the same Node.js as the native installer');
-  assert.match(df, /^FROM node:\$\{NODE_VERSION\}-slim$/m);
+  // Phase 59: pinned by the tag's multi-arch index digest (one digest for amd64 and arm64).
+  assert.match(df, /^ARG NODE_DIGEST=sha256:[0-9a-f]{64}$/m);
+  assert.match(df, /^FROM node:\$\{NODE_VERSION\}-slim@\$\{NODE_DIGEST\}$/m);
+  const code = df.split(/\r?\n/).filter((l) => !/^\s*#/.test(l)).join('\n');
+  assert.doesNotMatch(code, /\b(amd64|x86_64|arm64|aarch64|x64)\b/, 'no Dockerfile instruction is tied to one architecture');
   assert.match(df, /org\.opencontainers\.image\.source="https:\/\/github\.com\/farena-ai\/sara"/);
   assert.match(df, /org\.opencontainers\.image\.licenses="MIT"/);
   assert.match(df, /org\.opencontainers\.image\.version="\$\{SARA_VERSION\}"/);
@@ -191,6 +195,19 @@ test('update-packaging fills versions and checksums from SHA256SUMS', () => {
   assert.equal(fillTemplates(withGet, { version: '1.0.3', date: '2027-03-02' }).proxmox.match(/^GET_SARA_SHA256="([^"]*)"$/m)?.[1], '', 'an old checksum never checks a new release');
 });
 
+test('Phase 59: browser setup without a code only behind Umbrel\'s login; other templates use the setup code', () => {
+  const uc = yaml(FILES.umbrelCompose);
+  const proxy = uc.services.app_proxy.environment;
+  assert.equal(uc.services.server.environment.SARA_SETUP, 'browser');
+  assert.notEqual(String(proxy.PROXY_AUTH_ADD ?? 'true'), 'false', "Umbrel's login stays on");
+  assert.ok(String(proxy.PROXY_AUTH_BLACKLIST).split(',').includes('/api/claim'), '/api/claim always needs the Umbrel login');
+  assert.ok(!String(proxy.PROXY_AUTH_WHITELIST).split(',').some((p) => p === '*' || p === '/*' || p === '/'), 'the web app is not whitelisted');
+  const ua = yaml(FILES.umbrelApp);
+  assert.deepEqual(ua.gallery, [], 'new Umbrel submissions leave gallery empty (Umbrel hosts the images)');
+  assert.equal(ua.releaseNotes, '');
+  for (const f of [FILES.casaos, FILES.truenas, 'packaging/unraid/sara.xml', 'docker-compose.yml']) assert.doesNotMatch(read(f), /SARA_SETUP\W+browser/, `${f} has no login proxy: setup code only`);
+});
+
 test('hardening L7: Umbrel uses the proxy-secret mode; the Proxmox script checks get-sara.sh, quotes its settings and never prints the token', () => {
   const uc = yaml(FILES.umbrelCompose);
   const env = uc.services.server.environment;
@@ -235,10 +252,14 @@ test('release scripts publish nothing unless asked (--push), and never create th
   assert.ok(start > 0 && elseAt > start && end > elseAt);
   lines.forEach((l, i) => {
     if (/^\s*#/.test(l) || /^\s*echo /.test(l)) return;
-    if (/\brun docker\b[^\n]*--push\b|docker push\b/.test(l)) assert.ok(i > start && i < elseAt, `line ${i + 1} pushes outside --push: ${l}`);
+    if (/\brun docker\b[^\n]*--push\b|docker push\b|podman (manifest )?push\b/.test(l)) assert.ok(i > start && i < elseAt, `line ${i + 1} pushes outside --push: ${l}`);
   });
   assert.match(lines.slice(elseAt, end).join('\n'), /--load "\$ROOT"/);
   assert.match(docker, /linux\/amd64,linux\/arm64/);
+  // Phase 59: Podman builds both platforms into one manifest list and pushes all of it; it keeps
+  // the HEALTHCHECK only in the docker image format.
+  assert.match(lines.slice(start, elseAt).join('\n'), /podman manifest push --all/);
+  for (const l of lines.filter((x) => /run podman build /.test(x))) assert.match(l, /--format docker/, l);
   assert.match(docker, /ghcr\.io\/farena-ai\/sara/);
   assert.match(docker, /gh auth token \| docker login ghcr\.io/, 'documents the registry sign-in');
 
@@ -266,5 +287,6 @@ test('packaging docs exist and the install guide lists the other ways to install
   assert.ok(i > 0, 'docs/INSTALL.md has "Other ways to install"');
   const section = install.slice(i);
   for (const w of ['Docker image', 'Homebrew', 'winget', 'Unraid', 'CasaOS', 'Umbrel', 'TrueNAS', 'Proxmox']) assert.ok(section.includes(w), `lists ${w}`);
-  assert.match(section, /available after the 1\.0 release/);
+  assert.match(section, /Available now/);
+  assert.match(section, /Waiting for review/);
 });

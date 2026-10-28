@@ -290,6 +290,9 @@
   "This card holds a whole character sheet: she comes back exactly as she was.",
   "A very long card: the first part of each section is kept.",
   "This card has adult content. Explicit replies still follow your Adult mode and intimacy settings.",
-  "The name was shortened to 40 characters."
+  "The name was shortened to 40 characters.",
+  "This server already has an owner. Sign in with the owner token.",
+  "Setup in the browser only works from this machine or your home network. Sign in with the owner token from her log instead.",
+  "That setup code is wrong. It is in her log, next to the words \"setup code\"."
  ]
 }

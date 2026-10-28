@@ -15,7 +15,7 @@ at release (from the release's `SHA256SUMS`, which `scripts/release-assets.sh` m
 (`printf %q`) before they reach the container's shell.
 
 ```sh
-# on the Proxmox host, as root (available after the 1.0 release, when the repository is public)
+# on the Proxmox host, as root (available now: it installs the release it was made for, 1.0.0)
 bash -c "$(curl -fsSL https://raw.githubusercontent.com/farena-ai/sara/main/packaging/proxmox/sara.sh)"
 # with settings:
 var_ram=4096 var_access=tailscale bash -c "$(curl -fsSL …/packaging/proxmox/sara.sh)"
@@ -26,7 +26,12 @@ It follows the look and the `var_*` settings of the
 self-contained (only `pct`, `pveam`, `pvesh`), so it works from Sara's own repository without
 their framework.
 
-## Listing it in the community scripts (owner, optional, after 1.0)
+First sign-in: the script installs with `--access lan`, so the installer in the container prints
+the owner token (the script says where to find it). From Sara 1.1 the browser also offers **Set up
+Sara** with the short setup code from her log (`pct exec <id> -- journalctl -u sara | grep 'setup
+code'`) within an hour of the start.
+
+## Listing it in the community scripts (owner, optional)
 
 The community collection only accepts scripts written on its own framework: a `ct/sara.sh`
 (container settings and `update_script`, sourcing `build.func`) plus an `install/sara-install.sh`
@@ -44,5 +49,7 @@ installer supports both.
 
 ## Not tested here
 
-This script was checked for syntax only (`bash -n`); it has not been run on a Proxmox host.
-Test it on a scratch Proxmox VE 8/9 node before announcing it.
+This script was checked for syntax only (`bash -n`); it has not been run on a Proxmox host (none is
+available). Test it on a scratch Proxmox VE 8/9 node before announcing it. Listing it in
+community-scripts means a PR to their repository, where their own GitHub Actions run (nothing in
+ours).

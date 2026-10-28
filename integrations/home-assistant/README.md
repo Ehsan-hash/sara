@@ -110,13 +110,18 @@ Diagnostics downloads never include the device token.
 ```sh
 uv venv --python 3.13 .venv
 uv pip install --python .venv -r requirements_test.txt
-.venv/bin/python -m pytest          # tests/ with a fake Sara server
+.venv/bin/python -m pytest          # tests/ with a fake Sara server (Linux or macOS: Home Assistant needs fcntl)
+# if tests/test_init.py can't import hassil.fuzzy: install the hassil and home-assistant-intents
+# versions pinned in .venv/lib/python3.13/site-packages/homeassistant/package_constraints.txt
 # against a real throwaway Sara:
 SARA_LIVE_URL=http://127.0.0.1:7880 SARA_LIVE_OWNER_TOKEN=... .venv/bin/python -m pytest tests/test_live_sara.py -s
 ```
 
-Brand images for the [home-assistant/brands](https://github.com/home-assistant/brands)
-repository are in `brand/` (`custom_integrations/sara/icon.png` and `icon@2x.png`).
+Brand images ship with the integration in `custom_components/sara/brand/` (`icon.png` 256×256,
+`icon@2x.png` 512×512): Home Assistant 2026.3 and newer shows them from there, and HACS checks for
+them. The top-level `brand/` folder has the same two files for the older
+[home-assistant/brands](https://github.com/home-assistant/brands) route (`custom_integrations/sara/`),
+which that repository now calls legacy.
 
 ## License
 

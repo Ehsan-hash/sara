@@ -2,6 +2,25 @@
 
 Format: newest first. Versions follow `0.<phase>.<patch>` until 1.0.0.
 
+## 1.1.0 (2026-10-28): install anywhere
+
+- **Set up a new server in the browser.** No more digging for a long token: open her page, type the
+  short setup code from her log, and she shows you your owner token once to save. On Umbrel there's
+  no code at all (Umbrel's own login protects it). Only the very first sign-in works this way, only
+  from your own computer or home network, only for an hour after she starts, and only with the code;
+  existing servers are never affected. Details in docs/THREAT_MODEL.md.
+- **Docker image for ARM** (Raspberry Pi 4/5, ARM servers) next to the usual one: the same
+  `ghcr.io/farena-ai/sara` works on both.
+- **Ready for the app stores and NAS systems:** Homebrew, winget, Unraid, CasaOS/ZimaOS, Umbrel,
+  TrueNAS, Proxmox and the Home Assistant community store (HACS); each was checked with that
+  platform's own validator. INSTALL.md says which are live and which are waiting for review.
+
+- **Fixed:** Undo's snapshots could miss an edit when a file was rewritten with the same size and
+  timestamp (two quick edits, or a tool restoring the time). Snapshots now also check the file's
+  change time and re-read anything changed just before the previous snapshot. Thanks to
+  @Guilsc for finding it (#17).
+- **Docs:** where Sara's log files are and how they rotate (INSTALL.md → Logs). Thanks to @Guilsc (#16).
+
 ## 1.0.0 (2026-10-28): first public release
 
 Sara is public: a self-hosted AI companion with a personality you choose, who is also a real coding

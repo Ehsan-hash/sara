@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "Collegati a Sara",
-        "description": "L'indirizzo del tuo server Sara, come lo apri nel browser (per esempio http://192.168.1.20:7860 o https://sara.example.com).",
+        "description": "L'indirizzo del tuo server Sara, come lo apri nel browser (per esempio {example_lan} o {example_domain}).",
         "data": {
           "url": "Indirizzo di Sara"
         },
@@ -27,7 +27,7 @@
       "wait_for_approval": "In Sara, approva l'accesso di **Home Assistant**:\n\n1. Apri {approve_in}, oppure {verify_url} in un browser in cui hai effettuato l'accesso a Sara.\n2. Scrivi questo codice: **{code}**\n3. Conferma che sei tu (token del proprietario, codice a due passaggi o passkey) e premi Approva.\n\nQuesta pagina prosegue da sola. Il codice dura 10 minuti."
     },
     "error": {
-      "invalid_url": "Non sembra un indirizzo. Usa qualcosa come http://192.168.1.20:7860.",
+      "invalid_url": "Non sembra un indirizzo. Usa qualcosa come {example_lan}.",
       "cannot_connect": "Impossibile raggiungere Sara a quell'indirizzo. È corretto, e Sara è in esecuzione?",
       "must_accept": "Accetta l'avviso per usare Sara da Home Assistant."
     },

@@ -253,6 +253,71 @@ What runs in a preview is code she (or a repository) wrote, so it is treated as 
 - **(1.0)** The VS Code extension and `sara-chat` send the token only to the server it was issued
   for (same scheme, host and port); a changed address means signing in again.
 
+## First sign-in in the browser (Phase 59)
+
+App stores want a new install to be set up from the browser, without reading logs (Umbrel requires
+it; CasaOS, TrueNAS and Unraid users expect it). The risk is plain: a new server that anyone could
+"claim" from the browser belongs to whoever gets there first. Code: `src/claim.ts`, the `claim`
+route in `src/server.ts`, tests in `test/claim.test.ts`.
+
+**How each platform protects an app (checked October 2026):**
+
+| Platform | Login in front of the app? | What that means for Sara |
+|---|---|---|
+| Umbrel | Yes. Its app proxy asks for the Umbrel login (and Umbrel two-step, when on) before a request reaches the app, unless the app opts out; `PROXY_AUTH_WHITELIST` / `PROXY_AUTH_BLACKLIST` pick paths ([umbrel-apps packaging guide](https://github.com/getumbrel/umbrel-apps/tree/master/.agents/skills/umbrel-package-app): "Umbrel auth can also protect an app before the user has created the app's own account during first-run setup") | Setup can be one click, because Umbrel already checked who is asking |
+| CasaOS / ZimaOS, TrueNAS SCALE, Unraid, plain Docker | No. The app's port is published straight onto the network | Anyone on the network reaches Sara's sign-in page first; something only the owner can see must be asked for. All four show container logs in their web dashboard, so the owner can read a short code there without a terminal |
+
+**Design.** A brand-new server (its `owner.json` was just made, `setupPending`) can be claimed in the
+browser only while all of these hold:
+
+1. **Nobody has signed in yet.** Any sign-in with the owner token (web, or the token as a bearer
+   on the API), and every token reset, removes `setupPending` for good. Owner files from before
+   Phase 59 don't have it, so existing servers never open setup.
+2. **Within a window after each start** (60 minutes; `SARA_SETUP_MINUTES`, 5 to 1440). Restarting
+   the server opens a new window; restarting needs control of the server, which a stranger doesn't
+   have.
+3. **From this machine or a private network** (loopback, 10/8, 172.16/12, 192.168/16, 169.254/16,
+   100.64/10 incl. Tailscale, fc00::/7, fe80::/10). A server that was port-forwarded to the
+   internet by mistake can't be claimed from the internet. Inside Docker this check is weak (the
+   published port can make every client look like the bridge gateway, a private address), so it is
+   a backstop, not the main guard.
+4. **A same-site JSON request** (the usual `Origin` = `Host` check), counted by the sign-in limiter.
+5. **The proof, by mode:**
+   - **`code` (default, every install that doesn't say otherwise):** the 8-character setup code
+     Sara prints in her log at each start (30-symbol alphabet, about 39 bits; only its hash is
+     kept, in memory). Wrong codes count per address (10 per 15 minutes, as for sign-in) **and**
+     for everyone together: after 10 wrong codes in total setup closes until the next start, so
+     guessing from many addresses can't work (10 guesses at 2^39 is about 2 in 10^11). Reading the
+     log needs the platform's dashboard login or a shell, the same as reading the owner token.
+   - **`browser` (`SARA_SETUP=browser`, set by the Umbrel template only):** no code. The Umbrel
+     compose keeps Umbrel's login on for the web app and for `/api/claim` (blacklisted from the
+     `/api/*` whitelist the phone apps need), so the request has passed Umbrel's login.
+   - **`off` (`SARA_SETUP=off`):** only the owner token works, as before.
+
+**Claiming** makes a new owner token (the one printed in the log stops working), deletes
+`first-token.txt`, signs the browser in and shows the new token once to save. It works once: the new
+owner file has no `setupPending`. The log notes that it happened and from which address.
+
+**What is left (accepted):**
+
+- **Umbrel, other apps:** another app installed on the same Umbrel shares its Docker network and
+  could call Sara's container directly, past the app proxy, during the window. Umbrel's own
+  guidance treats that network as untrusted, and every Umbrel app with a first-run account page has
+  the same exposure; installed apps are code the owner chose to run with access to that network
+  anyway. If an app claimed Sara first, the owner sees "already has an owner" and recovers with
+  `sara reset-token` (a restart opens nothing: reset tokens never reopen setup).
+- **Umbrel, login turned off:** umbrelOS 2.0 lets the owner turn off "Require Umbrel login" per
+  app. Turned off before setup, browser mode has only the window and the private-address rule;
+  set it up before turning the login off. (The Umbrel README says so.)
+- **`SARA_SETUP=browser` without a login proxy** is a misconfiguration that lets anyone on the
+  network claim the server within the window. Only the Umbrel template sets it; the docs say not
+  to set it anywhere else.
+- **Someone who can read the logs** can claim the server, exactly as they could already sign in
+  with the owner token printed there. On a platform with several dashboard users, all of them
+  can see the logs.
+- **Denial of setup:** someone on the network can burn the 10 wrong codes; the owner restarts the
+  app for a new code or signs in with the owner token from the log. Nothing is taken over.
+
 ## Other apps: OpenAI-compatible API, MCP server, character cards (Phase 57)
 
 New entry points: `/v1/*` (OpenAI-compatible), `/mcp` (MCP, Streamable HTTP), the stdio bridge

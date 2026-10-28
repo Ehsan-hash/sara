@@ -11,7 +11,12 @@ Three manifests (schema 1.10, multi-file format) for the package **`BackstageCod
 - `ProductCode` is the installer's AppId (`{6F0B2C1E-…}_is1`) so winget recognises an existing
   install and upgrades it.
 
-Users install with `winget install BackstageCoding.Sara` (after 1.0).
+Users install with `winget install BackstageCoding.Sara` once the manifests are merged into
+winget-pkgs (waiting: not submitted yet).
+
+**1.0.0 is ready:** `outputs/release/1.0.0/winget/manifests/b/BackstageCoding/Sara/1.0.0/` (filled
+from the release's `SHA256SUMS`; the installer checksum matches the asset GitHub serves).
+`winget validate --manifest` on it: "Manifest validation succeeded" (winget 1.29.380, 2026-10-27).
 
 ## At each release (owner)
 
@@ -28,7 +33,9 @@ Users install with `winget install BackstageCoding.Sara` (after 1.0).
 
 3. Submit: fork [microsoft/winget-pkgs](https://github.com/microsoft/winget-pkgs), add that folder
    under `manifests/b/BackstageCoding/Sara/<v>/`, open a PR (or use
-   `wingetcreate submit <folder>`). Their bots validate and install-test it in a sandbox.
+   `wingetcreate submit <folder>`). Their bots (Azure pipelines in their repository, nothing to
+   approve on our side) validate and install-test it in a sandbox; a moderator merges it. The PR
+   needs the Microsoft CLA bot's agreement on the first PR.
 
 The installer is not code-signed yet; winget-pkgs accepts unsigned installers, but SmartScreen
 and some antivirus checks in their pipeline can flag them. Signing the installer before 1.0 makes

@@ -29,6 +29,8 @@ const exportDir = join(ROOT, 'outputs', 'public-export');
 
 // 2. The public repository, cloned (or created empty) under outputs/.
 const repoDir = join(ROOT, 'outputs', 'public-repo');
+// A leftover clone of another repository (or an older state) is thrown away and cloned fresh.
+if (existsSync(join(repoDir, '.git'))) rmSync(repoDir, { recursive: true, force: true });
 if (!existsSync(join(repoDir, '.git'))) {
   rmSync(repoDir, { recursive: true, force: true });
   try {
@@ -38,16 +40,26 @@ if (!existsSync(join(repoDir, '.git'))) {
     run('git', ['remote', 'add', 'origin', `https://github.com/${opt.repo}.git`], repoDir);
   }
 }
-// Guard: the public repository may only hold commits made by this script. Anything else (for
-// example the private development history, before the repositories were split) stops here.
-let authors = '';
+// Guard: never publish into the private development history. The public repository starts from
+// a root commit made by this script; merged outside pull requests (other authors) are fine on top
+// of it, but no commit of the private repository may be in it.
+const privateRoots = run('git', ['rev-list', '--max-parents=0', 'HEAD'], ROOT).split('\n').filter(Boolean);
+let publicRoots: string[] = [];
 try {
-  authors = run('git', ['log', '--all', '--format=%ae%n%ce'], repoDir);
+  publicRoots = run('git', ['rev-list', '--max-parents=0', 'HEAD'], repoDir).split('\n').filter(Boolean);
 } catch {
-  authors = ''; // no commits yet
+  publicRoots = []; // no commits yet
 }
-const foreign = [...new Set(authors.split('\n').filter((a) => a && a !== email))];
-if (foreign.length) throw new Error(`github.com/${opt.repo} has commits from other identities (${foreign.length}); it is not the clean public repository. Nothing was changed.`);
+const hasPrivate = privateRoots.some((sha) => {
+  try {
+    run('git', ['cat-file', '-e', `${sha}^{commit}`], repoDir);
+    return true;
+  } catch {
+    return false;
+  }
+});
+const rootAuthors = publicRoots.map((sha) => run('git', ['log', '-1', '--format=%ae', sha], repoDir));
+if (hasPrivate || rootAuthors.some((a) => a !== email)) throw new Error(`github.com/${opt.repo} is not the clean public repository (it holds private history or a root commit from another identity). Nothing was changed.`);
 if (run('git', ['tag', '--list', tag], repoDir)) throw new Error(`${tag} is already in the public repository.`);
 
 // 3. Replace its files with the public copy (its .git stays), commit and tag.
@@ -72,7 +84,7 @@ if (!first && !run('git', ['status', '--porcelain'], repoDir)) throw new Error('
 git(['commit', '--quiet', '-m', first ? `Sara ${version}` : `Sara ${version}\n\nSee CHANGELOG.md.`], repoDir);
 git(['tag', '-a', tag, '-m', `Sara ${version}`], repoDir);
 
-// 4. A last look at what the commit carries: author and committer must be the no-reply identity.
+// 4. A last look at what this commit carries: author and committer must be the no-reply identity.
 const ids = run('git', ['log', '-1', '--format=%an <%ae>%n%cn <%ce>'], repoDir);
 if (ids.split('\n').some((l) => !l.includes(email))) throw new Error(`Unexpected identity in the commit:\n${ids}`);
 console.log(`Committed ${tag} in ${repoDir} as ${name} <${email}>.`);

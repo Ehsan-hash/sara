@@ -147,7 +147,10 @@ sudo docker compose --profile ollama up -d      # Sara + a local Ollama (--profi
 sudo docker compose logs sara | grep -A1 'owner token'
 ```
 
-Sign in exactly as above (SSH tunnel to port 7860, or HTTPS). Day-to-day commands, run in
+Sign in exactly as above (SSH tunnel to port 7860, or HTTPS). Instead of the long token you can also
+set her up in the browser within an hour of the first start: **Set up Sara** asks for the short
+setup code that is in the same log (`sudo docker compose logs sara | grep 'setup code'`), then shows
+your owner token once (the one printed in the log stops working). Day-to-day commands, run in
 `/opt/sara-src`:
 
 ```sh
@@ -377,7 +380,9 @@ Then open `https://sara.example.com`.
 
 ## 3. First start
 
-1. Open your address, sign in with the owner token, read and accept the disclosure.
+1. Open your address, sign in with the owner token (or, on a new server, **Set up Sara** with the
+   setup code from her log: see "The first sign-in" under [Other ways to install](#other-ways-to-install)),
+   read and accept the disclosure.
 2. The **setup guide** opens: your name → keep Sara or make your own companion (name, she/he/they,
    relationship, vibe) → connect a model. It finds Ollama on the server by itself; otherwise paste
    an API key (OpenAI, Anthropic, xAI, OpenRouter, Ollama Cloud), point it at Ollama on another
@@ -529,6 +534,8 @@ of it; `node_modules` and similar rebuildable folders in workspaces are left out
 | `SARA_ACCESS` / `SARA_PUBLIC_URL` | (none) | How she's reached (`local`, `tailscale`, `domain`, `lan`) and her address; written by the installer and `sara access` |
 | `SARA_SECURE_COOKIES` | `0` | `1` behind HTTPS |
 | `SARA_TRUST_PROXY` | `0` | `1` behind a reverse proxy on this machine |
+| `SARA_SETUP` | `code` | First sign-in in the browser on a new server: `code` (the setup code from her log), `browser` (no code; **only** behind a proxy that makes people sign in first, as Umbrel's does), `off` (owner token only) |
+| `SARA_SETUP_MINUTES` | `60` | How long after each start browser setup stays open on a server nobody has signed in to yet (5–1440) |
 | `SARA_DATA` | `/var/lib/sara` | Data directory |
 | `SARA_MASTER_KEY` | file in data dir | 32-byte base64 key for the secret vault |
 | `SARA_SANDBOX` | `auto` | `bwrap` (recommended), `seatbelt` (macOS), `none` |
@@ -730,21 +737,37 @@ Terminal and start with `sara status`.
 
 ## Other ways to install
 
-These are prepared and will be **available after the 1.0 release** (when the repository and its
-releases are public). Maintainers: see [PACKAGING.md](PACKAGING.md).
+Maintainers: see [PACKAGING.md](PACKAGING.md) for how each one is made and submitted.
 
-- **Docker image** (available after the 1.0 release): `docker pull ghcr.io/farena-ai/sara:latest`
-  (linux/amd64 and linux/arm64), the same image the Docker Compose file above builds.
-- **Homebrew** (Mac, available after the 1.0 release): `brew install --cask farena-ai/tap/sara`.
-- **winget** (Windows, available after the 1.0 release): `winget install BackstageCoding.Sara`
-  (installs for you, without an administrator; run the installer yourself for a Windows service).
-- **Unraid** (available after the 1.0 release): search for *Sara* in Community Applications.
-- **CasaOS / ZimaOS** (available after the 1.0 release): *Sara* in the App Store.
-- **Umbrel** (available after the 1.0 release): *Sara* in the Umbrel App Store.
-- **TrueNAS SCALE** (available after the 1.0 release): *Apps → Discover Apps → Install via YAML*
-  with `packaging/truenas/docker-compose.yml`.
-- **Proxmox VE** (available after the 1.0 release): a helper script that makes a Debian 12
-  container with Sara in it, `packaging/proxmox/sara.sh`.
+**Available now:**
 
-Each starts her the same way: open her address and sign in with the owner token from the first
-start (in the container's log for the app stores).
+- **Docker image:** `docker pull ghcr.io/farena-ai/sara:latest`, the same image the Docker Compose
+  file above builds. 1.0.0 is linux/amd64 only; linux/arm64 (Raspberry Pi 4/5, Apple-silicon and
+  other ARM servers) comes with the next release.
+- **TrueNAS SCALE** (24.10 and newer): *Apps → Discover Apps → ⋮ → Install via YAML* with
+  `packaging/truenas/docker-compose.yml` (see `packaging/truenas/README.md`).
+- **Proxmox VE:** a helper script that makes a Debian 12 container with Sara in it, run on the
+  Proxmox host: `bash -c "$(curl -fsSL https://raw.githubusercontent.com/farena-ai/sara/main/packaging/proxmox/sara.sh)"`
+  (checked for syntax; not yet run on a Proxmox host, see its README).
+- **Home Assistant integration**, by hand: copy `integrations/home-assistant/custom_components/sara`
+  (see [HOME_ASSISTANT.md](HOME_ASSISTANT.md)).
+
+**Waiting for review** (prepared and validated; each is listed here as available once it is
+accepted or published):
+
+- **Homebrew** (Mac): `brew install --cask farena-ai/tap/sara`, once the tap is published.
+- **winget** (Windows): `winget install BackstageCoding.Sara` (installs for you, without an
+  administrator; run the installer yourself for a Windows service).
+- **Unraid:** *Sara* in Community Applications.
+- **CasaOS / ZimaOS:** *Sara* in the App Store.
+- **Umbrel:** *Sara* in the Umbrel App Store (needs the arm64 image of the next release).
+- **HACS** (Home Assistant): `farena-ai/hacs-sara` as a custom repository, later in the HACS store.
+
+**The first sign-in** works the same way for every container install (Docker, TrueNAS, Unraid,
+CasaOS, Proxmox's container): open her address within an hour of the first start and Sara offers
+**Set up Sara**. Type the 8-character **setup code** from her log (the app's log view in your
+dashboard; look for "setup code"), and she shows your owner token once to save. On Umbrel there is
+no code: Umbrel's own login already checked it's you, so it's one click. The setup code is new at
+every start, works only until someone has signed in, and only from this machine or your home
+network; missed the hour, restart the app for a new one. The owner token from the log works too, as
+before. Why this is safe: [THREAT_MODEL.md](THREAT_MODEL.md), "First sign-in in the browser".

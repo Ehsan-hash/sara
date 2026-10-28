@@ -40,7 +40,8 @@ Every module in `src/`, roughly in the order they were added (the phase is noted
 |---|---|
 | `src/main.ts` | Entry point; env config; first-run owner token |
 | `src/server.ts` | HTTP API + static web UI, security headers, origin guard |
-| `src/auth.ts` | Owner token (hash only stored), HMAC-signed session cookies, login rate limit |
+| `src/auth.ts` | Owner token (hash only stored), HMAC-signed session cookies, login rate limit; `setupPending` until the first owner sign-in (Phase 59) |
+| `src/claim.ts` | Phase 59: first sign-in in the browser on a new server (`/api/claim`): setup code from the log or, behind a login proxy (`SARA_SETUP=browser`, Umbrel), one click; time window, private addresses only, one-time; see THREAT_MODEL.md |
 | `src/chat.ts` | One turn: disclosure → safety checks → provider routing → agent loop (stream → tool calls → approvals → results → repeat) → persist |
 | `src/providers/*` | Adapter interface; OpenAI-compatible and Anthropic adapters; presets |
 | `src/model-catalog.ts` | Phase 56: always-current model lists per provider (`<data>/model-lists.json`): first seen / New, retired only after two good checks, daily background check + Refresh, the whole Ollama Cloud catalog through an Ollama daemon with pull-before-first-use, retired models in use switched to a replacement with a notice |

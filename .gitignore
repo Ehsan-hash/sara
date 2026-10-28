@@ -1,6 +1,8 @@
 node_modules/
 # Runtime data: conversations, settings, encrypted secrets, master key, owner token.
 data/
+# Umbrel needs the app's empty bind-mount folder committed (sara/data/.gitkeep).
+!packaging/umbrel/data/
 *.db
 *.db-journal
 *.db-wal

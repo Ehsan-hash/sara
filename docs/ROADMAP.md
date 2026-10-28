@@ -62,10 +62,17 @@ version's details are in the [changelog](../CHANGELOG.md).
 
 ## Next
 
-- **App stores:** the Android app is on Google Play; the iPhone and Mac apps are coming as soon as
-  Apple approves them.
-- **Phones:** locked-screen calls on iPhone (CallKit), one-tap pairing by QR code.
-- **Install anywhere:** Homebrew, winget, Unraid, CasaOS, Umbrel, TrueNAS, Proxmox and HACS listings.
+| Phase | Plan | Version |
+|---|---|---|
+| 59 | Install anywhere: Homebrew, winget, HACS, Unraid, CasaOS, Umbrel, TrueNAS, Proxmox; first sign-in in the browser; a Docker image for ARM | 1.1 |
+| 60 | Phones: locked-screen calls on iPhone (CallKit), one-tap pairing on iPhone, the iPhone app in the App Store (when Apple approves it) | 1.2 |
+| 61 | Fully in your language: the help guide and every server message in all six languages | 1.3 |
+| 62 | Smarter checks in every language, and a bigger coding benchmark on real-size projects | 1.4 |
+| 63 | Smoothness: tool calls that stream as they happen, a more expressive talking portrait, server logs | 1.5 |
+
+**Later:** group chats with two or more companions, video calls with her moving avatar, a fully
+private local mode in the desktop apps, household mode (more than one person per server), importing
+from other companion apps, a shared photo album, and a smart-home presence through Home Assistant.
 
 Ideas and requests are welcome in [Discussions](https://github.com/farena-ai/sara/discussions)
 and [issues](https://github.com/farena-ai/sara/issues). See [CONTRIBUTING.md](../CONTRIBUTING.md).

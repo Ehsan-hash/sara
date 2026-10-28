@@ -25,6 +25,7 @@ import { acceptWebSocket, refuseUpgrade } from './ws.ts';
 import { previewUrl } from './preview.ts';
 import { extname, join, normalize, resolve, sep } from 'node:path';
 import { DEVICE_TOKEN_PREFIX, deviceLabel, LoginLimiter, OwnerAuth, SESSION_COOKIE } from './auth.ts';
+import type { FirstClaim } from './claim.ts';
 import { cleanScope, DeviceFlow } from './device-flow.ts';
 import { handleOpenAI } from './openai-api.ts';
 import { handleMcp } from './mcp-server.ts';
@@ -142,6 +143,8 @@ export interface ServerOptions {
   reportTo?: string;
   /** Phase 31: all companions on this server (the app above is one of them). */
   companions?: import('./companions.ts').CompanionManager;
+  /** Phase 59: first sign-in in the browser on a new server (src/claim.ts); shared by every companion. */
+  claim?: FirstClaim;
 }
 
 /** A soft square picture with a companion's initial (until she has a look of her own). */
@@ -440,7 +443,12 @@ export function createSaraServer(opts: ServerOptions): Server {
       return id !== undefined && auth.deviceKind(id) !== 'api';
     }
     // Phase 24: with two-step sign-in on, the owner token alone is no longer enough.
-    if (header?.startsWith('Bearer ')) return !auth.twoStepOn && auth.verifyToken(header.slice(7));
+    if (header?.startsWith('Bearer ')) {
+      const ok = !auth.twoStepOn && auth.verifyToken(header.slice(7));
+      // Phase 59: the owner token was used, so the server has its owner: browser setup ends.
+      if (ok) auth.markSignedIn();
+      return ok;
+    }
     return auth.verifySession(cookies(req)[SESSION_COOKIE]);
   }
 
@@ -1058,11 +1066,43 @@ export function createSaraServer(opts: ServerOptions): Server {
         }
       }
       limiter.reset(ip);
+      // Phase 59: the owner has signed in: browser setup (src/claim.ts) closes for good.
+      auth.markSignedIn();
       const session = auth.createSession(deviceLabel(req.headers['user-agent']));
       res.setHeader('set-cookie', cookie(session.value, session.maxAgeSeconds));
       // The token has been used: the copy kept for the installer to show isn't needed any more.
       rmSync(join(app.dataDir, 'first-token.txt'), { force: true });
       return send(res, 200, { ok: true });
+    }
+
+    // Phase 59: first sign-in in the browser on a new server (src/claim.ts, docs/THREAT_MODEL.md).
+    // GET tells the sign-in page whether setup is open; POST claims the server: a new owner token
+    // (the one in the log stops working), shown once, and this browser is signed in.
+    if (a === 'claim' && !b && !opts.demo && (method === 'GET' || method === 'POST')) {
+      const claim = opts.claim;
+      if (method === 'GET') return send(res, 200, claim ? claim.status() : { open: false });
+      sameSiteOnly();
+      const ip = clientIp(req, opts.trustProxy);
+      if (limiter.blocked(ip)) throw new HttpError(429, 'Too many attempts. Try again later.');
+      const body = await readJson(req);
+      if (!claim) throw new HttpError(404, 'This server already has an owner. Sign in with the owner token.');
+      const check = claim.check(ip, body.code);
+      if (!check.ok) {
+        if (check.wrongCode) {
+          limiter.fail(ip);
+          claim.failed();
+        }
+        throw new HttpError(check.status, check.message);
+      }
+      claim.finish();
+      // A fresh token, without setupPending: setup never reopens on this server.
+      const token = auth.resetToken();
+      limiter.reset(ip);
+      rmSync(join(app.dataDir, 'first-token.txt'), { force: true });
+      const session = auth.createSession(deviceLabel(req.headers['user-agent']));
+      res.setHeader('set-cookie', cookie(session.value, session.maxAgeSeconds));
+      console.log(`Sara was set up in the browser (${claim.mode === 'browser' ? 'behind the platform login' : 'with the setup code'}) from ${ip}. The owner token printed earlier no longer works.`);
+      return send(res, 200, { ok: true, token });
     }
 
     // Phase 24: passkey sign-in (no token, no code: the passkey checks it's you).
@@ -1134,6 +1174,11 @@ export function createSaraServer(opts: ServerOptions): Server {
         ...(opts.demo ? { demo: true } : {}),
         // Phase 24: the sign-in page offers "Sign in with a passkey" when one exists.
         ...(!authed && !opts.demo && auth.passkeys().length ? { passkeys: true } : {}),
+        // Phase 59: a new server that can be set up in the browser (only while nobody has signed in).
+        ...(() => {
+          const st = !authed && !opts.demo && auth.setupPending ? opts.claim?.status() : undefined;
+          return st && (st.open || st.closed) ? { claim: st } : {};
+        })(),
         ...(authed ? { identity: identityOf(app.persona) } : {}),
         // Phase 53: the app language (the page loads its translations before showing anything).
         ...(authed ? { language: app.settings.get().language ?? 'auto', appLanguage: appLanguage(app.settings.get()) } : {}),

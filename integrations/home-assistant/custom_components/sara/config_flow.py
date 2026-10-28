@@ -31,6 +31,8 @@ from .const import (
 )
 
 STEP_USER = vol.Schema({vol.Required(CONF_URL): str})
+# Example addresses for the address form (hassfest wants URLs as placeholders, not in strings.json).
+EXAMPLES = {"example_lan": "http://192.168.1.20:7860", "example_domain": "https://sara.example.com"}
 
 
 class SaraConfigFlow(ConfigFlow, domain=DOMAIN):
@@ -66,6 +68,7 @@ class SaraConfigFlow(ConfigFlow, domain=DOMAIN):
             step_id="user",
             data_schema=self.add_suggested_values_to_schema(STEP_USER, user_input or {}),
             errors=errors,
+            description_placeholders=EXAMPLES,
         )
 
     async def _begin(self) -> ConfigFlowResult:
@@ -79,7 +82,7 @@ class SaraConfigFlow(ConfigFlow, domain=DOMAIN):
                 step_id=form_id,
                 data_schema=None if form_id == "reauth_confirm" else self.add_suggested_values_to_schema(STEP_USER, {CONF_URL: self._url}),
                 errors={"base": "cannot_connect"},
-                description_placeholders={"url": self._url or ""},
+                description_placeholders={"url": self._url or "", **EXAMPLES},
             )
         self._task = None
         return await self.async_step_approve()

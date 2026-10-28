@@ -180,8 +180,13 @@ sudo sara status
 ```sh
 git clone https://github.com/farena-ai/sara && cd sara
 sudo docker compose up -d                       # or: sudo docker compose --profile ollama up -d  (with a local Ollama)
-sudo docker compose logs sara | grep -A1 'owner token'
+sudo docker compose logs sara | grep -A1 'owner token'   # or: open her page and enter the setup code from this log
 ```
+
+**App stores and NAS:** the image `ghcr.io/farena-ai/sara`, TrueNAS and Proxmox work now; Unraid,
+CasaOS/ZimaOS, Umbrel, Homebrew, winget and HACS are prepared and waiting for review
+([which is which](docs/INSTALL.md#other-ways-to-install)). A new server is set up in the browser
+with a short code from her log (one click on Umbrel), no long token to copy.
 
 **Windows and macOS:** download `Sara-Setup-<version>.exe` or `Sara-<version>.dmg` from the
 [releases page](https://github.com/farena-ai/sara/releases/latest). The first question: run Sara on
@@ -200,8 +205,7 @@ npm ci
 npm start                                       # http://127.0.0.1:7860; the token is in the output
 ```
 
-The one-line installer and the `git clone` lines work once this repository is public (until then:
-`sudo bash deploy/get-sara.sh --source <copy>`). Sign in with the token, and a setup guide asks your
+Sign in with the token (or the setup code), and a setup guide asks your
 name, helps you shape your companion and connects a model. Reaching her from your phone (Tailscale,
 your own web address with HTTPS, or your home network), updates, backups and troubleshooting:
 **[docs/INSTALL.md](docs/INSTALL.md)**.

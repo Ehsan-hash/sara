@@ -20,6 +20,7 @@ import { decryptBackup, isEncrypted } from './offsite.ts';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { OwnerAuth } from './auth.ts';
+import { claimModeFrom, claimWindowMs, FirstClaim, formatClaimCode } from './claim.ts';
 import { vaultKeyFor, type AppContext } from './chat.ts';
 import { ApprovalBroker, ToolRegistry } from './tools/registry.ts';
 import { Redactor, vaultSecretValues } from './redact.ts';
@@ -292,8 +293,24 @@ const codemaps = new CodeMaps({ cacheDir: join(dataDir, 'cache', 'codemap'), tar
 let push: PushService | undefined;
 let healthHistory: HealthHistory | undefined;
 let bridges: AppContext['bridges'];
+// Phase 59: a new server nobody has signed in to can be set up in the browser for a while after
+// each start (src/claim.ts): with the setup code printed below, or with no code behind a platform
+// login (SARA_SETUP=browser, Umbrel). SARA_SETUP=off keeps the owner token as the only way in.
+const claim = new FirstClaim({ pending: () => auth.setupPending, mode: claimModeFrom(process.env), windowMs: claimWindowMs(process.env) });
+/** The setup code (or browser-setup note) for the start-up log, while setup is open. */
+function claimBanner(): void {
+  const st = claim.status();
+  if (!st.open || !claim.code) return;
+  const where = `http://${host === '0.0.0.0' || host === '::' ? '<this server>' : host}:${port}`;
+  const lines =
+    claim.mode === 'browser'
+      ? [' Set Sara up in your browser: open her from your home screen (within', ` ${st.minutesLeft} minutes; restart her to open setup again).`]
+      : [` Or set her up in the browser: open ${where} within ${st.minutesLeft} minutes`, ` and enter this setup code: ${formatClaimCode(claim.code)}`, ' (Restart her for a new code. It stops working once she has an owner.)'];
+  process.stdout.write(`================================================================\n${lines.join('\n')}\n================================================================\n\n`);
+}
 const serverOpts = {
   auth,
+  claim,
   info,
   webDir,
   secureCookies: process.env.SARA_SECURE_COOKIES === '1',
@@ -604,6 +621,7 @@ server.on('upgrade', (req, socket, head) => {
 
 server.listen(port, host, () => {
   if (auth.newToken) banner(auth.newToken);
+  claimBanner();
   // Reachable from other machines without HTTPS: sign-in tokens and cookies would cross the
   // network readable by anyone on it.
   if (!/^(127\.|::1$|localhost$)/.test(host) && process.env.SARA_SECURE_COOKIES !== '1') {
