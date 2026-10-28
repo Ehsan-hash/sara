@@ -198,3 +198,12 @@ export const t = (s, vars) => {
   return out;
 };
 export const currentIdentity = () => identity;
+/**
+ * Phase 61: a message the server sent ({ error } or a notice's { key, params }) in the app language.
+ * Fixed messages are keyed by their English text; messages with values come with `errorKey`/`key`
+ * (the English template) and `params`. Unknown messages stay as the server's English.
+ */
+export const serverText = (data, fallback = '') => {
+  const key = data?.errorKey ?? data?.key ?? data?.error ?? data?.text;
+  return key ? t(String(key), data?.params && typeof data.params === 'object' ? data.params : undefined) : fallback;
+};

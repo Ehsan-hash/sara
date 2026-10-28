@@ -1,6 +1,6 @@
 // HTTP API + static web UI. No framework; node:http only.
 import { closeSync, createReadStream, existsSync, mkdirSync, openSync, readdirSync, readFileSync, readSync, rmSync, statSync, writeFileSync } from 'node:fs';
-import { appLanguage, toLang } from './i18n.ts';
+import { appLanguage, en, fill, toLang, trOwner } from './i18n.ts';
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { qrSvg } from './qr.ts';
@@ -29,7 +29,7 @@ import type { FirstClaim } from './claim.ts';
 import { cleanScope, DeviceFlow } from './device-flow.ts';
 import { handleOpenAI } from './openai-api.ts';
 import { handleMcp } from './mcp-server.ts';
-import { cleanOrigins, KeyLimiter, otherAppsSettings } from './other-apps.ts';
+import { cleanOrigins, DEFAULT_APP_NAME, KeyLimiter, otherAppsSettings } from './other-apps.ts';
 import { CardError, cardPng, cardToCharacter, isPng, MAX_CARD_JSON, MAX_CARD_PNG, parseCardFile, personaToCard, placeholderPicture, portraitPng, type CardImport } from './character-cards.ts';
 import { cleanBudget, cleanPrices, DEFAULT_PRICES, mergeSummaries, priceTable, usageLine } from './usage.ts';
 import { createFromStarter, listStarters } from './starters.ts';
@@ -212,10 +212,18 @@ class HttpError extends Error {
   readonly status: number;
   /** Extra fields for the JSON error body (e.g. { twoStep: true }). */
   readonly extra?: Record<string, unknown>;
+  /**
+   * Phase 61: `message` is English. With `extra.params` it is a template ("Send up to {n} photos at a
+   * time."): the body then has the filled English `error` plus `errorKey` (the template) and `params`,
+   * so the app shows it in the owner's language (web/naming.js serverText). `extra.errorKey` alone
+   * names the template of a message the server already personalized.
+   */
   constructor(status: number, message: string, extra?: Record<string, unknown>) {
-    super(message);
+    const params = extra?.params && typeof extra.params === 'object' ? (extra.params as Record<string, unknown>) : undefined;
+    super(params ? fill(message, params) : message);
     this.status = status;
-    if (extra) this.extra = extra;
+    if (params) this.extra = { errorKey: message, ...extra };
+    else if (extra) this.extra = extra;
   }
 }
 
@@ -482,7 +490,7 @@ export function createSaraServer(opts: ServerOptions): Server {
   function savePhotos(raw: unknown): string[] {
     if (raw === undefined || raw === null) return [];
     if (!Array.isArray(raw)) throw new HttpError(400, 'images must be a list.');
-    if (raw.length > MAX_IMAGES_PER_MESSAGE) throw new HttpError(400, `Send up to ${MAX_IMAGES_PER_MESSAGE} photos at a time.`);
+    if (raw.length > MAX_IMAGES_PER_MESSAGE) throw new HttpError(400, 'Send up to {n} photos at a time.', { params: { n: MAX_IMAGES_PER_MESSAGE } });
     if (raw.length && !app.uploads) throw new HttpError(400, 'Photos are not available on this server.');
     try {
       return raw.map((d) => app.uploads!.save(String(d)).id);
@@ -648,7 +656,7 @@ export function createSaraServer(opts: ServerOptions): Server {
   const ctxOf = (id: string): AppContext => (offStore.getConversation(id) ? offApp : app);
 
   async function runTracked(conversationId: string, content: string, onEvent: (ev: ChatEvent) => void, opts: TurnOptions = {}): Promise<void> {
-    if (active.has(conversationId)) throw new HttpError(409, me('Sara is still working on this conversation. Wait for her or press Stop.'));
+    if (active.has(conversationId)) throw new HttpError(409, me('Sara is still working on this conversation. Wait for her or press Stop.'), { errorKey: 'Sara is still working on this conversation. Wait for her or press Stop.' });
     const controller = new AbortController();
     const turn: ActiveTurn = { controller, startedAt: app.now().toISOString(), status: 'thinking', detail: '', approvals: new Map() };
     active.set(conversationId, turn);
@@ -671,11 +679,11 @@ export function createSaraServer(opts: ServerOptions): Server {
         if (ev.type === 'tool_call' || ev.type === 'tool_result') lastText = '';
         if (ev.type === 'error') failed = true;
         // She needs the owner's OK: a notification (shown only when the app isn't in front).
-        if (ev.type === 'approval' && !partner) void app.push?.notifyOwner(`${app.persona.name} needs your OK`, ev.summary, conversationId, `ok-${ev.id}`).catch(() => {});
+        if (ev.type === 'approval' && !partner) void app.push?.notifyOwner(trOwner('Sara needs your OK', app.settings.get(), undefined, identityOf(app.persona)), ev.summary, conversationId, `ok-${ev.id}`).catch(() => {});
       }
       // A long job finished while the owner may be away.
       const secs = (app.now().getTime() - Date.parse(turn.startedAt)) / 1000;
-      if (!partner && !failed && !controller.signal.aborted && secs >= 60) void app.push?.notifyOwner(me('Sara finished'), lastText.trim() || 'Done.', conversationId, `done-${conversationId}`).catch(() => {});
+      if (!partner && !failed && !controller.signal.aborted && secs >= 60) void app.push?.notifyOwner(trOwner('Sara finished', app.settings.get(), undefined, identityOf(app.persona)), lastText.trim() || trOwner('Done.', app.settings.get()), conversationId, `done-${conversationId}`).catch(() => {});
       app.healthHistory?.turn(firstToken || null, failed);
     } finally {
       active.delete(conversationId);
@@ -712,7 +720,7 @@ export function createSaraServer(opts: ServerOptions): Server {
     t.status = 'waiting';
     t.detail = summary;
     externalTurns.set(conversationId, (externalTurns.get(conversationId) ?? 0) + 1);
-    void app.push?.notifyOwner(me('Sara needs your OK'), summary, conversationId, `ok-${id}`).catch(() => {});
+    void app.push?.notifyOwner(trOwner('Sara needs your OK', app.settings.get(), undefined, identityOf(app.persona)), summary, conversationId, `ok-${id}`).catch(() => {});
     void decision
       .then(async (ok) => {
         let text: string;
@@ -760,7 +768,7 @@ export function createSaraServer(opts: ServerOptions): Server {
   }
 
   async function streamChat(req: IncomingMessage, res: ServerResponse, conversationId: string, content: string, opts: TurnOptions = {}): Promise<void> {
-    if (active.has(conversationId)) throw new HttpError(409, me('Sara is still working on this conversation. Wait for her or press Stop.'));
+    if (active.has(conversationId)) throw new HttpError(409, me('Sara is still working on this conversation. Wait for her or press Stop.'), { errorKey: 'Sara is still working on this conversation. Wait for her or press Stop.' });
     res.writeHead(200, {
       'content-type': 'text/event-stream; charset=utf-8',
       'cache-control': 'no-store',
@@ -821,7 +829,7 @@ export function createSaraServer(opts: ServerOptions): Server {
   function whenOrNull(v: unknown, dateOnlyHour?: number): string | null {
     if (v === undefined || v === null || v === '') return null;
     const d = parseWhen(String(v), app.now(), app.settings.get().timeZone, { dateOnlyHour });
-    if (!d) throw new HttpError(400, `Couldn't understand the time "${String(v)}"`);
+    if (!d) throw new HttpError(400, 'Couldn\'t understand the time "{time}"', { params: { time: String(v) } });
     return d.toISOString();
   }
 
@@ -975,7 +983,7 @@ export function createSaraServer(opts: ServerOptions): Server {
         if (!content) throw new HttpError(400, 'Message is empty');
         if (content.length > 100_000) throw new HttpError(413, 'Message too long');
         if (body.background === true) {
-          if (active.has(b)) throw new HttpError(409, me('Sara is still working on this conversation. Wait for her or press Stop.'));
+          if (active.has(b)) throw new HttpError(409, me('Sara is still working on this conversation. Wait for her or press Stop.'), { errorKey: 'Sara is still working on this conversation. Wait for her or press Stop.' });
           void runBackground(b, content, turnOpts());
           return send(res, 202, { ok: true });
         }
@@ -1308,7 +1316,7 @@ export function createSaraServer(opts: ServerOptions): Server {
         const langPick = (v: unknown, what: string) => {
           if (v === 'auto' || v === '' || v === null) return 'auto';
           const l = toLang(v);
-          if (!l || l !== v) throw new HttpError(400, `${what}: unknown language.`);
+          if (!l || l !== v) throw new HttpError(400, '{what}: unknown language.', { params: { what } });
           return l;
         };
         if (body.language !== undefined) patch.language = langPick(body.language, 'Language');
@@ -1341,16 +1349,16 @@ export function createSaraServer(opts: ServerOptions): Server {
           if (!body.routes || typeof body.routes !== 'object') throw new HttpError(400, 'routes must be an object');
           const routes: NonNullable<Settings['routes']> = {};
           for (const [k, v] of Object.entries(body.routes as Record<string, unknown>)) {
-            if (!ROUTE_PURPOSES.includes(k as RoutePurpose)) throw new HttpError(400, `Unknown route "${k}"`);
+            if (!ROUTE_PURPOSES.includes(k as RoutePurpose)) throw new HttpError(400, 'Unknown route "{route}"', { params: { route: k } });
             if (!v) continue;
             const r = v as { providerId?: unknown; model?: unknown };
             const pid = String(r.providerId ?? '');
             const prov = app.settings.get().providers.find((p) => p.id === pid);
-            if (!prov) throw new HttpError(400, `Route "${k}": unknown provider`);
-            if (k === 'private' && !prov.local) throw new HttpError(400, `The private route must use a local provider; ${prov.label} isn't marked local.`);
+            if (!prov) throw new HttpError(400, 'Route "{route}": unknown provider', { params: { route: k } });
+            if (k === 'private' && !prov.local) throw new HttpError(400, 'The private route must use a local provider; {provider} isn\'t marked local.', { params: { provider: prov.label } });
             const model = String(r.model ?? '').trim().slice(0, 200);
-            if (!model) throw new HttpError(400, `Route "${k}": choose a model`);
-            if (k === 'private' && isCloudModel(model)) throw new HttpError(400, `${model} is an Ollama cloud model (it runs on Ollama's servers). Private conversations need a model on your own hardware.`);
+            if (!model) throw new HttpError(400, 'Route "{route}": choose a model', { params: { route: k } });
+            if (k === 'private' && isCloudModel(model)) throw new HttpError(400, '{model} is an Ollama cloud model (it runs on Ollama\'s servers). Private conversations need a model on your own hardware.', { params: { model } });
             const fallbacks = cleanModelList((v as { fallbacks?: unknown }).fallbacks, k === 'private');
             routes[k as RoutePurpose] = { providerId: pid, model, ...(fallbacks.length ? { fallbacks } : {}) };
           }
@@ -1487,8 +1495,8 @@ export function createSaraServer(opts: ServerOptions): Server {
           if (!body.permissions || typeof body.permissions !== 'object') throw new HttpError(400, 'permissions must be an object');
           const perms: Record<string, Permission> = { ...app.settings.get().toolPermissions };
           for (const [name, value] of Object.entries(body.permissions as Record<string, unknown>)) {
-            if (!app.tools.get(name)) throw new HttpError(400, `Unknown tool ${name}`);
-            if (!PERMISSIONS.includes(value as Permission)) throw new HttpError(400, `Invalid permission for ${name}`);
+            if (!app.tools.get(name)) throw new HttpError(400, 'Unknown tool {name}', { params: { name } });
+            if (!PERMISSIONS.includes(value as Permission)) throw new HttpError(400, 'Invalid permission for {name}', { params: { name } });
             perms[name] = value as Permission;
           }
           patch.toolPermissions = perms;
@@ -1686,7 +1694,7 @@ export function createSaraServer(opts: ServerOptions): Server {
         const name = String(body.name ?? '').trim();
         if (!name || name.length > 40) throw new HttpError(400, 'Give her (or him) a name of up to 40 characters.');
         if (cm.all().length >= 8) throw new HttpError(400, 'Up to 8 companions on one server.');
-        if (cm.all().some((c) => c.app.persona.name.toLowerCase() === name.toLowerCase())) throw new HttpError(400, `There's already a companion called ${name}.`);
+        if (cm.all().some((c) => c.app.persona.name.toLowerCase() === name.toLowerCase())) throw new HttpError(400, 'There\'s already a companion called {name}.', { params: { name } });
         const pronouns = ['she', 'he', 'they'].includes(String(body.pronouns)) ? String(body.pronouns) : 'she';
         const from = body.from ? cm.get(String(body.from)) : undefined;
         if (body.from && !from) throw new HttpError(400, 'No such companion to copy.');
@@ -1750,7 +1758,7 @@ export function createSaraServer(opts: ServerOptions): Server {
         const next = { ...cur, kind } as typeof cur;
         if (body.path !== undefined) {
           const p = String(body.path).trim();
-          if (p && !p.startsWith('/') && !/^[A-Za-z]:[\\/]/.test(p)) throw new HttpError(400, `Use a full folder path, like ${process.platform === 'win32' ? 'D:\\Backups\\Sara' : process.platform === 'darwin' ? '/Volumes/Backup/Sara' : '/mnt/backup-drive/sara'}.`);
+          if (p && !p.startsWith('/') && !/^[A-Za-z]:[\\/]/.test(p)) throw new HttpError(400, 'Use a full folder path, like {example}.', { params: { example: process.platform === 'win32' ? 'D:\\Backups\\Sara' : process.platform === 'darwin' ? '/Volumes/Backup/Sara' : '/mnt/backup-drive/sara' } });
           next.path = p || undefined;
         }
         for (const k of ['endpoint', 'bucket', 'region', 'accessKeyId', 'prefix'] as const) if (body[k] !== undefined) next[k] = String(body[k]).trim().slice(0, 300) || undefined;
@@ -1872,7 +1880,7 @@ export function createSaraServer(opts: ServerOptions): Server {
         }
       }
       if (b === 'test' && method === 'POST') {
-        const r = await push.sendAll({ title: app.persona.name, body: "It's me. Notifications work. 💛", url: '/', tag: 'test' });
+        const r = await push.sendAll({ title: app.persona.name, body: trOwner("It's me. Notifications work. 💛", app.settings.get()), url: '/', tag: 'test' });
         return send(res, 200, r);
       }
     }
@@ -2022,7 +2030,7 @@ export function createSaraServer(opts: ServerOptions): Server {
       if (!b && method === 'PUT') {
         const body = await readJson(req);
         const cur = cfg();
-        const pick = <T extends string>(v: unknown, allowed: readonly T[], d: T): T => (v === undefined ? d : allowed.includes(v as T) ? (v as T) : (() => { throw new HttpError(400, `Invalid value "${String(v)}"`); })());
+        const pick = <T extends string>(v: unknown, allowed: readonly T[], d: T): T => (v === undefined ? d : allowed.includes(v as T) ? (v as T) : (() => { throw new HttpError(400, 'Invalid value "{value}"', { params: { value: String(v) } }); })());
         const o = (body.openai ?? {}) as Record<string, unknown>;
         const e = (body.elevenlabs ?? {}) as Record<string, unknown>;
         const x = (body.xai ?? {}) as Record<string, unknown>;
@@ -2333,7 +2341,7 @@ export function createSaraServer(opts: ServerOptions): Server {
           const cm = opts.companions;
           if (!cm?.build) throw new HttpError(400, 'More companions are not available on this server.');
           if (cm.all().length >= 8) throw new HttpError(400, 'Up to 8 companions on one server.');
-          if (cm.all().some((x) => x.app.persona.name.toLowerCase() === d.imp.persona.name.toLowerCase())) throw new HttpError(400, `There's already a companion called ${d.imp.persona.name}.`);
+          if (cm.all().some((x) => x.app.persona.name.toLowerCase() === d.imp.persona.name.toLowerCase())) throw new HttpError(400, 'There\'s already a companion called {name}.', { params: { name: d.imp.persona.name } });
           const { id, dir } = createCompanionDir(rootDir, d.imp.persona as unknown as Record<string, unknown>, app.now());
           try {
             const comp = cm.build(id, dir);
@@ -2436,7 +2444,7 @@ export function createSaraServer(opts: ServerOptions): Server {
           else app.look.reset(); // the file has the default look
           lookDone = true;
         } catch (err) {
-          throw new HttpError(409, `Her name and personality were imported, but not the look: ${(err as Error).message}`);
+          throw new HttpError(409, 'Her name and personality were imported, but not the look: {error}', { params: { error: (err as Error).message } });
         }
       }
       if (parts.voice && c.voice) app.settings.update({ voice: withCharacterVoice(app, c.voice) });
@@ -2775,7 +2783,7 @@ export function createSaraServer(opts: ServerOptions): Server {
       return void res.end(body);
     }
     if (a === 'import' && !b && method === 'POST') {
-      if (active.size) throw new HttpError(409, me('Wait until Sara finishes what she is doing, then import.'));
+      if (active.size) throw new HttpError(409, me('Wait until Sara finishes what she is doing, then import.'), { errorKey: 'Wait until Sara finishes what she is doing, then import.' });
       const body = await readJson(req, MAX_IMPORT);
       try {
         return send(res, 200, importAll(app, body));
@@ -2931,7 +2939,7 @@ export function createSaraServer(opts: ServerOptions): Server {
         const due = byPlace ? PLACE_DUE : whenOrNull(body.when);
         if (!due) throw new HttpError(400, 'When should the reminder go off?');
         const repeat = String(body.repeat ?? 'none') as Repeat;
-        if (!REPEATS.includes(repeat)) throw new HttpError(400, `repeat must be one of ${REPEATS.join(', ')}`);
+        if (!REPEATS.includes(repeat)) throw new HttpError(400, 'repeat must be one of {list}', { params: { list: REPEATS.join(', ') } });
         const convId = body.conversationId ? String(body.conversationId) : null;
         const placeId = body.placeId === undefined || body.placeId === null || body.placeId === '' ? undefined : Number(body.placeId);
         if (placeId !== undefined && !pl.place(placeId)) throw new HttpError(400, 'That place no longer exists.');
@@ -3053,7 +3061,7 @@ export function createSaraServer(opts: ServerOptions): Server {
       if (!id && method === 'GET') return send(res, 200, app.snapshots.list(ws));
       if (id && parts[4] === 'restore' && method === 'POST') {
         const busy = [...active.keys()].some((cid) => app.store.getConversation(cid)?.workspace === ws);
-        if (busy) throw new HttpError(409, me('Sara is working in this workspace. Stop her or wait before undoing.'));
+        if (busy) throw new HttpError(409, me('Sara is working in this workspace. Stop her or wait before undoing.'), { errorKey: 'Sara is working in this workspace. Stop her or wait before undoing.' });
         const body = await readJson(req);
         let result;
         try {
@@ -3760,7 +3768,7 @@ export function createSaraServer(opts: ServerOptions): Server {
     if (a === 'devices' && b === 'api-key' && !c && method === 'POST') {
       const body = await readJson(req);
       confirmIdentity(body, { passkey: true });
-      const label = String(body.label ?? '').replace(/[\u0000-\u001f\u007f<>]/g, '').replace(/\s+/g, ' ').trim().slice(0, 60) || 'Another app';
+      const label = String(body.label ?? '').replace(/[\u0000-\u001f\u007f<>]/g, '').replace(/\s+/g, ' ').trim().slice(0, 60) || DEFAULT_APP_NAME;
       try {
         const k = auth.createApiKey(label);
         return send(res, 200, { key: k.token, id: k.id, label });
@@ -4031,7 +4039,7 @@ export function createSaraServer(opts: ServerOptions): Server {
           if (!q) delete next.home;
           else if (q !== next.home?.label) {
             const place = await findAddress(q).catch((err: Error) => {
-              throw new HttpError(502, `Couldn't look up that address: ${err.message}`);
+              throw new HttpError(502, 'Couldn\'t look up that address: {error}', { params: { error: err.message } });
             });
             if (!place) throw new HttpError(400, "Couldn't find that address. Try the street, number and town.");
             next.home = place;
@@ -4223,7 +4231,7 @@ export function createSaraServer(opts: ServerOptions): Server {
         }
         const bytes = await readRaw(req, MAX_DOC_BYTES);
         if (!bytes.length) throw new HttpError(400, 'That file is empty.');
-        if (!detectKind(name, bytes)) throw new HttpError(415, `She can't read that kind of file. She reads ${SUPPORTED.map((k) => k.label).join(', ')}.`);
+        if (!detectKind(name, bytes)) throw new HttpError(415, 'She can\'t read that kind of file. She reads {kinds}.', { params: { kinds: SUPPORTED.map((k) => k.label).join(', ') } });
         if (keep) {
           const had = lib.findKept(bytes);
           if (had) return send(res, 200, { doc: docView(had), already: true });
@@ -4461,9 +4469,9 @@ export function createSaraServer(opts: ServerOptions): Server {
         }
         if (c === 'remember' && method === 'POST') {
           if (!cx.memory) throw new HttpError(404, 'Memory is not available');
-          if (active.has(b)) throw new HttpError(409, me('Sara is still working in this conversation.'));
+          if (active.has(b)) throw new HttpError(409, me('Sara is still working in this conversation.'), { errorKey: 'Sara is still working in this conversation.' });
           const r = await summarizeConversation(cx, cx.memory, b);
-          if (r.error) throw new HttpError(502, `Couldn't write the summary: ${r.error}`);
+          if (r.error) throw new HttpError(502, 'Couldn\'t write the summary: {error}', { params: { error: r.error } });
           return send(res, 200, r);
         }
         if (c === 'stop' && method === 'POST') {
@@ -4491,7 +4499,7 @@ export function createSaraServer(opts: ServerOptions): Server {
           // Phase 18: from a notification's Reply box or the share sheet, the phone doesn't wait.
           // The reply arrives like her other messages: as an event, so as a notification too.
           if (body.background === true) {
-            if (active.has(b)) throw new HttpError(409, me('Sara is still working on this conversation. Wait for her or press Stop.'));
+            if (active.has(b)) throw new HttpError(409, me('Sara is still working on this conversation. Wait for her or press Stop.'), { errorKey: 'Sara is still working on this conversation. Wait for her or press Stop.' });
             void runBackground(b, content, { ...(images.length ? { images } : {}), ...(docs.length ? { docs } : {}) });
             return send(res, 202, { ok: true });
           }
@@ -4500,7 +4508,7 @@ export function createSaraServer(opts: ServerOptions): Server {
         // Regenerate the last reply, or edit the last owner message and answer it again.
         if (c === 'retry' && method === 'POST') {
           requireDisclosure(req);
-          if (active.has(b)) throw new HttpError(409, me('Sara is still working on this conversation. Wait for her or press Stop.'));
+          if (active.has(b)) throw new HttpError(409, me('Sara is still working on this conversation. Wait for her or press Stop.'), { errorKey: 'Sara is still working on this conversation. Wait for her or press Stop.' });
           const body = await readJson(req);
           const lastUser = cx.store.messages(b).filter((m) => m.role === 'user').at(-1);
           if (!lastUser) throw new HttpError(400, 'There is no message to answer again.');
@@ -4556,7 +4564,7 @@ export function createSaraServer(opts: ServerOptions): Server {
     } catch (err) {
       const status = err instanceof HttpError ? err.status : 500;
       if (status === 500) console.error(err);
-      if (!res.headersSent) send(res, status, { error: status === 500 ? 'Internal error' : (err as Error).message, ...(err instanceof HttpError ? err.extra : {}) });
+      if (!res.headersSent) send(res, status, { error: status === 500 ? en('Internal error') : (err as Error).message, ...(err instanceof HttpError ? err.extra : {}) });
       else res.end();
     }
   });
@@ -4706,7 +4714,7 @@ function cleanModelList(v: unknown, localOnly: boolean): { providerId: string; m
     const providerId = String(r.providerId ?? '');
     const model = String(r.model ?? '').trim().slice(0, 200);
     if (!providerId || !model) return [];
-    if (localOnly && isCloudModel(model)) throw new HttpError(400, `${model} is an Ollama cloud model; private conversations need a model on your own hardware.`);
+    if (localOnly && isCloudModel(model)) throw new HttpError(400, '{model} is an Ollama cloud model; private conversations need a model on your own hardware.', { params: { model } });
     return [{ providerId, model }];
   });
 }

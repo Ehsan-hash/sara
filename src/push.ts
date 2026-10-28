@@ -6,6 +6,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import type { ApnsSender } from './apns.ts';
 import type { HubEvent } from './events.ts';
 import type { SettingsStore } from './settings.ts';
+import { trOwner } from './i18n.ts';
 import type { Vault } from './vault.ts';
 
 export const PUSH_VAULT = 'push:vapid';
@@ -210,10 +211,15 @@ export class PushService {
     return out;
   }
 
+  /** Phase 61: the notification's own words in the owner's app language (her words stay as she wrote them). */
+  #tr(text: string, params?: Record<string, unknown>): string {
+    return trOwner(text, this.#settings.get(), params);
+  }
+
   /** A note for the owner (approval needed, long job done); text only if previews are on. */
   async notifyOwner(title: string, text: string, conversationId: string, tag: string): Promise<void> {
     const t = text.replace(/\s+/g, ' ').trim();
-    const body = this.settings.preview ? (t.length > 180 ? `${t.slice(0, 177)}…` : t) : 'Open the app to see it.';
+    const body = this.settings.preview ? (t.length > 180 ? `${t.slice(0, 177)}…` : t) : this.#tr('Open the app to see it.');
     await this.sendAll({ title, body, url: `/#c=${conversationId}`, tag });
   }
 
@@ -223,12 +229,12 @@ export class PushService {
       // Phase 26: she's calling. Where Sara isn't open, a notification; opening it shows the call.
       if (ev.ring.state !== 'ringing') return;
       const reason = redact(ev.ring.reason).replace(/\s+/g, ' ').trim();
-      await this.sendAll({ title: `📞 ${persona} is calling`, body: this.settings.preview ? reason.slice(0, 180) : 'Open the app to answer.', url: `/#c=${ev.ring.conversationId}`, tag: 'ring' });
+      await this.sendAll({ title: `📞 ${this.#tr('{name} is calling', { name: persona })}`, body: this.settings.preview ? reason.slice(0, 180) : this.#tr('Open the app to answer.'), url: `/#c=${ev.ring.conversationId}`, tag: 'ring' });
       return;
     }
     if (ev.type !== 'message' || ev.message.role === 'notice' || isPartner(ev.conversationId)) return;
     const text = redact(ev.message.content).replace(/\s+/g, ' ').trim();
-    const body = this.settings.preview ? (text.length > 180 ? `${text.slice(0, 177)}…` : text) : ev.reason === 'reminder' ? 'You have a reminder.' : `${persona} sent you a message.`;
+    const body = this.settings.preview ? (text.length > 180 ? `${text.slice(0, 177)}…` : text) : ev.reason === 'reminder' ? this.#tr('You have a reminder.') : this.#tr('{name} sent you a message.', { name: persona });
     await this.sendAll({ title: ev.reason === 'reminder' ? `⏰ ${persona}` : persona, body, url: `/#c=${ev.conversationId}`, tag: `c${ev.message.id}` });
   }
 }

@@ -2,7 +2,7 @@
 // address (/mcp) with copyable set-up snippets, API keys (made here, shown once, listed with a
 // Remove), and the three switches: her tools for other apps, changes from other apps, and the
 // browser apps on other addresses that may call her. Saves by itself.
-import { t } from './naming.js';
+import { serverText, t } from './naming.js';
 
 const $ = (sel) => document.querySelector(sel);
 function el(tag, cls, text) {
@@ -18,7 +18,7 @@ async function api(path, opts = {}) {
     body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
   });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw Object.assign(new Error(data.error ?? `HTTP ${res.status}`), { status: res.status });
+  if (!res.ok) throw Object.assign(new Error(serverText(data, `HTTP ${res.status}`)), { status: res.status });
   return data;
 }
 
@@ -60,7 +60,7 @@ function render(v) {
     ...(v.keys.length
       ? v.keys.map((k) => {
           const li = el('li');
-          const name = el('strong', '', k.label);
+          const name = el('strong', '', k.label === 'Another app' ? t('Another app') : k.label);
           name.dataset.raw = '';
           li.append(name, el('span', 'muted small', ` · ${t('made {date}', { date: new Date(k.createdAt).toLocaleDateString() })} · ${keyUse(k)} `));
           const rm = el('button', 'ghost small', t('Remove'));

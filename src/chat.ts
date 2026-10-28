@@ -2,7 +2,7 @@
 // (model → tool calls → results → model …) with streaming and persistence.
 import { randomBytes } from 'node:crypto';
 import { buildSystemPrompt, identityOf, type Persona } from './persona.ts';
-import { appLanguage, languageLine, talkLanguage } from './i18n.ts';
+import { appLanguage, en, fill, languageLine, talkLanguage } from './i18n.ts';
 import { createProvider } from './providers/registry.ts';
 import { isToolsUnsupported, type ChatMessage, type ImageData, type Provider, type ProviderConfig, type ToolCall } from './providers/types.ts';
 import type { UploadStore } from './uploads.ts';
@@ -190,7 +190,8 @@ export interface AppContext {
 }
 
 export type ChatEvent =
-  | { type: 'notice'; kind: 'disclosure' | 'crisis' | 'fallback'; text: string }
+  /** Phase 61: `key` + `params` (fallback notices) let the app and the bridges word it in the owner's language; `text` is the English. */
+  | { type: 'notice'; kind: 'disclosure' | 'crisis' | 'fallback'; text: string; key?: string; params?: Record<string, unknown> }
   | { type: 'token'; text: string }
   | { type: 'tool_call'; id: string; name: string; summary: string; args: Record<string, unknown> }
   /** A long tool call is still being written by the model (chars so far). */
@@ -334,9 +335,11 @@ export function resolveFor(app: AppContext, conv: Conversation, purpose: Job = '
 
 /** Phase 38: a model that hasn't said its first word in time. */
 export class SlowModelError extends Error {
+  readonly seconds: number;
   constructor(seconds: number) {
     super(`no answer within ${seconds} seconds`);
     this.name = 'SlowModelError';
+    this.seconds = seconds;
   }
 }
 
@@ -917,11 +920,14 @@ export async function* runTurn(app: AppContext, conversationId: string, userText
         const was = `${provider.config.label} (${model})`;
         ci++;
         ({ provider, model } = chain[ci]);
-        const why = err instanceof SlowModelError ? `gave ${err.message}` : `failed: ${(err as Error).message.replace(/\s+/g, ' ').slice(0, 120)}`;
-        const note = `${was} ${why}, so ${provider.config.label} (${model}) took over.`;
+        // Phase 61: a template and its values, so the owner reads it in the app's language.
+        const slow = err instanceof SlowModelError;
+        const key = slow ? en('{was} gave no answer within {seconds} seconds, so {now} took over.') : en('{was} failed: {error}, so {now} took over.');
+        const params = { was, now: `${provider.config.label} (${model})`, ...(slow ? { seconds: (err as SlowModelError).seconds } : { error: (err as Error).message.replace(/\s+/g, ' ').slice(0, 120) }) };
+        const note = fill(key, params);
         console.warn(`fallback: ${note}`);
-        store.addMessage(conv.id, 'notice', `fallback:${note}`);
-        yield { type: 'notice', kind: 'fallback', text: note };
+        store.addMessage(conv.id, 'notice', `fallback:${note}`, { key, params });
+        yield { type: 'notice', kind: 'fallback', text: note, key, params };
         step--;
         continue;
       }

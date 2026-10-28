@@ -6,6 +6,7 @@ import { header, type GmailPart } from './google.ts';
 import { expressionFor, leansPlayful, moodLabel } from './inner.ts';
 import { localDate } from './memory-worker.ts';
 import { dayStartUtc } from './planner.ts';
+import { en } from './i18n.ts';
 
 export interface TodayEvent {
   id: string;
@@ -63,7 +64,7 @@ export async function calendarToday(app: AppContext, now: Date, tz?: string): Pr
     return {
       events: (r.items ?? []).map((e) => ({
         id: e.id,
-        title: e.summary ?? '(no title)',
+        title: e.summary ?? en('(no title)'),
         start: e.start?.dateTime ?? e.start?.date ?? '',
         ...(e.end?.dateTime || e.end?.date ? { end: e.end.dateTime ?? e.end.date } : {}),
         allDay: !e.start?.dateTime,
@@ -90,7 +91,7 @@ export async function mailToday(app: AppContext): Promise<Today['mail']> {
     );
     return {
       unread: unread.messagesUnread ?? 0,
-      important: metas.map((m) => ({ id: m.id, from: header(m.payload, 'From').replace(/\s*<[^>]+>$/, '').replace(/^"|"$/g, ''), subject: header(m.payload, 'Subject') || '(no subject)' })),
+      important: metas.map((m) => ({ id: m.id, from: header(m.payload, 'From').replace(/\s*<[^>]+>$/, '').replace(/^"|"$/g, ''), subject: header(m.payload, 'Subject') || en('(no subject)') })),
     };
   } catch (err) {
     return { unread: 0, important: [], error: (err as Error).message };

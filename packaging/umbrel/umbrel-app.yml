@@ -7,7 +7,7 @@ storage:
   dataRoot: data
 category: ai
 name: Sara
-version: "1.0.0"
+version: "1.1.0"
 tagline: A self-hosted AI companion and coding partner
 description: >-
   First start: open Sara and click "Set up Sara". Umbrel has already checked it's you, so one click
@@ -34,4 +34,4 @@ path: ""
 defaultUsername: ""
 defaultPassword: ""
 submitter: Backstage Coding
-submission: https://github.com/getumbrel/umbrel-apps/pull/0
+submission: https://github.com/getumbrel/umbrel-apps/pull/6269

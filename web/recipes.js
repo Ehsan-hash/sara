@@ -1,6 +1,6 @@
 // Phase 50: Settings → Abilities → Recipes: the recipes she saved (how she did tricky jobs). Open one
 // to read it; the title, when to use it, workspace and steps save when you leave each box; delete.
-import { t } from './naming.js';
+import { serverText, t } from './naming.js';
 
 const $ = (sel) => document.querySelector(sel);
 function el(tag, cls, text) {
@@ -16,7 +16,7 @@ async function api(path, opts = {}) {
     body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
   });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw Object.assign(new Error(data.error ?? `HTTP ${res.status}`), { status: res.status });
+  if (!res.ok) throw Object.assign(new Error(serverText(data, `HTTP ${res.status}`)), { status: res.status });
   return data;
 }
 

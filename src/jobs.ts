@@ -11,7 +11,7 @@ import { complete } from './life.ts';
 import { buildSystemPrompt } from './persona.ts';
 import { checkClaims, type Receipt } from './receipts.ts';
 import { detectMinorSexualContent } from './safety.ts';
-import { personalize } from './identity.ts';
+import { en, trOwner } from './i18n.ts';
 import { identityOf } from './persona.ts';
 import { cleanBudget, overBudget, usageScope, type Budget, type UsageNumbers, type UsageScope } from './usage.ts';
 import type { ProviderConfig } from './providers/types.ts';
@@ -277,16 +277,26 @@ export class JobManager {
         ? `Files: ${files.added?.length ?? 0} added${names(files.added)}, ${files.changed?.length ?? 0} changed${names(files.changed)}, ${files.removed?.length ?? 0} removed${names(files.removed)}.`
         : 'Files: none were changed.';
     // The receipt she (and the owner) can see, and that her words are checked against.
+    // Phase 61: the first line as a template too, so the job card reads in the owner's language.
+    const headKey =
+      job.status === 'ok' ? en('Background job #{id} finished after {took}: {label}')
+      : job.status === 'budget' ? en('Background job #{id} stopped at its budget after {took}: {label}')
+      : job.status === 'stopped' ? en('Background job #{id} was stopped after {took}: {label}')
+      : run.timedOut ? en('Background job #{id} ran out of time after {took}: {label}')
+      : en('Background job #{id} failed (exit code {code}) after {took}: {label}');
+    const headParams = { id: job.id, took, label: job.label, code: job.exitCode ?? 'none' };
     const receiptText = [`Background job #${job.id} ${outcome} after ${took}: ${job.label}`, fileLine, job.result?.summary ? `Result: ${String(job.result.summary).slice(0, 1500)}` : '', `Last output:\n${job.tail.slice(-1500)}`].filter(Boolean).join('\n');
     // Not in the middle of her answering in that conversation: wait for her to finish (up to 10 min).
     for (let i = 0; i < 600 && app.isBusy?.(conv.id); i++) await new Promise((r) => setTimeout(r, 1000));
     // Saved as an app note (shown to the owner as a job card; she sees it in her history).
-    const notice = app.store.addMessage(conv.id, 'notice', `job:${receiptText}`, { job: job.id, status: job.status });
+    const notice = app.store.addMessage(conv.id, 'notice', `job:${receiptText}`, { job: job.id, status: job.status, ...(job.status === 'budget' ? {} : { key: headKey, params: headParams }) });
     app.events?.publish({ type: 'message', conversationId: conv.id, message: notice, reason: 'job' });
     if (job.status === 'stopped') return; // the owner stopped it; nothing to announce
     if (job.status === 'budget') {
       // Phase 52: a plain message (no model call: the budget is used up), with the Continue button.
-      const text = personalize(`I stopped ${job.label} at ${budget?.reason ?? 'its budget'}, so it didn't go past it. What it did so far is kept. Press "Continue with more budget" if you want me to carry on.`, identityOf(app.persona));
+      const text = budget?.reason
+        ? trOwner('I stopped {label} at {reason}, so it didn\'t go past it. What it did so far is kept. Press "Continue with more budget" if you want me to carry on.', app.settings.get(), { label: job.label, reason: budget.reason }, identityOf(app.persona))
+        : trOwner('I stopped {label} at its budget, so it didn\'t go past it. What it did so far is kept. Press "Continue with more budget" if you want me to carry on.', app.settings.get(), { label: job.label }, identityOf(app.persona));
       const msg = app.store.addMessage(conv.id, 'assistant', text, { job: job.id, budget: true });
       app.events?.publish({ type: 'message', conversationId: conv.id, message: msg, reason: 'job' });
       return;
@@ -305,7 +315,8 @@ export class JobManager {
     }
     const receipt: Receipt = { name: 'start_job', status: job.status === 'ok' ? 'ok' : 'error', args: { label: job.label }, output: receiptText };
     if (!text || checkClaims(text, [receipt]).length || detectMinorSexualContent(text, { fromHer: true })) {
-      text = personalize(job.status === 'ok' ? `Done: ${job.label} finished (${took}).` : `Heads up: ${job.label} ${outcome}. The details are in the job result above.`, identityOf(app.persona));
+      // Phase 61: the app's own fallback words, in the owner's language.
+      text = job.status === 'ok' ? trOwner('Done: {label} finished ({took}).', app.settings.get(), { label: job.label, took }, identityOf(app.persona)) : run.timedOut ? trOwner('Heads up: {label} ran out of time. The details are in the job result above.', app.settings.get(), { label: job.label }, identityOf(app.persona)) : trOwner('Heads up: {label} failed (exit code {code}). The details are in the job result above.', app.settings.get(), { label: job.label, code: job.exitCode ?? 'none' }, identityOf(app.persona));
     }
     const msg = app.store.addMessage(conv.id, 'assistant', app.redactor.redact(text), { job: job.id });
     // Published like her other messages: the app shows it, phones get a notification, and the

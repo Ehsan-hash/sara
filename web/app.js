@@ -4,7 +4,7 @@ import { LiveCall } from './live.js';
 import { parse as parseMd, toDom } from './markdown.js';
 import { Presence, setLookVersion } from './presence.js';
 import { openLightbox } from './lightbox.js';
-import { browserLang, currentIdentity, currentLang, locale, savedLang, setIdentity, setLanguage, t, toLang, translateOnly } from './naming.js';
+import { browserLang, currentIdentity, currentLang, locale, savedLang, setIdentity, setLanguage, serverText, t, toLang, translateOnly } from './naming.js';
 import { autoSave, initDialogs, markDirty, onSave, runSave, saved } from './dialogs.js';
 import { endTour, startTour, tourRunning } from './tour.js';
 import { isDocFile, openLibrary, uploadDoc, waitRead } from './library.js';
@@ -31,7 +31,7 @@ async function api(path, opts = {}) {
   });
   if (opts.raw) return res;
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw Object.assign(new Error(data.error ?? `HTTP ${res.status}`), { data, status: res.status });
+  if (!res.ok) throw Object.assign(new Error(serverText(data, `HTTP ${res.status}`)), { data, status: res.status });
   return data;
 }
 
@@ -782,9 +782,9 @@ function setActivity(status, detail = '', startedAt) {
 
 function renderActivity() {
   const now = Date.now();
-  $('#activity-text').textContent = `${ACTIVITY_LABEL[activity.status] ?? activity.status}${activity.detail ? `: ${activity.detail}` : '…'}`;
+  $('#activity-text').textContent = `${ACTIVITY_LABEL[activity.status] ? t(ACTIVITY_LABEL[activity.status]) : activity.status}${activity.detail ? `: ${/^.*?: (Remember|Add a to-do|Save a note): /.test(activity.detail) ? appApprovalText({ id: 'app-', summary: activity.detail }) : activity.detail}` : '…'}`;
   const step = activity.status === 'running' || activity.status === 'waiting' ? `${fmtSecs(now - activity.stepAt)} · ` : '';
-  $('#activity-time').textContent = `${step}total ${fmtSecs(now - activity.startedAt)}`;
+  $('#activity-time').textContent = `${step}${t('total {time}', { time: fmtSecs(now - activity.startedAt) })}`;
 }
 
 $('#new-chat').addEventListener('click', () => newConversation());
@@ -1013,13 +1013,14 @@ function renderMessages(messages, opts = {}) {
         if (card) els.push(card);
       }
     } else if (m.role === 'notice' && m.kind === 'job') {
-      els.push(jobCard(m.content, m.meta?.status));
+      els.push(jobCard(m.content, m.meta?.status, m.meta));
     } else if (m.role === 'notice' && m.kind === 'call') {
       els.push(bubble('notice', `📞 ${t('Sara called you')}: ${m.content}`, 'call', m.id));
     } else if (m.role === 'assistant' && !m.content.trim() && !m.meta?.proof?.length) {
       continue;
     } else {
-      const b = bubble(m.role, m.content, m.kind, m.id, Array.isArray(m.meta?.images) ? m.meta.images.map((i) => `/api/uploads/${i}`) : [], Array.isArray(m.meta?.docs) ? m.meta.docs : []);
+      // Phase 61: app notices with a template (a backup model took over) in the app language.
+      const b = bubble(m.role, m.role === 'notice' && m.meta?.key ? serverText(m.meta, m.content) : m.content, m.kind, m.id, Array.isArray(m.meta?.images) ? m.meta.images.map((i) => `/api/uploads/${i}`) : [], Array.isArray(m.meta?.docs) ? m.meta.docs : []);
       // Phase 51: a reply from another assistant in imported history is labelled as theirs.
       if (m.role === 'assistant' && typeof m.meta?.importedFrom === 'string') {
         b.classList.add('imported');
@@ -1313,7 +1314,7 @@ async function runStream(path, body, userBubble) {
     if (!res.ok) {
       const data = await res.json().catch(() => ({}));
       userBubble?.remove();
-      throw new Error(data.error ?? `HTTP ${res.status}`);
+      throw new Error(serverText(data, `HTTP ${res.status}`));
     }
     const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
     let buf = '';
@@ -1329,7 +1330,7 @@ async function runStream(path, body, userBubble) {
         if (!dataLine) continue;
         const ev = JSON.parse(dataLine.slice(6));
         if (ev.type === 'notice') {
-          const n = bubble('notice', ev.text, ev.kind);
+          const n = bubble('notice', ev.key ? serverText(ev, ev.text) : ev.text, ev.kind);
           if (ev.kind === 'disclosure' && userBubble) userBubble.before(n);
           else append(n);
         } else if (ev.type === 'tool_progress') {
@@ -1593,14 +1594,18 @@ function fillToolBlock(d, { status, output, ms, snapshotId }) {
  * Approvals that came from another app (MCP write tools; their id starts with "app-") as
  * "Claude Code wants to remember: I like tea". The server's summary is "<key name>: <what>".
  */
+/** A key nobody named is "Another app" on the server: shown in the app language. */
+const appName = (name) => (name === 'Another app' ? t('Another app') : name);
+
 function appApprovalText(ev) {
   if (!String(ev.id ?? '').startsWith('app-')) return '';
   const m = /^(.*?): (Remember|Add a to-do|Save a note): ([\s\S]*)$/.exec(String(ev.summary ?? ''));
   if (!m) {
     const g = /^(.*?): ([\s\S]+)$/.exec(String(ev.summary ?? ''));
-    return g ? t('{app} wants to: {what}', { app: g[1], what: g[2] }) : String(ev.summary ?? '');
+    return g ? t('{app} wants to: {what}', { app: appName(g[1]), what: g[2] }) : String(ev.summary ?? '');
   }
-  const [, app, verb, what] = m;
+  const [, name, verb, what] = m;
+  const app = appName(name);
   if (verb === 'Remember') return t('{app} wants to remember: {what}', { app, what });
   if (verb === 'Add a to-do') return t('{app} wants to add a to-do: {what}', { app, what });
   return t('{app} wants to save a note: {what}', { app, what });
@@ -1918,7 +1923,7 @@ $('#avatar-file').addEventListener('change', async (e) => {
   const f = e.target.files?.[0];
   if (!f) return;
   const res = await fetch('/api/sara/avatar', { method: 'PUT', headers: { 'content-type': 'application/octet-stream' }, body: f });
-  if (!res.ok) alert((await res.json().catch(() => ({}))).error ?? t('Upload failed'));
+  if (!res.ok) alert(serverText(await res.json().catch(() => ({})), t('Upload failed')));
   e.target.value = '';
   await refreshSaraStatus();
 });
@@ -2399,7 +2404,7 @@ $('#speak-toggle').addEventListener('click', () => {
 async function transcribe(wav) {
   const res = await fetch('/api/voice/transcribe', { method: 'POST', headers: { 'content-type': 'audio/wav' }, body: wav });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`);
+  if (!res.ok) throw new Error(serverText(data, `HTTP ${res.status}`));
   return data.text ?? '';
 }
 
@@ -2705,7 +2710,7 @@ $('#v-oalive-listen').addEventListener('click', async () => {
   btn.textContent = '…';
   try {
     const res = await fetch(`/api/voice/openai-sample?voice=${encodeURIComponent($('#v-oalive-voice').value)}`, { credentials: 'same-origin' });
-    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? t('Could not play that voice.'));
+    if (!res.ok) throw new Error(serverText(await res.json().catch(() => ({})), t('Could not play that voice.')));
     oaliveAudio = new Audio(URL.createObjectURL(await res.blob()));
     await oaliveAudio.play();
     $('#v-oalive-status').textContent = '';
@@ -2763,7 +2768,7 @@ $('#vg-listen').addEventListener('click', async () => {
   btn.textContent = '…';
   try {
     const res = await fetch(`/api/voice/xai-sample?voice=${encodeURIComponent($('#vg-voice').value)}&lang=${encodeURIComponent($('#v-xai-lang').value || 'en')}`, { credentials: 'same-origin' });
-    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? t('Could not play that voice.'));
+    if (!res.ok) throw new Error(serverText(await res.json().catch(() => ({})), t('Could not play that voice.')));
     vgAudio = new Audio(URL.createObjectURL(await res.blob()));
     await vgAudio.play();
   } catch (err) {
@@ -2781,7 +2786,7 @@ $('#v-expressive-try').addEventListener('click', async () => {
   btn.textContent = t('Playing…');
   try {
     const res = await fetch('/api/voice/speak', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ text: voice.sample ?? t('Haha, okay. *sighs* I needed that.'), expressive: $('#v-expressive').value, tone: $('#v-tone').value }) });
-    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? t('Could not play the sample.'));
+    if (!res.ok) throw new Error(serverText(await res.json().catch(() => ({})), t('Could not play the sample.')));
     const audio = new Audio(URL.createObjectURL(await res.blob()));
     await audio.play();
     await new Promise((r) => audio.addEventListener('ended', r, { once: true }));
@@ -3195,9 +3200,11 @@ async function loadAccess() {
   const a = await api('/access').catch(() => null);
   $('#access-box').hidden = !a;
   if (!a) return;
-  $('#access-line').textContent = a.url ? `${a.label} — ${a.url}` : a.mode ? a.label : t('{label}. Open the address you use now on your phone.', { label: a.label });
+  // Phase 61: the server's labels are fixed English texts, shown in the app language.
+  const label = t(a.label);
+  $('#access-line').textContent = a.url ? `${label} — ${a.url}` : a.mode ? label : t('{label}. Open the address you use now on your phone.', { label });
   $('#access-warn').hidden = !a.warning;
-  $('#access-warn').textContent = a.warning ?? '';
+  $('#access-warn').textContent = a.warning ? t(a.warning) : '';
   $('#access-qr').hidden = $('#access-qr-how').hidden = !a.qr;
   if (a.qr) $('#access-qr').src = a.qr;
 }
@@ -3213,15 +3220,24 @@ async function loadHealth() {
     ...h.checks.map((c) => {
       const li = el('li', c.ok ? 'ok' : 'bad');
       // UX 19: model lists/changes come with their facts (items): worded in the app language.
-      const detail = Array.isArray(c.items) && c.items.length ? c.items.map(modelNoticeText).join(' ') : c.detail;
-      li.append(el('span', 'mark', c.ok ? '✓' : '!'), el('strong', '', c.name), document.createTextNode(` ${detail}`));
+      // Phase 61: the other details come as a template (detailKey/params) or a fixed English text.
+      // A `detail` value (e.g. the sandbox's own description) is fixed English sentences: each is looked up.
+      const params = c.params ? Object.fromEntries(Object.entries(c.params).map(([k, v]) => [k, k === 'detail' && typeof v === 'string' ? v.split(/(?<=[.!?])\s+/).map((x) => t(x)).join(' ') : typeof v === 'string' && /^\d+\.\d$/.test(v) ? Number(v).toLocaleString(locale(), { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : v])) : undefined;
+      const detail = Array.isArray(c.items) && c.items.length ? c.items.map(modelNoticeText).join(' ') : c.detailKey ? t(c.detailKey, params) : t(c.detail);
+      const line = document.createTextNode(` ${detail}`);
+      const name = el('strong', '', t(c.name));
+      name.dataset.raw = '';
+      const box = el('span', '');
+      box.dataset.raw = '';
+      box.append(line);
+      li.append(el('span', 'mark', c.ok ? '✓' : '!'), name, box);
       return li;
     }),
   );
   const up = h.uptimeSeconds > 86400 ? `${Math.floor(h.uptimeSeconds / 86400)} d` : h.uptimeSeconds > 3600 ? `${Math.floor(h.uptimeSeconds / 3600)} h` : `${Math.floor(h.uptimeSeconds / 60)} min`;
   void loadHealthHistory();
   void loadProblems();
-  $('#health-info').textContent = `Sara ${h.version}${h.revision ? ` (${h.revision})` : ''} · Node ${h.node} · up ${up} · database ${fmtBytes(h.data.databaseBytes)} · ${h.pushDevices} notification device${h.pushDevices === 1 ? '' : 's'}`;
+  $('#health-info').textContent = `Sara ${h.version}${h.revision ? ` (${h.revision})` : ''} · Node ${h.node} · ${t('up {time}', { time: up })} · ${t('database {size}', { size: fmtBytes(h.data.databaseBytes) })} · ${h.pushDevices === 1 ? t('1 notification device') : t('{n} notification devices', { n: h.pushDevices })}`;
 }
 // ---------- Phase 30: health history and recent problems ----------
 /** A small bar chart (inline SVG, theme colours). values: numbers or null (no data). */
@@ -3235,7 +3251,7 @@ function miniChart(title, values, labels, { fmt = (v) => String(v), max, bad } =
   svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
   svg.setAttribute('role', 'img');
   const known = values.filter((v) => v !== null);
-  svg.setAttribute('aria-label', `${title}: ${known.length ? `latest ${fmt(known.at(-1))}` : 'no data yet'}`);
+  svg.setAttribute('aria-label', `${title}: ${known.length ? t('latest {value}', { value: fmt(known.at(-1)) }) : t('no data yet')}`);
   values.forEach((v, i) => {
     const r = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
     const h = v === null ? 2 : Math.max(2, (v / top) * (H - 4));
@@ -3352,8 +3368,10 @@ function continueButton(path, after) {
   return b;
 }
 
-function jobCard(text, status) {
-  const [head, ...rest] = text.split('\n');
+function jobCard(text, status, meta) {
+  const [first, ...rest] = text.split('\n');
+  // Phase 61: the server sends the first line as a template (meta.key/params) for the app language.
+  const head = meta?.key ? serverText(meta, first) : first;
   return toolBlock({ name: 'job', summary: head, status: status === 'ok' ? 'ok' : status === 'stopped' || status === 'budget' ? 'denied' : 'error', output: rest.join('\n') });
 }
 
@@ -3818,7 +3836,7 @@ function startEvents() {
         b.className = `msg notice ${ev.message.meta?.kind ?? ''}`;
       }
       if (ev.message.meta?.call) b.classList.add('missed-call');
-      if (ev.message.role === 'notice' && ev.message.content.startsWith('job:')) append(jobCard(ev.message.content.slice(4), ev.message.meta?.status));
+      if (ev.message.role === 'notice' && ev.message.content.startsWith('job:')) append(jobCard(ev.message.content.slice(4), ev.message.meta?.status, ev.message.meta));
       else append(b);
     }
     await loadConversations();
@@ -7383,7 +7401,7 @@ async function wzVoice() {
 $('#wz-listen').addEventListener('click', async () => {
   const name = $('#wz-name').value.trim() || wz.draft.name;
   const res = await fetch('/api/voice/speak', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ text: t("Hi, I'm {name}. This is how I'd sound.", { name }), voice: $('#wz-voice').value }) });
-  if (!res.ok) return void ($('#wz-voice-note').textContent = (await res.json().catch(() => ({}))).error ?? t("Couldn't play that voice."));
+  if (!res.ok) return void ($('#wz-voice-note').textContent = serverText(await res.json().catch(() => ({})), t("Couldn't play that voice.")));
   const audio = new Audio(URL.createObjectURL(await res.blob()));
   audio.play().catch(() => {});
 });
@@ -7759,7 +7777,7 @@ $('#hist-file').addEventListener('change', async () => {
   try {
     const res = await fetch('/api/history-import/preview', { method: 'POST', headers: { 'content-type': 'application/octet-stream' }, body: f });
     const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`);
+    if (!res.ok) throw new Error(serverText(data, `HTTP ${res.status}`));
     hist.preview = data;
     $('#hist-summary').textContent = `${data.name}: ${data.conversations} ${t('conversations')}, ${data.messages} ${t('messages')} (${data.yourMessages} ${t('from you')}), ${fmtDay(data.from)} – ${fmtDay(data.to)}.${data.already ? ` ${data.already} ${t('are already here and will be skipped.')}` : ''}`;
     $('#hist-titles').replaceChildren(...data.sampleTitles.map((x) => el('li', '', x)));

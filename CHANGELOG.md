@@ -2,6 +2,18 @@
 
 Format: newest first. Versions follow `0.<phase>.<patch>` until 1.0.0.
 
+## 1.2.0 (2026-10-28): fully in your language
+
+- **The whole help guide** is now in Spanish, French, German, Portuguese (Brazil) and Italian, with
+  menu paths matching the translated app.
+- **Text Sara's server makes now follows your language:** error messages, Health and Today lines,
+  setup messages, job cards, phone notifications, "a backup model took over" notices, the default
+  name for another app's key and its conversation titles, and her Telegram/Discord messages to you.
+  Numbers use your local format. Apps and older clients still receive the same English as before.
+- Still in English on purpose: the crisis-line notice (988 is a US line), the fixed texts other
+  people see when they message her bots, and replies to other apps over MCP or the OpenAI API.
+  Gallery character descriptions are open for contributors (issue #8).
+
 ## 1.1.0 (2026-10-28): install anywhere
 
 - **Set up a new server in the browser.** No more digging for a long token: open her page, type the

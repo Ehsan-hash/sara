@@ -3,7 +3,7 @@
 // Import button or by dropping the file,
 // see a preview first, then make her that character or add the character as a new companion.
 // Export her as a V3 card: a PNG of her picture with the card inside, or JSON.
-import { t } from './naming.js';
+import { serverText, t } from './naming.js';
 
 const $ = (sel) => document.querySelector(sel);
 function el(tag, cls, text) {
@@ -19,7 +19,7 @@ async function api(path, opts = {}) {
     body: opts.raw ?? (opts.body !== undefined ? JSON.stringify(opts.body) : undefined),
   });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw Object.assign(new Error(data.error ?? `HTTP ${res.status}`), { status: res.status });
+  if (!res.ok) throw Object.assign(new Error(serverText(data, `HTTP ${res.status}`)), { status: res.status });
   return data;
 }
 
@@ -123,7 +123,7 @@ async function exportPng() {
     c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
     const blob = await new Promise((r) => c.toBlob(r, 'image/png'));
     const res = await fetch('/api/character/card/png', { method: 'POST', headers: { 'content-type': 'image/png' }, body: blob });
-    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? `HTTP ${res.status}`);
+    if (!res.ok) throw new Error(serverText(await res.json().catch(() => ({})), `HTTP ${res.status}`));
     download(await res.blob(), `${hooks.name()}.card.png`);
     status('');
   } catch {

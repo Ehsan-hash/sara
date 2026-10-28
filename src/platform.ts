@@ -2,6 +2,7 @@
 // how to name the system, which admin command to suggest, whether local voice exists, and the
 // "how you reach her" block the installers set through environment variables.
 import { existsSync } from 'node:fs';
+import { en } from './i18n.ts';
 
 /** A friendly name for the operating system ("Windows", "macOS", "Linux"). */
 export function systemName(platform: NodeJS.Platform = process.platform): string {
@@ -106,10 +107,10 @@ export type AccessMode = 'local' | 'tailscale' | 'domain' | 'lan';
 export const ACCESS_MODES: readonly AccessMode[] = ['local', 'tailscale', 'domain', 'lan'];
 
 const ACCESS_LABEL: Record<AccessMode, string> = {
-  local: 'Just this computer',
-  tailscale: 'Tailscale (your private network)',
-  domain: 'Your own web address',
-  lan: 'Your home network',
+  local: en('Just this computer'),
+  tailscale: en('Tailscale (your private network)'),
+  domain: en('Your own web address'),
+  lan: en('Your home network'),
 };
 
 export interface AccessInfo {
@@ -136,7 +137,7 @@ export function accessInfo(env: NodeJS.ProcessEnv = process.env): AccessInfo {
       url = null;
     }
   }
-  const info: AccessInfo = { mode, label: mode ? ACCESS_LABEL[mode] : 'Not set up by an installer', url };
-  if (url?.startsWith('http:') && mode !== 'local') info.warning = 'This address has no HTTPS: anyone on the same network could read what you send. Fine at home on a network you trust; use Tailscale for anywhere else.';
+  const info: AccessInfo = { mode, label: mode ? ACCESS_LABEL[mode] : en('Not set up by an installer'), url };
+  if (url?.startsWith('http:') && mode !== 'local') info.warning = en('This address has no HTTPS: anyone on the same network could read what you send. Fine at home on a network you trust; use Tailscale for anywhere else.');
   return info;
 }

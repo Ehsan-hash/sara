@@ -2,7 +2,7 @@
 // The owner types the code the app shows (it is never taken from the link), sees the app's name,
 // the address it asked from and how long ago, and confirms it's really them with the owner token,
 // the current two-step code or a passkey. Nothing happens until then.
-import { savedLang, setLanguage, t } from './naming.js';
+import { savedLang, setLanguage, serverText, t } from './naming.js';
 
 const $ = (s) => document.querySelector(s);
 const status = (s) => ($('#dv-status').textContent = s);
@@ -33,7 +33,7 @@ function done(ok, data, path) {
     $('#dv-what').hidden = true;
     $('#dv-find').hidden = true;
   } else {
-    status(data.error ?? t('That did not work.'));
+    status(serverText(data, t('That did not work.')));
     $('#dv-yes').disabled = $('#dv-no').disabled = $('#dv-pk').disabled = false;
   }
 }
@@ -48,7 +48,7 @@ async function decide(path, proof) {
 async function approveWithPasskey() {
   try {
     const { res, data } = await post('passkey/confirm-options', {});
-    if (!res?.ok) return status(data.error ?? t('That did not work.'));
+    if (!res?.ok) return status(serverText(data, t('That did not work.')));
     const cred = await navigator.credentials.get({ publicKey: { challenge: b64u.dec(data.challenge), rpId: data.rpId, userVerification: data.userVerification, timeout: data.timeout, allowCredentials: [] } });
     if (!cred) return;
     await decide('approve', { passkey: { id: cred.id, clientDataJSON: b64u.enc(cred.response.clientDataJSON), authenticatorData: b64u.enc(cred.response.authenticatorData), signature: b64u.enc(cred.response.signature) } });

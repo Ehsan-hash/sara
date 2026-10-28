@@ -1,6 +1,6 @@
 // Phase 44: her library. A window listing the documents she keeps (add, search, open one to see
 // what she learned and the text she read, remove), plus the upload used by the 📎 in chat.
-import { t } from './naming.js';
+import { serverText, t } from './naming.js';
 
 const $ = (sel) => document.querySelector(sel);
 function el(tag, cls, text) {
@@ -16,7 +16,7 @@ async function api(path, opts = {}) {
     body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
   });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw Object.assign(new Error(data.error ?? `HTTP ${res.status}`), { status: res.status });
+  if (!res.ok) throw Object.assign(new Error(serverText(data, `HTTP ${res.status}`)), { status: res.status });
   return data;
 }
 
@@ -36,7 +36,7 @@ export async function uploadDoc(file, { keep = true, conversationId = null, lear
   if (conversationId) q.set('conversation', conversationId);
   const res = await fetch(`/api/library?${q}`, { method: 'POST', headers: { 'content-type': 'application/octet-stream' }, body: file });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`);
+  if (!res.ok) throw new Error(serverText(data, `HTTP ${res.status}`));
   return data.doc;
 }
 

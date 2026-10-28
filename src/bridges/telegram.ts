@@ -6,13 +6,12 @@
 // Phase 43: more owners by user ID; owners can work with her (tools) in groups when allowed; she
 // can also answer to her name without the @ and to @all / @everyone; adult groups by ID.
 import { randomInt } from 'node:crypto';
-import { appLanguage } from '../i18n.ts';
+import { appLanguage, en, tr } from '../i18n.ts';
 import type { AppContext, ChatEvent } from '../chat.ts';
 import type { HubEvent } from '../events.ts';
 import { disclosureText } from '../safety.ts';
 import { speechOf } from '../speech.ts';
 import { paceLikeTyping } from './pace.ts';
-import { personalize } from '../identity.ts';
 import { identityOf } from '../persona.ts';
 import type { Conversation } from '../store.ts';
 import { takeChatDocument, type SharedDoc } from '../library/intake.ts';
@@ -180,6 +179,11 @@ export class TelegramBridge {
     }
   }
 
+  /** Phase 61: her app lines to the owner in the owner's app language (partners get the English ones). */
+  #tr(text: string, params?: Record<string, unknown>): string {
+    return tr(text, appLanguage(this.#app.settings.get()), params, identityOf(this.#app.persona));
+  }
+
   async send(chatId: number, text: string, extra: Record<string, unknown> = {}): Promise<void> {
     for (const part of splitMessage(text)) await this.#call('sendMessage', { chat_id: chatId, text: part, ...extra });
   }
@@ -192,7 +196,7 @@ export class TelegramBridge {
       const m = q.data?.match(/^ap:([\w-]+):([01])$/);
       if (m && isTelegramOwner(cfg, q.from.id)) {
         const ok = this.#app.approvals.decide(m[1], m[2] === '1');
-        await this.#call('answerCallbackQuery', { callback_query_id: q.id, text: ok ? (m[2] === '1' ? 'Allowed' : 'Denied') : 'No longer waiting' });
+        await this.#call('answerCallbackQuery', { callback_query_id: q.id, text: this.#tr(ok ? (m[2] === '1' ? en('Allowed') : en('Denied')) : en('No longer waiting')) });
         if (q.message) await this.#call('editMessageReplyMarkup', { chat_id: q.message.chat.id, message_id: q.message.message_id, reply_markup: { inline_keyboard: [] } }).catch(() => undefined);
       } else await this.#call('answerCallbackQuery', { callback_query_id: q.id }).catch(() => undefined);
       return;
@@ -208,11 +212,11 @@ export class TelegramBridge {
       if (this.#link && this.#link.code === link[1] && Date.now() < this.#link.expires) {
         this.#link = undefined;
         this.#app.settings.update({ telegram: { ...cfg, ownerChatId: msg.chat.id } });
-        await this.send(msg.chat.id, `Linked. It's me, ${this.#app.persona.name}. Text me here any time. (${disclosureText(this.#app.persona.name, appLanguage(this.#app.settings.get()))})`);
+        await this.send(msg.chat.id, `${this.#tr("Linked. It's me, {name}. Text me here any time.", { name: this.#app.persona.name })} (${disclosureText(this.#app.persona.name, appLanguage(this.#app.settings.get()))})`);
       } else {
         // Five wrong tries and the code is gone (no guessing it in the 10 minutes it lasts).
         if (this.#link && ++this.#link.misses >= 5) this.#link = undefined;
-        await this.send(msg.chat.id, 'That code is wrong or expired. Get a new one in Settings → Telegram.');
+        await this.send(msg.chat.id, this.#tr('That code is wrong or expired. Get a new one in Settings → Telegram.'));
       }
       return;
     }
@@ -240,11 +244,11 @@ export class TelegramBridge {
       try {
         heard = await this.#hear(note);
       } catch (err) {
-        await this.send(msg.chat.id, isOwner ? `I couldn't listen to that: ${(err as Error).message}` : "Sorry, I can't listen to voice notes right now. Could you type it?");
+        await this.send(msg.chat.id, isOwner ? this.#tr("I couldn't listen to that: {error}", { error: (err as Error).message }) : "Sorry, I can't listen to voice notes right now. Could you type it?");
         return;
       }
       if (!heard) {
-        await this.send(msg.chat.id, "I couldn't make out any words in that one. Try again?");
+        await this.send(msg.chat.id, isOwner ? this.#tr("I couldn't make out any words in that one. Try again?") : "I couldn't make out any words in that one. Try again?");
         return;
       }
     }
@@ -258,11 +262,11 @@ export class TelegramBridge {
         if (r.problem) return void (await this.send(msg.chat.id, r.problem));
         docs.push(r.doc!);
       } catch (err) {
-        return void (await this.send(msg.chat.id, `I couldn't get that file: ${(err as Error).message}`));
+        return void (await this.send(msg.chat.id, this.#tr("I couldn't get that file: {error}", { error: (err as Error).message })));
       }
     }
     if (!text && !heard && !docs.length) {
-      if (msg.photo) await this.send(msg.chat.id, "I can only read text and voice notes here for now. Tell me about it?");
+      if (msg.photo) await this.send(msg.chat.id, isOwner ? this.#tr('I can only read text and voice notes here for now. Tell me about it?') : 'I can only read text and voice notes here for now. Tell me about it?');
       return;
     }
 
@@ -359,16 +363,16 @@ export class TelegramBridge {
         // The flagged reply is replaced by her correction.
         if (ev.correcting) reply = '';
         else flush();
-      } else if (ev.type === 'notice') sends.push(this.send(chatId, `ℹ️ ${ev.text}`));
+      } else if (ev.type === 'notice') sends.push(this.send(chatId, `ℹ️ ${isOwner && ev.key ? this.#tr(ev.key, ev.params) : ev.text}`));
       else if (ev.type === 'approval' && isOwner) {
         sends.push(
-          this.send(chatId, personalize(`She wants to: ${ev.summary}`, identityOf(this.#app.persona)), {
-            reply_markup: { inline_keyboard: [[{ text: 'Allow', callback_data: `ap:${ev.approvalId}:1` }, { text: 'Deny', callback_data: `ap:${ev.approvalId}:0` }]] },
+          this.send(chatId, this.#tr('She wants to: {what}', { what: ev.summary }), {
+            reply_markup: { inline_keyboard: [[{ text: this.#tr('Allow'), callback_data: `ap:${ev.approvalId}:1` }, { text: this.#tr('Deny'), callback_data: `ap:${ev.approvalId}:0` }]] },
           }),
         );
       } else if (ev.type === 'error') {
         flush();
-        if (ev.message !== 'Stopped.') outgoing.push(isOwner ? `(Something went wrong: ${ev.message})` : "Sorry, I can't answer right now.");
+        if (ev.message !== 'Stopped.') outgoing.push(isOwner ? this.#tr('(Something went wrong: {error})', { error: ev.message }) : "Sorry, I can't answer right now.");
       }
     };
     try {

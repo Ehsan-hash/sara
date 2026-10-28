@@ -10,13 +10,12 @@
 // per channel keeps two bots from talking forever: after botTurnLimit bot-triggered replies she
 // waits for a person to write there, and botHourlyCap caps bot-triggered replies per hour.
 import { randomInt } from 'node:crypto';
-import { appLanguage } from '../i18n.ts';
+import { appLanguage, en, tr } from '../i18n.ts';
 import type { AppContext, ChatEvent } from '../chat.ts';
 import type { HubEvent } from '../events.ts';
 import { disclosureText } from '../safety.ts';
 import { speechOf } from '../speech.ts';
 import { paceLikeTyping } from './pace.ts';
-import { personalize } from '../identity.ts';
 import { identityOf } from '../persona.ts';
 import type { Conversation } from '../store.ts';
 import { takeChatDocument, type SharedDoc } from '../library/intake.ts';
@@ -262,9 +261,14 @@ export class DiscordBridge {
     const who = i.user ?? i.member?.user;
     const m = i.data?.custom_id?.match(/^ap:([\w-]+):([01])$/);
     let reply = 'Only the owner can answer that.';
-    if (m && who && isDiscordOwner(discordSettings(this.#app), who.id)) reply = this.#app.approvals.decide(m[1], m[2] === '1') ? (m[2] === '1' ? 'Allowed.' : 'Denied.') : 'That request is no longer waiting.';
+    if (m && who && isDiscordOwner(discordSettings(this.#app), who.id)) reply = this.#app.approvals.decide(m[1], m[2] === '1') ? this.#tr(m[2] === '1' ? en('Allowed.') : en('Denied.')) : this.#tr('That request is no longer waiting.');
     // Type 4 = reply with a message (ephemeral flag 64).
     await this.#rest('POST', `/interactions/${i.id}/${i.token}/callback`, { type: 4, data: { content: reply, flags: 64 } });
+  }
+
+  /** Phase 61: her app lines to the owner in the owner's app language (partners get the English ones). */
+  #tr(text: string, params?: Record<string, unknown>): string {
+    return tr(text, appLanguage(this.#app.settings.get()), params, identityOf(this.#app.persona));
   }
 
   async send(channelId: string, text: string, extra: Record<string, unknown> = {}): Promise<void> {
@@ -296,11 +300,11 @@ export class DiscordBridge {
         this.#link = undefined;
         this.#app.settings.update({ discord: { ...cfg, ownerUserId: msg.author.id } });
         this.#dmChannel.set(msg.author.id, msg.channel_id);
-        await this.send(msg.channel_id, `Linked. It's me, ${this.#app.persona.name}. (${disclosureText(this.#app.persona.name, appLanguage(this.#app.settings.get()))})`);
+        await this.send(msg.channel_id, `${this.#tr("Linked. It's me, {name}.", { name: this.#app.persona.name })} (${disclosureText(this.#app.persona.name, appLanguage(this.#app.settings.get()))})`);
       } else {
         // Five wrong tries and the code is gone (no guessing it in the 10 minutes it lasts).
         if (this.#link && ++this.#link.misses >= 5) this.#link = undefined;
-        await this.send(msg.channel_id, 'That code is wrong or expired. Get a new one in Settings → Discord.');
+        await this.send(msg.channel_id, this.#tr('That code is wrong or expired. Get a new one in Settings → Discord.'));
       }
       return;
     }
@@ -324,10 +328,10 @@ export class DiscordBridge {
         if ((note.size ?? 0) > MAX_NOTE_BYTES) throw new Error('that voice message is too long for me.');
         heard = await speechOf(this.#app).hearNote(note.url, {}, MAX_NOTE_BYTES);
       } catch (err) {
-        await this.send(msg.channel_id, isOwnerDm ? `I couldn't listen to that: ${(err as Error).message}` : "Sorry, I can't listen to voice messages right now.");
+        await this.send(msg.channel_id, isOwnerDm ? this.#tr("I couldn't listen to that: {error}", { error: (err as Error).message }) : "Sorry, I can't listen to voice messages right now.");
         return;
       }
-      if (!heard) return void (await this.send(msg.channel_id, "I couldn't make out any words in that one. Try again?"));
+      if (!heard) return void (await this.send(msg.channel_id, isOwnerDm ? this.#tr("I couldn't make out any words in that one. Try again?") : "I couldn't make out any words in that one. Try again?"));
     }
     const isOwner = isOwnerDm || ownerWork;
     // Phase 44: documents from an owner go to her library (or are read once, if the message says so).
@@ -346,7 +350,7 @@ export class DiscordBridge {
           if (r.problem) await this.send(msg.channel_id, r.problem);
           else docs.push(r.doc!);
         } catch (err) {
-          await this.send(msg.channel_id, `I couldn't get that file: ${(err as Error).message}`);
+          await this.send(msg.channel_id, this.#tr("I couldn't get that file: {error}", { error: (err as Error).message }));
         }
       }
     }
@@ -463,16 +467,16 @@ export class DiscordBridge {
       else if (ev.type === 'replace') reply = ev.text;
       else if (ev.type === 'tool_call') flush();
       else if (ev.type === 'claim_check') ev.correcting ? (reply = '') : flush();
-      else if (ev.type === 'notice') sends.push(this.send(channelId, `ℹ️ ${ev.text}`));
+      else if (ev.type === 'notice') sends.push(this.send(channelId, `ℹ️ ${isOwner && ev.key ? this.#tr(ev.key, ev.params) : ev.text}`));
       else if (ev.type === 'approval' && isOwner) {
         sends.push(
-          this.send(channelId, personalize(`She wants to: ${ev.summary}`, identityOf(this.#app.persona)), {
-            components: [{ type: 1, components: [{ type: 2, style: 3, label: 'Allow', custom_id: `ap:${ev.approvalId}:1` }, { type: 2, style: 4, label: 'Deny', custom_id: `ap:${ev.approvalId}:0` }] }],
+          this.send(channelId, this.#tr('She wants to: {what}', { what: ev.summary }), {
+            components: [{ type: 1, components: [{ type: 2, style: 3, label: this.#tr('Allow'), custom_id: `ap:${ev.approvalId}:1` }, { type: 2, style: 4, label: this.#tr('Deny'), custom_id: `ap:${ev.approvalId}:0` }] }],
           }),
         );
       } else if (ev.type === 'error') {
         flush();
-        if (ev.message !== 'Stopped.') outgoing.push(isOwner ? `(Something went wrong: ${ev.message})` : "Sorry, I can't answer right now.");
+        if (ev.message !== 'Stopped.') outgoing.push(isOwner ? this.#tr('(Something went wrong: {error})', { error: ev.message }) : "Sorry, I can't answer right now.");
       }
     };
     try {

@@ -7,7 +7,7 @@ This page is for anyone who wants to fix a word, keep a language complete, or ad
 ## How it works
 
 - **English is the source.** Every built-in string is written in English in `web/index.html`,
-  `web/*.js` and `web/tips.json`.
+  `web/*.js`, `web/tips.json`, `web/help.html` and, for text the server makes, `src/`.
 - **One file per language:** `web/i18n/<lang>.json`, a flat object keyed by the English text itself
   (trimmed, spaces collapsed). There is no build step and no list of made-up key names to keep in
   sync. If the English changes, the old key shows up as unused and the new one as missing, so you
@@ -21,8 +21,33 @@ This page is for anyone who wants to fix a word, keep a language complete, or ad
   pronouns for her.** Example: German "Sara antwortet…" rather than "Sie antwortet…".
 - Text the owner or the companion wrote (messages, memories, notes, titles, look backs) is never
   translated.
-- Server-made text (errors, most notices) is still English, except the AI disclosure, which is
-  legally required and lives in `src/i18n.ts` (`DISCLOSURE`) in every language.
+- The AI disclosure is legally required and has its own reviewed texts in `src/i18n.ts`
+  (`DISCLOSURE`). The crisis resources stay English (988 is a US line).
+
+## Text the server makes (Phase 61)
+
+Server text the owner sees uses the **same** `web/i18n/<lang>.json` files, keyed by the English.
+Two ways, depending on where the text ends up:
+
+- **Shown by the web app** (API errors, Today and Health lines, job cards, "a backup model took
+  over" notices, default names like "Another app"): the server keeps sending English, so older apps
+  and other clients still work, and the app translates it with `t()`. A fixed text is its own key
+  (mark it with `en('…')` in `src/` so the extractor finds it; `new HttpError(400, '…')` with a plain
+  string is found too). Text with values is sent as a template plus values: an `HttpError` with
+  `{ params }` adds `errorKey` and `params` to the JSON error; notices carry `key`/`params`; Health
+  checks carry `detailKey`/`params`. `serverText()` in `web/naming.js` picks the right one.
+- **Leaving the server as plain text** (push notifications, Telegram and Discord messages to the
+  owner, conversation titles made by the server, model-switch and job messages she sends):
+  `tr(text, lang, params, identity)` / `trOwner(text, settings, …)` in `src/i18n.ts` look the key up
+  in the owner's app language (Settings → You → Language) and fill `{placeholders}`. Unknown keys
+  and languages stay English.
+- Never through `tr()`: what she says (the model's words), and the fixed texts partners see in
+  Telegram/Discord (they don't share the owner's language).
+- `scripts/i18n-extract.ts` (`fromServer`) collects the first argument of `tr()`, `trOwner()` and
+  `en()`, plain-string `HttpError` messages and `errorKey: '…'` in every `.ts` file under `src/`,
+  so a new server text without translations fails the i18n test like any other string.
+- Write the companion as "Sara" in server keys too: `tr()` swaps the name (and, in English only,
+  the pronouns) like the app does.
 
 ## The rules
 
@@ -69,5 +94,11 @@ extractor can't see go in `web/i18n/_extra.json` (`keys`).
 4. Look at the app in the new language at desktop and phone width (long words wrap or get cut off
    in the sidebar and buttons; pick shorter words where needed).
 
-The help page (`web/help.html`) translates its menu, headings, opening line and "Getting started"
-(`web/help-i18n.js`); the rest of the guide is English for now.
+## The help guide
+
+The whole guide (`web/help.html`) is translated by `web/help-i18n.js` with the same files: the menu
+and headings by their text, and every block (list item, paragraph, table cell, tip box) by its
+inner HTML as the browser reads it (a bare `&` becomes `&amp;`). Keep the tags, links and `<code>`
+samples exactly; menu paths (*Settings → …*) must use the translated names of the Settings pages
+and buttons. `helpBlocks()` in `scripts/i18n-extract.ts` lists the same blocks, so a new or changed
+paragraph shows up as missing until it is translated.

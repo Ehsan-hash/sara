@@ -1,7 +1,9 @@
-// Phase 53: the help page in the app's language (the one this device last used): the menu, the
-// headings, the opening line and "Getting started". The rest of the guide is English for now.
-// Keys are the English text (for whole items of "Getting started": their HTML, so links and
-// emphasis keep working); translations come from the same /i18n/<lang>.json as the app.
+// Phase 53, whole guide since Phase 61: the help page in the app's language (the one this device
+// last used). Translations come from the same /i18n/<lang>.json as the app, keyed by the English:
+// the menu and headings by their text, every other block of the guide (list items, paragraphs,
+// table cells, tips) by its HTML, so links, emphasis and code samples keep working.
+// scripts/i18n-extract.ts (fromHelp / helpBlocks) lists the same blocks, so a new paragraph without
+// translations fails the i18n test.
 const norm = (s) => s.replace(/\s+/g, ' ').trim();
 let lang = null;
 try {
@@ -14,6 +16,9 @@ if (!lang) {
   const c = String(navigator.language ?? '').toLowerCase();
   lang = c.startsWith('pt') ? 'pt-BR' : ['es', 'fr', 'de', 'it'].find((l) => c.startsWith(l)) ?? null;
 }
+
+/** Blocks translated as a whole: their HTML (as the browser serializes it) is the key. */
+const BLOCKS = 'main li, main p, main td, main th, main div.tip';
 
 async function translateHelp() {
   if (!lang || lang === 'en' || !/^[a-z]{2}(-[A-Z]{2})?$/.test(lang)) return;
@@ -30,14 +35,10 @@ async function translateHelp() {
   };
   const title = dict[norm(document.title)];
   if (title) document.title = title;
-  for (const el of document.querySelectorAll('nav a, nav .brand, main h1, main h2, main h3, main > p.muted')) textOf(el);
-  // "Getting started": whole items, so the links inside them stay.
-  const start = document.getElementById('start');
-  for (let el = start?.nextElementSibling; el && el.tagName !== 'H2'; el = el.nextElementSibling) {
-    for (const item of el.matches('ol, ul') ? el.children : [el]) {
-      const tr = dict[norm(item.innerHTML)];
-      if (tr) item.innerHTML = tr;
-    }
+  for (const el of document.querySelectorAll('nav a, nav .brand, main h1, main h2, main h3')) textOf(el);
+  for (const el of document.querySelectorAll(BLOCKS)) {
+    const tr = dict[norm(el.innerHTML)];
+    if (tr) el.innerHTML = tr;
   }
 }
 

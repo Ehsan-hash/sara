@@ -9,6 +9,10 @@ import type { AppContext, ChatEvent, TurnOptions } from './chat.ts';
 import type { CompanionManager } from './companions.ts';
 import { minorSexualMatch, MINOR_BLOCK_REPLY } from './safety.ts';
 import type { Settings } from './settings.ts';
+import { en, trOwner } from './i18n.ts';
+
+/** The name of an API key the owner didn't name (the app shows it in her language). */
+export const DEFAULT_APP_NAME = en('Another app');
 
 export interface OtherAppsSettings {
   /** Her own tools in turns from other apps (her normal approval rules still apply). Off by default. */
@@ -91,7 +95,7 @@ export function callerOf(req: IncomingMessage, auth: OwnerAuth): Caller | undefi
   if (!m || !m[1].startsWith(DEVICE_TOKEN_PREFIX)) return undefined;
   const id = auth.deviceTokenId(m[1]);
   if (!id) return undefined;
-  return { id, label: auth.deviceLabelOf(id) ?? 'Another app', kind: auth.deviceKind(id) ?? 'app' };
+  return { id, label: auth.deviceLabelOf(id) ?? DEFAULT_APP_NAME, kind: auth.deviceKind(id) ?? 'app' };
 }
 
 export const CORS_HEADERS = 'authorization, content-type, x-sara-conversation, x-sara-history, x-sara-companion, mcp-protocol-version, mcp-method, mcp-name, mcp-session-id, last-event-id, openai-organization, openai-project, x-stainless-arch, x-stainless-lang, x-stainless-os, x-stainless-package-version, x-stainless-runtime, x-stainless-runtime-version, x-stainless-retry-count, x-stainless-timeout';
@@ -177,7 +181,10 @@ export function appConversation(app: AppContext, channel: 'api' | 'mcp', caller:
   const k = `${caller.id}:${key || 'default'}`;
   const found = app.store.findChannelConversation(channel, k);
   if (found) return found.id;
-  const title = channel === 'mcp' ? (key === 'changes' ? `${caller.label}: changes (MCP)` : `${caller.label} (MCP)`) : key && key !== 'default' ? `${caller.label} · ${key}` : caller.label;
+  // Phase 61: the app's own words in the title follow the owner's language (made once; the title is hers to rename).
+  const s = app.settings.get();
+  const label = caller.label === DEFAULT_APP_NAME ? trOwner(DEFAULT_APP_NAME, s) : caller.label;
+  const title = channel === 'mcp' ? (key === 'changes' ? trOwner('{app}: changes (MCP)', s, { app: label }) : `${label} (MCP)`) : key && key !== 'default' ? `${label} · ${key}` : label;
   return app.store.createConversation({ title: title.slice(0, 60), channel, channelKey: k }).id;
 }
 

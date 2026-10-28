@@ -14,6 +14,7 @@
 // browser in. Any sign-in with the owner token also ends setup for good. See docs/THREAT_MODEL.md
 // ("First sign-in in the browser").
 import { createHash, randomInt, timingSafeEqual } from 'node:crypto';
+import { en } from './i18n.ts';
 
 export type ClaimMode = 'browser' | 'code' | 'off';
 
@@ -118,17 +119,17 @@ export class FirstClaim {
     if (!st.open) {
       const message =
         st.closed === 'expired'
-          ? 'Setup in the browser has timed out. Restart Sara to open it again (with a new setup code), or sign in with the owner token from her log.'
+          ? en('Setup in the browser has timed out. Restart Sara to open it again (with a new setup code), or sign in with the owner token from her log.')
           : st.closed === 'locked'
-            ? 'Too many wrong setup codes. Restart Sara for a new code, or sign in with the owner token from her log.'
-            : 'This server already has an owner. Sign in with the owner token.';
+            ? en('Too many wrong setup codes. Restart Sara for a new code, or sign in with the owner token from her log.')
+            : en('This server already has an owner. Sign in with the owner token.');
       return { ok: false, status: 404, message };
     }
-    if (!isPrivateAddress(ip)) return { ok: false, status: 403, message: 'Setup in the browser only works from this machine or your home network. Sign in with the owner token from her log instead.' };
+    if (!isPrivateAddress(ip)) return { ok: false, status: 403, message: en('Setup in the browser only works from this machine or your home network. Sign in with the owner token from her log instead.') };
     if (this.mode === 'browser' && (code === undefined || code === null || code === '')) return { ok: true };
     const given = normalizeClaimCode(String(code ?? ''));
     const ok = given.length === CLAIM_CODE_LENGTH && timingSafeEqual(createHash('sha256').update(given).digest(), this.#hash!);
-    return ok ? { ok: true } : { ok: false, status: 401, message: 'That setup code is wrong. It is in her log, next to the words "setup code".', wrongCode: true };
+    return ok ? { ok: true } : { ok: false, status: 401, message: en('That setup code is wrong. It is in her log, next to the words "setup code".'), wrongCode: true };
   }
 
   /** A wrong code: counts toward the limit for everyone together. */

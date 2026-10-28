@@ -1,5 +1,5 @@
 // Phase 53: finds every user-visible English string of the web app and checks the translations.
-// Sources: web/index.html (text nodes, placeholder, title, aria-label, alt, data-tip, and the Settings
+// Sources (Phase 61: also server text in src/, see fromServer): web/index.html (text nodes, placeholder, title, aria-label, alt, data-tip, and the Settings
 // page names in data-title / data-group), every
 // t('…') / t("…") / t(`…`) call in web/*.js (template literals only without ${…}), and the tip
 // texts of web/tips.json. Translations live in web/i18n/<lang>.json keyed by the English text.
@@ -76,20 +76,25 @@ export function fromHelp(html: string): string[] {
   if (title) add(title);
   const nav = /<nav\b[\s\S]*?<\/nav>/.exec(html)?.[0] ?? '';
   for (const m of nav.matchAll(/>([^<]+)</g)) add(m[1]);
-  const main = html.slice(html.indexOf('<main>'));
+  const main = html.slice(html.indexOf('<main>'), html.indexOf('</main>')).replace(/<!--[\s\S]*?-->/g, '');
   for (const m of main.matchAll(/<(h1|h2|h3)\b[^>]*>([^<]*)<\/\1>/g)) add(m[2]);
-  const intro = /<\/h1>\s*<p class="muted">([^<]*)<\/p>/.exec(main)?.[1];
-  if (intro) add(intro);
-  const start = main.indexOf('<h2 id="start">');
-  const end = main.indexOf('<h2', start + 5);
-  const section = main.slice(start, end).replace(/^<h2[^>]*>[^<]*<\/h2>/, '');
-  // Items: <li>…</li> inside lists, and top-level <p>…</p>. Keys are the inner HTML as the browser
-  // serializes it (entities like &amp; stay as written).
-  for (const m of section.matchAll(/<(li|p)\b[^>]*>([\s\S]*?)<\/\1>/g)) {
-    const k = norm(m[2]);
-    if (k && /\p{L}/u.test(k)) out.add(k);
-  }
+  // Phase 61: every block of the guide (list items, paragraphs, table cells, tips), keyed by its
+  // inner HTML as the browser serializes it (see helpBlocks).
+  for (const k of helpBlocks(main)) if (/\p{L}/u.test(k) && wanted(k)) out.add(k);
   return [...out];
+}
+
+/**
+ * The blocks web/help-i18n.js translates as a whole (li, p, td, th, div.tip), as the keys the
+ * browser will look up: inner HTML, spaces collapsed, a bare & written as &amp; (how innerHTML reads).
+ */
+export function helpBlocks(main: string): string[] {
+  const out: string[] = [];
+  for (const m of main.matchAll(/<(li|p|td|th)\b[^>]*>([\s\S]*?)<\/\1>|<div class="tip">([\s\S]*?)<\/div>/g)) {
+    const k = norm(m[2] ?? m[3] ?? '').replace(/&(?![a-z]+;|#\d+;|#x[\da-f]+;)/gi, '&amp;');
+    if (k) out.push(k);
+  }
+  return out;
 }
 
 /** Strings from t('…') calls in our JS modules. */
@@ -114,6 +119,39 @@ export function fromJs(src: string): string[] {
   return [...out];
 }
 
+/**
+ * Phase 61: server-made text the owner sees (every .ts file in src/): the first argument of tr(…), trOwner(…)
+ * and en(…), fixed HttpError messages (the app translates them by their English text), and
+ * `errorKey: '…'` templates. Only plain quoted strings (no template literals): text with values is
+ * written with {placeholders}.
+ */
+export function fromServer(src: string): string[] {
+  const out = new Set<string>();
+  const q = String.raw`'((?:[^'\\\n]|\\.)*)'|"((?:[^"\\\n]|\\.)*)"`;
+  const res = [
+    new RegExp(String.raw`(?<![\w$.])(?:tr|trOwner|en)\(\s*(?:${q})\s*[,)]`, 'g'),
+    new RegExp(String.raw`new HttpError\(\s*\d+\s*,\s*(?:${q})\s*[,)]`, 'g'),
+    new RegExp(String.raw`errorKey:\s*(?:${q})`, 'g'),
+  ];
+  for (const re of res) {
+    for (const m of src.matchAll(re)) {
+      const s = (m[1] ?? m[2] ?? '').replace(/\\(['"\\])/g, '$1').replace(/\\n/g, '\n');
+      if (s.trim() && wanted(norm(s))) out.add(norm(s));
+    }
+  }
+  return [...out];
+}
+
+/** Every .ts file under src/. */
+export function serverFiles(dir = join(ROOT, 'src')): string[] {
+  const out: string[] = [];
+  for (const d of readdirSync(dir, { withFileTypes: true })) {
+    if (d.isDirectory()) out.push(...serverFiles(join(dir, d.name)));
+    else if (d.name.endsWith('.ts')) out.push(join(dir, d.name));
+  }
+  return out.sort();
+}
+
 /** Tip texts and page summaries from tips.json. */
 export function fromTips(json: string): string[] {
   const j = JSON.parse(json) as { tips?: Record<string, [string, string]>; pages?: Record<string, [string, string]> };
@@ -132,6 +170,7 @@ export function allKeys(): Map<string, string> {
   for (const f of webJsFiles()) add(fromJs(readFileSync(f, 'utf8')), f.slice(ROOT.length + 1).replace(/\\/g, '/'));
   add(fromTips(readFileSync(join(ROOT, 'web', 'tips.json'), 'utf8')), 'tips.json');
   add(fromHelp(readFileSync(join(ROOT, 'web', 'help.html'), 'utf8')), 'help.html');
+  for (const f of serverFiles()) add(fromServer(readFileSync(f, 'utf8')), f.slice(ROOT.length + 1).replace(/\\/g, '/'));
   // Extra keys a module asks for by list (see web/i18n/_extra.json): words built from data, e.g. memory kinds.
   const extraPath = join(ROOT, 'web', 'i18n', '_extra.json');
   if (existsSync(extraPath)) add((JSON.parse(readFileSync(extraPath, 'utf8')) as { keys: string[] }).keys, '_extra.json');

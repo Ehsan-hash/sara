@@ -2,8 +2,13 @@
 // Portuguese (Brazil) and Italian (web/i18n/<lang>.json, keyed by the English text). The owner picks
 // the app language in Settings → You → Language (Automatic = the browser's language) and, separately,
 // the language she talks in ("Talk to me in": Automatic = the language the owner writes in, else the
-// app language). Server-made text stays English in this phase, except the AI disclosure, which is
-// legally required and is shown in the owner's language (same meaning in every language).
+// app language). The AI disclosure is legally required and has its own reviewed texts (DISCLOSURE).
+// Phase 61: other server-made text the owner sees goes through tr() (below), from the same
+// web/i18n/<lang>.json files as the app, keyed by the English text.
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { personalize, type Identity } from './identity.ts';
 import type { Settings } from './settings.ts';
 
 export const LANGUAGES = ['en', 'es', 'fr', 'de', 'pt-BR', 'it'] as const;
@@ -119,4 +124,52 @@ export function speechLanguage(s: Pick<Settings, 'language' | 'languageDetected'
   if (own && own !== 'en') return own;
   const talk = talkLanguage(s);
   return talk === 'en' ? 'en' : voiceLanguage(talk);
+}
+
+// ---------- Phase 61: server-made text in the owner's language ----------
+// One set of translation files for the app and the server: web/i18n/<lang>.json, keyed by the
+// English text with {placeholders}. scripts/i18n-extract.ts finds the server's keys in src/ (tr()
+// and en() calls, and fixed HttpError messages), so a new English text needs its translations in
+// the same change. English is the fallback for any key a language lacks.
+
+/** Marks English text the owner sees that is translated elsewhere (the app, or a later tr()); returns it unchanged. */
+export const en = <S extends string>(text: S): S => text;
+
+/** Fills {name}-style placeholders. */
+export function fill(text: string, params?: Record<string, unknown>): string {
+  if (!params) return text;
+  return text.replace(/\{(\w+)\}/g, (m, k: string) => (k in params ? String(params[k] ?? '') : m));
+}
+
+const I18N_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', 'web', 'i18n');
+const dicts = new Map<Lang, Record<string, unknown>>();
+function dictFor(lang: Lang): Record<string, unknown> {
+  let d = dicts.get(lang);
+  if (!d) {
+    try {
+      d = JSON.parse(readFileSync(join(I18N_DIR, `${lang}.json`), 'utf8')) as Record<string, unknown>;
+    } catch {
+      d = {};
+    }
+    dicts.set(lang, d);
+  }
+  return d;
+}
+
+/**
+ * English text in a language, with its {placeholders} filled. Like the app's t(): translate first,
+ * then the companion's name (and, in English only, her pronouns), then the values, so owner text
+ * in the values is never rewritten. Unknown keys and languages stay English.
+ */
+export function tr(text: string, lang: Lang | string | undefined, params?: Record<string, unknown>, who?: Identity): string {
+  const l = toLang(lang) ?? 'en';
+  const found = l === 'en' ? undefined : dictFor(l)[text.replace(/\s+/g, ' ').trim()];
+  let out = typeof found === 'string' && found.trim() ? found : text;
+  if (who) out = l === 'en' ? personalize(out, who) : who.name && who.name !== 'Sara' ? out.replace(/\bSara\b/g, who.name) : out;
+  return fill(out, params);
+}
+
+/** tr() in the owner's app language (Settings → You → Language). */
+export function trOwner(text: string, s: Pick<Settings, 'language' | 'languageDetected'>, params?: Record<string, unknown>, who?: Identity): string {
+  return tr(text, appLanguage(s), params, who);
 }

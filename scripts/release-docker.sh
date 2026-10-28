@@ -103,13 +103,16 @@ podman_fresh() {
   elif podman image exists "$1" 2>/dev/null; then podman untag "$1" "$1" >/dev/null; fi
 }
 
-# Podman 4.x can't find a digest-pinned base image for the second platform of a multi-platform
-# build unless each platform's copy was pulled first ("locating pulled image … image not known").
-podman_base() {
+# Podman 4.x: a digest-pinned base pulled for two platforms shares one name, so the second pull
+# hides the first ("locating pulled image … image not known"). Build one platform at a time, pulling
+# that platform's base right before its build, adding each to the same manifest list.
+podman_manifest_build() { # <manifest name> <platforms>
   local digest p
   digest="$(sed -n 's/^ARG NODE_DIGEST=\(sha256:[0-9a-f]\{64\}\)$/\1/p' "$ROOT/Dockerfile" | head -1)"
-  [[ -n "$digest" ]] || return 0
-  for p in ${1//,/ }; do run podman pull -q --platform "$p" "docker.io/library/node@$digest"; done
+  for p in ${2//,/ }; do
+    [[ -n "$digest" ]] && run podman pull -q --platform "$p" "docker.io/library/node@$digest"
+    run podman build --format docker --platform "$p" "${ARGS[@]}" --manifest "$1" "$ROOT"
+  done
 }
 
 if [[ $PUSH == 1 ]]; then
@@ -130,8 +133,7 @@ if [[ $PUSH == 1 ]]; then
     # Podman: both platforms into one local manifest list, then push it (every image) per tag.
     # --format docker keeps the HEALTHCHECK (Podman drops it from OCI-format images).
     podman_fresh "$IMAGE:$VERSION"
-    podman_base "$PLATFORMS_ALL"
-    run podman build --format docker --platform "$PLATFORMS_ALL" "${ARGS[@]}" --manifest "$IMAGE:$VERSION" "$ROOT"
+    podman_manifest_build "$IMAGE:$VERSION" "$PLATFORMS_ALL"
     for t in "${TAGS[@]}"; do run podman manifest push --all --format v2s2 "$IMAGE:$VERSION" "docker://$t"; done
     INSPECT="podman manifest inspect docker://$IMAGE:$VERSION"
   fi
@@ -152,8 +154,7 @@ else
       run docker buildx build --builder sara-builder --platform "$PLATFORMS_ALL" "${ARGS[@]}" --tag "$IMAGE:$VERSION" "$ROOT"
     else
       podman_fresh "sara:$VERSION"
-      podman_base "$PLATFORMS_ALL"
-      run podman build --format docker --platform "$PLATFORMS_ALL" "${ARGS[@]}" --manifest "sara:$VERSION" "$ROOT"
+      podman_manifest_build "sara:$VERSION" "$PLATFORMS_ALL"
     fi
     [[ $DRY == 1 ]] && { echo "(dry run: nothing was built)"; exit 0; }
     echo "Built sara:$VERSION for $PLATFORMS_ALL (local only; nothing pushed). Try one with --platform."

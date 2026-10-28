@@ -1,7 +1,7 @@
 // Phase 50: the Map tab on the project page: her code map of the workspace. A folder tree (sizes
 // and how many functions/classes each file has), a file's names with line numbers and what it
 // imports / what imports it, and a search box (names, words, or meaning). Read only.
-import { t } from './naming.js';
+import { serverText, t } from './naming.js';
 
 const $ = (sel) => document.querySelector(sel);
 function el(tag, cls, text) {
@@ -17,7 +17,7 @@ async function api(path, opts = {}) {
     body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
   });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw Object.assign(new Error(data.error ?? `HTTP ${res.status}`), { status: res.status });
+  if (!res.ok) throw Object.assign(new Error(serverText(data, `HTTP ${res.status}`)), { status: res.status });
   return data;
 }
 const fmtSize = (n) => (n < 1024 ? `${n} B` : n < 1048576 ? `${(n / 1024).toFixed(1)} KB` : `${(n / 1048576).toFixed(1)} MB`);
