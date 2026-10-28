@@ -8,6 +8,8 @@
 //
 //   node sara-mcp.ts --server https://sara.example.ts.net      (key in SARA_API_KEY)
 //   node sara-mcp.ts --server http://127.0.0.1:7860 --key-file ~/.sara-api-key
+//   node sara-mcp.ts --describe      (no server: answers initialize and tools/list with her tools,
+//                                     for MCP directories that check a server by starting it)
 //
 // The key never goes on the command line (other programs on the computer can read that).
 // Logs go to stderr only (stdout is the protocol).
@@ -18,6 +20,8 @@ import { createInterface } from 'node:readline';
 interface Options {
   server: string;
   key: string;
+  /** No server: answer the handshake and tools/list locally; tool calls explain how to connect. */
+  describe?: boolean;
 }
 
 function usage(msg: string): never {
@@ -26,6 +30,7 @@ function usage(msg: string): never {
 }
 
 export function parseArgs(argv: string[], env: NodeJS.ProcessEnv): Options {
+  if (argv.includes('--describe')) return { server: '', key: '', describe: true };
   let server = env.SARA_URL ?? '';
   let keyFile = env.SARA_API_KEY_FILE ?? '';
   for (let i = 0; i < argv.length; i++) {
@@ -71,6 +76,359 @@ export function sseMessages(text: string): string[] {
   return out;
 }
 
+/**
+ * Her MCP tools, as Sara's server lists them (all of them; a real server hides write tools unless the
+ * owner allows changes). Kept identical to describeTools() in src/mcp-server.ts by a test.
+ */
+export const DESCRIBE_TOOLS = [
+  {
+    "name": "search_memory",
+    "title": "Search her memory",
+    "description": "Search Sara's long-term memory about the owner (facts, summaries of past conversations, decisions, promises, dates). Use it for context about the owner's life, preferences and projects.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "query": {
+          "type": "string",
+          "description": "Words to look for, e.g. \"sister\" or \"deploy server\"."
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 50,
+          "description": "Up to how many notes (default 10)."
+        }
+      },
+      "required": [
+        "query"
+      ],
+      "additionalProperties": false
+    },
+    "annotations": {
+      "title": "Search her memory",
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    }
+  },
+  {
+    "name": "list_facts",
+    "title": "What she knows about the owner",
+    "description": "List the facts Sara has learned about the owner, newest first.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100,
+          "description": "Up to how many (default 30)."
+        }
+      },
+      "additionalProperties": false
+    },
+    "annotations": {
+      "title": "What she knows about the owner",
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    }
+  },
+  {
+    "name": "recent_conversations",
+    "title": "Recent conversations",
+    "description": "Titles and short summaries of the owner's recent conversations with Sara (never other people's chats or private conversations).",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 30,
+          "description": "Up to how many (default 10)."
+        }
+      },
+      "additionalProperties": false
+    },
+    "annotations": {
+      "title": "Recent conversations",
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    }
+  },
+  {
+    "name": "get_today",
+    "title": "Today",
+    "description": "Today's agenda from Sara's planner: to-dos due today or overdue, reminders in the next 24 hours, calendar events (when connected) and dates that matter coming up.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {},
+      "additionalProperties": false
+    },
+    "annotations": {
+      "title": "Today",
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    }
+  },
+  {
+    "name": "list_tasks",
+    "title": "To-dos",
+    "description": "The owner's to-do list in Sara's planner.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": [
+            "open",
+            "done",
+            "all"
+          ],
+          "description": "Which ones (default open)."
+        },
+        "project": {
+          "type": "string",
+          "description": "Only this project (name)."
+        }
+      },
+      "additionalProperties": false
+    },
+    "annotations": {
+      "title": "To-dos",
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    }
+  },
+  {
+    "name": "search_library",
+    "title": "Search her library",
+    "description": "Search the documents the owner keeps in Sara's library (PDFs, Word, spreadsheets, books, web pages) by words and meaning. Answers quote the passages with where they are.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "query": {
+          "type": "string",
+          "description": "What to look for, e.g. \"when does the lease end\"."
+        }
+      },
+      "required": [
+        "query"
+      ],
+      "additionalProperties": false
+    },
+    "annotations": {
+      "title": "Search her library",
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    }
+  },
+  {
+    "name": "list_notes",
+    "title": "Notes",
+    "description": "The owner's notes in Sara's planner (title and id). Read one with read_note.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "query": {
+          "type": "string",
+          "description": "Only notes with these words."
+        }
+      },
+      "additionalProperties": false
+    },
+    "annotations": {
+      "title": "Notes",
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    }
+  },
+  {
+    "name": "read_note",
+    "title": "Read a note",
+    "description": "Read one of the owner's notes by its id (from list_notes).",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "integer",
+          "description": "The note id."
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "additionalProperties": false
+    },
+    "annotations": {
+      "title": "Read a note",
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    }
+  },
+  {
+    "name": "ask_sara",
+    "title": "Ask Sara",
+    "description": "Send Sara a message and get her reply. She answers in her own conversation for this app (the owner can read it in Sara), with her memory and personality. Use it to ask her something or tell her something worth remembering.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "message": {
+          "type": "string",
+          "description": "What to say to her."
+        }
+      },
+      "required": [
+        "message"
+      ],
+      "additionalProperties": false
+    },
+    "annotations": {
+      "title": "Ask Sara",
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": false
+    }
+  },
+  {
+    "name": "add_task",
+    "title": "Add a to-do",
+    "description": "Add a to-do to the owner's planner in Sara.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string"
+        },
+        "due": {
+          "type": "string",
+          "description": "When, in words: \"tomorrow 9am\", \"friday\", \"2026-11-03\"."
+        },
+        "project": {
+          "type": "string"
+        },
+        "priority": {
+          "type": "string",
+          "enum": [
+            "low",
+            "normal",
+            "high"
+          ]
+        }
+      },
+      "required": [
+        "title"
+      ],
+      "additionalProperties": false
+    },
+    "annotations": {
+      "title": "Add a to-do",
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": false
+    }
+  },
+  {
+    "name": "add_note",
+    "title": "Add a note",
+    "description": "Save a note in the owner's planner in Sara.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string"
+        },
+        "body": {
+          "type": "string"
+        },
+        "project": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "title",
+        "body"
+      ],
+      "additionalProperties": false
+    },
+    "annotations": {
+      "title": "Add a note",
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": false
+    }
+  },
+  {
+    "name": "remember_fact",
+    "title": "Tell her something to remember",
+    "description": "Ask Sara to remember a fact about the owner. The owner always approves it in Sara first.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "fact": {
+          "type": "string",
+          "description": "One short fact, e.g. \"Prefers tabs over spaces\"."
+        }
+      },
+      "required": [
+        "fact"
+      ],
+      "additionalProperties": false
+    },
+    "annotations": {
+      "title": "Tell her something to remember",
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": false
+    }
+  }
+];
+
+const DESCRIBE_VERSIONS = ['2025-11-25', '2025-06-18', '2025-03-26'];
+const CONNECT_HINT = 'This is the Sara MCP bridge in --describe mode, with no Sara server behind it. Run your own Sara (https://github.com/farena-ai/sara), make an API key in Settings → Connections → Other apps, and start the bridge with --server https://<her address> and SARA_API_KEY.';
+
+/** --describe: answers locally, never contacts anything. */
+export function describeAnswer(msg: { id?: unknown; method?: unknown; params?: Record<string, unknown> }): unknown {
+  if (msg.id === undefined || msg.id === null) return undefined; // notifications need no answer
+  const ok = (result: unknown) => ({ jsonrpc: '2.0', id: msg.id, result });
+  switch (msg.method) {
+    case 'initialize': {
+      const want = String(msg.params?.protocolVersion ?? '');
+      return ok({ protocolVersion: DESCRIBE_VERSIONS.includes(want) ? want : DESCRIBE_VERSIONS[0], capabilities: { tools: { listChanged: false } }, serverInfo: { name: 'sara', title: 'Sara', version: 'describe' }, instructions: CONNECT_HINT });
+    }
+    case 'ping':
+      return ok({});
+    case 'tools/list':
+      return ok({ tools: DESCRIBE_TOOLS });
+    case 'tools/call':
+      return ok({ content: [{ type: 'text', text: CONNECT_HINT }], isError: true });
+    case 'resources/list':
+      return ok({ resources: [] });
+    case 'prompts/list':
+      return ok({ prompts: [] });
+    default:
+      return { jsonrpc: '2.0', id: msg.id, error: { code: -32601, message: `Method not found: ${String(msg.method).slice(0, 60)}` } };
+  }
+}
+
 export function startBridge(opts: Options, input: NodeJS.ReadableStream = process.stdin, output: NodeJS.WritableStream = process.stdout, fetchFn: typeof fetch = fetch): Promise<void> {
   let version = ''; // from the initialize answer (handshake revisions)
   const pending = new Set<Promise<void>>();
@@ -84,6 +442,11 @@ export function startBridge(opts: Options, input: NodeJS.ReadableStream = proces
       msg = JSON.parse(line) as typeof msg;
     } catch {
       return send({ jsonrpc: '2.0', error: { code: -32700, message: 'Parse error' } });
+    }
+    if (opts.describe) {
+      const answer = describeAnswer(msg);
+      if (answer !== undefined) send(answer);
+      return;
     }
     const meta = msg.params?._meta as Record<string, unknown> | undefined;
     const pv = typeof meta?.['io.modelcontextprotocol/protocolVersion'] === 'string' ? String(meta['io.modelcontextprotocol/protocolVersion']) : msg.method === 'initialize' ? '' : version;
@@ -131,5 +494,6 @@ export function startBridge(opts: Options, input: NodeJS.ReadableStream = proces
 
 if (process.argv[1] && /(sara-mcp|mcp-bridge)\.(ts|js|mjs)$/.test(process.argv[1])) {
   const opts = parseArgs(process.argv.slice(2), process.env);
+  if (opts.describe) process.stderr.write('sara-mcp: --describe mode (no server): listing her tools only.\n');
   void startBridge(opts).then(() => process.exit(0));
 }

@@ -12,7 +12,7 @@ posting**. What's known about the community's norms:
   of it working. Say plainly what needs the cloud and what doesn't.
 - Use the flair the subreddit offers for a project or integration.
 
-Wait until the HACS repository (`farena-ai/hacs-sara`) is public and installs cleanly.
+Wait until the HACS repository (`farena-ai/sara-home-assistant`) is public and installs cleanly.
 
 ## Post
 
@@ -23,7 +23,7 @@ Wait until the HACS repository (`farena-ai/hacs-sara`) is public and installs cl
 > Disclosure: I'm the author; it's MIT and free.
 >
 > Sara is a self-hosted AI companion (https://github.com/farena-ai/sara). The **Sara
-> integration** (installable with HACS as a custom repository: `https://github.com/farena-ai/hacs-sara`)
+> integration** (installable with HACS as a custom repository: `https://github.com/farena-ai/sara-home-assistant`)
 > connects her to Home Assistant both ways:
 >
 > **Home Assistant → Sara**

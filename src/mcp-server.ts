@@ -330,6 +330,15 @@ const TOOLS: ToolDef[] = [
   },
 ];
 
+/** Every tool as tools/list shows it (write tools included). Used to keep the stdio bridge's --describe list identical. */
+export function describeTools(): Json[] {
+  return TOOLS.map((t) => toolListing(t));
+}
+
+function toolListing(t: ToolDef): Json {
+  return { name: t.name, title: t.title, description: t.description, inputSchema: t.inputSchema, annotations: { title: t.title, readOnlyHint: !t.write && t.name !== 'ask_sara', destructiveHint: false, idempotentHint: !t.write && t.name !== 'ask_sara', openWorldHint: false } };
+}
+
 /** Write tools follow her approval rules: the matching tool's setting (auto / ask / never); `null` = always ask. */
 async function gated(cx: CallContext, tool: string | null, name: string, summary: string, args: Json, run: () => Promise<string>): Promise<string> {
   const perm = tool ? cx.app.tools.permission(tool, cx.app.settings.get().toolPermissions) : 'ask';
@@ -383,7 +392,7 @@ async function dispatch(msg: RpcRequest, version: string, modern: boolean, cx: C
     case 'ping':
       return done({});
     case 'tools/list':
-      return done({ tools: toolsFor(app).map((t) => ({ name: t.name, title: t.title, description: t.description, inputSchema: t.inputSchema, annotations: { title: t.title, readOnlyHint: !t.write && t.name !== 'ask_sara', destructiveHint: false, idempotentHint: !t.write && t.name !== 'ask_sara', openWorldHint: false } })) });
+      return done({ tools: toolsFor(app).map((t) => toolListing(t)) });
     case 'tools/call': {
       const name = String(params.name ?? '');
       const tool = toolsFor(app).find((t) => t.name === name);

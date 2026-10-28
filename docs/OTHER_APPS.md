@@ -210,6 +210,11 @@ answers back. The key comes from `SARA_API_KEY` (or `--key-file`), never the com
 
 The same bridge works for any MCP app that only starts programs (`node sara-mcp.ts --server …`).
 
+`node sara-mcp.ts --describe` starts the bridge with no server: it answers `initialize` and
+`tools/list` with her tools and nothing else (every tool call says how to connect). It exists for MCP
+directories such as [Glama](https://glama.ai/mcp/servers) that check a server by starting it with no
+setup (`packaging/glama/Dockerfile`); it never contacts anything.
+
 ## Character cards
 
 Settings → Her → Name and personality → *Import a character…* (or drop the file on that

@@ -28,7 +28,7 @@ Needs Home Assistant 2025.6 or newer and a Sara server Home Assistant can reach.
 
 ### With HACS
 
-1. HACS → ⋮ → **Custom repositories** → add `https://github.com/farena-ai/hacs-sara`, type
+1. HACS → ⋮ → **Custom repositories** → add `https://github.com/farena-ai/sara-home-assistant`, type
    **Integration**.
 2. Find **Sara** in HACS, **Download**, then restart Home Assistant.
 

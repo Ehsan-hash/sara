@@ -768,7 +768,7 @@ Maintainers: see [PACKAGING.md](PACKAGING.md) for how each one is made and submi
   Proxmox host: `bash -c "$(curl -fsSL https://raw.githubusercontent.com/farena-ai/sara/main/packaging/proxmox/sara.sh)"`
   (checked for syntax; not yet run on a Proxmox host, see its README).
 - **Home Assistant integration** through HACS: *HACS → ⋮ → Custom repositories*, add
-  `https://github.com/farena-ai/hacs-sara` as an *Integration*, then install **Sara**. Or by hand:
+  `https://github.com/farena-ai/sara-home-assistant` as an *Integration*, then install **Sara**. Or by hand:
   copy `integrations/home-assistant/custom_components/sara` (see [HOME_ASSISTANT.md](HOME_ASSISTANT.md)).
 
 **Waiting for review** (submitted and passing each store's own checks; listed here as available

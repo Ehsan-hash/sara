@@ -64,6 +64,8 @@ Check the description is still under 250 characters after any edit.)
 
 ## awesome-mcp-servers
 
+_2026-10-28: the list now also requires a passing [Glama](https://glama.ai/mcp/servers) listing and its score badge in the line (a bot labels PRs `missing-glama`). Agent PRs are allowed if the title ends with 🤖🤖🤖._
+
 **Rules** ([CONTRIBUTING.md](https://github.com/punkpeye/awesome-mcp-servers/blob/main/CONTRIBUTING.md)):
 servers with a public GitHub repository that you install and run yourself (remote-only servers go
 to awesome-remote-mcp-servers); one server per line; follow the existing format; keep the
@@ -147,7 +149,7 @@ project's owner are flagged as self-promotion and need a reason in the PR text; 
 must not start with the name or mention "Home Assistant", and ends with a period; add it as the
 last item in its category; one link per PR.
 
-**Sara doesn't qualify yet:** `farena-ai/hacs-sara` (the HACS repository) must be 6 months old
+**Sara doesn't qualify yet:** `farena-ai/sara-home-assistant` (the HACS repository) must be 6 months old
 first. Ideally someone other than you suggests it once people use it.
 
 **Section:** `Custom Integrations`.
@@ -155,7 +157,7 @@ first. Ideally someone other than you suggests it once people use it.
 **Line to add (then):**
 
 ```markdown
-- [Sara](https://github.com/farena-ai/hacs-sara) - Self-hosted AI companion as an Assist conversation agent, with a send-message action, notes and a last-reply sensor.
+- [Sara](https://github.com/farena-ai/sara-home-assistant) - Self-hosted AI companion as an Assist conversation agent, with a send-message action, notes and a last-reply sensor.
 ```
 
 **PR text (draft):**

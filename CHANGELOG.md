@@ -2,9 +2,17 @@
 
 Format: newest first. Versions follow `0.<phase>.<patch>` until 1.0.0.
 
-## Unreleased
+## 1.4.1 (2026-10-28)
 
-- **Docs:** Clarified that Undo skips dependency folders such as `node_modules` and `.venv`, plus files over 50 MB.
+- **MCP directories:** `sara-mcp.ts --describe` answers the MCP handshake and lists her tools with no
+  server or key, so directories like Glama (which start a server to check it) can list Sara; tool
+  calls in that mode explain how to connect to your own Sara. `packaging/glama/Dockerfile` and
+  `glama.json` are for that listing.
+
+- **Help guide:** says what Undo can't bring back: snapshots skip dependency folders such as
+  `node_modules` and `.venv`, and files over 50 MB. Thanks to @Ehsan-hash (#18).
+- **Home Assistant integration 0.2.1**, now in its own repository `farena-ai/sara-home-assistant`
+  (validated by HACS and hassfest; submitted to the HACS store).
 
 ## 1.4.0 (2026-10-28): smoothness
 

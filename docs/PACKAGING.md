@@ -34,7 +34,7 @@ Ready-to-push submission folders (gitignored, made from the files above; copy ag
 | `outputs/umbrel/sara/` + `outputs/umbrel/pr-assets/` | the `sara/` folder for getumbrel/umbrel-apps; gallery `1.jpg`–`3.jpg` and icon for the PR description |
 | `outputs/casaos/Apps/Sara/` | the `Apps/Sara/` folder for IceWhaleTech/CasaOS-AppStore (compose, icon, thumbnail, screenshots) |
 | `outputs/unraid-templates/` | the repository farena-ai/unraid-templates (`ca_profile.xml`, `templates/sara.xml`, icon, screenshots) |
-| `outputs/hacs-sara/` | the repository farena-ai/hacs-sara (the Home Assistant integration with its `brand/` icons, `hacs.json`, README, info.md, LICENSE, tests) |
+| `outputs/sara-home-assistant/` | the repository farena-ai/sara-home-assistant (the Home Assistant integration with its `brand/` icons, `hacs.json`, README, info.md, LICENSE, tests) |
 | `outputs/brands/custom_integrations/sara/` | icons for home-assistant/brands (legacy route; HA 2026.3+ and HACS read `custom_components/sara/brand/`) |
 | `outputs/homebrew-tap/` | the repository farena-ai/homebrew-tap (`Casks/sara.rb`, README, LICENSE) |
 | `outputs/release/<v>/winget/…` and `…/homebrew/sara.rb` | written by `update-packaging.ts` |
@@ -120,7 +120,7 @@ repository root on the dev PC (git-bash) unless a step says Mac.
    - **CasaOS:** PR `outputs/casaos/Apps/Sara/` as `Apps/Sara/` to IceWhaleTech/CasaOS-AppStore.
    - **Umbrel:** PR `outputs/umbrel/sara/` as `sara/` to getumbrel/umbrel-apps (multi-arch image
      and browser setup needed, so from 1.1).
-   - **Home Assistant (HACS):** push `outputs/hacs-sara/` to farena-ai/hacs-sara and make a GitHub
+   - **Home Assistant (HACS):** push `outputs/sara-home-assistant/` to farena-ai/sara-home-assistant and make a GitHub
      Release; later, PR it into hacs/default (see `integrations/home-assistant/README.md`).
    - **TrueNAS:** the custom-app YAML needs no submission; the catalog is optional (see its README).
    - **Proxmox:** the script runs from the public repository; listing it in community-scripts is
@@ -128,7 +128,7 @@ repository root on the dev PC (git-bash) unless a step says Mac.
 
 ## Home Assistant: HACS and brands
 
-`outputs/hacs-sara/` is the repository **farena-ai/hacs-sara** in the layout HACS requires
+`outputs/sara-home-assistant/` is the repository **farena-ai/sara-home-assistant** in the layout HACS requires
 (one integration under `custom_components/sara/`, `hacs.json` with `name` and the minimum Home
 Assistant version, README, MIT LICENSE). Brand icons now ship inside the integration
 (`custom_components/sara/brand/icon.png` 256×256 and `icon@2x.png` 512×512): Home Assistant 2026.3+
@@ -144,17 +144,28 @@ placeholders (it rejected URLs in `strings.json`). The integration's own tests (
 
 Publish (owner):
 
-1. Create the public repository `farena-ai/hacs-sara` (description, topics such as
-   `home-assistant`, `hacs`, `integration`, `ai`; issues on), push `outputs/hacs-sara/` to `main`.
+1. Create the public repository `farena-ai/sara-home-assistant` (description, topics such as
+   (Repository names must not contain "HACS": hacs-bot rejects them. Renamed 2026-10-28.)
+   `home-assistant`, `hacs`, `integration`, `ai`; issues on), push `outputs/sara-home-assistant/` to `main`.
 2. Make a GitHub Release (tag `v<manifest version>`, now `v0.2.0`). Users can then add it in HACS as a
    custom repository right away.
 3. For the HACS default list: add the [HACS action](https://github.com/hacs/action) and
    [hassfest action](https://github.com/home-assistant/actions#hassfest) workflows to *that*
    repository (GitHub Actions: needs the maintainer's yes), let them pass, make a new
-   release, then PR the line `farena-ai/hacs-sara` (alphabetical) into the `integration` file of
+   release, then PR the line `farena-ai/sara-home-assistant` (alphabetical) into the `integration` file of
    [hacs/default](https://github.com/hacs/default) from a personal (not organization) fork, filling
    in their PR template. Their bots then check brands, manifest, hacs.json, releases, license,
    repository description/topics/issues.
+
+## MCP directories (Glama)
+
+[Glama](https://glama.ai/mcp/servers) lists MCP servers after building a Dockerfile and checking that
+the server starts and answers `tools/list`; awesome-mcp-servers requires that listing. Sara's real MCP
+endpoint needs a running Sara and an API key, so the directory gets the bridge's describe mode:
+`packaging/glama/Dockerfile` (paste it into Glama's form; it copies `src/mcp-bridge.ts` and runs it
+with `--describe`). `glama.json` at the repository root names the maintainer (`farena-ai`) so the
+listing can be claimed. The tool list there is kept identical to the server's by
+`test/mcp-describe.test.ts`.
 
 ## Notes
 

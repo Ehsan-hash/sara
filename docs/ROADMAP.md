@@ -69,10 +69,14 @@ version's details are in the [changelog](../CHANGELOG.md).
 | 61 | Fully in your language: the help guide and every server message in all six languages | ✅ 1.2 |
 | 62 | Smarter checks in every language, and a bigger coding benchmark on real-size projects | ✅ 1.3 |
 | 63 | Smoothness: tool calls that stream as they happen, a more expressive talking portrait, server logs | ✅ 1.4 |
-
-**Later:** group chats with two or more companions, video calls with her moving avatar, a fully
-private local mode in the desktop apps, household mode (more than one person per server), importing
-from other companion apps, a shared photo album, and a smart-home presence through Home Assistant.
+| 64 | Be found: app stores, NAS catalogs, Home Assistant's store and directories | ongoing |
+| 65 | Bring her from another app: import chats and characters from other companion apps | 1.5 |
+| 66 | Group chats with two or more of your companions | 1.6 |
+| 67 | A private local mode in the desktop apps: the model runs on that computer, nothing leaves it | 1.7 |
+| 68 | Video calls with her moving avatar | 1.8 |
+| 69 | Our moments: a shared photo album with her captions | 1.9 |
+| 70 | Household mode: several people on one server, each with their own companions | 2.0 |
+| 71 | Her voice in the home: Alexa, Android's assistant and Google Home, Siri Shortcuts, smart-home presence | 2.1 |
 
 Ideas and requests are welcome in [Discussions](https://github.com/farena-ai/sara/discussions)
 and [issues](https://github.com/farena-ai/sara/issues). See [CONTRIBUTING.md](../CONTRIBUTING.md).
