@@ -13,6 +13,9 @@ import { Updater } from './updates.ts';
 import { reviewSettings } from './review.ts';
 import { exportCharacter, parseCharacter, withCharacterVoice } from './characterfile.ts';
 import { HistoryImporter, MAX_HISTORY_BYTES, saveUpload } from './history-import/index.ts';
+import { isHistorySource, SOURCE_NAME } from './history-import/types.ts';
+import { CompanionImporter, type ConfirmInput } from './companion-import/session.ts';
+import { MAX_FILE_BYTES, MAX_ZIP_BYTES, PICKABLE_SOURCES } from './companion-import/types.ts';
 import { galleryEntry, galleryLine, galleryList, NoBrainError } from './gallery.ts';
 import { findAddress, leaveBySettings } from './leaveby.ts';
 import { DEFAULT_REPORT_INBOX, REASON_LABELS, validReason } from './reports.ts';
@@ -4197,9 +4200,69 @@ export function createSaraServer(opts: ServerOptions): Server {
       }
       if (!b && method === 'DELETE') {
         const src = new URL(req.url ?? '/', 'http://x').searchParams.get('source');
-        const r = hi.remove(src === 'chatgpt' || src === 'claude' ? src : undefined);
+        const r = hi.remove(isHistorySource(src) ? src : undefined);
         app.uploads?.prune(app.store.imagesInUse());
         return send(res, 200, { ...r, status: hi.status() });
+      }
+      throw new HttpError(404, 'Not found');
+    }
+    // Phase 65: bring her from another app: read a chat file, preview, estimate, read it with the
+    // background model, review, confirm. Owner only; never in the demo. Nothing is saved before confirm.
+    if (a === 'import') {
+      if (opts.demo) throw new HttpError(403, 'Not in the demo.');
+      const ci = (app.companionImport ??= new CompanionImporter(() => app));
+      const fail = (err: unknown): never => {
+        if (err instanceof HttpError) throw err;
+        throw new HttpError(400, (err as Error).message);
+      };
+      if (!b && method === 'GET') return send(res, 200, { sources: PICKABLE_SOURCES.map((id) => ({ id, name: SOURCE_NAME[id] })), maxZipBytes: MAX_ZIP_BYTES, maxFileBytes: MAX_FILE_BYTES });
+      if (b === 'preview' && method === 'POST') {
+        const name = String(new URL(req.url ?? '/', 'http://x').searchParams.get('name') ?? 'chat.txt').slice(0, 200);
+        const max = CompanionImporter.maxBytes(name);
+        const tooBig = max === MAX_ZIP_BYTES ? en('That file is bigger than 200 MB.') : en('That file is bigger than 50 MB. If it came in a zip, upload the zip (up to 200 MB).');
+        if (Number(req.headers['content-length'] ?? 0) > max) throw new HttpError(413, tooBig);
+        let path: string;
+        try {
+          path = ci.uploadPath();
+        } catch (err) {
+          res.setHeader('connection', 'close');
+          res.once('finish', () => req.socket.destroy());
+          throw new HttpError(409, (err as Error).message);
+        }
+        try {
+          try {
+            if (!(await saveUpload(req, path, max))) throw new HttpError(400, 'That file is empty.');
+          } catch (err) {
+            if ((err as { code?: string }).code === 'TOO_BIG') throw new HttpError(413, tooBig);
+            throw err;
+          }
+          try {
+            return send(res, 200, ci.preview(path, name));
+          } catch (err) {
+            return fail(err);
+          }
+        } finally {
+          ci.uploadDone(path);
+        }
+      }
+      if (b && b !== 'preview') {
+        try {
+          if (!c && method === 'GET') return send(res, 200, ci.status(b));
+          if (!c && method === 'DELETE') {
+            ci.discard(b);
+            return send(res, 200, { ok: true });
+          }
+          if (method === 'POST' && (c === 'estimate' || c === 'start' || c === 'cancel' || c === 'confirm')) {
+            const body = await readJson(req);
+            const choice = { conversations: body.conversations, roles: body.roles, source: body.source, localOnly: body.localOnly !== false };
+            if (c === 'estimate') return send(res, 200, ci.estimate(b, choice));
+            if (c === 'start') return send(res, 200, ci.start(b, { ...choice, useModel: body.useModel !== false }));
+            if (c === 'cancel') return send(res, 200, ci.cancel(b));
+            return send(res, 200, ci.confirm(b, body as ConfirmInput));
+          }
+        } catch (err) {
+          return fail(err);
+        }
       }
       throw new HttpError(404, 'Not found');
     }

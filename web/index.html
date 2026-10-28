@@ -1044,6 +1044,43 @@
       <label>To-dos, reminders and notes <select id="cmp-planner"><option value="shared">One planner, shared by all companions</option><option value="separate">Each companion keeps her own</option></select></label>
       <p id="cmp-planner-note" class="muted small">A change applies after the next restart or update.</p>
         </section>
+        <section class="settings-page" data-page="her-import" data-group="Her" data-title="Bring her from another app" hidden>
+      <p class="muted small">Bring your chats from Character.AI, SillyTavern, Replika, Nomi, Kindroid, ChatGPT, Claude or a saved transcript. She reads them and suggests what she learned about you, your history together and her character. Nothing is saved until you check it and press Save. <a href="/help#import" target="_blank" rel="noopener">How to export from each app</a></p>
+      <h3>Choose the file</h3>
+      <p class="muted small">A .zip export (up to 200 MB) or one chat file: .json, .jsonl, .csv, .txt or .md (up to 50 MB). Character cards are imported in Name and personality instead.</p>
+      <p class="actions-left"><button type="button" class="ghost file-button" data-pick="ci-file">Choose a file</button><input id="ci-file" type="file" accept=".zip,.json,.jsonl,.csv,.txt,.md,application/zip,application/json,text/plain,text/csv,text/markdown" hidden data-noauto></p>
+      <div id="ci-preview" class="hist-card" hidden>
+        <p id="ci-summary"></p>
+        <p id="ci-notes" class="muted small"></p>
+        <label>Which app it came from <select id="ci-source" data-noauto></select></label>
+        <h4>Who is who</h4>
+        <div id="ci-speakers" class="ci-speakers"></div>
+        <h4>Which conversations</h4>
+        <p class="actions-left"><button id="ci-all" type="button" class="ghost small">All</button> <button id="ci-none" type="button" class="ghost small">None</button> <span id="ci-chosen" class="muted small"></span></p>
+        <ul id="ci-list" class="ci-list"></ul>
+        <label class="row"><input id="ci-local" type="checkbox" checked data-noauto> Only models on this server</label>
+        <p id="ci-estimate" class="small" role="status"></p>
+        <p class="actions-left"><button id="ci-start" type="button">Let her read them</button> <button id="ci-simple" type="button" class="ghost">Read without a model</button> <button id="ci-discard" type="button" class="ghost">Never mind</button></p>
+      </div>
+      <div id="ci-progress" class="hist-card" hidden>
+        <progress id="ci-bar" max="1" value="0"></progress>
+        <p id="ci-status" class="small" role="status"></p>
+        <p class="actions-left"><button id="ci-cancel" type="button" class="ghost small">Stop</button></p>
+      </div>
+      <div id="ci-review" class="hist-card" hidden>
+        <p id="ci-review-note" class="muted small"></p>
+        <h4>About you</h4>
+        <ul id="ci-facts" class="ci-items"></ul>
+        <h4>Your history together</h4>
+        <ul id="ci-summaries" class="ci-items"></ul>
+        <h4>Her personality (a draft)</h4>
+        <ul id="ci-style" class="ci-items"></ul>
+        <label class="row"><input id="ci-apply" type="checkbox" data-noauto> Add the ticked notes to her personality</label>
+        <label class="row"><input id="ci-keep" type="checkbox" data-noauto> Also keep the chats (read-only, private)</label>
+        <p class="actions-left"><button id="ci-save" type="button">Save what's ticked</button> <button id="ci-throw" type="button" class="ghost">Throw it all away</button></p>
+      </div>
+      <p id="ci-msg" class="muted small" role="status"></p>
+        </section>
         <section class="settings-page" data-page="her-look" data-group="Her" data-title="Look" hidden>
       <p class="muted small">Describe a look and Grok Imagine paints it (on your Grok subscription, or an xAI key). Like it? Sara then gets matching happy, caring and sleepy pictures and blink/talk frames, so she animates like the default. About a minute.</p>
       <label>Describe the look <input id="look-desc" maxlength="600" placeholder="e.g. a man in his 30s with short dark curly hair, a beard and a denim jacket"></label>

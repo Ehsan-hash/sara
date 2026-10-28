@@ -113,6 +113,8 @@ export interface AppContext {
   codemap?: import('./codemap/index.ts').CodeMaps;
   /** Phase 51: imported ChatGPT / Claude history (per companion). */
   historyImport?: import('./history-import/index.ts').HistoryImporter;
+  /** Phase 65: "Bring her from another app" (per companion; nothing saved until the owner confirms). */
+  companionImport?: import('./companion-import/session.ts').CompanionImporter;
   /** Phase 50: how she did tricky jobs before (per companion). */
   recipes?: import('./recipes.ts').RecipeStore;
   /** Phase 44: ask the library worker to read what was just added. */

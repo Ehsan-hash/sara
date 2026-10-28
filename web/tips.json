@@ -968,9 +968,29 @@
     "story-to": [
       "The last day of the stretch she looks back on, usually today.",
       "story"
+    ],
+    "ci-source": [
+      "Which app the file came from. It names the app in her notes (\"from your Replika chats\"). For a plain transcript or an app not listed, pick Another app.",
+      "import"
+    ],
+    "ci-local": [
+      "On: only a model on your own hardware reads the chats, so they never leave your server. Off: your background model, even a cloud one (the estimate shows its cost first).",
+      "import"
+    ],
+    "ci-apply": [
+      "Off by default. Tick to add the ticked character and writing notes to her personality (Name and personality, up to 20 lines each). You can edit or remove them there later.",
+      "import"
+    ],
+    "ci-keep": [
+      "Off by default: only what you tick is saved. On: the chats are kept too, archived and read-only, labelled as from the other app, and never shown to other apps or MCP.",
+      "import"
     ]
   },
   "pages": {
+    "her-import": [
+      "Bring chats from Character.AI, SillyTavern, Replika, Nomi, Kindroid, ChatGPT or Claude: she suggests what she learned, you check it, and only what you keep is saved.",
+      "import"
+    ],
     "her-relationship": [
       "What you are to each other and how she is with you: romance, jealousy, being away, disagreements, intimacy and a stop word. Try her reactions before saving.",
       "relationship"

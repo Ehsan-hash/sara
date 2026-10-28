@@ -231,7 +231,7 @@ sudo sara access       # how you reach her (change: tailscale, local, domain, la
 | [Security checklist](docs/SECURITY_CHECKLIST.md) · [What leaves your server](docs/PRIVACY.md) | Five minutes after installing; every outgoing connection and how to turn it off |
 | [FAQ and glossary](docs/FAQ.md) | Common questions, and what the words mean |
 | [Apps and clients](docs/clients.md) · [Desktop apps](docs/desktop.md) · [Home Assistant](docs/HOME_ASSISTANT.md) | Terminal, VS Code, Windows and macOS; Sara in Home Assistant and Home Assistant in Sara |
-| [Other apps](docs/OTHER_APPS.md) | OpenAI-compatible API (SillyTavern, Open WebUI, scripts), MCP (Claude Code, Cursor, Claude Desktop), character cards |
+| [Other apps](docs/OTHER_APPS.md) · [Bring her from another app](docs/IMPORT.md) | OpenAI-compatible API (SillyTavern, Open WebUI, scripts), MCP (Claude Code, Cursor, Claude Desktop), character cards; importing chats from Character.AI, SillyTavern, Replika, Nomi, Kindroid, ChatGPT or Claude |
 | [Extending Sara](docs/EXTENDING.md) | Add tools, bridges, characters, MCP servers, languages, starters |
 | [Architecture](docs/ARCHITECTURE.md) | How the pieces fit, module by module |
 | [Results](docs/RESULTS.md) | Benchmarks and evals, and how to re-run them |

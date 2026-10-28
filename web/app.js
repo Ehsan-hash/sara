@@ -12,6 +12,7 @@ import { initProjectMap, resetProjectMap } from './codemap.js';
 import { initRecipes, loadRecipes } from './recipes.js';
 import { initOtherApps, keyUse, loadOtherApps } from './other-apps.js';
 import { initCards } from './cards.js';
+import { initImport, loadImport } from './import.js';
 import { appLink, inPhoneApp, phoneKind } from './pair-link.js';
 const $ = (sel) => document.querySelector(sel);
 
@@ -110,7 +111,7 @@ async function boot() {
   const fromLink = /#c=([\w-]+)/.exec(location.hash)?.[1];
   if (fromLink) history.replaceState(null, '', '/');
   if (fromLink && (await openElsewhere(fromLink))) return;
-  const first = state.conversations.find((c) => c.id === fromLink) ?? state.conversations.find((c) => !c.archivedAt) ?? state.conversations[0];
+  const first = state.conversations.find((c) => c.id === fromLink) ?? state.conversations.find((c) => !c.archivedAt) ?? state.conversations.find((c) => !String(c.channel ?? '').startsWith('import-'));
   if (first) await openConversation(first.id);
   else {
     $('#chat-title').textContent = t('Sara');
@@ -5179,6 +5180,7 @@ function showSettingsTab(page, opts = {}) {
   if (pick === 'dh-updates') void loadUpdates();
   if (pick === 'ab-recipes') void loadRecipes();
   if (pick === 'co-apps') void loadOtherApps();
+  if (pick === 'her-import') void loadImport();
   $('#settings-empty').hidden = true;
   $('#settings').classList.add('page-open'); // phone: show the page instead of the list
   $('.settings-pages').scrollTop = 0;
@@ -7194,6 +7196,7 @@ initCards({
   name: () => yours.persona?.name ?? 'character',
 });
 initOtherApps({ copyText, confirmProof });
+initImport();
 
 $('#st-check').addEventListener('change', async () => {
   await api('/persona/studio/check', { method: 'PUT', body: { inCharacter: $('#st-check').value } }).catch((err) => ($('#st-status').textContent = err.message));

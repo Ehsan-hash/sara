@@ -253,7 +253,7 @@ export interface Page {
 
 /** Sidebar groups, in order; files not listed go to "More". */
 const GROUPS: [string, string[]][] = [
-  ['Start here', ['README.md', 'docs/INSTALL.md', 'docs/REQUIREMENTS.md', 'docs/CHOOSING_A_MODEL.md', 'docs/COSTS.md', 'docs/PHONE.md', 'docs/clients.md', 'docs/desktop.md', 'docs/MOVING.md', 'docs/FAQ.md', 'docs/DISCLOSURES.md']],
+  ['Start here', ['README.md', 'docs/INSTALL.md', 'docs/REQUIREMENTS.md', 'docs/CHOOSING_A_MODEL.md', 'docs/COSTS.md', 'docs/PHONE.md', 'docs/clients.md', 'docs/desktop.md', 'docs/IMPORT.md', 'docs/MOVING.md', 'docs/FAQ.md', 'docs/DISCLOSURES.md']],
   ['Build with Sara', ['docs/EXTENDING.md', 'docs/ARCHITECTURE.md', 'docs/RESULTS.md', 'docs/TRANSLATING.md']],
   ['Contribute', ['CONTRIBUTING.md', 'docs/GOOD_FIRST_ISSUES.md', 'CODE_OF_CONDUCT.md']],
   ['Safety and security', ['docs/SECURITY_CHECKLIST.md', 'docs/PRIVACY.md', 'docs/COMPLIANCE.md', 'SECURITY.md', 'docs/THREAT_MODEL.md']],

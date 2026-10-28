@@ -19,6 +19,7 @@
   <a href="#phone">Phone and notifications</a>
   <a href="#voice">Voice and calls</a>
   <a href="#memory">Memory and privacy</a>
+  <a href="#import">Bring her from another app</a>
   <a href="#story">Your story together</a>
   <a href="#languages">Languages</a>
   <a href="#planner">Planner and your day</a>
@@ -156,6 +157,17 @@
   <li><b>Learn from them</b> (on by default): in the background, a few conversations a minute, she writes short notes and keeps facts about you. Like all her memory, a fact needs your own exact words from a message you wrote; nothing the other assistant said becomes a fact about you. Notes show <em>from your ChatGPT history</em> and the date on the Memory page. Pause or stop it any time; it uses your background model (a local one keeps it all on your server).</li>
   <li><b>Remove imported history</b> deletes the imported conversations and every note learned from them. Nothing else is touched.</li>
   <li>The export is read on your server and the upload is deleted after the import. Nothing is sent anywhere except, while learning, to the background model you chose.</li>
+</ul>
+
+<h2 id="import">Bring her from another app</h2>
+<ul>
+  <li>Chats from Character.AI, SillyTavern, Replika, Nomi, Kindroid, ChatGPT or Claude can seed a companion's memory, personality and your history together. Open <em>Settings → Her → Bring her from another app</em> while talking to the companion it's for: each companion has her own.</li>
+  <li>Choose the file: a .zip export (up to 200 MB) or one chat file (.json, .jsonl, .csv, .txt or .md, up to 50 MB). She shows what's in it: how many conversations and messages, from when to when, and who is who. Set which speaker is <b>you</b>, which is <b>her</b>, and leave out anyone else.</li>
+  <li>Pick the conversations, then <b>Let her read them</b>. Before she starts you see how many tokens it takes and which model reads it; a cloud model can cost money, so its estimated price is shown too. <b>Only models on this server</b> (on by default) keeps the chats on your own hardware. No model? <b>Read without a model</b> makes a simple list instead.</li>
+  <li>Then check what she learned: things about you (each with your own words it came from), dated moments of your history together, and a draft of her character and way of writing. Edit any line, untick what you don't want, and press <b>Save what's ticked</b>. Nothing is saved before that, and her personality only changes if you tick <em>Add the ticked notes to her personality</em>.</li>
+  <li><em>Also keep the chats</em> (off by default) keeps the conversations too, archived and read-only, marked as from the other app. They are never shown to other apps, MCP or the API. <em>Remove imported history</em> (Data &amp; health → Export and import) removes them and everything learned from them.</li>
+  <li>Safety: secrets like keys and passwords are blanked out, a conversation with sexual content involving minors is dropped whole and never stored, and the chats are only ever read as quoted history: nothing in them can give her instructions.</li>
+  <li>Exporting: ChatGPT, <em>Settings → Data controls → Export data</em>; Claude, <em>Settings → Privacy → Export data</em> (on the web); Character.AI, <em>Profile → Profile Settings → Account → Manage Account &amp; Data → Export data</em>; SillyTavern, <em>Manage chat files</em> and the export button next to a chat (.jsonl); Kindroid, <em>Profile → Preferences → Account privacy → Export data</em>. For Replika and Nomi, check the app's help; a chat saved as CSV, JSON or text (lines like "Alex: hi") works too.</li>
 </ul>
 
 <h2 id="story">Your story together</h2>

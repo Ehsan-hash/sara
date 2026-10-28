@@ -54,6 +54,21 @@ separate modes you won't run unless you set them up on purpose.
 | Docker (optional) | Docker Hub (the `node:24-slim` image, and `ollama/ollama` with the Ollama profile) |
 | Tailscale (optional) | Tailscale, if you install it |
 
+## Bringing her from another app
+
+Importing chats (*Settings → Her → Bring her from another app*, [IMPORT.md](IMPORT.md)) sends
+nothing anywhere until you press **Let her read them**; then the chosen conversations go, with
+secrets blanked out, to the companion's background model. With **Only models on this server** (on
+by default) that is only ever a model on your own hardware; untick it and it can be a cloud model,
+whose estimated cost you see first. **Read without a model** sends nothing.
+
+What is kept: only the notes you tick and press Save on (facts about you, dated summaries of your
+history together, and, if you tick it, lines for her personality). The chats themselves are kept
+only if you tick *Also keep the chats* (off by default), archived and never shown to other apps,
+MCP or the API. The uploaded file is deleted as soon as it's read, and the parsed chats are held
+in the server's memory for two hours at most. *Remove imported history* (Data & health → Export and
+import) deletes everything an import kept.
+
 ## Her logs
 
 Her logs stay on your server (`<data>/logs/sara.log`, the system journal or `docker logs`, and a

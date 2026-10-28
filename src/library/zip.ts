@@ -19,6 +19,8 @@ export interface ZipLimits {
   maxEntries?: number;
   maxEntryBytes?: number;
   maxTotalBytes?: number;
+  /** Phase 65: refuse an entry that unpacks to more than this many times its packed size (zip bombs). */
+  maxRatio?: number;
 }
 
 const DAMAGED = 'This file looks damaged or incomplete, so she can\'t open it.';
@@ -29,12 +31,14 @@ export class Zip {
   readonly #buf: Buffer;
   readonly #maxEntryBytes: number;
   readonly #maxTotalBytes: number;
+  readonly #maxRatio: number;
   #used = 0;
 
   constructor(buf: Buffer, limits: ZipLimits = {}) {
     this.#buf = buf;
     this.#maxEntryBytes = limits.maxEntryBytes ?? 100 * 1024 * 1024;
     this.#maxTotalBytes = limits.maxTotalBytes ?? 300 * 1024 * 1024;
+    this.#maxRatio = limits.maxRatio ?? 0;
     const maxEntries = limits.maxEntries ?? 20_000;
     const eocd = findEndRecord(buf);
     if (eocd < 0) throw new ReadError(DAMAGED);
@@ -124,11 +128,14 @@ export class Zip {
     const raw = buf.subarray(start, end);
     const room = Math.min(this.#maxEntryBytes, this.#maxTotalBytes - this.#used);
     if (entry.size > room) throw new ReadError(tooBig());
+    // Phase 65: a small entry that claims (or turns out) to unpack hugely is a bomb, whatever its size.
+    const ratioOk = (n: number) => !this.#maxRatio || n <= 64 * 1024 || n <= Math.max(1, entry.compressedSize) * this.#maxRatio;
+    if (!ratioOk(entry.size)) throw new ReadError(tooBig());
     let out: Buffer;
     if (entry.method === 0) out = Buffer.from(raw);
     else if (entry.method === 8) {
       try {
-        out = inflateRawSync(raw, { maxOutputLength: Math.max(1, room) });
+        out = inflateRawSync(raw, { maxOutputLength: Math.max(1, this.#maxRatio ? Math.min(room, Math.max(64 * 1024, entry.compressedSize * this.#maxRatio)) : room) });
       } catch (err) {
         if (err instanceof RangeError || (err as { code?: string }).code === 'ERR_BUFFER_TOO_LARGE') throw new ReadError(tooBig());
         throw new ReadError(DAMAGED);
@@ -138,6 +145,7 @@ export class Zip {
     } else {
       throw new ReadError('This file uses a kind of compression she doesn\'t understand. Try saving it again from the program that made it.');
     }
+    if (!ratioOk(out.length)) throw new ReadError(tooBig());
     this.#used += out.length;
     return out;
   }

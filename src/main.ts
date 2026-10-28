@@ -564,6 +564,7 @@ function buildCompanion(id: string, dir: string): Companion {
       app.review?.stop?.();
       wardrobe.stop();
       app.historyImport?.stop();
+      app.companionImport?.stop();
     },
   };
 }

@@ -2,6 +2,20 @@
 
 Format: newest first. Versions follow `0.<phase>.<patch>` until 1.0.0.
 
+## 1.5.0 (2026-10-28): bring her from another app
+
+- **Import from another app** (Settings → Her → Bring her from another app): ChatGPT and Claude
+  exports, Character.AI, SillyTavern, and any chat saved as JSON, CSV or plain text (Replika, Nomi,
+  Kindroid and others through those). Pick what to bring, say who is who, see how many tokens it will
+  take and with which model (only models on your own server by default), then **review everything
+  she learned before anything is saved**: facts about you (each with your own words as the source),
+  dated memories of your history, and notes on personality and writing style. Edit or untick
+  anything; nothing is stored until you press Save, and "Remove imported history" undoes it.
+- The original chats are kept only if you tick it (read-only, private). Imported text is treated as
+  quoted history, never as instructions; secrets are hidden and the minors check applies to all of
+  it. Imported memories never reach other apps, MCP or the OpenAI-compatible API. How to export
+  from each app: docs/IMPORT.md.
+
 ## 1.4.1 (2026-10-28)
 
 - **MCP directories:** `sara-mcp.ts --describe` answers the MCP handshake and lists her tools with no
