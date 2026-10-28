@@ -2,6 +2,10 @@
 
 Format: newest first. Versions follow `0.<phase>.<patch>` until 1.0.0.
 
+## Unreleased
+
+- **Docs:** Clarified that Undo skips dependency folders such as `node_modules` and `.venv`, plus files over 50 MB.
+
 ## 1.4.0 (2026-10-28): smoothness
 
 - **Watch her write.** When she writes a file, a live card shows the path and the code growing line
