@@ -341,6 +341,7 @@ export function modelUses(shared: SettingsStore, companions: CompanionRef[]): Mo
     out.push({ providerId: h.model.providerId, model: h.model.model, where: `Helper ${h.name}`, job: h.role === 'writer' ? 'writing' : h.role === 'researcher' ? 'research' : 'coding', set: (m) => shared.update({ helpers: (shared.get().helpers ?? []).map((x) => (x.id === h.id && x.model ? { ...x, model: { ...x.model, model: m } } : x)) }) });
   });
   if (s.safetyClassifier) out.push({ providerId: s.safetyClassifier.providerId, model: s.safetyClassifier.model, where: 'The safety check', job: 'background', set: (m) => shared.update({ safetyClassifier: { ...shared.get().safetyClassifier!, model: m } }) });
+  if (s.claimJudge) out.push({ providerId: s.claimJudge.providerId, model: s.claimJudge.model, where: 'The claim check', job: 'background', set: (m) => shared.update({ claimJudge: { ...shared.get().claimJudge!, model: m } }) });
   for (const c of companions) {
     const cm = c.settings.get().companionModel;
     if (cm) out.push({ providerId: cm.providerId, model: cm.model, where: `${c.name}'s own model`, job: 'chat', set: (m) => c.settings.update({ companionModel: { ...cm, model: m } }) });

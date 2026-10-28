@@ -2163,7 +2163,7 @@ function jobRow(job, cur, opts = {}) {
     jobHint(r, t('Testing…'));
     test.disabled = true;
     try {
-      const res = await api('/model-jobs/test', { method: 'POST', body: { job: job.id, ...v } });
+      const res = await api('/model-jobs/test', { method: 'POST', body: { job: job.testAs ?? job.id, ...v } });
       if (!res.ok) jobHint(r, `✗ ${res.error}`, true);
       else {
         const speed = { fast: t('Fast'), ok: t('OK speed'), slow: t('Slow') }[res.speed] ?? '';
@@ -2201,10 +2201,14 @@ async function renderRoutes() {
   const emb = jobsUi.rows.get('embeddings');
   if (emb && v?.model) jobHint(emb, v.error ? `${t('Not reachable')}: ${v.error}` : `${v.indexed} ${t('of')} ${v.total} ${t('notes ready for meaning search')}`, Boolean(v.error));
   // The safety and truth check (its own setting, kept as before).
-  const cls = jobRow({ id: 'classifier', label: t('Safety and truth check'), tip: t('Optional small local model (for example a small Ollama model). It double-checks messages for crisis or minors in any language, and checks that she really did what she says she did. It can only add protection, never remove it. Off: the built-in checks still run (English, Spanish, French, German, Portuguese and Italian).') }, s.safetyClassifier, { noBackups: true, noCompare: true, blank: t('Off') });
-  $('#routes').replaceChildren(cls);
+  const cls = jobRow({ id: 'classifier', testAs: 'background', label: t('Safety and truth check'), tip: t('Optional small local model (for example a small Ollama model). It double-checks messages for crisis or minors in any language, and checks that she really did what she says she did. It can only add protection, never remove it. Off: the built-in checks still run (English, Spanish, French, German, Portuguese and Italian).') }, s.safetyClassifier, { noBackups: true, noCompare: true, blank: t('Off') });
+  // Phase 62: the claim judge (off by default; only the model picked here, never filled in for you).
+  const cj = jobRow({ id: 'claimjudge', testAs: 'background', label: t('Double-check her claims'), tip: t('Optional small model (best a local one) asked only when the built-in check is unsure whether she claims she did something (saved, sent, ran) that no tool did. It can only add a correction, never remove one. Off: the built-in check still runs.') }, s.claimJudge, { noBackups: true, noCompare: true, blank: t('Off') });
+  $('#routes').replaceChildren(cls, cj);
   jobsUi.classifier = jobsUi.rows.get('classifier');
   jobsUi.rows.delete('classifier');
+  jobsUi.claimJudge = jobsUi.rows.get('claimjudge');
+  jobsUi.rows.delete('claimjudge');
   // Backups for the default model.
   jobsUi.defaults = [0, 1].map((k) => modelPick(t('No backup'), s.defaultFallbacks?.[k]));
   $('#jobs-default-backups').replaceChildren(
@@ -2230,6 +2234,7 @@ async function saveRoutes() {
   const body = {
     routes,
     safetyClassifier: jobsUi.classifier?.pick.value() ?? null,
+    claimJudge: jobsUi.claimJudge?.pick.value() ?? null,
     companionModel: jobsUi.companion?.pick.value() ?? null,
     defaultFallbacks: jobsUi.defaults.map((b) => b.value()).filter(Boolean),
     fallbackAfterSec: Number($('#jobs-after').value),

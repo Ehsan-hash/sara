@@ -194,8 +194,9 @@ sudo docker compose up -d                       # or: sudo docker compose --prof
 sudo docker compose logs sara | grep -A1 'owner token'   # oppure: apri la sua pagina e inserisci il codice di configurazione da questo log
 ```
 
-**App store e NAS:** l'immagine `ghcr.io/farena-ai/sara`, TrueNAS e Proxmox funzionano già;
-Unraid, CasaOS/ZimaOS, Umbrel, Homebrew, winget e HACS sono pronti e in attesa di revisione
+**App store e NAS:** l'immagine `ghcr.io/farena-ai/sara` (anche per ARM), Homebrew, TrueNAS,
+Proxmox e HACS (come repository personalizzato) funzionano già; winget, CasaOS/ZimaOS, Umbrel e
+Unraid sono in attesa di revisione
 ([quale è quale](docs/INSTALL.md#other-ways-to-install)). Un nuovo server si configura nel
 browser con un breve codice dal suo log (con un clic su Umbrel).
 

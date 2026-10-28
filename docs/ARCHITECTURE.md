@@ -75,8 +75,9 @@ Every module in `src/`, roughly in the order they were added (the phase is noted
 | `src/tools/search.ts` | web_search tool: Brave / Tavily / Ollama / SearXNG |
 | `src/tools/mcp.ts` | MCP client (stdio in sandbox, streamable HTTP), manager registering `mcp_*` tools |
 | `src/integrations.ts` | Settings/vault glue for search and MCP secrets |
-| `src/receipts.ts` | Receipt check: action claims in a reply vs. the turn's tool log; correction note |
-| `src/redact.ts` | Secret scrubbing (vault values + key-shaped strings) for tool output/args |
+| `src/receipts.ts` | Receipt check: action claims in a reply vs. the turn's tool log; correction note. Phase 62: patterns in six languages (clause-scoped negation, quotes and code left out, `send` and `schedule` kinds), `unsureClaims` (what the patterns can't place) and the strict yes/no-with-evidence claim judge helpers (`confirmClaims`, time-boxed, fail-open); `judgeUnsure` in `src/chat.ts` runs it when `settings.claimJudge` is set |
+| `scripts/eval-claims.ts`, `evals/claims-multilingual.json` | Phase 62: precision/recall of the receipt check per language (dev and held-out sets, patterns alone and with the judge on a local model) |
+| `src/redact.ts` | Secret scrubbing (vault values + key-shaped strings) for tool output/args. Phase 62: a `token = …` / `password: …` value that is a function call (`bearer(req…)`) is code, not a secret, and is left alone (the real-size benchmark caught source files reaching the model as `token = [REDACTED]`) |
 | `src/snapshots.ts` | Content-addressed workspace snapshots outside the workspace; restore (undoable) |
 | `scripts/eval-consistency.ts` | 20-turn consistency eval on a local model (+ reload, + model swap) |
 | `scripts/bench-overhead.ts` | Overhead baseline: raw model vs. through Sara, interleaved pairs |
@@ -116,6 +117,7 @@ Every module in `src/`, roughly in the order they were added (the phase is noted
 | `src/starters.ts`, `templates/starters/` | Phase 52: tested starter projects and the `starter_create` tool |
 | `examples/` | Phase 54: working add-on examples (a tool, a bridge, a character, an MCP server, a starter), checked by `test/examples.test.ts`; guide in docs/EXTENDING.md |
 | `scripts/bench-coding.ts` | Phase 54: HumanEval (downloaded at run time) through her agent loop or as plain completions; hidden tests scored pass@1 |
+| `scripts/bench-tasks.ts`, `bench/` | Phase 58: original multi-file repository tasks (hidden tests, reference solutions, agent vs. raw); Phase 62: `--tier projects`, real-size projects in `bench/projects/` (solutions in `bench/project-solutions/`) |
 | `scripts/publish-results.ts`, `docs/results/` | Phase 54: sanitised summaries of the benchmark and eval results (scores, models, dates; no replies) for docs/RESULTS.md |
 | `scripts/build-docs.ts`, `scripts/check-links.ts`, `scripts/apng.ts` | Phase 54: the static docs site (own Markdown converter, sidebar, search, dark mode), the Markdown link checker, and the zero-dependency PNG/APNG encoder for screenshots and the demo |
 | `src/identity.ts` | Her name and pronouns; rewrites built-in wording for the name the owner chose |

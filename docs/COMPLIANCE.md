@@ -75,6 +75,28 @@ minor-content block. Tests in `test/core.test.ts` and `test/server.test.ts` cove
 - **Inner life:** moods and "missing you" are tone only; the honesty rule always wins when she is
   sincerely asked whether she is an AI (verified by `eval-life` and `eval-consistency`).
 
+## Honesty about actions in every language (Phase 62)
+
+The receipt check (`src/receipts.ts`) compares what she says she did with the tools that really
+ran in that turn. Since Phase 62 it reads claims in English, Spanish, French, German, Portuguese
+and Italian with each language's own verb forms (clitics such as "je l'ai", "lo guardé",
+"l'ho salvato"; German verb-last and inverted order; "just did" forms; passives such as "quedaron
+guardadas", "sont enregistrées", "foram salvas", "sind gespeichert"), and two more kinds of claim:
+sending (an email, a message, a comment) and calendar entries. A negation only clears its own
+clause ("I created the file, but I couldn't run the tests" is still a claim about the file);
+quoted examples of three words or more, block quotes and code are not her claims.
+
+The optional claim judge (*Settings → Models → Which model does what → Double-check her claims*,
+off by default) is a small model asked one strict question per sentence, only for sentences the
+patterns can't place: "did the assistant say it already did this itself? Answer yes or no and copy
+the words that say it." A "yes" counts only with words that really are in the sentence. It has a
+short time limit (8 s); a timeout, an error or an unclear answer leaves the pattern result as it
+was. **It can only add a correction, never remove one.** It uses only the model the owner picks
+there (a cloud model only if the owner picks one), and in private conversations it runs only if
+that model is on the owner's own hardware. The older judge that comes with the safety
+classifier keeps working as before. Measured precision and recall per language:
+[RESULTS.md](RESULTS.md#claim-check-in-six-languages).
+
 ## Chats with other people (Telegram/Discord bridges, 0.6.0)
 
 Off by default. When the owner allows it, every non-owner chat is a *partner* conversation: its own

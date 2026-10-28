@@ -742,26 +742,27 @@ Maintainers: see [PACKAGING.md](PACKAGING.md) for how each one is made and submi
 **Available now:**
 
 - **Docker image:** `docker pull ghcr.io/farena-ai/sara:latest`, the same image the Docker Compose
-  file above builds. 1.0.0 is linux/amd64 only; linux/arm64 (Raspberry Pi 4/5, Apple-silicon and
-  other ARM servers) comes with the next release.
+  file above builds, for linux/amd64 and linux/arm64 (Raspberry Pi 4/5, Apple-silicon and other
+  ARM servers) since 1.1.0.
+- **Homebrew** (Mac): `brew install --cask farena-ai/tap/sara` (the app, signed and notarized).
 - **TrueNAS SCALE** (24.10 and newer): *Apps → Discover Apps → ⋮ → Install via YAML* with
   `packaging/truenas/docker-compose.yml` (see `packaging/truenas/README.md`).
 - **Proxmox VE:** a helper script that makes a Debian 12 container with Sara in it, run on the
   Proxmox host: `bash -c "$(curl -fsSL https://raw.githubusercontent.com/farena-ai/sara/main/packaging/proxmox/sara.sh)"`
   (checked for syntax; not yet run on a Proxmox host, see its README).
-- **Home Assistant integration**, by hand: copy `integrations/home-assistant/custom_components/sara`
-  (see [HOME_ASSISTANT.md](HOME_ASSISTANT.md)).
+- **Home Assistant integration** through HACS: *HACS → ⋮ → Custom repositories*, add
+  `https://github.com/farena-ai/hacs-sara` as an *Integration*, then install **Sara**. Or by hand:
+  copy `integrations/home-assistant/custom_components/sara` (see [HOME_ASSISTANT.md](HOME_ASSISTANT.md)).
 
-**Waiting for review** (prepared and validated; each is listed here as available once it is
-accepted or published):
+**Waiting for review** (submitted and passing each store's own checks; listed here as available
+once accepted):
 
-- **Homebrew** (Mac): `brew install --cask farena-ai/tap/sara`, once the tap is published.
 - **winget** (Windows): `winget install BackstageCoding.Sara` (installs for you, without an
   administrator; run the installer yourself for a Windows service).
-- **Unraid:** *Sara* in Community Applications.
 - **CasaOS / ZimaOS:** *Sara* in the App Store.
-- **Umbrel:** *Sara* in the Umbrel App Store (needs the arm64 image of the next release).
-- **HACS** (Home Assistant): `farena-ai/hacs-sara` as a custom repository, later in the HACS store.
+- **Umbrel:** *Sara* in the Umbrel App Store.
+- **Unraid:** *Sara* in Community Applications (template: `farena-ai/unraid-templates`).
+- **HACS store:** Sara in HACS's own list, so the custom-repository step isn't needed.
 
 **The first sign-in** works the same way for every container install (Docker, TrueNAS, Unraid,
 CasaOS, Proxmox's container): open her address within an hour of the first start and Sara offers

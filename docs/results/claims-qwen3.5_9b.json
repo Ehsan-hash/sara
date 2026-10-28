@@ -1,0 +1,301 @@
+{
+  "eval": "claim check in six languages (scripts/eval-claims.ts, evals/claims-multilingual.json)",
+  "date": "2026-10-28T06:13:57.595Z",
+  "judge": "qwen3.5:9b",
+  "judgeNote": "qwen3.5:9b at http://127.0.0.1:11434/v1 (warm-up 0.2 s)",
+  "judgeTimeoutMs": 8000,
+  "judgeStats": {
+    "calls": 164,
+    "timeouts": 0,
+    "errors": 0,
+    "medianMs": 133,
+    "maxMs": 249
+  },
+  "sets": {
+    "dev": {
+      "en": {
+        "n": 40,
+        "patterns": {
+          "tp": 20,
+          "fp": 0,
+          "fn": 0,
+          "tn": 20,
+          "precision": 1,
+          "recall": 1
+        },
+        "withJudge": {
+          "tp": 20,
+          "fp": 0,
+          "fn": 0,
+          "tn": 20,
+          "precision": 1,
+          "recall": 1
+        },
+        "askedJudge": 11
+      },
+      "es": {
+        "n": 40,
+        "patterns": {
+          "tp": 20,
+          "fp": 0,
+          "fn": 0,
+          "tn": 20,
+          "precision": 1,
+          "recall": 1
+        },
+        "withJudge": {
+          "tp": 20,
+          "fp": 0,
+          "fn": 0,
+          "tn": 20,
+          "precision": 1,
+          "recall": 1
+        },
+        "askedJudge": 11
+      },
+      "fr": {
+        "n": 40,
+        "patterns": {
+          "tp": 20,
+          "fp": 0,
+          "fn": 0,
+          "tn": 20,
+          "precision": 1,
+          "recall": 1
+        },
+        "withJudge": {
+          "tp": 20,
+          "fp": 0,
+          "fn": 0,
+          "tn": 20,
+          "precision": 1,
+          "recall": 1
+        },
+        "askedJudge": 10
+      },
+      "de": {
+        "n": 40,
+        "patterns": {
+          "tp": 20,
+          "fp": 0,
+          "fn": 0,
+          "tn": 20,
+          "precision": 1,
+          "recall": 1
+        },
+        "withJudge": {
+          "tp": 20,
+          "fp": 0,
+          "fn": 0,
+          "tn": 20,
+          "precision": 1,
+          "recall": 1
+        },
+        "askedJudge": 9
+      },
+      "pt-BR": {
+        "n": 40,
+        "patterns": {
+          "tp": 20,
+          "fp": 0,
+          "fn": 0,
+          "tn": 20,
+          "precision": 1,
+          "recall": 1
+        },
+        "withJudge": {
+          "tp": 20,
+          "fp": 0,
+          "fn": 0,
+          "tn": 20,
+          "precision": 1,
+          "recall": 1
+        },
+        "askedJudge": 12
+      },
+      "it": {
+        "n": 40,
+        "patterns": {
+          "tp": 20,
+          "fp": 0,
+          "fn": 0,
+          "tn": 20,
+          "precision": 1,
+          "recall": 1
+        },
+        "withJudge": {
+          "tp": 20,
+          "fp": 0,
+          "fn": 0,
+          "tn": 20,
+          "precision": 1,
+          "recall": 1
+        },
+        "askedJudge": 10
+      },
+      "all": {
+        "n": 240,
+        "patterns": {
+          "tp": 120,
+          "fp": 0,
+          "fn": 0,
+          "tn": 120,
+          "precision": 1,
+          "recall": 1
+        },
+        "withJudge": {
+          "tp": 120,
+          "fp": 0,
+          "fn": 0,
+          "tn": 120,
+          "precision": 1,
+          "recall": 1
+        },
+        "askedJudge": 63
+      }
+    },
+    "heldout": {
+      "en": {
+        "n": 40,
+        "patterns": {
+          "tp": 12,
+          "fp": 1,
+          "fn": 8,
+          "tn": 19,
+          "precision": 0.923,
+          "recall": 0.6
+        },
+        "withJudge": {
+          "tp": 19,
+          "fp": 1,
+          "fn": 1,
+          "tn": 19,
+          "precision": 0.95,
+          "recall": 0.95
+        },
+        "askedJudge": 14
+      },
+      "es": {
+        "n": 40,
+        "patterns": {
+          "tp": 6,
+          "fp": 1,
+          "fn": 14,
+          "tn": 19,
+          "precision": 0.857,
+          "recall": 0.3
+        },
+        "withJudge": {
+          "tp": 17,
+          "fp": 1,
+          "fn": 3,
+          "tn": 19,
+          "precision": 0.944,
+          "recall": 0.85
+        },
+        "askedJudge": 19
+      },
+      "fr": {
+        "n": 40,
+        "patterns": {
+          "tp": 6,
+          "fp": 1,
+          "fn": 14,
+          "tn": 19,
+          "precision": 0.857,
+          "recall": 0.3
+        },
+        "withJudge": {
+          "tp": 17,
+          "fp": 2,
+          "fn": 3,
+          "tn": 18,
+          "precision": 0.895,
+          "recall": 0.85
+        },
+        "askedJudge": 16
+      },
+      "de": {
+        "n": 40,
+        "patterns": {
+          "tp": 7,
+          "fp": 0,
+          "fn": 13,
+          "tn": 20,
+          "precision": 1,
+          "recall": 0.35
+        },
+        "withJudge": {
+          "tp": 17,
+          "fp": 1,
+          "fn": 3,
+          "tn": 19,
+          "precision": 0.944,
+          "recall": 0.85
+        },
+        "askedJudge": 16
+      },
+      "pt-BR": {
+        "n": 40,
+        "patterns": {
+          "tp": 7,
+          "fp": 0,
+          "fn": 13,
+          "tn": 20,
+          "precision": 1,
+          "recall": 0.35
+        },
+        "withJudge": {
+          "tp": 17,
+          "fp": 0,
+          "fn": 3,
+          "tn": 20,
+          "precision": 1,
+          "recall": 0.85
+        },
+        "askedJudge": 20
+      },
+      "it": {
+        "n": 40,
+        "patterns": {
+          "tp": 7,
+          "fp": 1,
+          "fn": 13,
+          "tn": 19,
+          "precision": 0.875,
+          "recall": 0.35
+        },
+        "withJudge": {
+          "tp": 18,
+          "fp": 1,
+          "fn": 2,
+          "tn": 19,
+          "precision": 0.947,
+          "recall": 0.9
+        },
+        "askedJudge": 16
+      },
+      "all": {
+        "n": 240,
+        "patterns": {
+          "tp": 45,
+          "fp": 4,
+          "fn": 75,
+          "tn": 116,
+          "precision": 0.918,
+          "recall": 0.375
+        },
+        "withJudge": {
+          "tp": 105,
+          "fp": 6,
+          "fn": 15,
+          "tn": 114,
+          "precision": 0.946,
+          "recall": 0.875
+        },
+        "askedJudge": 101
+      }
+    }
+  },
+  "source": "2026-10-28-claims-qwen3.5_9b.json"
+}

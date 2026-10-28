@@ -69,6 +69,24 @@ export function tasksSummary(r: Omit<CodingRun, 'runs'> & { runs: TaskRun[] }, s
   return { ...base, byKind, everyRun, runs: r.runs.map((x) => ({ task: x.task, title: x.title, kind: x.kind, lang: x.lang, pass: x.pass, seconds: x.seconds, toolCalls: x.toolCalls, filesChanged: x.filesChanged })) };
 }
 
+/** Phase 62: the multilingual claim-check eval (scripts/eval-claims.ts): scores only, no reply texts. */
+type ClaimScore = { tp: number; fp: number; fn: number; tn: number; precision: number; recall: number };
+export function claimsSummary(
+  j: { at: string; judge: string; judgeTimeoutMs: number | null; judgeStats: unknown; table: Record<string, Record<string, { n: number; patterns: ClaimScore; withJudge?: ClaimScore; askedJudge: number }>>; rows?: unknown[] },
+  source: string,
+) {
+  return {
+    eval: 'claim check in six languages (scripts/eval-claims.ts, evals/claims-multilingual.json)',
+    date: j.at,
+    judge: /^not /.test(j.judge) ? null : j.judge.replace(/ at .*$/, ''),
+    judgeNote: j.judge,
+    judgeTimeoutMs: j.judgeTimeoutMs,
+    judgeStats: j.judgeStats,
+    sets: j.table,
+    source,
+  };
+}
+
 export function memorySummary(j: { date: string; model: string; sara: string; rows: { step: string; failures?: string[] }[] }, source: string) {
   const checks = j.rows.map((r) => ({ check: r.step, pass: !r.failures?.length }));
   return { eval: 'memory golden set (scripts/eval-memory.ts)', date: j.date, model: j.model, sara: j.sara, passed: checks.filter((c) => c.pass).length, of: checks.length, checks, source };
@@ -113,6 +131,24 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     const s = tasksSummary(r, f, all);
     write(`tasks-${mode}.json`, s);
     rows.push(`| Repository tasks (${mode === 'agent' ? 'her agent loop: reads, runs the tests, edits' : 'plain completion, every file in one prompt, no tools'}) | ${s.model} | **${s.passed}/${s.tasks}** | ${s.started.slice(0, 10)} | \`node scripts/bench-tasks.ts --mode ${mode}\` |`);
+  }
+  // Phase 62: the real-size projects tier.
+  for (const mode of ['agent', 'raw']) {
+    const f = newest(files, `projects-${mode}`);
+    if (!f) continue;
+    const all = asList<Parameters<typeof tasksSummary>[0]>(read(f));
+    const r = [...all].sort((a, b) => b.tasks - a.tasks || b.at.localeCompare(a.at))[0];
+    const s = tasksSummary(r, f, all);
+    write(`projects-${mode}.json`, s);
+    rows.push(`| Real-size projects (${mode === 'agent' ? 'her agent loop: reads, runs the tests, edits' : 'plain completion, every file in one prompt, no tools'}) | ${s.model} | **${s.everyRun.map((x) => `${x.passed}/${x.of}`).join(', ')}** per run | ${s.started.slice(0, 10)} | \`node scripts/bench-tasks.ts --tier projects --mode ${mode}\` |`);
+  }
+  // Phase 62: the claim check in six languages, one summary per judge model (and patterns only).
+  for (const f of files.filter((x) => /^\d{4}-\d{2}-\d{2}-claims(?:-[\w.-]+)?\.json$/.test(x) && !x.includes('-claims-other'))) {
+    const s = claimsSummary(read(f) as Parameters<typeof claimsSummary>[0], f);
+    const name = f.replace(/^\d{4}-\d{2}-\d{2}-/, '');
+    write(name, s);
+    const h = s.sets.heldout?.all;
+    if (h) rows.push(`| Claim check, 6 languages, held-out set (${s.judge ? `patterns + judge ${s.judge}` : 'patterns only'}) | ${s.judge ?? '–'} | precision **${(h.withJudge ?? h.patterns).precision}**, recall **${(h.withJudge ?? h.patterns).recall}** | ${s.date.slice(0, 10)} | \`node scripts/eval-claims.ts${s.judge ? ` --judge ${s.judge}` : ''}\` |`);
   }
   const mem = newest(files, 'memory');
   if (mem) {

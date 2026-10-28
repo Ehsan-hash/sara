@@ -42,7 +42,7 @@ import { CHANGES_FILES } from './codemap/tools.ts';
 import { docsNote, type SharedDoc } from './library/intake.ts';
 import { importedName, type Conversation, type StoredMessage, type Store } from './store.ts';
 import type { ApprovalBroker, ToolRegistry } from './tools/registry.ts';
-import { checkClaims, correctionNote, JUDGE_KINDS, judgedClaim, type Claim, type Receipt } from './receipts.ts';
+import { checkClaims, confirmClaims, correctionNote, JUDGE_KINDS, judgedClaim, unsureClaims, type Claim, type Receipt } from './receipts.ts';
 import type { Redactor } from './redact.ts';
 import { SNAPSHOT_TOOLS, type SnapshotStore } from './snapshots.ts';
 import { datesNote, followUps, followUpsNote, selectMemories, type Injection, type MemoryStore } from './memory.ts';
@@ -443,6 +443,36 @@ export async function judgeClaims(app: AppContext, reply: string, receipts: Rece
     if (!m || !sentence) return [];
     const claim = judgedClaim(sentence, JUDGE_KINDS[m[2].toUpperCase()], receipts, prior);
     return claim ? [claim] : [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Phase 62: the optional claim judge (Settings → Models → "Double-check her claims"; off by
+ * default). Asked only about sentences the patterns are unsure about, one strict yes/no with the
+ * words that prove it, each with a short time limit. It can only add a claim: no setting, a
+ * timeout, an error or an unclear answer leaves the pattern result as it was. It uses only the
+ * model the owner picked there (a cloud model only if the owner picks one).
+ */
+export async function judgeUnsure(app: AppContext, reply: string, receipts: Receipt[], prior: Receipt[] = [], opts: { private?: boolean } = {}): Promise<Claim[]> {
+  const cfg = app.settings.get().claimJudge;
+  if (!cfg) return [];
+  const unsure = unsureClaims(reply, receipts, prior);
+  if (!unsure.length) return [];
+  try {
+    const { provider, model } = resolveProvider(app, cfg.providerId, cfg.model, { purpose: 'background' });
+    // A private conversation never leaves the owner's hardware, not even for this check.
+    if (opts.private && (!provider.config.local || isCloudModel(model))) return [];
+    return await confirmClaims(async (system, user, signal) => {
+      let out = '';
+      const messages: ChatMessage[] = [
+        { role: 'system', content: system },
+        { role: 'user', content: user },
+      ];
+      for await (const ev of provider.stream({ model, messages, temperature: 0, maxTokens: 160, reasoning: 'none', signal })) if (ev.type === 'text') out += ev.text;
+      return out;
+    }, unsure);
   } catch {
     return [];
   }
@@ -984,6 +1014,7 @@ export async function* runTurn(app: AppContext, conversationId: string, userText
     }
     if (!calls.length) {
       let claims = checkClaims(reply, receipts, priorReceipts);
+      if (!claims.length) claims = await judgeUnsure(app, reply, receipts, priorReceipts, { private: Boolean(conv.private) });
       if (!claims.length) claims = await judgeClaims(app, reply, receipts, priorReceipts);
       if (!claims.length) break;
       store.recordSafetyEvent('unverified_claim', conv.id);

@@ -1,0 +1,9 @@
+{
+  "name": "ledger-cli",
+  "version": "1.4.1",
+  "private": true,
+  "type": "module",
+  "description": "Keep track of money in a JSON file from the command line.",
+  "bin": { "ledger": "bin/ledger.js" },
+  "scripts": { "test": "node --test" }
+}

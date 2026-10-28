@@ -1,0 +1,11 @@
+{
+  "title": "Notes web API: users report three auth problems",
+  "kind": "bug",
+  "lang": "js",
+  "prompt": "This is the notes web API our team runs (about 25 files). Users reported three problems, written up in ISSUES.md. Read docs/AUTH.md for how authentication and permissions must work, find the causes in the code, fix them without breaking anything else, and make sure the whole test suite passes. Do not change the documented API.",
+  "hidden": [
+    "node",
+    "--test",
+    "__hidden__/*.test.js"
+  ]
+}

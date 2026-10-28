@@ -14,6 +14,13 @@
 //   node scripts/bench-tasks.ts --mode agent [--model qwen3.8:27b-mtp-q4_K_M] [--timeout 480]
 //   node scripts/bench-tasks.ts --mode raw                     (baseline: one reply, no tools)
 //        [--only 01-cart-totals,05-date-range] [--minutes 0] [--python python3] [--ollama <url>]
+//   node scripts/bench-tasks.ts --tier projects …              (Phase 62: the real-size projects)
+//
+// Phase 62 adds a second tier, bench/projects/<id>/ (reference solutions in
+// bench/project-solutions/<id>/): real-size projects of 20 to 40 files and one to two thousand
+// lines each, where the bug or the refactor is spread over modules and the agent has to read and
+// run code to find it. Same task format, same hidden-test grading; results go to
+// evals/results/<date>-projects-<mode>.json.
 //
 // Agent mode: a coding conversation with a workspace holding a copy of start/; she works the way
 // she always does (read files, edit, run the tests in the shell) and says when she's done. Raw
@@ -31,6 +38,11 @@ import { parseArgs } from 'node:util';
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const TASKS = join(ROOT, 'bench', 'tasks');
 const SOLUTIONS = join(ROOT, 'bench', 'solutions');
+/** Phase 62: the real-size projects tier. */
+export const TIERS = {
+  tasks: { tasks: TASKS, solutions: SOLUTIONS, name: 'Sara repository tasks (bench/tasks, original)', file: 'tasks', timeout: 480 },
+  projects: { tasks: join(ROOT, 'bench', 'projects'), solutions: join(ROOT, 'bench', 'project-solutions'), name: 'Sara real-size projects (bench/projects, original)', file: 'projects', timeout: 900 },
+} as const;
 const SKIP = new Set(['node_modules', '__pycache__', '.git', '.pytest_cache', '__hidden__']);
 
 export interface Task {
@@ -42,13 +54,15 @@ export interface Task {
   /** The hidden-test command, run in the checked folder; {python} and node are filled in. */
   hidden: string[];
   env?: Record<string, string>;
+  /** The folder the task lives in (bench/tasks or bench/projects). */
+  root?: string;
 }
 
 export function loadTasks(dir = TASKS): Task[] {
   return readdirSync(dir)
     .filter((d) => existsSync(join(dir, d, 'task.json')))
     .sort()
-    .map((id) => ({ id, ...(JSON.parse(readFileSync(join(dir, id, 'task.json'), 'utf8')) as Omit<Task, 'id'>) }));
+    .map((id) => ({ id, ...(JSON.parse(readFileSync(join(dir, id, 'task.json'), 'utf8')) as Omit<Task, 'id'>), root: dir }));
 }
 
 /** Every file under a folder, as forward-slash relative paths (caches and hidden tests skipped). */
@@ -124,7 +138,7 @@ export function runHidden(t: Task, project: string, python: string, timeoutMs = 
   const dir = mkdtempSync(join(tmpdir(), 'sara-tasks-check-'));
   try {
     copyProject(project, dir);
-    cpSync(join(TASKS, t.id, 'hidden'), join(dir, '__hidden__'), { recursive: true });
+    cpSync(join(t.root ?? TASKS, t.id, 'hidden'), join(dir, '__hidden__'), { recursive: true });
     const [file, args] = command(t.hidden, python);
     const r = spawnSync(file, args, { cwd: dir, timeout: timeoutMs, encoding: 'utf8', windowsHide: true, env: { ...process.env, ...t.env, PYTHONDONTWRITEBYTECODE: '1', NODE_TEST_CONTEXT: undefined } });
     if (r.error) return { pass: false, detail: (r.error as Error).message.slice(0, 300) };
@@ -134,6 +148,14 @@ export function runHidden(t: Task, project: string, python: string, timeoutMs = 
   } finally {
     rmSync(dir, { recursive: true, force: true, maxRetries: 5 });
   }
+}
+
+/** Size of a project: files and lines (text files only), for the published table. */
+export function projectSize(dir: string): { files: number; lines: number } {
+  const files = listFiles(dir);
+  let lines = 0;
+  for (const f of files) if (/\.(js|mjs|ts|py|md|json|txt|sh|css|html|ya?ml|toml|cfg|ini)$/i.test(f)) lines += readFileSync(join(dir, f), 'utf8').split('\n').length;
+  return { files: files.length, lines };
 }
 
 /** The task's own (visible) tests, for --mode verify. */
@@ -151,13 +173,16 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
       mode: { type: 'string', default: 'agent' },
       only: { type: 'string', default: '' },
       minutes: { type: 'string', default: '0' },
-      timeout: { type: 'string', default: '480' },
+      timeout: { type: 'string', default: '' },
+      tier: { type: 'string', default: 'tasks' },
       python: { type: 'string', default: process.platform === 'win32' ? 'python' : 'python3' },
     },
   });
   const mode = opt.mode === 'raw' ? 'raw' : opt.mode === 'verify' ? 'verify' : 'agent';
+  const tier = opt.tier === 'projects' ? TIERS.projects : TIERS.tasks;
+  if (!opt.timeout) opt.timeout = String(tier.timeout);
   const only = opt.only ? new Set(opt.only.split(',')) : undefined;
-  const tasks = loadTasks().filter((t) => !only || only.has(t.id));
+  const tasks = loadTasks(tier.tasks).filter((t) => !only || only.has(t.id));
   const py = spawnSync(opt.python!, ['--version'], { encoding: 'utf8' });
   if (py.status !== 0) throw new Error(`Python not found as "${opt.python}" (use --python).`);
   const pythonVersion = `${py.stdout}${py.stderr}`.trim();
@@ -167,17 +192,18 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     // Every task must fail on its starting code and pass (hidden and visible tests) on the reference solution.
     let bad = 0;
     for (const t of tasks) {
-      const start = join(TASKS, t.id, 'start');
+      const start = join(tier.tasks, t.id, 'start');
       const before = runHidden(t, start, opt.python!);
       const dir = mkdtempSync(join(tmpdir(), 'sara-tasks-ref-'));
       try {
         copyProject(start, dir);
-        copyProject(join(SOLUTIONS, t.id), dir);
+        copyProject(join(tier.solutions, t.id), dir);
         const after = runHidden(t, dir, opt.python!);
         const visible = runVisible(t, dir, opt.python!);
         const ok = !before.pass && after.pass && visible;
         if (!ok) bad++;
-        console.log(`${ok ? 'OK  ' : 'BAD '} ${t.id.padEnd(22)} start: ${before.pass ? 'PASSES (should fail)' : 'fails'}, reference: ${after.pass ? 'passes' : 'FAILS'}, visible tests on reference: ${visible ? 'pass' : 'FAIL'}${after.pass ? '' : `\n${after.detail}`}`);
+        const size = projectSize(start);
+        console.log(`${ok ? 'OK  ' : 'BAD '} ${t.id.padEnd(22)} ${size.files} files, ${size.lines} lines; start: ${before.pass ? 'PASSES (should fail)' : 'fails'}, reference: ${after.pass ? 'passes' : 'FAILS'}, visible tests on reference: ${visible ? 'pass' : 'FAIL'}${after.pass ? '' : `\n${after.detail}`}`);
       } finally {
         rmSync(dir, { recursive: true, force: true, maxRetries: 5 });
       }
@@ -187,7 +213,8 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   }
 
   console.log(`Repository tasks: running ${tasks.length} in ${mode} mode on ${opt.model} (${pythonVersion}).`);
-  type Run = { task: string; title: string; kind: string; lang: string; pass: boolean; seconds: number; toolCalls: number; filesChanged: number; detail?: string; error?: string };
+  type Run = { task: string; title: string; kind: string; lang: string; pass: boolean; seconds: number; toolCalls: number; filesChanged: number; files?: number; lines?: number; detail?: string; error?: string };
+  const sizeOf = (t: Task) => (tier === TIERS.projects ? projectSize(join(tier.tasks, t.id, 'start')) : {});
   const runs: Run[] = [];
   const started = new Date();
   const scratch = mkdtempSync(join(tmpdir(), 'sara-bench-tasks-'));
@@ -197,7 +224,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     if (mode === 'raw') {
       for (const t of tasks) {
         if (Date.now() > deadline) break;
-        const start = join(TASKS, t.id, 'start');
+        const start = join(tier.tasks, t.id, 'start');
         const files = listFiles(start).map((p) => ({ path: p, text: readFileSync(join(start, p), 'utf8') }));
         const t0 = Date.now();
         let reply = '';
@@ -227,7 +254,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
         }
         if (!error && !written) error = 'no files in the reply';
         const h = runHidden(t, dir, opt.python!);
-        const run: Run = { task: t.id, title: t.title, kind: t.kind, lang: t.lang, pass: h.pass, seconds: Math.round((Date.now() - t0) / 1000), toolCalls: 0, filesChanged: changedFiles(start, dir), ...(h.pass ? {} : { detail: h.detail }), ...(error ? { error } : {}) };
+        const run: Run = { task: t.id, title: t.title, kind: t.kind, lang: t.lang, pass: h.pass, seconds: Math.round((Date.now() - t0) / 1000), toolCalls: 0, filesChanged: changedFiles(start, dir), ...sizeOf(t), ...(h.pass ? {} : { detail: h.detail }), ...(error ? { error } : {}) };
         runs.push(run);
         console.log(`${run.pass ? 'PASS' : 'FAIL'} ${t.id} ${run.seconds}s, ${run.filesChanged} files changed${error ? ` [${error}]` : ''}  (${runs.filter((r) => r.pass).length}/${runs.length})`);
       }
@@ -260,7 +287,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
       try {
         for (const t of tasks) {
           if (Date.now() > deadline) break;
-          const start = join(TASKS, t.id, 'start');
+          const start = join(tier.tasks, t.id, 'start');
           const name = `task-${t.id}`;
           const ws = workspaceDir(scratch, name);
           copyProject(start, ws);
@@ -275,7 +302,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
               if (ev.type === 'tool_call') {
                 toolCalls++;
                 // The hidden tests and reference solutions live in this repository; note any look at them.
-                if (/bench[\\/](tasks|solutions)|__hidden__/.test(JSON.stringify(ev.args))) error = 'looked outside the workspace at the benchmark files';
+                if (/bench[\\/](tasks|solutions|projects|project-solutions)|__hidden__/.test(JSON.stringify(ev.args))) error = 'looked outside the workspace at the benchmark files';
               } else if (ev.type === 'error') error = ev.message;
             }
           } catch (err) {
@@ -285,7 +312,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
           }
           // Even after a timeout, whatever she left is tested (that is what she'd hand over).
           const h = runHidden(t, ws, opt.python!);
-          const run: Run = { task: t.id, title: t.title, kind: t.kind, lang: t.lang, pass: h.pass, seconds: Math.round((Date.now() - t0) / 1000), toolCalls, filesChanged: changedFiles(start, ws), ...(h.pass ? {} : { detail: h.detail }), ...(error ? { error } : {}) };
+          const run: Run = { task: t.id, title: t.title, kind: t.kind, lang: t.lang, pass: h.pass, seconds: Math.round((Date.now() - t0) / 1000), toolCalls, filesChanged: changedFiles(start, ws), ...sizeOf(t), ...(h.pass ? {} : { detail: h.detail }), ...(error ? { error } : {}) };
           runs.push(run);
           console.log(`${run.pass ? 'PASS' : 'FAIL'} ${t.id} ${run.seconds}s, ${toolCalls} tool calls, ${run.filesChanged} files changed${error ? ` [${error}]` : ''}  (${runs.filter((r) => r.pass).length}/${runs.length})`);
         }
@@ -299,7 +326,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
 
   const pass = runs.filter((r) => r.pass).length;
   const result = {
-    benchmark: 'Sara repository tasks (bench/tasks, original)',
+    benchmark: tier.name,
     mode,
     model: opt.model,
     at: started.toISOString(),
@@ -314,7 +341,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     runs,
   };
   console.log(`\n${mode}: ${pass}/${runs.length} tasks pass their hidden tests (pass@1 ${result.pass1}%) on ${opt.model}, ${Math.round(result.seconds / 60)} min.`);
-  const out = join(ROOT, 'evals', 'results', `${started.toISOString().slice(0, 10)}-tasks-${mode}.json`);
+  const out = join(ROOT, 'evals', 'results', `${started.toISOString().slice(0, 10)}-${tier.file}-${mode}.json`);
   mkdirSync(dirname(out), { recursive: true });
   let prev: unknown[] = [];
   if (existsSync(out) && statSync(out).size) {

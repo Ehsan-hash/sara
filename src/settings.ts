@@ -100,6 +100,11 @@ export interface Settings {
   checklistHidden?: boolean;
   /** Optional local classifier backing the safety heuristics (adds protection only). */
   safetyClassifier?: { providerId: string; model: string };
+  /**
+   * Phase 62: optional claim judge (off when unset). A small model asked only about sentences the
+   * receipt patterns are unsure about; it can only add a correction, never remove one.
+   */
+  claimJudge?: { providerId: string; model: string };
   /** Discord bridge (Phase 6). Bot token lives in the vault (bridge:discord). */
   discord?: Partial<DiscordSettings>;
   /** Automatic backups (Phase 6). */

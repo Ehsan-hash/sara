@@ -31,14 +31,15 @@ Sizes: **S** = an evening, **M** = a weekend.
    *Where:* `CODES` in [`examples/tools/weather-tool.ts`](../examples/tools/weather-tool.ts), test in
    [`test/examples.test.ts`](../test/examples.test.ts).
 
-4. **Receipt check: claims in other languages** (M)
-   The check that compares what she *says* she did with what really ran only recognises English
-   claims ("I ran the tests", "I committed"). Add Spanish, French, German, Portuguese and Italian
-   patterns for the most common claims.
-   *Where:* [`src/receipts.ts`](../src/receipts.ts) (`checkClaims`), tests in
-   [`test/core.test.ts`](../test/core.test.ts) (search for `checkClaims`).
-   *Done when:* "Ejecuté las pruebas" without a test run is flagged, the same sentence after a real
-   run is not.
+4. **Receipt check: one more language** (M)
+   The check that compares what she *says* she did with what really ran reads English, Spanish,
+   French, German, Portuguese and Italian (Phase 62). Add another language you know well (Dutch,
+   Polish, Swedish…): its verb forms for "I created / saved / sent / ran / deleted / scheduled",
+   its negations, and 40 labelled replies (half real claims) in `evals/claims-multilingual.json`.
+   *Where:* [`src/receipts.ts`](../src/receipts.ts) (`MORE`, `SEND_VERB`, `SCHEDULE_VERB`), tests in
+   [`test/phase62.test.ts`](../test/phase62.test.ts), eval `node scripts/eval-claims.ts`.
+   *Done when:* the eval shows your language with precision ≥ 0.9 on replies you wrote *before*
+   writing the patterns.
 
 5. **Coding benchmark: an MBPP option** (M)
    `scripts/bench-coding.ts` runs OpenAI's HumanEval. Add `--set mbpp` for the sanitized MBPP

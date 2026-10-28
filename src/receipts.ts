@@ -10,8 +10,11 @@ export interface Receipt {
   output: string;
 }
 
-/** 'action': found by the optional local judge (any language, any kind of action). */
-export type ClaimKind = 'write' | 'run' | 'tests_pass' | 'commit' | 'web' | 'remind' | 'planner' | 'browser' | 'action';
+/**
+ * 'send': sent, emailed or replied to a message (Phase 62); 'schedule': put something in a
+ * calendar (Phase 62); 'action': found by the optional local judge (any kind of action).
+ */
+export type ClaimKind = 'write' | 'run' | 'tests_pass' | 'commit' | 'web' | 'remind' | 'planner' | 'browser' | 'send' | 'schedule' | 'action';
 
 export interface Claim {
   kind: ClaimKind;
@@ -102,14 +105,169 @@ const I18N = {
   negated: w("no he|no pude|no lo|todavía no|aún no|je n'ai pas|je n'ai rien|pas encore|je ne peux pas|nicht|kein(?:e|en)?|noch nicht|não|ainda não|non ho|non sono riuscit[oa]|non ancora|non posso"),
 };
 
+// Phase 62: smarter checks in every language. More verb forms per language (clitics like "je l'ai",
+// "lo guardé", "l'ho salvato"; German verb-last and inverted order, "hab"; "acabo de", "je viens
+// de", "acabei de", "ho appena"; passives like "quedaron guardadas", "sont enregistrées", "foram
+// salvas", "sind gespeichert"), two new kinds (sent / emailed / replied, and calendar entries),
+// and negation scoped to the clause that holds the verb ("I created it, nothing failed" is still a
+// claim). These only ever ADD flags: every Phase 28 pattern above still applies as before.
+const ART2 = w(
+  'errors?|errores?|fallos?|bugs?|fehlers?|erreurs?|erros?|errori|errore|imports?|importaciones|importações|importe|dependencies|dependencias|dépendances|abhängigkeiten|dependências|dipendenze|readme|cartell[ae]|backups?|notizen|notas|note|configs?|login|[\\w./-]+/[\\w./-]+',
+);
+/** Something one sends (an email, a message, a comment) or "by email". */
+const SEND_OBJ = w(
+  'e-?mails?|mails?|correos?|courriels?|messages?|mensajes?|nachrichten?|mensage(?:m|ns)|messaggi[oa]?|invit(?:e|ation|ación|ación|o|e)s?|einladung(?:en)?|convites?|comments?|comentarios?|commentaires?|kommentare?|comentários?|comment[oi]|issues?|pull requests?|prs?|respuestas?|réponses?|antwort(?:en)?|respostas?|rispost[ae]|por correo|par e-?mail|par mail|per mail|por e-?mail|via e-?mail',
+);
+/** Something one puts in a calendar. */
+const CAL_OBJ = w(
+  'calendars?|calendario|calendrier|kalender|calendário|agenda|agendas|appointments?|meetings?|citas?|reuni(?:ón|ones)|rendez-vous|réunions?|termine?s?|besprechung(?:en)?|consultas?|reuni(?:ão|ões)|compromissos?|appuntament[oi]|riunion[ei]',
+);
+const DE_HAVE = '(?:ich (?:habe|hab)|(?:habe|hab) ich|^(?:habe|hab)|^(?:gerade|eben|grad) (?:habe|hab))';
+const MORE: Partial<Record<ClaimKind, RegExp[]>> = {
+  write: [
+    /\b(?:has|have) been (?:created|saved|written|updated|deleted|removed|renamed|added|fixed|changed|modified)\b|\b(?:is|are) (?:now )?(?:saved|created|deleted|updated)\b/i,
+    w(
+      '(?:(?:lo|la|los|las|le|les|te) )?he (?:creado|escrito|guardado|añadido|agregado|actualizado|editado|modificado|cambiado|corregido|arreglado|borrado|eliminado|renombrado|implementado|movido)|' +
+        'agregué|añadí|edité|modifiqué|cambié|renombré|implementé|moví|' +
+        'acabo de (?:crear|escribir|guardar|añadir|agregar|actualizar|editar|modificar|cambiar|corregir|arreglar|borrar|eliminar|renombrar|implementar)|' +
+        '(?:quedó|quedaron|ha quedado|han quedado|está|están|ha sido|han sido|fue|fueron) (?:ya )?(?:guardad|cread|actualizad|borrad|eliminad|escrit|modificad|corregid|renombrad)[oa]s?',
+    ),
+    w(
+      "(?:j'|je (?:l'|les |t'|lui |leur |vous ))ai (?:bien |aussi |déjà |enfin )?(?:créée?s?|écrite?s?|enregistrée?s?|sauvegardée?s?|ajoutée?s?|mise? à jour|modifiée?s?|changée?s?|corrigée?s?|supprimée?s?|effacée?s?|renommée?s?|implémentée?s?|déplacée?s?)|" +
+        'je viens de (?:créer|écrire|enregistrer|sauvegarder|ajouter|mettre à jour|modifier|changer|corriger|supprimer|effacer|renommer|implémenter)|' +
+        '(?:est|sont|a été|ont été) (?:bien |maintenant )?(?:créée?s?|enregistrée?s?|sauvegardée?s?|mise?s? à jour|supprimée?s?|modifiée?s?|corrigée?s?|renommée?s?)',
+    ),
+    w(
+      `${DE_HAVE}.{0,90}?(?:erstellt|angelegt|geschrieben|gespeichert|abgespeichert|hinzugefügt|ergänzt|aktualisiert|bearbeitet|geändert|angepasst|behoben|repariert|korrigiert|gefixt|gelöscht|entfernt|umbenannt|implementiert|verschoben|eingebaut|überarbeitet)|` +
+        '(?:ist|sind|wurde|wurden)(?: [^ ]+){0,6}? (?:jetzt |nun )?(?:gespeichert|abgespeichert|erstellt|angelegt|gelöscht|entfernt|aktualisiert|geändert|umbenannt)',
+    ),
+    w(
+      'gravei|excluí|acabei de (?:criar|escrever|salvar|gravar|adicionar|atualizar|editar|modificar|alterar|corrigir|consertar|apagar|excluir|remover|renomear|implementar)|' +
+        '(?:foi|foram|está|estão|ficou|ficaram) (?:já )?(?:salv|criad|atualizad|apagad|excluíd|gravad|corrigid|removid|alterad|renomead)[oa]s?',
+    ),
+    w(
+      "(?:(?:l'|li |le |lo |ti |gli |vi )?ho|abbiamo) (?:appena |già |anche |finalmente )?(?:creat|scritt|salvat|aggiunt|aggiornat|modificat|cambiat|corrett|sistemat|cancellat|eliminat|rimoss|rinominat|implementat|spostat)[oaie]|" +
+        '(?:è|sono) (?:stat[oaie] )?(?:salvat|creat|aggiornat|cancellat|eliminat|scritt|modificat|corrett|rinominat)[oaie]',
+    ),
+  ],
+  run: [
+    w(
+      'he (?:lanzado|vuelto a ejecutar)|lancé|acabo de (?:ejecutar|correr|probar|lanzar|compilar|instalar)|' +
+        "(?:j'|je (?:l'|les ))ai (?:re)?(?:lancée?s?|exécutée?s?|testée?s?|compilée?s?|installée?s?)|je viens de (?:lancer|exécuter|tester|compiler|installer)|" +
+        `${DE_HAVE}.{0,90}?(?:ausgeführt|gestartet|laufen lassen|getestet|gebaut|kompiliert|installiert)|` +
+        'acabei de (?:rodar|executar|testar|compilar|instalar)|' +
+        "(?:l'|li |le |lo )?ho (?:appena |già )?(?:eseguit|lanciat|testat|compilat|installat)[oaie]",
+    ),
+  ],
+  tests_pass: [
+    w(
+      'todas pasan|pasan todas|pasan las \\d+|las pruebas están en verde|todos (?:os testes )?passam|passam todos|passaram todos|os testes estão verdes|' +
+        'tous les tests sont verts|les \\d+ passent|' +
+        'laufen alle tests durch|alle tests laufen durch|tests (?:sind|waren) (?:alle )?grün|alle (?:\\d+ )?(?:tests )?(?:bestehen|sind grün)|bestehen alle|' +
+        'passano tutti|tutti (?:e \\d+ )?passano|i test sono verdi',
+    ),
+  ],
+  commit: [
+    /\b(?:changes|commits?|fix(?:es)?|branch)\b[^.!?]{0,40}\b(?:committed and pushed|pushed)\b/i,
+    w(
+      'he subido|subí los cambios|(?:están|está|fueron|fue) (?:ya )?(?:subidos?|commiteados?)|' +
+        '(?:sont|est|ont été|a été) (?:bien )?(?:commitée?s?|poussée?s?|pushée?s?)|' +
+        `${DE_HAVE}.{0,90}?(?:committet|commitet|gepusht|gepushed|gemergt)|(?:sind|ist|wurden|wurde)(?: [^ ]+){0,4}? (?:committet|gepusht)|` +
+        'commitei|(?:foi|foram|estão|está) (?:já )?(?:commitad|pushad)[oa]s?|' +
+        '(?:sono|è) (?:stat[oaie] )?(?:committat|pushat)[oaie]|ho committato',
+    ),
+  ],
+  web: [
+    w(
+      'lo busqué|la busqué|he buscado|busqué en (?:internet|la web|google)|' +
+        "j'ai (?:cherché|recherché|regardé) (?:sur internet|en ligne|sur le web|sur google)|" +
+        `${DE_HAVE}.{0,90}?(?:online|im internet|im netz|im web).{0,30}?(?:nachgesehen|nachgeschaut|gesucht|recherchiert)|${DE_HAVE}.{0,60}?gegoogelt|` +
+        'pesquisei|procurei (?:na internet|online|no google)|' +
+        'ho cercato (?:su internet|online|sul web|su google)',
+    ),
+  ],
+  planner: [
+    // German compounds (Einkaufsliste, Aufgabenliste) have no word edge before "liste".
+    new RegExp(`${DE_HAVE}.{0,90}?(?:liste|aufgabe|notiz|to-?do)[\\p{L}]*.{0,40}?(?:gesetzt|hinzugefügt|eingetragen|abgehakt|notiert|geschrieben|aufgeschrieben)`, 'iu'),
+  ],
+  remind: [
+    w(
+      '(?:te |le )?(?:puse|he puesto|he creado|creé|dejé) un recordatorio|' +
+        "(?:je t'ai|j'ai|je vous ai) (?:mis|programmé|créé|réglé) un rappel|" +
+        `${DE_HAVE}.{0,60}?erinnerung.{0,40}?(?:gesetzt|eingerichtet|erstellt|gestellt|angelegt)|` +
+        '(?:coloquei|criei|pus|deixei|programei) um lembrete|' +
+        '(?:ti )?ho (?:messo|impostato|creato|programmato) un promemoria',
+    ),
+  ],
+};
+/** Kinds with their own receipts (Phase 62); a verb plus the right kind of object. */
+const SEND_VERB = [
+  /\bI(?:'ve| have)?\s+(?:just\s+|also\s+|already\s+)?(?:sent|forwarded|replied to|answered|posted|wrote back to|messaged)\b/i,
+  w(
+    '(?:(?:le|te|les|se lo|se la) )?(?:he enviado|he mandado|he reenviado|he respondido|he contestado|envié|mandé|reenvié|respondí|contesté)|' +
+      "(?:j'|je (?:l'|les |lui |leur |t'|vous ))ai (?:envoyée?s?|renvoyée?s?|transférée?s?|répondu|écrit)|" +
+      `${DE_HAVE}.{0,90}?(?:geschickt|verschickt|gesendet|gesandt|weitergeleitet|geantwortet|geschrieben)|` +
+      'enviei|mandei|encaminhei|respondi|reenviei|' +
+      "(?:(?:l'|li |le |gli |ti )?ho) (?:appena |già )?(?:inviat|mandat|spedit|inoltrat|scritt)[oaie]|ho risposto",
+  ),
+];
+const SEND_ALONE = /\bI(?:'ve| have)?\s+(?:just\s+|also\s+|already\s+)?(?:e-?mailed|emailed)\b/i;
+const SCHEDULE_VERB = [
+  /\bI(?:'ve| have)?\s+(?:just\s+|also\s+)?(?:scheduled|booked|put|added|blocked(?: out)?|entered|set up)\b/i,
+  w(
+    '(?:(?:te|le|les|lo|la) )?(?:he agendado|agendé|he programado|programé|he reservado|reservé|puse|he puesto|añadí|he añadido|agregué|he agregado|apunté|he apuntado)|' +
+      "(?:j'|je (?:l'|les |t'|lui |vous ))ai (?:programmée?s?|planifiée?s?|calée?s?|réservée?s?|mise?s?|ajoutée?s?|notée?s?|inscrite?s?|bloquée?s?)|" +
+      `${DE_HAVE}.{0,90}?(?:eingetragen|eingeplant|geplant|gebucht|reserviert|terminiert|geblockt|gelegt)|` +
+      'agendei|marquei|coloquei|reservei|programei|adicionei|' +
+      "(?:(?:l'|ti |gli |le )?ho) (?:appena |già )?(?:fissat|programmat|pianificat|prenotat|mess|aggiunt|segnat|inserit)[oaie]",
+  ),
+];
+const SCHEDULE_ALONE = w('he agendado|agendé|agendei');
+/** Phase 62: "tested it in the browser / at phone width", "took a screenshot", in five more languages. */
+const BROWSER_I18N = w(
+  '(?:probé|he probado|lo probé|testé|abrí|revisé|lo he probado).{0,80}?(?:navegador|vista previa|ancho de móvil|en el móvil)|(?:hice|he hecho|tomé) (?:una |unas )?capturas?|' +
+    "(?:j'ai|je l'ai) (?:testé|essayé|ouvert|vérifié|regardé).{0,80}?(?:navigateur|aperçu|largeur (?:de )?téléphone|sur mobile)|(?:j'ai|je l'ai) (?:fait|pris) (?:une |des )?captures?|" +
+    `${DE_HAVE}.{0,90}?(?:im browser|in der vorschau|handybreite|auf dem handy|mobil).{0,40}?(?:getestet|angesehen|ausprobiert|geöffnet|geprüft)|${DE_HAVE}.{0,40}?screenshots? (?:gemacht|erstellt)|` +
+    '(?:testei|abri|verifiquei|olhei).{0,80}?(?:navegador|pré-visualização|largura de celular|no celular)|(?:tirei|fiz) (?:um |uns )?(?:print|captura)s?|' +
+    "(?:(?:l'|lo |la )?ho) (?:provat|testat|apert|controllat)[oaie].{0,80}?(?:browser|anteprima|larghezza (?:del )?telefono|sul telefono)|ho fatto (?:uno |degli )?screenshot",
+);
+/** Clause edges: punctuation and "but" words; negation counts only in the verb's own clause. */
+const CLAUSE = /\s*[,;:–—]\s*|\s+-\s+|\s+(?:but|however|pero|aunque|sin embargo|mais|cependant|aber|jedoch|doch|mas|porém|però|ma)\s+/i;
+/** Read-only tools: they never back an action claim. */
+const READ_ONLY = /^(?:read_file|list_dir|search|web_search|web_fetch|gmail_read|gmail_search|gmail_thread|gmail_needs_answer|calendar_events|github_list|github_read|home_status|job_status|browser_read|recall|find)$/;
+
 const WRITE_TOOLS = new Set(['write_file', 'edit_file']);
 
-function sentences(text: string): string[] {
+/**
+ * The reply with things that aren't her own claims taken out (Phase 62): code blocks, block
+ * quotes, inline code with spaces, and quoted text of three words or more (a quoted example like
+ * «I've sent it» is not a claim). Typographic apostrophes become plain ones.
+ */
+export function visibleText(text: string): string {
   return text
-    .replace(/```[\s\S]*?```/g, ' ')
-    .split(/(?<=[.!?])\s+|\n+/)
+    .replace(/[\u2019\u02bc]/g, "'")
+    .replace(/(`{3,}|~{3,})[\s\S]*?\1/g, ' ')
+    .replace(/^\s*>.*$/gm, ' ')
+    .replace(/`[^`\n]*\s[^`\n]*`/g, ' ')
+    .replace(/"([^"\n]{1,400})"|“([^”\n]{1,400})”|„([^“”\n]{1,400})[“”]|«([^»\n]{1,400})»|‹([^›\n]{1,400})›/g, (m: string, ...g: (string | undefined)[]) => {
+      const inner = g.slice(0, 5).find((x) => typeof x === 'string') ?? '';
+      return inner.trim().split(/\s+/).length >= 3 ? ' ' : m;
+    });
+}
+
+function sentences(text: string): string[] {
+  return visibleText(text)
+    .split(/(?<=[.!?…])\s+|\n+/)
     .map((s) => s.trim())
     .filter(Boolean);
+}
+
+/** True when a pattern matches a clause with no negation in it, or (as before) the whole sentence with none. */
+function claimed(s: string, res: RegExp | RegExp[]): boolean {
+  const list = Array.isArray(res) ? res : [res];
+  const neg = (x: string) => NEGATED.test(x) || I18N.negated.test(x);
+  if (list.some((r) => r.test(s)) && !neg(s)) return true;
+  return s.split(CLAUSE).some((c) => c && !neg(c) && list.some((r) => r.test(c)));
 }
 
 function exitCode(output: string): number | null {
@@ -131,19 +289,38 @@ function priorSupports(sentence: string, prior: Receipt[], kinds: (r: Receipt) =
   return prior.some((r) => r.status === 'ok' && kinds(r) && names.some((n) => JSON.stringify(r.args).toLowerCase().includes(n)));
 }
 
-export function checkClaims(reply: string, receipts: Receipt[], prior: Receipt[] = []): Claim[] {
+/** What this turn's receipts can back, per kind of claim. */
+function backing(receipts: Receipt[]) {
   const ok = receipts.filter((r) => r.status === 'ok');
   const shells = ok.filter((r) => r.name === 'shell');
-  const hasWrite = ok.some((r) => WRITE_TOOLS.has(r.name) || r.name.startsWith('mcp_')) || shells.length > 0;
-  const hasRun = shells.length > 0 || ok.some((r) => r.name.startsWith('mcp_'));
-  const hasCommit = ok.some((r) => r.name === 'git_commit' || r.name === 'git_push') || shells.some((r) => /\bgit\b[\s\S]*\b(commit|push|merge|tag)\b/.test(String(r.args.command ?? '')) && exitCode(r.output) === 0);
-  const hasWeb = ok.some((r) => r.name === 'web_search' || r.name === 'web_fetch');
-  const hasRemind = ok.some((r) => r.name === 'remind' && String(r.args.action) === 'set');
-  const hasPlanner = ok.some((r) => r.name === 'todo' || r.name === 'note' || r.name.startsWith('mcp_'));
-  const hasBrowser = ok.some((r) => BROWSER_TOOLS.has(r.name));
-  const hasShot = ok.some((r) => r.name === 'browser_screenshot');
-  const testRuns = shells.filter((r) => /\b(test|jest|vitest|pytest|mocha|go test|cargo test|npm t\b|node --test|make check|npm run check)\b/i.test(String(r.args.command ?? '')));
+  const mcp = ok.some((r) => r.name.startsWith('mcp_'));
+  const cmd = (r: Receipt) => String(r.args.command ?? '');
+  return {
+    ok,
+    shells,
+    hasWrite: ok.some((r) => WRITE_TOOLS.has(r.name)) || mcp || shells.length > 0,
+    hasRun: shells.length > 0 || mcp,
+    hasCommit: ok.some((r) => r.name === 'git_commit' || r.name === 'git_push') || shells.some((r) => /\bgit\b[\s\S]*\b(commit|push|merge|tag)\b/.test(cmd(r)) && exitCode(r.output) === 0),
+    hasWeb: ok.some((r) => r.name === 'web_search' || r.name === 'web_fetch'),
+    hasRemind: ok.some((r) => r.name === 'remind' && String(r.args.action) === 'set'),
+    hasPlanner: ok.some((r) => r.name === 'todo' || r.name === 'note') || mcp,
+    hasBrowser: ok.some((r) => BROWSER_TOOLS.has(r.name)),
+    hasShot: ok.some((r) => r.name === 'browser_screenshot'),
+    // Phase 62: sending (mail, a GitHub comment / issue / pull request, an MCP tool, a mail command).
+    hasSend: mcp || ok.some((r) => r.name === 'gmail_send' || r.name === 'github_comment' || r.name === 'github_create_issue' || r.name === 'github_open_pr') || shells.some((r) => /\b(?:mail|sendmail|msmtp|mutt|curl|gh)\b/.test(cmd(r))),
+    // Phase 62: a calendar entry (or a reminder set for it).
+    hasSchedule: mcp || ok.some((r) => r.name === 'calendar_add' || (r.name === 'remind' && String(r.args.action) === 'set')),
+    // Anything that did something (not just reading) backs the judge's generic "action".
+    hasAny: ok.some((r) => !READ_ONLY.test(r.name)),
+    testRuns: shells.filter((r) => /\b(test|jest|vitest|pytest|mocha|go test|cargo test|npm t\b|node --test|make check|npm run check)\b/i.test(cmd(r))),
+  };
+}
 
+const isQuestion = (s: string) => /[?¿]\s*$/.test(s) || /^\s*¿/.test(s);
+const isEarlier = (s: string) => EARLIER.test(s) || I18N.earlier.test(s);
+
+export function checkClaims(reply: string, receipts: Receipt[], prior: Receipt[] = []): Claim[] {
+  const b = backing(receipts);
   const claims: Claim[] = [];
   const seen = new Set<string>();
   const add = (kind: ClaimKind, sentence: string, problem: Claim['problem']) => {
@@ -152,31 +329,29 @@ export function checkClaims(reply: string, receipts: Receipt[], prior: Receipt[]
     seen.add(key);
     claims.push({ kind, sentence, problem });
   };
+  const priorWrite = (s: string) => priorSupports(s, prior, (r) => WRITE_TOOLS.has(r.name) || r.name === 'shell');
+  const priorRun = (s: string) => priorSupports(s, prior, (r) => r.name === 'shell' || r.name.startsWith('mcp_'));
 
   for (const s of sentences(reply)) {
-    if (EARLIER.test(s) || NEGATED.test(s) || I18N.earlier.test(s) || I18N.negated.test(s) || /\?\s*$/.test(s)) continue;
-    const artifact = ARTIFACT.test(s) || I18N.artifact.test(s);
-    if (I18N.write.test(s) && artifact && !hasWrite && !priorSupports(s, prior, (r) => WRITE_TOOLS.has(r.name) || r.name === 'shell')) add('write', s, 'missing');
-    if (I18N.run.test(s) && artifact && !hasRun && !priorSupports(s, prior, (r) => r.name === 'shell' || r.name.startsWith('mcp_'))) add('run', s, 'missing');
-    if (I18N.tests.test(s)) {
-      if (!testRuns.length && !hasRun) add('tests_pass', s, 'missing');
-      else if (testRuns.length && exitCode(testRuns.at(-1)!.output) !== 0) add('tests_pass', s, 'contradicted');
+    // Earlier work and questions are fine; a negation only clears the clause it is in (Phase 62).
+    if (isEarlier(s) || isQuestion(s)) continue;
+    const artifact = ARTIFACT.test(s) || I18N.artifact.test(s) || ART2.test(s);
+    if (artifact && !b.hasWrite && !priorWrite(s) && claimed(s, [WRITE_VERB, I18N.write, ...MORE.write!])) add('write', s, 'missing');
+    if (artifact && !b.hasRun && !priorRun(s) && claimed(s, [RUN_VERB, I18N.run, ...MORE.run!])) add('run', s, 'missing');
+    if (claimed(s, [TESTS_PASS, I18N.tests, ...MORE.tests_pass!])) {
+      if (!b.testRuns.length && !b.hasRun) add('tests_pass', s, 'missing');
+      else if (b.testRuns.length && exitCode(b.testRuns.at(-1)!.output) !== 0) add('tests_pass', s, 'contradicted');
     }
-    if (I18N.commit.test(s) && !hasCommit) add('commit', s, 'missing');
-    if (I18N.web.test(s) && !hasWeb) add('web', s, 'missing');
-    if (I18N.remind.test(s) && !hasRemind) add('remind', s, 'missing');
-    else if (I18N.planner.test(s) && !hasPlanner && !hasWrite) add('planner', s, 'missing');
-    if (WRITE_VERB.test(s) && ARTIFACT.test(s) && !hasWrite && !priorSupports(s, prior, (r) => WRITE_TOOLS.has(r.name) || r.name === 'shell')) add('write', s, 'missing');
-    if (RUN_VERB.test(s) && ARTIFACT.test(s) && !hasRun && !priorSupports(s, prior, (r) => r.name === 'shell' || r.name.startsWith('mcp_'))) add('run', s, 'missing');
-    if (TESTS_PASS.test(s)) {
-      if (!testRuns.length && !hasRun) add('tests_pass', s, 'missing');
-      else if (testRuns.length && exitCode(testRuns.at(-1)!.output) !== 0) add('tests_pass', s, 'contradicted');
-    }
-    if (COMMIT.test(s) && !hasCommit) add('commit', s, 'missing');
-    if (WEB.test(s) && !hasWeb) add('web', s, 'missing');
-    if (REMIND.test(s) && !hasRemind) add('remind', s, 'missing');
-    else if (PLANNER.test(s) && !hasPlanner && !hasWrite) add('planner', s, 'missing');
-    if ((SCREENSHOT.test(s) && !hasShot) || (BROWSER.test(s) && !hasBrowser)) add('browser', s, 'missing');
+    if (!b.hasCommit && claimed(s, [COMMIT, I18N.commit, ...MORE.commit!])) add('commit', s, 'missing');
+    if (!b.hasWeb && claimed(s, [WEB, I18N.web, ...MORE.web!])) add('web', s, 'missing');
+    const remind = claimed(s, [REMIND, I18N.remind, ...MORE.remind!]);
+    const schedule = !remind && ((SCHEDULE_ALONE.test(s) && claimed(s, SCHEDULE_ALONE)) || (CAL_OBJ.test(s) && claimed(s, SCHEDULE_VERB)));
+    if (remind && !b.hasRemind) add('remind', s, 'missing');
+    else if (schedule) {
+      if (!b.hasSchedule) add('schedule', s, 'missing');
+    } else if (!remind && !b.hasPlanner && !b.hasWrite && claimed(s, [PLANNER, I18N.planner, ...MORE.planner!])) add('planner', s, 'missing');
+    if (!b.hasSend && ((SEND_OBJ.test(s) && claimed(s, SEND_VERB)) || claimed(s, SEND_ALONE))) add('send', s, 'missing');
+    if ((claimed(s, SCREENSHOT) && !b.hasShot) || (claimed(s, [BROWSER, BROWSER_I18N]) && !b.hasBrowser)) add('browser', s, 'missing');
   }
   return claims;
 }
@@ -191,9 +366,15 @@ export const JUDGE_KINDS: Record<string, ClaimKind> = { FILE: 'write', RUN: 'run
  */
 export function judgedClaim(sentence: string, kind: ClaimKind, receipts: Receipt[], prior: Receipt[] = []): Claim | undefined {
   if (EARLIER.test(sentence) || NEGATED.test(sentence) || I18N.earlier.test(sentence) || I18N.negated.test(sentence) || /\?\s*$/.test(sentence)) return undefined;
+  return isBacked(sentence, kind, receipts, prior) ? undefined : { kind, sentence, problem: 'missing' };
+}
+
+/** Does a tool in this turn (or an earlier one naming the same file) back this kind of claim? */
+function isBacked(sentence: string, kind: ClaimKind, receipts: Receipt[], prior: Receipt[]): boolean {
   const ok = receipts.filter((r) => r.status === 'ok');
   const shell = ok.some((r) => r.name === 'shell');
   const mcp = ok.some((r) => r.name.startsWith('mcp_'));
+  const b = backing(receipts);
   const backed: Record<ClaimKind, boolean> = {
     write: shell || mcp || ok.some((r) => WRITE_TOOLS.has(r.name)) || priorSupports(sentence, prior, (r) => WRITE_TOOLS.has(r.name) || r.name === 'shell'),
     run: shell || mcp,
@@ -203,10 +384,140 @@ export function judgedClaim(sentence: string, kind: ClaimKind, receipts: Receipt
     remind: ok.some((r) => r.name === 'remind'),
     planner: mcp || ok.some((r) => r.name === 'todo' || r.name === 'note' || WRITE_TOOLS.has(r.name)),
     browser: ok.some((r) => BROWSER_TOOLS.has(r.name)),
-    action: false,
+    send: b.hasSend,
+    schedule: b.hasSchedule,
+    action: b.hasAny,
   };
-  return backed[kind] ? undefined : { kind, sentence, problem: 'missing' };
+  return backed[kind];
 }
+
+// ---------- Phase 62: the optional claim judge (a small local model, asked only when unsure) ----------
+
+/** "Done!", "all set", "listo", "c'est fait", "erledigt", "pronto", "fatto": done, but done what? */
+const DONE_CUE = w("done|all set|it's done|that's done|listo|ya está|hecho|c'est fait|c'est bon|voilà|erledigt|fertig|gemacht|pronto|feito|tá feito|fatto|ecco fatto");
+/** First-person past/perfect action words with no object the patterns know (any of the six languages). */
+const VAGUE_ACTION = [
+  WRITE_VERB,
+  RUN_VERB,
+  /\bI(?:'ve| have)?\s+(?:just\s+|also\s+)?(?:sent|emailed|scheduled|booked|set up|took care of|handled|sorted|finished|completed)\b/i,
+  I18N.write,
+  I18N.run,
+  ...MORE.write!,
+  ...MORE.run!,
+  ...SEND_VERB,
+  ...SCHEDULE_VERB,
+  w('me encargué|me he encargado|lo hice|lo he hecho|je m.en suis occupée?|je l.ai fait|ich habe (?:mich )?(?:darum gekümmert|das gemacht|es gemacht|erledigt)|hab(?:e)? (?:das|es) (?:gemacht|erledigt)|cuidei disso|já fiz|fiz isso|me ne sono occupat[oa]|l.ho fatto|ho fatto'),
+];
+
+/** Work words beyond files and code: reminders, lists, screenshots, builds, servers, hotfixes. */
+const WORK_WORDS = w(
+  'reminders?|recordatorios?|rappels?|erinnerung(?:en)?|lembretes?|promemoria|to-?dos?|tasks?|tareas?|tâches?|aufgaben?|tarefas?|attività|screenshots?|capturas?|captures?|prints?|builds?|servers?|servidor(?:es)?|serveurs?|server|hotfix(?:es)?|pull requests?|commits?|branch(?:es)?|origin',
+);
+
+export interface UnsureClaim {
+  sentence: string;
+  /** The kind the patterns guess, or 'action' when they can't tell. */
+  kind: ClaimKind;
+}
+
+/**
+ * Sentences the patterns are unsure about (Phase 62): an action word with no object they know,
+ * or a bare "done", where this turn's receipts don't back it. Only these go to the optional
+ * judge; sentences the patterns already flagged, questions and earlier work never do.
+ */
+/** True when a full pattern (verb and object) for some kind matches: the patterns are sure. */
+function sureKind(s: string): boolean {
+  const artifact = ARTIFACT.test(s) || I18N.artifact.test(s) || ART2.test(s);
+  if (artifact && claimed(s, [WRITE_VERB, I18N.write, ...MORE.write!, RUN_VERB, I18N.run, ...MORE.run!])) return true;
+  if (claimed(s, [TESTS_PASS, I18N.tests, ...MORE.tests_pass!, COMMIT, I18N.commit, ...MORE.commit!, WEB, I18N.web, ...MORE.web!, REMIND, I18N.remind, ...MORE.remind!, PLANNER, I18N.planner, ...MORE.planner!, SCREENSHOT, BROWSER, BROWSER_I18N, SEND_ALONE, SCHEDULE_ALONE])) return true;
+  return (CAL_OBJ.test(s) && claimed(s, SCHEDULE_VERB)) || (SEND_OBJ.test(s) && claimed(s, SEND_VERB));
+}
+
+export function unsureClaims(reply: string, receipts: Receipt[], prior: Receipt[] = [], flagged: Claim[] = []): UnsureClaim[] {
+  const b = backing(receipts);
+  const done = new Set(flagged.map((c) => c.sentence));
+  const out: UnsureClaim[] = [];
+  for (const s of sentences(reply)) {
+    // Negations are not filtered here: "the imports that weren't used" is not "I didn't"; the judge decides.
+    if (done.has(s) || isEarlier(s) || isQuestion(s) || s.length < 6) continue;
+    const any = (res: RegExp[]) => res.some((r) => r.test(s));
+    // The patterns already know this kind of sentence (and flagged it, or a tool backs it).
+    if (sureKind(s)) continue;
+    let kind: ClaimKind | undefined;
+    if (any([WRITE_VERB, I18N.write, ...MORE.write!])) kind = 'write';
+    else if (any([RUN_VERB, I18N.run, ...MORE.run!])) kind = 'run';
+    else if (any([...SEND_VERB, SEND_ALONE])) kind = 'send';
+    else if (any([...VAGUE_ACTION, DONE_CUE])) kind = 'action';
+    // When no tool did anything this turn, any sentence about work things is worth a second look.
+    else if (!b.hasAny && any([ARTIFACT, I18N.artifact, ART2, SEND_OBJ, CAL_OBJ, WORK_WORDS])) kind = 'action';
+    if (!kind || isBacked(s, kind, receipts, prior)) continue;
+    out.push({ sentence: s, kind });
+  }
+  return out.slice(0, 3);
+}
+
+/** The judge's instructions: one sentence, a strict yes/no with the evidence copied from it. */
+export const CLAIM_JUDGE_SYSTEM = `Read one sentence that an AI assistant wrote to its user (any language). Question: does the sentence say the assistant has ALREADY done something itself, on a computer or online: changed, saved, moved or deleted files or code, ran a command, build, deploy or tests, sent an email or message, committed or pushed code, searched online, set a reminder, put something in a calendar, added to a list? It counts even without the word "I" ("Wiped the cache", "the email went out", "it is in your calendar now", "tests passed on my run").
+It does not count: offers, plans, advice or questions; negations; quoted examples; things from an earlier day; ordinary personal life ("I baked bread").
+Reply with JSON only: {"answer": "yes" or "no", "evidence": "<if yes, the words of the sentence that say it, copied exactly>"}`;
+
+export function claimJudgeQuestion(sentence: string): string {
+  return `Sentence: ${sentence}`;
+}
+
+const squash = (s: string) => s.toLowerCase().replace(/[\u2019\u02bc]/g, "'").replace(/[^\p{L}\p{N}']+/gu, ' ').trim();
+
+/**
+ * The judge's answer, strictly: "yes" counts only with evidence that really is in the sentence
+ * (at least two words, copied). Anything else (chatter, "yes" without proof, broken JSON) is no.
+ */
+export function parseClaimVerdict(answer: string, sentence: string): boolean {
+  const m = /\{[\s\S]*\}/.exec(answer.replace(/```(?:json)?/g, ''));
+  if (!m) return false;
+  let j: { answer?: unknown; evidence?: unknown };
+  try {
+    j = JSON.parse(m[0]) as typeof j;
+  } catch {
+    return false;
+  }
+  if (String(j.answer ?? '').trim().toLowerCase() !== 'yes') return false;
+  const ev = squash(String(j.evidence ?? ''));
+  return ev.split(' ').filter(Boolean).length >= 2 && squash(sentence).includes(ev);
+}
+
+/**
+ * Asks the judge about each unsure sentence (in parallel, each with its own short time limit) and
+ * returns the ones it confirms with evidence. It can only add claims: a timeout, an error or an
+ * unclear answer counts as "no", so the pattern result stands (fail-open to the patterns).
+ */
+export async function confirmClaims(ask: (system: string, user: string, signal: AbortSignal) => Promise<string>, unsure: UnsureClaim[], timeoutMs = CLAIM_JUDGE_TIMEOUT_MS): Promise<Claim[]> {
+  const verdicts = await Promise.all(
+    unsure.map(async (u) => {
+      const ctl = new AbortController();
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      try {
+        const out = await Promise.race([
+          ask(CLAIM_JUDGE_SYSTEM, claimJudgeQuestion(u.sentence), ctl.signal),
+          new Promise<string>((_, reject) => {
+            timer = setTimeout(() => {
+              ctl.abort(new Error('claim judge timeout'));
+              reject(new Error('claim judge timeout'));
+            }, timeoutMs);
+          }),
+        ]);
+        return parseClaimVerdict(out, u.sentence);
+      } catch {
+        return false;
+      } finally {
+        clearTimeout(timer);
+      }
+    }),
+  );
+  return unsure.filter((_, i) => verdicts[i]).map((u) => ({ kind: u.kind, sentence: u.sentence, problem: 'missing' as const }));
+}
+
+/** The judge's time limit per sentence: short, so a slow or sleeping model never holds a reply up for long. */
+export const CLAIM_JUDGE_TIMEOUT_MS = 8_000;
 
 export function correctionNote(claims: Claim[]): string {
   const lines = claims.map((c) =>

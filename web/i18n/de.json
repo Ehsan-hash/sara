@@ -3354,5 +3354,10 @@
 "This address has no HTTPS: anyone on the same network could read what you send. Fine at home on a network you trust; use Tailscale for anywhere else.": "Diese Adresse hat kein HTTPS: Jeder im selben Netzwerk könnte mitlesen, was du sendest. Zu Hause in einem vertrauenswürdigen Netzwerk ist das okay; überall sonst nutze Tailscale.",
 "latest {value}": "zuletzt {value}",
 "no data yet": "noch keine Daten",
-"total {time}": "gesamt {time}"
+"total {time}": "gesamt {time}",
+"Double-check her claims": "Ihre Aussagen gegenprüfen",
+"Optional small model (best a local one) asked only when the built-in check is unsure whether she claims she did something (saved, sent, ran) that no tool did. It can only add a correction, never remove one. Off: the built-in check still runs.": "Optionales kleines Modell (am besten lokal), nur gefragt, wenn die eingebaute Prüfung unsicher ist, ob sie etwas behauptet (gespeichert, gesendet, ausgeführt), das kein Werkzeug tat. Es fügt nur Korrekturen hinzu. Aus: die eingebaute Prüfung bleibt.",
+"Claim check: unknown provider": "Aussagenprüfung: unbekannter Anbieter",
+"Claim check: choose a model": "Aussagenprüfung: wähle ein Modell",
+"<strong>Double-check her claims</strong> (optional, off by default): a small model, best a local one, asked only when the built-in check can't tell whether she says she did something (saved a file, sent an email, ran the tests) that no tool did. It can only add a correction, never remove one, and waits a few seconds at most.": "<strong>Ihre Aussagen gegenprüfen</strong> (optional, standardmäßig aus): ein kleines Modell, am besten ein lokales, das nur gefragt wird, wenn die eingebaute Prüfung nicht erkennt, ob sie etwas behauptet (eine Datei gespeichert, eine E-Mail gesendet, die Tests ausgeführt), das kein Werkzeug getan hat. Es kann nur eine Korrektur hinzufügen, nie eine entfernen, und wartet höchstens ein paar Sekunden."
 }

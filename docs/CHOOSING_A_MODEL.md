@@ -111,6 +111,7 @@ only; nothing is sent anywhere). Each job also has *Test* (does it work, how fas
 | **Private conversations** | The model for conversations marked private | A model on your own hardware (not an Ollama cloud model) |
 | **Adult** | Used when a conversation turns explicit, only with Adult mode on | One that allows it; cloud models often refuse |
 | **Safety check** (optional) | A local model that double-checks messages for crisis or content involving minors, on top of the built-in checks | A small local model |
+| **Double-check her claims** (optional, off by default) | Asked only when the built-in receipt check can't tell whether she claims something (saved, sent, ran) no tool did; it can only add a correction | A small local model (on the dev PC `qwen3.5:9b` answered in about 0.1 s; see [RESULTS](RESULTS.md#claim-check-in-six-languages)) |
 
 Live voice calls don't use these: they run on the voice service you choose (Grok or OpenAI) in
 Settings → Her → Voice. Pictures of her are made by xAI Grok Imagine (Settings → Her → Pictures

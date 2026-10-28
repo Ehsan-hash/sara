@@ -40,6 +40,25 @@ bench/
 | 13-py-ledger-decimal | refactor | Python | Floats to `Decimal` across a package |
 | 14-py-ini-spec | feature | Python | A settings-file reader that follows SPEC.md |
 
+## Real-size projects (Phase 62)
+
+`bench/projects/<id>/` holds bigger projects in the same format (start/, hidden/, task.json; reference
+solutions in `bench/project-solutions/<id>/`): 20 to 40 files each, with a README and docs that
+state the rules, their own test suites (partly failing), and problems spread over several modules,
+so the agent has to read around and run code to find them. Graded only by the hidden tests.
+
+```sh
+node scripts/bench-tasks.ts --tier projects --mode verify
+node scripts/bench-tasks.ts --tier projects --mode agent --model <m>   # 900 s per project by default
+node scripts/bench-tasks.ts --tier projects --mode raw --model <m>
+```
+
+| Project | Kind | Files / lines | What it needs |
+|---|---|---|---|
+| 21-notes-api | bug | 36 / 1,065 | A JSON web API (node:http): three reported auth problems; causes in the auth middleware (scheme case, refresh grace applied everywhere) and the note access rules |
+| 22-ledger-cli | bug | 32 / 867 | A money-ledger CLI after a refactor: four regressions across the shared option parser (`--x=y`, negative numbers), the amount parser and the date filter |
+| 23-units-lib | refactor | 22 / 539 | A units library: units are defined in four places; move them into one registry so `registerUnit()` works everywhere, then add three units |
+
 ## Adding a task
 
 1. Write a small project in `tasks/<nn-name>/start/` with its own tests (some may fail) and a

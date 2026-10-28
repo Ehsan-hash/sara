@@ -3346,5 +3346,10 @@
 "This address has no HTTPS: anyone on the same network could read what you send. Fine at home on a network you trust; use Tailscale for anywhere else.": "Este endereço não tem HTTPS: qualquer pessoa na mesma rede poderia ler o que você envia. Tudo bem em casa, numa rede confiável; em qualquer outro lugar, use o Tailscale.",
 "latest {value}": "último {value}",
 "no data yet": "ainda sem dados",
-"total {time}": "no total {time}"
+"total {time}": "no total {time}",
+"Double-check her claims": "Conferir o que ela diz que fez",
+"Optional small model (best a local one) asked only when the built-in check is unsure whether she claims she did something (saved, sent, ran) that no tool did. It can only add a correction, never remove one. Off: the built-in check still runs.": "Modelo pequeno opcional (de preferência local), consultado só quando a verificação embutida duvida se ela diz ter feito algo (salvou, enviou, rodou) que nenhuma ferramenta fez. Só adiciona correções, nunca tira. Desligado: a verificação embutida continua.",
+"Claim check: unknown provider": "Conferência do que ela diz: provedor desconhecido",
+"Claim check: choose a model": "Conferência do que ela diz: escolha um modelo",
+"<strong>Double-check her claims</strong> (optional, off by default): a small model, best a local one, asked only when the built-in check can't tell whether she says she did something (saved a file, sent an email, ran the tests) that no tool did. It can only add a correction, never remove one, and waits a few seconds at most.": "<strong>Conferir o que ela diz que fez</strong> (opcional, desligado por padrão): um modelo pequeno, de preferência local, consultado só quando a verificação embutida não sabe dizer se ela afirma ter feito algo (salvou um arquivo, enviou um e-mail, rodou os testes) que nenhuma ferramenta fez. Ele só pode adicionar uma correção, nunca tirar, e espera no máximo alguns segundos."
 }

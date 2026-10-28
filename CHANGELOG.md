@@ -2,6 +2,24 @@
 
 Format: newest first. Versions follow `0.<phase>.<patch>` until 1.0.0.
 
+## 1.3.0 (2026-10-28): smarter checks in every language
+
+- **Her honesty check now works in Spanish, French, German, Portuguese and Italian**, not just
+  English: when she says she saved, sent, ran, deleted or scheduled something that no tool actually
+  did, she adds a correction. It also understands "I didn't send it", ignores quoted examples and
+  code, and knows sending (email, GitHub comments) and calendar entries.
+- **Optional double-check** (Settings → Models → *Double-check her claims*, off by default): a small
+  model, best a local one, is asked only about sentences the built-in check can't place. It can only
+  add a correction, never remove one, has an 8-second limit, and in private chats only a local model
+  is used. Measured on 240 held-out replies in six languages: the built-in check catches 38% of false
+  claims at 92% precision (before: 20% / 86%); with a local qwen3.5:9b judge it catches 88% at 95%.
+- **A new benchmark tier of multi-file projects** (22–36 files: a notes API with auth bugs, a ledger
+  CLI with parsing regressions, a units library needing a cross-file refactor), graded by hidden
+  tests. Results, method and limits in docs/RESULTS.md.
+- **Fixed** (found by that benchmark): the secret scrubber could hide ordinary code such as
+  `const token = bearer(req)` from her, and she then wrote "[REDACTED]" back into the file. Code is
+  now left alone; real secrets are still scrubbed.
+
 ## 1.2.0 (2026-10-28): fully in your language
 
 - **The whole help guide** is now in Spanish, French, German, Portuguese (Brazil) and Italian, with

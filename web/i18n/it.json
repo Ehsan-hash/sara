@@ -3347,5 +3347,10 @@
 "This address has no HTTPS: anyone on the same network could read what you send. Fine at home on a network you trust; use Tailscale for anywhere else.": "Questo indirizzo non ha HTTPS: chiunque sulla stessa rete potrebbe leggere ciò che invii. Va bene a casa su una rete fidata; altrove usa Tailscale.",
 "latest {value}": "ultimo {value}",
 "no data yet": "ancora nessun dato",
-"total {time}": "totale {time}"
+"total {time}": "totale {time}",
+"Double-check her claims": "Ricontrolla ciò che dice di aver fatto",
+"Optional small model (best a local one) asked only when the built-in check is unsure whether she claims she did something (saved, sent, ran) that no tool did. It can only add a correction, never remove one. Off: the built-in check still runs.": "Piccolo modello facoltativo (meglio locale), interpellato solo se il controllo integrato è incerto se lei dica di aver fatto qualcosa (salvato, inviato, eseguito) senza strumenti. Può solo aggiungere correzioni. Spento: il controllo integrato resta attivo.",
+"Claim check: unknown provider": "Controllo di ciò che dice: fornitore sconosciuto",
+"Claim check: choose a model": "Controllo di ciò che dice: scegli un modello",
+"<strong>Double-check her claims</strong> (optional, off by default): a small model, best a local one, asked only when the built-in check can't tell whether she says she did something (saved a file, sent an email, ran the tests) that no tool did. It can only add a correction, never remove one, and waits a few seconds at most.": "<strong>Ricontrolla ciò che dice di aver fatto</strong> (facoltativo, spento di serie): un modello piccolo, meglio se locale, interpellato solo quando il controllo integrato non capisce se lei dice di aver fatto qualcosa (salvato un file, inviato un'email, eseguito i test) che nessuno strumento ha fatto. Può solo aggiungere una correzione, mai toglierla, e aspetta al massimo pochi secondi."
 }

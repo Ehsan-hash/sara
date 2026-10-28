@@ -183,8 +183,9 @@ sudo docker compose up -d                       # or: sudo docker compose --prof
 sudo docker compose logs sara | grep -A1 'owner token'   # or: open her page and enter the setup code from this log
 ```
 
-**App stores and NAS:** the image `ghcr.io/farena-ai/sara`, TrueNAS and Proxmox work now; Unraid,
-CasaOS/ZimaOS, Umbrel, Homebrew, winget and HACS are prepared and waiting for review
+**App stores and NAS:** the image `ghcr.io/farena-ai/sara` (also for ARM), Homebrew, TrueNAS,
+Proxmox and HACS (as a custom repository) work now; winget, CasaOS/ZimaOS, Umbrel and Unraid are
+waiting for review
 ([which is which](docs/INSTALL.md#other-ways-to-install)). A new server is set up in the browser
 with a short code from her log (one click on Umbrel), no long token to copy.
 

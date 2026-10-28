@@ -5,8 +5,8 @@ import assert from 'node:assert/strict';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
-import { filesFromReply, listFiles, loadTasks, rawPrompt, safePath, taskText } from '../scripts/bench-tasks.ts';
-import { tasksSummary } from '../scripts/publish-results.ts';
+import { filesFromReply, listFiles, loadTasks, projectSize, rawPrompt, safePath, taskText, TIERS } from '../scripts/bench-tasks.ts';
+import { claimsSummary, tasksSummary } from '../scripts/publish-results.ts';
 
 const BENCH = join(import.meta.dirname, '..', 'bench');
 
@@ -81,5 +81,41 @@ test('bench tasks: the published summary counts by kind and keeps no failure det
   );
   assert.deepEqual(s.byKind, { bug: { passed: 1, of: 1 }, feature: { passed: 0, of: 1 } });
   assert.deepEqual(s.failed, ['b']);
+  assert.ok(!JSON.stringify(s).includes('secret'));
+});
+
+test('bench projects (Phase 62): real-size projects with hidden tests and a reference solution outside the task', () => {
+  const projects = loadTasks(TIERS.projects.tasks);
+  assert.ok(projects.length >= 3, `${projects.length} projects`);
+  for (const t of projects) {
+    assert.equal(t.root, TIERS.projects.tasks);
+    const start = join(TIERS.projects.tasks, t.id, 'start');
+    const size = projectSize(start);
+    assert.ok(size.files >= 15 && size.files <= 40, `${t.id}: ${size.files} files`);
+    assert.ok(size.lines >= 500, `${t.id}: ${size.lines} lines`);
+    assert.ok(listFiles(join(TIERS.projects.tasks, t.id, 'hidden')).some((f) => f.endsWith('.test.js')), `${t.id} hidden`);
+    assert.ok(listFiles(join(TIERS.projects.solutions, t.id)).length, `${t.id} solution`);
+    assert.ok(!listFiles(start).some((f) => /hidden|solution/i.test(f)), t.id);
+    assert.ok(listFiles(start).some((f) => /^test\//.test(f)), `${t.id} has its own tests`);
+  }
+  // Same ids never appear in both tiers (results are told apart by tier and id).
+  const small = new Set(loadTasks().map((t) => t.id));
+  assert.ok(projects.every((t) => !small.has(t.id)));
+});
+
+test('claims summary (Phase 62): scores per language and set, no reply texts', () => {
+  const s = claimsSummary(
+    {
+      at: '2026-10-28T06:00:00.000Z',
+      judge: 'qwen3.5:9b at http://127.0.0.1:11434/v1 (warm-up 1 s)',
+      judgeTimeoutMs: 8000,
+      judgeStats: { calls: 3, timeouts: 0, errors: 0, medianMs: 120, maxMs: 200 },
+      table: { heldout: { en: { n: 40, patterns: { tp: 12, fp: 1, fn: 8, tn: 19, precision: 0.923, recall: 0.6 }, withJudge: { tp: 19, fp: 1, fn: 1, tn: 19, precision: 0.95, recall: 0.95 }, askedJudge: 14 } } },
+      rows: [{ text: 'secret reply text' }],
+    },
+    'x.json',
+  );
+  assert.equal(s.judge, 'qwen3.5:9b');
+  assert.equal(s.sets.heldout.en.withJudge?.recall, 0.95);
   assert.ok(!JSON.stringify(s).includes('secret'));
 });

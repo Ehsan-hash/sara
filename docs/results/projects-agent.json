@@ -1,0 +1,84 @@
+{
+  "benchmark": "Sara real-size projects (bench/projects, original)",
+  "mode": "agent",
+  "model": "qwen3.8:27b-mtp-q4_K_M",
+  "started": "2026-10-28T06:55:02.716Z",
+  "finished": "2026-10-28T06:58:26.345Z",
+  "python": "Python 3.14.9",
+  "platform": "win32",
+  "tasks": 3,
+  "passed": 3,
+  "pass1": 100,
+  "minutes": 3.4,
+  "failed": [],
+  "stopped": [],
+  "runs": [
+    {
+      "task": "21-notes-api",
+      "title": "Notes web API: users report three auth problems",
+      "kind": "bug",
+      "lang": "js",
+      "pass": true,
+      "seconds": 33,
+      "toolCalls": 22,
+      "filesChanged": 3
+    },
+    {
+      "task": "22-ledger-cli",
+      "title": "Ledger CLI: regressions after the 1.4 refactor",
+      "kind": "bug",
+      "lang": "js",
+      "pass": true,
+      "seconds": 112,
+      "toolCalls": 28,
+      "filesChanged": 4
+    },
+    {
+      "task": "23-units-lib",
+      "title": "Units library: one registry, three new units",
+      "kind": "refactor",
+      "lang": "js",
+      "pass": true,
+      "seconds": 58,
+      "toolCalls": 34,
+      "filesChanged": 5
+    }
+  ],
+  "source": "2026-10-28-projects-agent.json",
+  "byKind": {
+    "bug": {
+      "passed": 2,
+      "of": 2
+    },
+    "refactor": {
+      "passed": 1,
+      "of": 1
+    }
+  },
+  "everyRun": [
+    {
+      "started": "2026-10-28T06:28:23.632Z",
+      "passed": 0,
+      "of": 3,
+      "failed": [
+        "21-notes-api",
+        "22-ledger-cli",
+        "23-units-lib"
+      ]
+    },
+    {
+      "started": "2026-10-28T06:41:40.033Z",
+      "passed": 2,
+      "of": 3,
+      "failed": [
+        "23-units-lib"
+      ]
+    },
+    {
+      "started": "2026-10-28T06:55:02.716Z",
+      "passed": 3,
+      "of": 3,
+      "failed": []
+    }
+  ]
+}

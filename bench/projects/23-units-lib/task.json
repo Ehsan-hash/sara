@@ -1,0 +1,11 @@
+{
+  "title": "Units library: one registry, three new units",
+  "kind": "refactor",
+  "lang": "js",
+  "prompt": "This is a small units-of-measure library (about 25 files). We need three new units: the nautical mile, the stone and the US cup (details in docs/UNITS.md, 'Wanted'), and test/new-units.test.js fails. Today a unit is defined in several places, so adding one means editing many files, and units added with registerUnit() only half work. Refactor so that every unit, built-in or added with registerUnit(), is defined once (in src/registry.js) and parse, format, convert, compare and sum all read it from there, as README.md describes; then add the three units. The public API in README.md must keep working exactly as documented, and every test must pass.",
+  "hidden": [
+    "node",
+    "--test",
+    "__hidden__/*.test.js"
+  ]
+}

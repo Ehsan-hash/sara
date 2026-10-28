@@ -67,7 +67,7 @@ version's details are in the [changelog](../CHANGELOG.md).
 | 59 | Install anywhere: Homebrew, winget, HACS, Unraid, CasaOS, Umbrel, TrueNAS, Proxmox; first sign-in in the browser; a Docker image for ARM | ✅ 1.1 |
 | 60 | Phones: locked-screen calls on iPhone (CallKit), one-tap pairing on iPhone, the iPhone app in the App Store (when Apple approves it) | after Apple's approval |
 | 61 | Fully in your language: the help guide and every server message in all six languages | ✅ 1.2 |
-| 62 | Smarter checks in every language, and a bigger coding benchmark on real-size projects | 1.3 |
+| 62 | Smarter checks in every language, and a bigger coding benchmark on real-size projects | ✅ 1.3 |
 | 63 | Smoothness: tool calls that stream as they happen, a more expressive talking portrait, server logs | 1.4 |
 
 **Later:** group chats with two or more companions, video calls with her moving avatar, a fully

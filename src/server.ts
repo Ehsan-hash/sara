@@ -1288,6 +1288,7 @@ export function createSaraServer(opts: ServerOptions): Server {
           defaultModel: s.defaultModel ?? null,
           routes: s.routes ?? {},
           safetyClassifier: s.safetyClassifier ?? null,
+          claimJudge: s.claimJudge ?? null,
           fallbackAfterSec: s.fallbackAfterSec ?? 60,
           defaultFallbacks: s.defaultFallbacks ?? [],
           companionModel: s.companionModel ?? null,
@@ -1390,6 +1391,18 @@ export function createSaraServer(opts: ServerOptions): Server {
             const model = String(c.model ?? '').trim();
             if (!model) throw new HttpError(400, 'Safety classifier: choose a model');
             patch.safetyClassifier = { providerId: prov.id, model };
+          }
+        }
+        if (body.claimJudge !== undefined) {
+          // Phase 62: the claim judge uses only the model picked here (a cloud one only if picked).
+          const c = body.claimJudge as { providerId?: unknown; model?: unknown } | null;
+          if (!c || !c.providerId) patch.claimJudge = undefined;
+          else {
+            const prov = app.settings.get().providers.find((p) => p.id === String(c.providerId));
+            if (!prov) throw new HttpError(400, 'Claim check: unknown provider');
+            const model = String(c.model ?? '').trim();
+            if (!model) throw new HttpError(400, 'Claim check: choose a model');
+            patch.claimJudge = { providerId: prov.id, model };
           }
         }
         if (body.modelAutoSwitch !== undefined) patch.modelAutoSwitch = Boolean(body.modelAutoSwitch);

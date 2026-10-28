@@ -1,7 +1,17 @@
 // Secret scrubbing for anything a tool returns: known vault secrets (exact values) and
 // key-shaped strings. Applied before tool output is shown, stored or sent to a model.
 
-const PATTERNS: [RegExp, string][] = [
+// Phase 62: source code such as `const token = bearer(req.headers.authorization)` is left alone
+// (the benchmark showed models writing "[REDACTED]" back into files). Only code style counts:
+// a space after `=` or `:`, no quotes, and a function call; `PASSWORD=Abc(1)` (env files) and
+// `"password": "Abc(1)"` (JSON, YAML with quotes) are still scrubbed.
+function isCodeCall(sep: string, value: string): boolean {
+  return !/["']/.test(sep) && /[:=]\s/.test(sep) && /^[A-Za-z_$][\w$.]*\(/.test(value);
+}
+
+type Replacement = string | ((match: string, ...groups: string[]) => string);
+
+const PATTERNS: [RegExp, Replacement][] = [
   [/-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----/g, '[REDACTED PRIVATE KEY]'],
   [/\bsk-(?:ant-|proj-)?[A-Za-z0-9_-]{20,}/g, '[REDACTED]'],
   [/\bxai-[A-Za-z0-9]{20,}/g, '[REDACTED]'],
@@ -16,7 +26,7 @@ const PATTERNS: [RegExp, string][] = [
   // NAME=value / "name": "value" where the name says it's secret.
   [
     /\b([A-Za-z0-9_.-]*(?:api[_-]?key|secret|token|passw(?:or)?d|private[_-]?key|access[_-]?key|auth)[A-Za-z0-9_.-]*)(["']?\s*[:=]\s*["']?)([^\s"',;]{8,})/gi,
-    '$1$2[REDACTED]',
+    (m: string, name: string, sep: string, value: string) => (isCodeCall(sep, value) ? m : `${name}${sep}[REDACTED]`),
   ],
 ];
 
@@ -35,7 +45,7 @@ export class Redactor {
       .filter((s) => typeof s === 'string' && s.length >= 8)
       .sort((a, b) => b.length - a.length);
     for (const s of known) out = out.split(s).join('[REDACTED]');
-    for (const [re, rep] of PATTERNS) out = out.replace(re, rep);
+    for (const [re, rep] of PATTERNS) out = typeof rep === 'string' ? out.replace(re, rep) : out.replace(re, rep);
     return out;
   }
 

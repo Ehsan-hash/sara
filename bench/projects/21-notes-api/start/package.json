@@ -1,0 +1,11 @@
+{
+  "name": "notes-api",
+  "version": "2.3.0",
+  "private": true,
+  "type": "module",
+  "description": "A small notes service: users, roles, notes and sharing over a JSON HTTP API.",
+  "scripts": {
+    "start": "node src/server.js",
+    "test": "node --test"
+  }
+}

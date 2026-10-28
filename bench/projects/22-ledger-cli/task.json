@@ -1,0 +1,11 @@
+{
+  "title": "Ledger CLI: regressions after the 1.4 refactor",
+  "kind": "bug",
+  "lang": "js",
+  "prompt": "This is a command-line money ledger (about 30 files). Version 1.4 moved option parsing, amount parsing and date filters into shared modules (see CHANGELOG.md), and since then users have reported the regressions in ISSUES.md. docs/CLI.md is the specification. Find and fix the causes (they are in more than one module), keep everything else working, and make sure the test suite passes.",
+  "hidden": [
+    "node",
+    "--test",
+    "__hidden__/*.test.js"
+  ]
+}
