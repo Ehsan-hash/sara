@@ -1,6 +1,6 @@
 // Phase 2 exit gate: receipts (1), secret scrubbing (4), workspace snapshots + undo (5).
 import assert from 'node:assert/strict';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, utimesSync, writeFileSync } from 'node:fs';
 import type { AddressInfo } from 'node:net';
 import { join } from 'node:path';
 import { test } from 'node:test';
@@ -202,6 +202,41 @@ test('snapshots: store dedupes unchanged files, skips node_modules, rejects bad 
   assert.throws(() => s.restore('w', ws, '../../etc'), /Invalid snapshot id/);
   s.restore('w', ws, one.id);
   assert.ok(existsSync(join(ws, 'node_modules', 'x', 'big.js')), 'skipped folders are left alone');
+});
+
+// Contributed by Guilherme Costa (farena-ai/sara#17).
+test('snapshots: detects same-size changes when modification time is unchanged', (t) => {
+  const { dir, cleanup } = tempDir();
+  t.after(cleanup);
+  const s = new SnapshotStore(dir);
+  const ws = workspaceDir(dir, 'w');
+  const file = join(ws, 'edit.txt');
+  writeFileSync(file, 'a');
+  const when = new Date('2026-01-01T00:00:00Z');
+  utimesSync(file, when, when);
+  const before = s.take('w', ws, 'before').id;
+  writeFileSync(file, 'b');
+  utimesSync(file, when, when);
+  const after = s.take('w', ws, 'after').id;
+  assert.deepEqual(s.compare('w', before, after).changed, ['edit.txt']);
+});
+
+test('snapshots: two quick same-size edits are both seen; settled files still reuse their hash', (t) => {
+  const { dir, cleanup } = tempDir();
+  t.after(cleanup);
+  const s = new SnapshotStore(dir);
+  const ws = workspaceDir(dir, 'w');
+  writeFileSync(join(ws, 'quick.txt'), 'one');
+  writeFileSync(join(ws, 'old.txt'), 'stable');
+  const past = new Date(Date.now() - 60_000);
+  utimesSync(join(ws, 'old.txt'), past, past);
+  const a = s.take('w', ws, 'a').id;
+  writeFileSync(join(ws, 'quick.txt'), 'two'); // same size, same second
+  const b = s.take('w', ws, 'b').id;
+  assert.deepEqual(s.compare('w', a, b).changed, ['quick.txt']);
+  // A file untouched for a minute keeps its entry (no re-read needed): same hash in both snapshots.
+  const c = s.take('w', ws, 'c').id;
+  assert.deepEqual(s.compare('w', b, c).changed, []);
 });
 
 test('snapshots API: undo via HTTP adds a note Sara sees; refused while she works there', async (t) => {
