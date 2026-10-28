@@ -1,0 +1,9 @@
+[Unit]
+Description=Sara: watch for update requests from Settings → Updates
+
+[Path]
+PathExists=/var/lib/sara/update-request
+Unit=sara-updater.service
+
+[Install]
+WantedBy=multi-user.target

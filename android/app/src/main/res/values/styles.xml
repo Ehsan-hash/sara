@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Sara" parent="@android:style/Theme.Material.NoActionBar">
+        <item name="android:colorPrimary">#1c1b22</item>
+        <item name="android:colorAccent">#c58cff</item>
+        <item name="android:statusBarColor">#141318</item>
+        <item name="android:navigationBarColor">#141318</item>
+        <item name="android:windowBackground">#141318</item>
+    </style>
+</resources>

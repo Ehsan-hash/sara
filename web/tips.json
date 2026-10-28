@@ -1,0 +1,1115 @@
+{
+  "_about": "Phase 41: the ? tips for settings that have none written into index.html. Each entry: id of the control → [tip text, guide section in /help]. Plain words, how to tune it, an example. app.js adds a ? next to each control; the server's settings_guide tool reads this file and every data-tip in index.html.",
+  "tips": {
+    "my-name": [
+      "What she's called everywhere: in chat, notifications and calls. Example: Sara, Mia, Alex.",
+      "shaping"
+    ],
+    "my-pronouns": [
+      "How the app and she refer to her. Pick he / him for a male companion; the whole app follows.",
+      "shaping"
+    ],
+    "my-age": [
+      "Her age, for her character. Companions are always adults (18 or older); the box won't take less.",
+      "shaping"
+    ],
+    "card-picture": [
+      "Tick to make the card's picture her picture (like uploading one). Untick to keep her current picture.",
+      "gallery"
+    ],
+    "char-look": [
+      "Tick to use the look (picture) that comes in the character file. Untick to keep her current look.",
+      "look"
+    ],
+    "char-voice": [
+      "Tick to use the voice named in the character file. Untick to keep her current voice.",
+      "look"
+    ],
+    "bd-turnoffs": [
+      "Things that put her off, in her own character. Example: rudeness, being ignored. She reacts the way her personality says.",
+      "shaping"
+    ],
+    "bd-yours": [
+      "Your hard limits: things she never brings up or does with you, whatever her settings. Example: no talk about exes.",
+      "shaping"
+    ],
+    "bd-stop": [
+      "A word that ends any scene at once: she stops and checks in kindly. Pick something you wouldn't say by accident, like \"red\".",
+      "safety"
+    ],
+    "cmp-name": [
+      "The new companion's name. You can change it later on their own Name and personality page.",
+      "companions"
+    ],
+    "cmp-pronouns": [
+      "How the new companion is referred to: she, he or they.",
+      "companions"
+    ],
+    "cmp-from": [
+      "Start blank and shape them afterwards, or copy an existing companion's personality as a starting point. Memories are never copied.",
+      "companions"
+    ],
+    "cmp-planner": [
+      "Shared: every companion sees the same to-dos and reminders. Separate: each keeps their own. Takes effect after a restart.",
+      "companions"
+    ],
+    "look-desc": [
+      "Describe her in plain words: age, hair, eyes, build, style. Example: \"late 20s, freckles, auburn bob, green eyes, cozy sweaters\".",
+      "look"
+    ],
+    "look-style": [
+      "The art style of her pictures. Illustrated matches the default; Photo-realistic looks like a photo.",
+      "look"
+    ],
+    "look-consent": [
+      "Needed before your own picture is animated: it must be AI-made, you, or used with the person's permission.",
+      "look"
+    ],
+    "look-outfit-own": [
+      "Describe an outfit for her to try. Example: \"red sundress and sandals\". Her face stays the same.",
+      "look"
+    ],
+    "wd-start": [
+      "When her work day starts. She dresses for work between these hours, if her life includes a job.",
+      "look"
+    ],
+    "wd-end": [
+      "When her work day ends. After this she changes into something relaxed.",
+      "look"
+    ],
+    "wd-pick": [
+      "Pick an outfit for her to wear right now, overriding her own choice for a while.",
+      "look"
+    ],
+    "wd-hours": [
+      "How long she keeps the outfit you picked before choosing for herself again.",
+      "look"
+    ],
+    "wd-own-name": [
+      "A name for your own occasion. Example: \"Beach week\".",
+      "look"
+    ],
+    "wd-own-from": [
+      "First day as month-day, e.g. 07-01. Leave empty to switch it on by hand.",
+      "look"
+    ],
+    "wd-own-to": [
+      "Last day as month-day, e.g. 07-14.",
+      "look"
+    ],
+    "vg-voice": [
+      "Her Grok voice. Press ▶ to hear one first; picking it saves it for her spoken replies and live calls.",
+      "voice"
+    ],
+    "v-stt": [
+      "How she hears you when you talk. On this server is private and free; Speech API uses a service with a key.",
+      "voice"
+    ],
+    "v-tts": [
+      "How her voice is made. Grok voice sounds most natural (your Grok subscription); On this server is private and free but slower.",
+      "voice"
+    ],
+    "v-voice": [
+      "Which local voice she uses when her voice is made on this server. Press Preview to hear it.",
+      "voice"
+    ],
+    "v-speed": [
+      "How fast she talks. 1.0 is normal; try 0.9 for calmer, 1.1 for brisker.",
+      "voice"
+    ],
+    "v-calls": [
+      "Live: instant back-and-forth, you can interrupt (Grok voice). Classic: slower turns, but she can use her tools during the call.",
+      "voice"
+    ],
+    "v-live": [
+      "Which realtime voice answers live calls. Whichever is set up uses Grok voice when you have it, else OpenAI. Picking one keeps it: calls won't switch to the other.",
+      "voice"
+    ],
+    "v-oalive-voice": [
+      "Her voice on OpenAI live calls (Marin and Cedar sound most natural). Press Hear a sample to listen first. It can't change in the middle of a call.",
+      "voice"
+    ],
+    "v-oalive-model": [
+      "The OpenAI voice model. gpt-realtime-1.5 is OpenAI's voice-first model; 2.1 thinks a little before answering; 2.1 mini costs least. All are billed per use to your OpenAI account.",
+      "voice"
+    ],
+    "v-oalive-key": [
+      "An OpenAI API key (platform.openai.com), billed per minute of talk to your OpenAI account. It is also the speech API key below. A ChatGPT plan can't be used for live calls.",
+      "voice"
+    ],
+    "v-notes": [
+      "What she does when you send a voice note on Telegram or Discord: answer in kind, always speak, or always write.",
+      "voice"
+    ],
+    "v-xai-voice": [
+      "The Grok voice used for calls and spoken replies.",
+      "voice"
+    ],
+    "v-xai-lang": [
+      "The language she speaks in. Match what she says follows the language of each reply.",
+      "voice"
+    ],
+    "v-xai-key": [
+      "Only if you don't sign in with a Grok subscription: an xAI API key (paid per use).",
+      "voice"
+    ],
+    "v-oa-url": [
+      "The address of an OpenAI-compatible speech service. Example: https://api.openai.com/v1.",
+      "voice"
+    ],
+    "v-oa-stt": [
+      "The model that turns your speech into text. Example: whisper-1.",
+      "voice"
+    ],
+    "v-oa-tts": [
+      "The model that makes her voice. Example: tts-1.",
+      "voice"
+    ],
+    "v-oa-voice": [
+      "The voice name on that service. Example: nova.",
+      "voice"
+    ],
+    "v-oa-key": [
+      "The key for that speech service. Leave empty to keep the saved one.",
+      "voice"
+    ],
+    "v-el-voice": [
+      "The voice id from your ElevenLabs voice library.",
+      "voice"
+    ],
+    "v-el-model": [
+      "The ElevenLabs model. eleven_flash is fastest; multilingual sounds richest.",
+      "voice"
+    ],
+    "v-el-key": [
+      "Your ElevenLabs key. Leave empty to keep the saved one.",
+      "voice"
+    ],
+    "cl-on": [
+      "Lets her ring you in the app or this browser. Off: she only ever sends messages.",
+      "voice"
+    ],
+    "cl-rem": [
+      "When a reminder is due: call only if you asked (\"call me at 5\"), call for every reminder, or never call.",
+      "voice"
+    ],
+    "cl-jobs": [
+      "When a long task she was doing for you finishes: a message, or a call.",
+      "voice"
+    ],
+    "cl-brief": [
+      "Your morning briefing as a message, or a call where she goes over it with you.",
+      "voice"
+    ],
+    "cl-qs": [
+      "Start of quiet hours: no calls from her after this (messages still arrive). Example: 22:00.",
+      "voice"
+    ],
+    "cl-qe": [
+      "End of quiet hours. Example: 07:30.",
+      "voice"
+    ],
+    "cl-max": [
+      "The most calls she makes in a day, so it never gets too much.",
+      "voice"
+    ],
+    "cl-ring": [
+      "How long she rings before sending it as a message instead.",
+      "voice"
+    ],
+    "ph-mode": [
+      "Off: no pictures. Her own portraits: the ones she already has (free). New pictures: she makes new ones with Grok Imagine and asks first.",
+      "look"
+    ],
+    "ph-key": [
+      "Only if you don't sign in with a Grok subscription: an xAI API key (paid per picture).",
+      "look"
+    ],
+    "ph-model": [
+      "The picture model. Leave the default unless you know you want another.",
+      "look"
+    ],
+    "default-provider": [
+      "Where her thinking runs: your own Ollama, a subscription, or a service with a key. Add more under Model providers.",
+      "brain"
+    ],
+    "default-model": [
+      "The model she uses for chat when a job has none of its own. Not sure? Use Which model does what → ✨ Use recommended.",
+      "brain"
+    ],
+    "history-budget": [
+      "How much of the conversation she rereads each turn. Small local models: Short. Big cloud models: Long remembers more of the chat.",
+      "brain"
+    ],
+    "sub-chatgpt-url": [
+      "After approving in the ChatGPT tab, copy the whole address of the page that can't be reached and paste it here.",
+      "brain"
+    ],
+    "sub-claude-code": [
+      "Paste the code Claude shows after you approve.",
+      "brain"
+    ],
+    "sub-claude-token": [
+      "On a computer with Claude Code, run claude setup-token and paste what it prints.",
+      "brain"
+    ],
+    "preset": [
+      "Start from a known service (Ollama, OpenRouter, OpenAI…) so the address and type are filled in for you.",
+      "brain"
+    ],
+    "p-id": [
+      "A short name used inside Sara, letters and dashes. Example: openrouter.",
+      "brain"
+    ],
+    "p-label": [
+      "The name you see in the lists. Example: OpenRouter.",
+      "brain"
+    ],
+    "p-kind": [
+      "How to talk to it. Almost every service, including Ollama, is OpenAI-compatible; pick Anthropic only for Claude's own API.",
+      "brain"
+    ],
+    "p-url": [
+      "The service's address. Example: http://192.168.1.20:11434/v1 for Ollama on another computer.",
+      "brain"
+    ],
+    "p-key": [
+      "The service's API key. Stored encrypted on your server and never shown again.",
+      "brain"
+    ],
+    "p-local": [
+      "Tick when the models run on your own hardware. Private conversations only use providers marked like this.",
+      "brain"
+    ],
+    "p-needs-key": [
+      "Tick if the service refuses requests without a key.",
+      "brain"
+    ],
+    "owner-name": [
+      "What she calls you. Example: Alex.",
+      "start"
+    ],
+    "time-zone": [
+      "Your time zone, so reminders, briefings and \"tomorrow\" mean your time.",
+      "start"
+    ],
+    "ap-theme": [
+      "Light or dark, or follow this device's setting.",
+      "start"
+    ],
+    "ap-typing": [
+      "Show her replies as they arrive, or typed out like a person texting.",
+      "start"
+    ],
+    "ap-size": [
+      "Text size in the chat on this device.",
+      "start"
+    ],
+    "ap-accent": [
+      "The app's highlight colour on this device.",
+      "start"
+    ],
+    "ap-chatbg": [
+      "The background behind the chat on this device.",
+      "start"
+    ],
+    "ap-density": [
+      "Compact fits more on the screen; Comfortable has more space.",
+      "start"
+    ],
+    "br-enabled": [
+      "A daily message with the weather and what's on your list. Turn off any time.",
+      "planner"
+    ],
+    "br-time": [
+      "When the briefing arrives. Example: 07:00.",
+      "planner"
+    ],
+    "br-place": [
+      "Your city for the weather. Example: Austin, TX. Leave empty for no weather.",
+      "planner"
+    ],
+    "br-units": [
+      "°F or °C for the weather.",
+      "planner"
+    ],
+    "rv-enabled": [
+      "A weekly look back: what got done, what's stalled, and a short plan for next week.",
+      "planner"
+    ],
+    "rv-day": [
+      "The day the weekly review arrives. Sunday evening or Monday morning work well.",
+      "planner"
+    ],
+    "rv-time": [
+      "The time the weekly review arrives.",
+      "planner"
+    ],
+    "lb-enabled": [
+      "A heads-up when it's time to leave for calendar events that have an address.",
+      "planner"
+    ],
+    "lb-home": [
+      "Where you usually leave from. Example: 12 Oak St, Austin, TX.",
+      "planner"
+    ],
+    "lb-mode": [
+      "How you get there, for the travel time.",
+      "planner"
+    ],
+    "lb-buffer": [
+      "Extra minutes on top of the travel time (traffic isn't counted). 10 is a good start.",
+      "planner"
+    ],
+    "adult-confirm": [
+      "You must be 18 or older to turn this on. If you're not, leave adult mode off.",
+      "safety"
+    ],
+    "shell-network": [
+      "Lets the commands she runs reach the internet (installing packages, downloading). Off keeps them offline.",
+      "coding"
+    ],
+    "g-client-id": [
+      "From your Google Cloud project's OAuth client (the steps above). Ends in .apps.googleusercontent.com.",
+      "accounts"
+    ],
+    "g-client-secret": [
+      "The client secret from the same OAuth client.",
+      "accounts"
+    ],
+    "gh-token": [
+      "A fine-grained GitHub token for the repositories you choose, with Contents: Read and write (and Issues / Pull requests to work with those).",
+      "accounts"
+    ],
+    "ghw-every": [
+      "How often she looks for new issues in the watched repositories. Off stops watching. Runs on your server, free.",
+      "workflows"
+    ],
+    "pj-ws": [
+      "The workspace whose projects you want to see. Each conversation's work happens in a workspace.",
+      "workflows"
+    ],
+    "ha-url": [
+      "Your Home Assistant address as this server reaches it. Example: https://xyz.ui.nabu.casa.",
+      "home"
+    ],
+    "ha-token": [
+      "A long-lived access token from Home Assistant (your profile → Security).",
+      "home"
+    ],
+    "mcp-preset": [
+      "Start from a known MCP server so the fields are filled in.",
+      "coding"
+    ],
+    "mcp-name": [
+      "A short name for the server. Its tools show up under this name.",
+      "coding"
+    ],
+    "mcp-transport": [
+      "Command: a program on this server. Remote URL: a server reached over the internet.",
+      "coding"
+    ],
+    "mcp-command": [
+      "The program to run. Example: npx.",
+      "coding"
+    ],
+    "mcp-args": [
+      "Its arguments, separated by spaces. Example: -y @modelcontextprotocol/server-filesystem /data.",
+      "coding"
+    ],
+    "mcp-url": [
+      "The remote server's address. Example: https://example.com/mcp.",
+      "coding"
+    ],
+    "mcp-secrets": [
+      "Keys it needs, one per line: NAME=value, or header:Authorization=Bearer …. Leave empty to keep the saved ones.",
+      "coding"
+    ],
+    "mcp-enabled": [
+      "Untick to keep the server saved but switched off.",
+      "coding"
+    ],
+    "phone-instant": [
+      "Notifications arrive at once (uses a little battery). Off: the app checks about every 15 minutes.",
+      "phone"
+    ],
+    "phone-private": [
+      "Hide what she wrote on the lock screen; you see only that she messaged.",
+      "phone"
+    ],
+    "phone-lock": [
+      "Ask for your fingerprint, face or PIN when the app opens.",
+      "phone"
+    ],
+    "phone-places": [
+      "Reminders for when you arrive somewhere (\"when I get to the store\"). Your location stays on the phone.",
+      "home"
+    ],
+    "push-preview": [
+      "Show the message text in notifications. Turn off if others see your screen.",
+      "phone"
+    ],
+    "apns-p8": [
+      "The .p8 key file from your Apple Developer account (Keys). You can download it only once, so keep a copy.",
+      "phone"
+    ],
+    "apns-keyid": [
+      "The 10-character Key ID shown next to that key.",
+      "phone"
+    ],
+    "apns-team": [
+      "Your 10-character Team ID, under Membership on the Apple Developer site.",
+      "phone"
+    ],
+    "apns-bundle": [
+      "The iPhone app's ID. Change only if you built the app yourself under your own ID.",
+      "phone"
+    ],
+    "tg-token": [
+      "The token @BotFather gives you after /newbot.",
+      "phone"
+    ],
+    "tg-enabled": [
+      "Switch the Telegram connection on or off without removing the token.",
+      "phone"
+    ],
+    "tg-mirror": [
+      "Also send her reminders and the messages she starts to your Telegram.",
+      "phone"
+    ],
+    "tg-others": [
+      "Let other people chat with her. With them she's openly an AI, has no tools and shares nothing private.",
+      "safety"
+    ],
+    "dc-token": [
+      "The bot token from the Discord Developer Portal (Bot → Reset Token).",
+      "phone"
+    ],
+    "dc-enabled": [
+      "Switch the Discord connection on or off without removing the token.",
+      "phone"
+    ],
+    "dc-mirror": [
+      "Also send her reminders and the messages she starts to your Discord DMs.",
+      "phone"
+    ],
+    "dc-servers": [
+      "Answer other people in servers when they call her (mention, reply, or the switches below). With them she's openly an AI, has no tools and shares nothing private.",
+      "safety"
+    ],
+    "hh-range": [
+      "How far back the health charts go.",
+      "trouble"
+    ],
+    "tok-current": [
+      "Type your current owner token to confirm. Every other device gets signed out.",
+      "signin"
+    ],
+    "pk-label": [
+      "A name for this passkey so you know which device it is. Example: Alex's phone.",
+      "signin"
+    ],
+    "ts-code": [
+      "The 6-digit code your authenticator app shows for Sara.",
+      "signin"
+    ],
+    "ts-off-code": [
+      "A current code from your authenticator app, to turn two-step sign-in off.",
+      "signin"
+    ],
+    "proof-token": [
+      "The long owner token you signed in with the first time (the installer showed it, or the server log). It only confirms it's you; nothing else is changed.",
+      "signin"
+    ],
+    "proof-code": [
+      "The 6-digit code your authenticator app shows for Sara right now. It only confirms it's you.",
+      "signin"
+    ],
+    "bk-auto": [
+      "Make a backup every day by itself.",
+      "care"
+    ],
+    "bk-keep": [
+      "How many daily backups to keep. Older ones are deleted. 7 is a good start.",
+      "care"
+    ],
+    "os-kind": [
+      "Where encrypted copies of the backups go, in case the server is lost: a folder (like a mounted drive) or S3-compatible storage.",
+      "care"
+    ],
+    "os-path": [
+      "The folder on this server. Example: /mnt/backup-drive/sara.",
+      "care"
+    ],
+    "os-endpoint": [
+      "The storage service's address. Example: https://s3.us-west-002.backblazeb2.com.",
+      "care"
+    ],
+    "os-bucket": [
+      "The bucket name you made for Sara's backups.",
+      "care"
+    ],
+    "os-region": [
+      "The bucket's region. Example: us-west-002. Leave empty if the service doesn't use one.",
+      "care"
+    ],
+    "os-key": [
+      "The storage access key ID.",
+      "care"
+    ],
+    "os-secret": [
+      "The storage secret key. Leave empty to keep the saved one.",
+      "care"
+    ],
+    "os-pass": [
+      "The copies are encrypted with this. Keep it in your password manager: without it the copies can't be opened.",
+      "care"
+    ],
+    "os-keep": [
+      "How many copies to keep there. Older ones are deleted.",
+      "care"
+    ],
+    "team-cp": [
+      "She waits for your OK on her plan and before opening the pull request. Untick to let her go straight through.",
+      "workflows"
+    ],
+    "team-pr": [
+      "At the end she commits to a new branch, pushes and opens a pull request with her review. Untick to leave the changes in the workspace.",
+      "workflows"
+    ],
+    "mem-kind": [
+      "Show one kind of memory at a time: about you, dates, things she noticed, promises, your story… or everything.",
+      "memory"
+    ],
+    "mem-new": [
+      "Tell her something to keep. Example: \"My sister Ana is a nurse in Denver\".",
+      "memory"
+    ],
+    "mem-new-date": [
+      "Add a date for birthdays, anniversaries and appointments, so she remembers on the day.",
+      "memory"
+    ],
+    "mem-new-yearly": [
+      "Tick for dates that come back each year, like a birthday.",
+      "memory"
+    ],
+    "task-title": [
+      "What needs doing. Example: \"Renew passport\".",
+      "planner"
+    ],
+    "task-project": [
+      "Group to-dos into a project. Example: Moving house.",
+      "planner"
+    ],
+    "task-due": [
+      "When it's due (optional). Due to-dos show up in your briefing.",
+      "planner"
+    ],
+    "task-priority": [
+      "High comes first in your lists and briefing.",
+      "planner"
+    ],
+    "task-show-done": [
+      "Show the to-dos you've already finished.",
+      "planner"
+    ],
+    "rem-text": [
+      "What to remind you of. Example: \"Call the dentist\".",
+      "planner"
+    ],
+    "rem-kind": [
+      "When the reminder goes off: at a time, or (in the phone app) when you arrive at a saved place.",
+      "planner"
+    ],
+    "rem-when": [
+      "When the reminder goes off.",
+      "planner"
+    ],
+    "rem-repeat": [
+      "Once, or every day, weekday, week or month.",
+      "planner"
+    ],
+    "rem-call": [
+      "She rings you for this reminder instead of sending a message.",
+      "voice"
+    ],
+    "rem-notify": [
+      "Show a notification on this computer when a reminder arrives.",
+      "phone"
+    ],
+    "place-name": [
+      "A short name for the place. Example: Grocery store.",
+      "home"
+    ],
+    "place-address": [
+      "Its address, or press 📍 to save where you are now.",
+      "home"
+    ],
+    "note-title": [
+      "The note's title.",
+      "planner"
+    ],
+    "note-body": [
+      "The note itself. Lists and links are fine.",
+      "planner"
+    ],
+    "aa-confirm": [
+      "You must be 18 or older to turn this on. If you're not, leave adult mode off.",
+      "safety"
+    ],
+    "su-owner": [
+      "Your first name or a nickname. Example: Alex.",
+      "start"
+    ],
+    "su-name": [
+      "Your companion's name. You can change it any time.",
+      "start"
+    ],
+    "su-pronouns": [
+      "How your companion is referred to: she, he or they.",
+      "start"
+    ],
+    "su-age": [
+      "Your companion's age. Always 18 or older.",
+      "start"
+    ],
+    "su-rel": [
+      "How you two relate: a close friend, dating, a partner, an assistant, a coach… It shapes how warm and close she is. Change it later in Settings.",
+      "shaping"
+    ],
+    "su-talk": [
+      "How she writes: casual like texting, thoughtful and full, or short and to the point. Fine-tune it later in the Personality studio.",
+      "shaping"
+    ],
+    "su-interests": [
+      "A few things she's into, separated by commas. Example: hiking, jazz, cooking.",
+      "shaping"
+    ],
+    "su-host": [
+      "The other computer's address with Ollama. Example: 192.168.1.20 (port 11434 is added for you).",
+      "brain"
+    ],
+    "su-preset": [
+      "The company that answers her messages. Pick the one you have a key for.",
+      "brain"
+    ],
+    "su-key": [
+      "The API key from that company's website. Stored encrypted on your server.",
+      "brain"
+    ],
+    "su-subs": [
+      "Tick to open the subscription sign-in (ChatGPT, Claude, Grok) when setup finishes.",
+      "brain"
+    ],
+    "su-model": [
+      "The model she uses for chat. The pick shown first is a good start; change it later under Models.",
+      "brain"
+    ],
+    "sd-thread-new": [
+      "Something she's into lately, for her own life. Example: \"learning to bake sourdough\".",
+      "shaping"
+    ],
+    "sd-inner": [
+      "Gives her moods, energy through the day and her own day, so she feels alive. Off: she's the same every time.",
+      "shaping"
+    ],
+    "sd-typing": [
+      "How fast she answers on Telegram and Discord: right away, or at a person's typing pace.",
+      "shaping"
+    ],
+    "sd-pro-enabled": [
+      "Lets her text you first now and then (good morning, a thought, a follow-up). Off: she only answers.",
+      "shaping"
+    ],
+    "sd-pro-max": [
+      "The most first messages she sends in a day. 1 or 2 feels natural.",
+      "shaping"
+    ],
+    "sd-pro-qs": [
+      "She doesn't text first from this hour (0–23). Example: 22.",
+      "shaping"
+    ],
+    "sd-pro-qe": [
+      "…until this hour. Example: 8.",
+      "shaping"
+    ],
+    "sd-pro-gap": [
+      "She only texts first after you've been quiet this many hours.",
+      "shaping"
+    ],
+    "pe-name": [
+      "Her name. Example: Sara, Mia, Alex.",
+      "shaping"
+    ],
+    "pe-pronouns": [
+      "How she's referred to: she, he or they.",
+      "shaping"
+    ],
+    "pe-age": [
+      "Her age. Always 18 or older.",
+      "shaping"
+    ],
+    "pe-appearance": [
+      "What she looks like, for pictures she takes. Example: \"late 20s, long dark hair, warm smile\".",
+      "look"
+    ],
+    "pe-summary": [
+      "Who she is in a sentence or two. Example: \"A warm, witty nurse from Denver who loves bad puns\".",
+      "shaping"
+    ],
+    "pe-background": [
+      "Her story, one fact per line: where she grew up, her work, her family.",
+      "shaping"
+    ],
+    "pe-personality": [
+      "Her traits, one per line. Example: curious; teases gently; honest even when it's hard.",
+      "shaping"
+    ],
+    "pe-speech": [
+      "How she talks, one per line. Example: short messages; uses \"hey you\"; no emojis.",
+      "shaping"
+    ],
+    "pe-boundaries": [
+      "Extra lines she never crosses, one per line. The safety rules always apply on top.",
+      "safety"
+    ],
+    "dc-forget": [
+      "Also remove what she learned from this conversation. Untick to delete only the messages.",
+      "memory"
+    ],
+    "pd-workspace": [
+      "The folder its conversations share for files and code. Example: website.",
+      "coding"
+    ],
+    "cs-project": [
+      "Put this conversation in a project, to keep related chats together.",
+      "planner"
+    ],
+    "cs-mode": [
+      "Chat for talking. Coding when she should work on code: plan, branch, test, commit.",
+      "coding"
+    ],
+    "cs-workspace": [
+      "The folder for her files and commands in this conversation. Type a new name for a fresh one.",
+      "coding"
+    ],
+    "cs-private": [
+      "Only models on your own hardware, no web or outside tools: nothing leaves your server.",
+      "memory"
+    ],
+    "cs-provider": [
+      "Use a different provider just for this conversation. Empty: the usual one.",
+      "brain"
+    ],
+    "cs-model": [
+      "Use a different model just for this conversation. Empty: the usual one.",
+      "brain"
+    ],
+    "report-dev": [
+      "Also send this one reply, the reason and your note to the app's developer, to help fix it. Nothing else is sent.",
+      "safety"
+    ],
+    "lib-learn": [
+      "After reading a document she writes its key points into her memory (dates, amounts, names, what to do), each with the exact words it came from. You can check and delete them by opening the document. Off: she only looks things up in it.",
+      "library"
+    ],
+    "lib-q": [
+      "Search all your documents at once, by words and (when Meaning search is on) by meaning. Click a result to open the document.",
+      "library"
+    ],
+    "lib-shared": [
+      "Off: each companion has her own library. On: one library for all of them (the first companion reads and learns from it). Takes effect after a restart.",
+      "library"
+    ],
+    "tg-owners": [
+      "People who can use her like you do on Telegram: tools (with Allow/Deny), memory, reminders. Separate with commas. To find an ID, the person messages @userinfobot. The account you linked is always an owner.",
+      "chatapps"
+    ],
+    "tg-work": [
+      "Owners get her tools and memory in groups. Everyone there can read her replies, so she keeps your private things out unless you ask. Others in the group still get the plain chat.",
+      "chatapps"
+    ],
+    "tg-name": [
+      "She answers when someone says her name in a group. Telegram only shows her those messages with the bot's privacy mode off: @BotFather → /setprivacy → Disable.",
+      "chatapps"
+    ],
+    "tg-everyone": [
+      "She also answers messages that call everyone with @all or @everyone (people type these in Telegram groups).",
+      "chatapps"
+    ],
+    "tg-nsfw": [
+      "Groups she treats as adult while Adult mode is on. Group IDs start with a minus, e.g. -1001234567890 (add @RawDataBot to the group to see it). Anything involving minors stays forbidden everywhere.",
+      "safety"
+    ],
+    "dc-owners": [
+      "People who can use her like you do on Discord: tools (with Allow/Deny), memory, reminders. Separate with commas. Copy an ID with Developer Mode on: right-click the person → Copy User ID. The account you linked is always an owner.",
+      "chatapps"
+    ],
+    "dc-work": [
+      "Owners get her tools and memory in server channels. Everyone there can read her replies, so she keeps your private things out unless you ask. Others in the channel still get the plain chat.",
+      "chatapps"
+    ],
+    "dc-name": [
+      "She answers when someone says her name in a server, not only @mentions and replies.",
+      "chatapps"
+    ],
+    "dc-everyone": [
+      "She also answers messages that ping @everyone or @here.",
+      "chatapps"
+    ],
+    "dc-bots": [
+      "Off by default. She answers other bots in servers like people: when one @mentions her, replies to her or says her name. Bots get no tools and nothing private. Each reply costs AI use like any other. Discord only: Telegram bots never see other bots.",
+      "chatapps"
+    ],
+    "dc-bot-list": [
+      "Bot user IDs or webhook IDs, separated by commas. Only these bots get an answer; any other bot is ignored. Names don't count: anyone can copy a name. Leave it empty to answer any bot that calls her.",
+      "chatapps"
+    ],
+    "dc-bot-turns": [
+      "Stops loops: two bots can answer each other forever and run up your AI bill. After this many replies to bots in a channel she waits (saying so once) until a person writes there, then the count starts again.",
+      "chatapps"
+    ],
+    "dc-bot-cap": [
+      "A hard limit on top: at most this many replies to bots in one channel in any 60 minutes, whatever people write. When it's reached she stays quiet to bots there until the hour frees up. People aren't limited.",
+      "chatapps"
+    ],
+    "dc-nsfw": [
+      "Channels she treats as adult while Adult mode is on, besides Discord's age-restricted ones. Discord's rules want adult content only in age-restricted channels, so mark them in Discord too. Minors stay forbidden everywhere.",
+      "safety"
+    ],
+    "pm-q": [
+      "Search her map of this workspace: a function or class name (runTurn), words (owner token), or what the code does (where sign-in is checked). Click a result to see the file.",
+      "code-map"
+    ],
+    "pm-kind": [
+      "Names finds functions, classes and types by name; Words finds code with those words; Meaning finds code that does what you describe (needs the Meaning search job). Best guess picks for you.",
+      "code-map"
+    ],
+    "rc-title": [
+      "The recipe's short name, e.g. Deploy the weather app. Saved when you leave the box.",
+      "recipes"
+    ],
+    "rc-when": [
+      "One line on when the recipe applies. She matches it against what you ask in coding conversations, so plain words help. Example: when the site needs to go live.",
+      "recipes"
+    ],
+    "rc-ws": [
+      "The workspace this recipe is for, or leave empty for any workspace. She only sees a workspace's recipes in conversations working there.",
+      "recipes"
+    ],
+    "rc-steps": [
+      "The steps she follows, in Markdown: commands, files, checks and pitfalls. Fix anything that changed; she reads this when she opens the recipe.",
+      "recipes"
+    ],
+    "work-quiet": [
+      "When your messages in a coding chat are short commands (\"run the tests\", \"fix it\"), she keeps replies short and to the point until you chat again. Coding conversations only.",
+      "work-dials"
+    ],
+    "hist-learn": [
+      "She reads the imported chats in the background, a few a minute, and keeps facts in your own words. Untick to only keep them as past conversations she can look through.",
+      "history"
+    ],
+    "hist-oldest": [
+      "Learn from the oldest conversations first, so newer facts replace older ones (a move, a new job). Untick to start with the most recent.",
+      "history"
+    ],
+    "team-budget-tok": [
+      "Optional token budget for this one task. It stops cleanly when the helpers have used this many tokens and offers Continue with more budget. Empty = the default limit below.",
+      "usage"
+    ],
+    "team-budget-usd": [
+      "Optional dollar budget for this one task, estimated from the prices in Settings → Data & health → Usage and costs. Local and subscription models count as $0. Empty = none.",
+      "usage"
+    ],
+    "team-l-usd": [
+      "A default dollar budget for every team task, estimated from your price table. Empty = no dollar budget (the token limit still applies).",
+      "usage"
+    ],
+    "usage-range": [
+      "Which period the numbers cover: today (since your midnight), the last 7 days or the last 30 days.",
+      "usage"
+    ],
+    "usage-job-tok": [
+      "Token budget for each background job that uses a model (Claude Code or Grok Build). The job stops cleanly at it and offers Continue with more budget. Empty = none.",
+      "usage"
+    ],
+    "usage-job-usd": [
+      "Dollar budget for each Claude Code job (Claude Code counts it itself, also on a subscription). Example: 2 stops a job after about $2 of work.",
+      "usage"
+    ],
+    "usage-team-usd": [
+      "Default dollar budget for each team task (same as Dollar budget on the Team page). Empty = none; the token limit still applies.",
+      "usage"
+    ],
+    "starter-name": [
+      "The new folder for the project in the workspace, e.g. weather-bot. Letters, digits, dots, dashes and underscores. An existing folder is never overwritten.",
+      "starters"
+    ],
+    "ui-language": [
+      "The language of the app's screens. Automatic follows this browser's language. Your messages and her replies aren't translated; for her replies use Talk to me in.",
+      "languages"
+    ],
+    "talk-language": [
+      "The language she writes and speaks in. Automatic: the language you write to her in (else the app's language). Pick one to keep it fixed, e.g. German while the app stays English.",
+      "languages"
+    ],
+    "model-auto-switch": [
+      "When a model you use is retired (gone from its provider's list two checks in a row), Sara moves that job to its newest replacement and tells you on Today and in Health. Off: she only warns you.",
+      "brain"
+    ],
+    "story-yearly": [
+      "Once a year, on the day you first wrote to her, she sends a look back at your year together, made only from Your story. Off by default; it waits for the end of quiet hours.",
+      "story"
+    ],
+    "story-from": [
+      "The first day of the stretch she looks back on. Example: a year ago today.",
+      "story"
+    ],
+    "story-to": [
+      "The last day of the stretch she looks back on, usually today.",
+      "story"
+    ]
+  },
+  "pages": {
+    "her-relationship": [
+      "What you are to each other and how she is with you: romance, jealousy, being away, disagreements, intimacy and a stop word. Try her reactions before saving.",
+      "relationship"
+    ],
+    "her-character": [
+      "Her name, pronouns and personality: start from a ready-made character, a guided setup, dials (also for coding), her life. Try her answers first. The character file saves, shares or loads her.",
+      "look"
+    ],
+    "her-look": [
+      "What she looks like in the app. Describe a look (Grok Imagine paints it), dress her in outfits and places, change one thing at a time with her face locked, and keep looks in her closet. Tag closet looks with scenarios and she can dress for the time, the weather and what is happening by herself.",
+      "look"
+    ],
+    "her-voice": [
+      "The voice she speaks with (voice notes, read-aloud, calls) and how she hears you. With Grok voice she can laugh, sigh and whisper (Expressive voice); the tone and her mood shape how she sounds.",
+      "voice"
+    ],
+    "desktop-app": [
+      "How the Sara app behaves on this computer: start when you sign in, keep running next to the clock when you close the window (so she can still reach you), and notifications.",
+      "start"
+    ],
+    "her-companions": [
+      "More than one companion on this server: each with her own character, look, voice, conversations and memories. Add, switch and remove them here.",
+      "start"
+    ],
+    "her-calls": [
+      "When she may ring you: reminders, finished tasks, the morning briefing; quiet hours and a daily limit. Missed calls become messages.",
+      "voice"
+    ],
+    "her-pictures": [
+      "Pictures she can send you, made with an image model. Off unless you set it up.",
+      "look"
+    ],
+    "models-default": [
+      "The AI model she thinks with in new conversations. Each conversation can use a different one.",
+      "brain"
+    ],
+    "models-routes": [
+      "Point each job at a model: your best one for talking, a model that can see for pictures, a fast one for background work. Test checks one; Compare… lets you pick the best blind. Backups take over if a model fails.",
+      "jobs"
+    ],
+    "models-subs": [
+      "Use a ChatGPT, Claude or Grok plan you already pay for, where the provider allows it.",
+      "brain"
+    ],
+    "models-providers": [
+      "Where models come from: Ollama on this or another computer, or a cloud service with an API key. Keys are stored encrypted on your server.",
+      "brain"
+    ],
+    "you-about": [
+      "Your name, time zone, and how the app looks on this device (theme, colour, text size, layout).",
+      "start"
+    ],
+    "you-briefing": [
+      "A morning message with the weather, your list, calendar and important mail, and a weekly review of how things went.",
+      "planner"
+    ],
+    "you-leave-by": [
+      "A heads-up when it’s time to leave for calendar events that have an address.",
+      "planner"
+    ],
+    "you-adult": [
+      "Off by default. Can only be changed in a web browser, by an adult.",
+      "safety"
+    ],
+    "ab-tools": [
+      "What she’s allowed to do on her own and what asks you first (running commands, sending mail, pushing code…).",
+      "coding"
+    ],
+    "ab-google": [
+      "Connect Gmail and Calendar so she can find mail, draft replies and handle your calendar. Sending and adding events ask you first.",
+      "accounts"
+    ],
+    "ab-home": [
+      "Home Assistant: she can see your lights, sensors and thermostat, and change things after you approve.",
+      "home"
+    ],
+    "ab-github": [
+      "Connect GitHub so she can commit, push, open pull requests and work with issues. Watch repositories and new issues become tasks.",
+      "accounts"
+    ],
+    "ab-projects": [
+      "What she knows about each coding project: commands, layout, rules and her notes. Add a note to teach her something for next time.",
+      "coding"
+    ],
+    "ab-search": [
+      "How she searches the web for up-to-date answers.",
+      "brain"
+    ],
+    "ab-mcp": [
+      "Add other programs she can use (MCP servers). For advanced use.",
+      "coding"
+    ],
+    "co-phone": [
+      "Notifications on your phone and computers, the phone apps, and adding her to your home screen.",
+      "phone"
+    ],
+    "co-telegram": [
+      "Talk to her on Telegram too: same memories, same her.",
+      "phone"
+    ],
+    "co-apps": [
+      "Use her from other apps (SillyTavern, Open WebUI, Claude Code, Cursor, Claude Desktop) with an API key.",
+      "clients"
+    ],
+    "co-discord": [
+      "Talk to her on Discord too.",
+      "phone"
+    ],
+    "dh-health": [
+      "How you reach her (the address to open on your phone, with a QR code), and is everything working? Checks the database, every model, backups and more, and says what to do when something’s wrong.",
+      "trouble"
+    ],
+    "dh-devices": [
+      "Signed-in phones, computers and apps: add one with a code (no token needed), approve the terminal client or VS Code when they ask, or sign one out. Passkeys and two-step sign-in keep the owner sign-in safe.",
+      "signin"
+    ],
+    "dh-backups": [
+      "Daily backups on the server, and an encrypted copy somewhere else in case the server is lost.",
+      "care"
+    ],
+    "dh-data": [
+      "Bring in your ChatGPT or Claude history, download everything as one file, or bring in an export from another Sara.",
+      "care"
+    ],
+    "dh-updates": [
+      "Get the newest version. A backup is made first, and Sara goes back by herself if the update doesn’t start.",
+      "care"
+    ],
+    "dh-usage": [
+      "Tokens and estimated costs of every model call (chats, jobs, team tasks, memory and other helpers), budgets for jobs and team tasks, and your price table.",
+      "usage"
+    ],
+    "dh-reports": [
+      "Replies you reported with ⚑.",
+      "safety"
+    ],
+    "ab-recipes": [
+      "How she did tricky jobs before, saved as recipes she finds and follows next time. Open one to read, edit or delete it.",
+      "recipes"
+    ]
+  }
+}

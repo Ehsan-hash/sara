@@ -1,0 +1,56 @@
+# Sara with Docker Compose (v2: `docker compose`, see docs/INSTALL.md).
+#   docker compose up -d                      # Sara only
+#   docker compose --profile ollama up -d     # Sara + a local Ollama server
+#   git pull && docker compose up -d --build  # update
+# The owner token is printed once in: docker compose logs sara
+# Ollama base URL in Settings: http://ollama:11434/v1 (ollama profile) or
+# http://host.docker.internal:11434/v1 (Ollama installed on this machine; make it listen on
+# 0.0.0.0 or the docker bridge address, e.g. OLLAMA_HOST=0.0.0.0, and keep that port firewalled).
+# Behind an HTTPS reverse proxy, put SARA_SECURE_COOKIES=1 and SARA_TRUST_PROXY=1 in a .env file
+# next to this one.
+services:
+  sara:
+    build: .
+    image: sara:latest
+    restart: unless-stopped
+    ports:
+      # Bound to localhost; put a TLS reverse proxy (Caddy, nginx) in front for remote access.
+      - "127.0.0.1:7860:7860"
+    environment:
+      SARA_SECURE_COOKIES: "${SARA_SECURE_COOKIES:-0}"
+      SARA_TRUST_PROXY: "${SARA_TRUST_PROXY:-0}"
+    # Lets Sara reach an Ollama running on this machine at host.docker.internal.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    # The server runs as the container's root only to start her commands as the separate
+    # sara-tools user; it keeps just the capabilities that needs (switch user, hand workspace files
+    # to the tools group, read/write and stop what that user creates) and can't gain more.
+    cap_drop: [ALL]
+    cap_add: [SETUID, SETGID, CHOWN, FOWNER, DAC_OVERRIDE, KILL]
+    security_opt:
+      - no-new-privileges:true
+    volumes:
+      - sara-data:/data
+    # Keep logs small (native installs use journald, which rotates on its own).
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+
+  ollama:
+    image: ollama/ollama:latest
+    profiles: ["ollama"]
+    restart: unless-stopped
+    volumes:
+      - ollama-models:/root/.ollama
+    # Uncomment for NVIDIA GPUs (requires nvidia-container-toolkit):
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
+
+volumes:
+  sara-data:
+  ollama-models:

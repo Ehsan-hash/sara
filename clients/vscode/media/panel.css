@@ -1,0 +1,17 @@
+body { font-family: var(--vscode-font-family); font-size: var(--vscode-font-size); color: var(--vscode-foreground); margin: 0; padding: 0 8px 8px; display: flex; flex-direction: column; height: 100vh; box-sizing: border-box; }
+.status { font-size: .85em; opacity: .75; padding: 6px 0; }
+.log { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding-bottom: 8px; }
+.msg { border-radius: 8px; padding: 6px 8px; white-space: pre-wrap; word-wrap: break-word; }
+.msg.user { background: var(--vscode-input-background); }
+.msg.her { background: var(--vscode-editor-inactiveSelectionBackground); }
+.who { font-weight: 600; font-size: .85em; margin-bottom: 2px; }
+.sent { margin-top: 4px; font-size: .85em; }
+.sent pre { max-height: 200px; overflow: auto; white-space: pre; font-family: var(--vscode-editor-font-family); }
+.tool, .notice, .muted { font-size: .85em; opacity: .75; }
+.error { color: var(--vscode-errorForeground); font-size: .9em; }
+.approval { border: 1px solid var(--vscode-focusBorder); border-radius: 8px; padding: 6px 8px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.composer textarea { width: 100%; box-sizing: border-box; resize: vertical; font: inherit; color: var(--vscode-input-foreground); background: var(--vscode-input-background); border: 1px solid var(--vscode-input-border, transparent); border-radius: 4px; padding: 4px 6px; }
+.row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+button { font: inherit; color: var(--vscode-button-foreground); background: var(--vscode-button-background); border: 0; border-radius: 3px; padding: 4px 10px; cursor: pointer; }
+button.ghost { color: var(--vscode-foreground); background: var(--vscode-button-secondaryBackground); }
+button:disabled { opacity: .5; cursor: default; }

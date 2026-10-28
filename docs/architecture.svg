@@ -1,0 +1,79 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 600" width="960" height="600" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" role="img" aria-labelledby="t d">
+  <title id="t">How Sara fits together</title>
+  <desc id="d">Apps and chat bridges talk to one Sara server. Each turn passes the always-on safety layer, gathers memory, library and code-map context, calls the model provider the owner chose, and runs tools in a sandboxed workspace with approvals. Everything is stored on the owner's own server.</desc>
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#8a8f98"/></marker>
+    <style>
+      .box{fill:#ffffff;stroke:#d9d4cc;stroke-width:1.5}
+      .core{fill:#fff5f8;stroke:#b4436c;stroke-width:2}
+      .safe{fill:#b4436c}
+      .h{font-size:15px;font-weight:700;fill:#1f2328}
+      .s{font-size:12.5px;fill:#5d6670}
+      .w{font-size:13px;font-weight:700;fill:#ffffff}
+      .ws{font-size:12px;fill:#ffe7f0}
+      .lbl{font-size:12px;font-weight:700;fill:#8a8f98;letter-spacing:.08em}
+      .line{stroke:#8a8f98;stroke-width:1.6;fill:none}
+    </style>
+  </defs>
+  <rect width="960" height="600" rx="18" fill="#fbfaf8"/>
+
+  <!-- Apps -->
+  <text class="lbl" x="40" y="44">WHERE YOU TALK TO HER</text>
+  <g>
+    <rect class="box" x="40" y="58" width="138" height="62" rx="10"/><text class="h" x="56" y="84">Web app</text><text class="s" x="56" y="104">any browser, PWA</text>
+    <rect class="box" x="190" y="58" width="138" height="62" rx="10"/><text class="h" x="206" y="84">Phone apps</text><text class="s" x="206" y="104">Android, iPhone</text>
+    <rect class="box" x="340" y="58" width="138" height="62" rx="10"/><text class="h" x="356" y="84">Desktop apps</text><text class="s" x="356" y="104">Windows, macOS</text>
+    <rect class="box" x="490" y="58" width="138" height="62" rx="10"/><text class="h" x="506" y="84">Terminal + editor</text><text class="s" x="506" y="104">sara-chat, VS Code</text>
+    <rect class="box" x="640" y="58" width="138" height="62" rx="10"/><text class="h" x="656" y="84">Chat bridges</text><text class="s" x="656" y="104">Telegram, Discord</text>
+    <rect class="box" x="790" y="58" width="130" height="62" rx="10"/><text class="h" x="806" y="84">Voice</text><text class="s" x="806" y="104">live calls, notes</text>
+  </g>
+  <path class="line" d="M480 124 V160" marker-end="url(#a)"/>
+
+  <!-- Core -->
+  <rect class="core" x="40" y="164" width="880" height="236" rx="14"/>
+  <text class="lbl" x="60" y="190">SARA SERVER  ·  Node 24, TypeScript, no runtime dependencies</text>
+  <text class="h" x="60" y="216">HTTP API · sign-in · events</text>
+  <text class="s" x="60" y="236">src/server.ts: session cookies, passkeys, device codes, push, WebSocket for live calls</text>
+
+  <!-- Turn pipeline -->
+  <g>
+    <rect class="box" x="60" y="252" width="180" height="70" rx="10"/><text class="h" x="74" y="278">One turn</text><text class="s" x="74" y="298">src/chat.ts runTurn():</text><text class="s" x="74" y="314">context → model → tools</text>
+    <path class="line" d="M240 287 H262" marker-end="url(#a)"/>
+    <rect class="box" x="266" y="252" width="190" height="70" rx="10"/><text class="h" x="280" y="278">Memory and context</text><text class="s" x="280" y="298">memory, recall, library,</text><text class="s" x="280" y="314">code map, planner, her day</text>
+    <path class="line" d="M456 287 H478" marker-end="url(#a)"/>
+    <rect class="box" x="482" y="252" width="190" height="70" rx="10"/><text class="h" x="496" y="278">Tools + approvals</text><text class="s" x="496" y="298">permission tiers, receipts,</text><text class="s" x="496" y="314">snapshots and undo</text>
+    <path class="line" d="M672 287 H694" marker-end="url(#a)"/>
+    <rect class="box" x="698" y="252" width="202" height="70" rx="10"/><text class="h" x="712" y="278">Personality</text><text class="s" x="712" y="298">character file, dials, moods,</text><text class="s" x="712" y="314">look and voice</text>
+  </g>
+  <rect class="safe" x="60" y="336" width="840" height="48" rx="10"/>
+  <text class="w" x="78" y="358">Safety layer, always on, in code around every model call (src/safety.ts)</text>
+  <text class="ws" x="78" y="375">AI disclosure · honest answer when sincerely asked · crisis resources · hard block on sexual content involving minors</text>
+
+  <!-- Bottom row -->
+  <path class="line" d="M170 404 V440" marker-end="url(#a)"/>
+  <path class="line" d="M480 404 V440" marker-end="url(#a)"/>
+  <path class="line" d="M790 404 V440" marker-end="url(#a)"/>
+  <text class="lbl" x="40" y="436">MODELS</text>
+  <rect class="box" x="40" y="444" width="270" height="118" rx="12"/>
+  <text class="h" x="56" y="470">Providers you choose</text>
+  <text class="s" x="56" y="492">Ollama (local or cloud), any OpenAI-</text>
+  <text class="s" x="56" y="509">compatible server, OpenAI, Anthropic,</text>
+  <text class="s" x="56" y="526">xAI, OpenRouter, or your ChatGPT /</text>
+  <text class="s" x="56" y="543">Claude / Grok subscription; one per job</text>
+
+  <text class="lbl" x="345" y="436">TOOLS</text>
+  <rect class="box" x="345" y="444" width="270" height="118" rx="12"/>
+  <text class="h" x="361" y="470">Workspace + sandbox</text>
+  <text class="s" x="361" y="492">files, shell, git, background jobs,</text>
+  <text class="s" x="361" y="509">preview + testing browser, helper team,</text>
+  <text class="s" x="361" y="526">web search, MCP servers, GitHub, Google,</text>
+  <text class="s" x="361" y="543">Home Assistant (bubblewrap / seatbelt)</text>
+
+  <text class="lbl" x="650" y="436">YOUR DATA, ON YOUR SERVER</text>
+  <rect class="box" x="650" y="444" width="270" height="118" rx="12"/>
+  <text class="h" x="666" y="470">One data folder</text>
+  <text class="s" x="666" y="492">SQLite (chats, memory, library, code</text>
+  <text class="s" x="666" y="509">maps), AES-256-GCM vault for keys,</text>
+  <text class="s" x="666" y="526">workspaces, daily backups with</text>
+  <text class="s" x="666" y="543">optional encrypted off-site copies</text>
+</svg>

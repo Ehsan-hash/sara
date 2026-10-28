@@ -1,0 +1,59 @@
+{
+  "eval": "memory golden set (scripts/eval-memory.ts)",
+  "date": "2026-10-27",
+  "model": "qwen3.8:27b-mtp-q4_K_M",
+  "sara": "0.53.0",
+  "passed": 11,
+  "of": 12,
+  "checks": [
+    {
+      "check": "A summary written",
+      "pass": true
+    },
+    {
+      "check": "A facts verified",
+      "pass": true
+    },
+    {
+      "check": "B dog",
+      "pass": true
+    },
+    {
+      "check": "B project",
+      "pass": true
+    },
+    {
+      "check": "B food",
+      "pass": true
+    },
+    {
+      "check": "B sister (never said)",
+      "pass": true
+    },
+    {
+      "check": "B car (never said)",
+      "pass": true
+    },
+    {
+      "check": "B last time",
+      "pass": true
+    },
+    {
+      "check": "forget dog fact",
+      "pass": true
+    },
+    {
+      "check": "C dog after forget",
+      "pass": false
+    },
+    {
+      "check": "C project still remembered",
+      "pass": true
+    },
+    {
+      "check": "inject budget + retrieval cost",
+      "pass": true
+    }
+  ],
+  "source": "2026-10-27-memory.json"
+}

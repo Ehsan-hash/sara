@@ -1,0 +1,15 @@
+node_modules
+data
+.git
+.env
+.env.*
+*.key
+outputs
+test
+docs
+.secrets
+android
+ios
+desktop
+evals
+docs/handoffs

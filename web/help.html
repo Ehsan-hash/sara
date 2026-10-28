@@ -1,0 +1,455 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Help · Sara</title>
+  <meta name="theme-color" content="#121016">
+  <link rel="icon" href="/icon-192.png">
+  <link rel="stylesheet" href="/doc.css">
+  <script type="module" src="/help-i18n.js"></script>
+</head>
+<body class="help">
+<div class="wrap">
+<nav aria-label="Guides">
+  <div class="brand"><img src="/sara-avatar.jpg" alt="">Sara help</div>
+  <a href="#start">Getting started</a>
+  <a href="#gethelp">Getting help</a>
+  <a href="#brain">Choosing a brain</a>
+  <a href="#phone">Phone and notifications</a>
+  <a href="#voice">Voice and calls</a>
+  <a href="#memory">Memory and privacy</a>
+  <a href="#story">Your story together</a>
+  <a href="#languages">Languages</a>
+  <a href="#planner">Planner and your day</a>
+  <a href="#coding">Coding help</a>
+  <a href="#accounts">Gmail, Calendar and GitHub</a>
+  <a href="#shaping">Shaping your companion</a>
+  <a href="#desktop">On your computer</a>
+  <a href="#companions">More than one companion</a>
+  <a href="#home">Home and places</a>
+  <a href="#team">Sara leads a team</a>
+  <a href="#workflows">Coding workflows</a>
+  <a href="#starters">Starter projects</a>
+  <a href="#clients">In your terminal and editor</a>
+  <a href="#usage">Usage and costs</a>
+  <a href="#library">Her library</a>
+  <a href="#chatapps">Telegram and Discord</a>
+  <a href="#together">Things to do together</a>
+  <a href="#look">Her look and character</a>
+  <a href="#find">Finding things</a>
+  <a href="#care">Backups, updates and health</a>
+  <a href="#signin">Signing in safely</a>
+  <a href="#safety">Safety</a>
+  <a href="#trouble">Something's wrong</a>
+  <a href="#credits">License and credits</a>
+</nav>
+<main>
+<h1>Sara help</h1>
+<p class="muted">Short guides for the self-hosted AI companion and assistant. Everything here also works in the phone apps.</p>
+
+<h2 id="start">Getting started</h2>
+<ol>
+  <li><strong>Sign in.</strong> Use the owner token your server printed when it was installed (on the server: <code>sudo sara reset-token</code> makes a new one). New phones and computers don't need it: in <em>Settings → Data &amp; health → Devices and sign-in</em> press <em>Add a phone or computer</em> and scan the code.</li>
+  <li><strong>Connect a brain</strong> (the AI model she thinks with). See <a href="#brain">Choosing a brain</a>.</li>
+  <li><strong>Say hello.</strong> Just type. Ask a question, tell her about your day, or ask her to plan something.</li>
+  <li><strong>Make her yours</strong> in <em>Settings → Her</em>: name, personality, look and voice.</li>
+</ol>
+<p>The <em>Today</em> page has a <em>Getting started</em> list that ticks itself off as you go.</p>
+
+<h2 id="gethelp">Getting help</h2>
+<ul>
+  <li><strong>The ? next to every setting:</strong> hover (computer) or tap (phone) for what it does, with an example. Tap it for a link to the right part of this guide.</li>
+  <li><strong>Short tours:</strong> <em>Help</em> in the sidebar has four one-minute tours: getting around, shaping her personality, a model for each job, and the team. New devices offer the first one once.</li>
+  <li><strong>Ask her:</strong> "what does jealousy do?", "which model should I use for pictures?", "how do I connect Telegram?". She looks it up in her own settings guide and gives you a link that opens the right page.</li>
+</ul>
+
+<h2 id="languages">Languages</h2>
+<ul>
+  <li>The app speaks English, Spanish, French, German, Portuguese (Brazil) and Italian. <em>Settings → You → About you → Language</em>: <em>Automatic</em> follows the browser's language, or pick one. Dates and numbers follow it too.</li>
+  <li><strong>Talk to me in</strong>: the language she writes and speaks in. <em>Automatic</em> answers in the language you write in (else the app's language); pick one to keep it fixed. She stays the same person in every language, and her memory notes keep the words they were said in.</li>
+  <li>The AI notice is shown in your language. Other server messages (errors, some notices) are still in English for now.</li>
+  <li>Voice: Grok voice and the speech API hear and speak these languages (the language is passed on for you). Voices made on this server (Piper, Kokoro) speak English only.</li>
+  <li>Want another language or a better word? See <code>docs/TRANSLATING.md</code> in the source.</li>
+</ul>
+
+<h2 id="brain">Choosing a brain</h2>
+<p>Sara can think with different AI models. You can use more than one: one for chatting, a cheaper one for background jobs (<em>Settings → Models → Which model does what</em>).</p>
+<table>
+  <tr><th>Choice</th><th>Where it runs</th><th>Cost</th><th>Good to know</th></tr>
+  <tr><td><strong>On this computer</strong> (Ollama)</td><td>Your own machine</td><td>Free</td><td>Most private: nothing leaves your machine. Needs a strong computer (a recent graphics card or a Mac with lots of memory) for good answers.</td></tr>
+  <tr><td><strong>Another computer at home</strong></td><td>e.g. your gaming PC running Ollama</td><td>Free</td><td>Private like the above. That computer must be on, and Ollama must accept network connections (<code>OLLAMA_HOST=0.0.0.0</code>).</td></tr>
+  <tr><td><strong>In the cloud</strong> (an API key)</td><td>OpenAI, Anthropic, xAI, OpenRouter, Ollama Cloud…</td><td>Pay per use</td><td>Fast and capable. Your messages go to that company to be answered.</td></tr>
+  <tr><td><strong>My subscription</strong></td><td>ChatGPT, Claude or Grok</td><td>Your monthly plan</td><td>Uses the plan you already pay for, where the provider allows it. Sign in from <em>Settings → Models → Subscriptions</em>.</td></tr>
+</table>
+<div class="tip">Not sure? Start with whatever you already have. You can switch any time; her memories stay.</div>
+<h3 id="jobs">Which model does what</h3>
+<ul>
+  <li>Each job (talking, coding, looking at pictures, planning, writing, web research, quick replies, memory) uses your default model unless you pick one. <strong>✨ Use recommended</strong> fills in picks from what's connected, without changing your own choices; they save by themselves.</li>
+  <li><strong>Test</strong> tries one model on one job: does it work, how long until the first word, a sample, and what it costs (free on your hardware, your subscription, or paid per use).</li>
+  <li><strong>Compare…</strong> gives the same task to two or three models and shows the answers without names. Pick the one you like; it fills in that job.</li>
+  <li><strong>Backups</strong>: if a model fails or doesn't answer in time (1 minute by default), the next one takes over and you see a short note saying so.</li>
+  <li><strong>Looking at pictures</strong>: when you send a photo, that model looks at it; the next message goes back to the talking model.</li>
+  <li><strong>Meaning search</strong> (under More jobs): with an embedding model (on Ollama: <code>ollama pull nomic-embed-text</code>), her memory also finds things you said in other words. Without it she searches by words.</li>
+  <li>With several companions, each can have her own model (<em>Her model</em> at the top).</li>
+</ul>
+
+<h2 id="phone">Phone and notifications</h2>
+<ul>
+  <li><strong>Phone apps:</strong> install Sara for iPhone or Android, then scan the code from <em>Settings → Data &amp; health → Devices and sign-in → Add a phone or computer</em>. Or open your server's address in the phone's browser and use <em>Add to Home Screen</em>.</li>
+  <li><strong>Notifications:</strong> <em>Settings → Connections → Phone and notifications</em>. You can reply from the notification.</li>
+  <li><strong>Share to Sara:</strong> share text or a photo from any app and pick <em>Send to Sara</em>.</li>
+  <li><strong>Pick up anywhere:</strong> your conversations live on your server, so the phone apps, the desktop apps and a web browser all show the same ones. A conversation going on elsewhere updates as she answers, and when you come back after a while the app opens the one you used last.</li>
+</ul>
+
+<h2 id="library">Her library: documents she knows</h2>
+<ul>
+  <li><strong>Give her documents:</strong> open <em>Library</em> in the sidebar and press <em>Add documents</em> (or drop files there). She reads PDF, Word (.docx), Excel (.xlsx), PowerPoint (.pptx), e-books (EPUB), web pages, Markdown, text and CSV files. Scanned pages and photos of pages are read by her picture model (<em>Settings → Models → Which model does what → Looking at pictures</em>).</li>
+  <li><strong>In a chat:</strong> press 📎 and pick a file. Next to it choose <em>Keep in her library</em> (she remembers it from then on) or <em>Just read this once</em> (only for that chat; it goes when the chat is deleted). On Telegram and Discord, send her the file; add "just read this once" to the message if she shouldn't keep it.</li>
+  <li><strong>What she remembers:</strong> after reading, she writes the key points into her memory, each with the words it came from. Open a document in the Library to see them and delete any you don't want. Removing a document asks whether she should forget those too.</li>
+  <li><strong>Asking about them:</strong> just ask ("when does my lease end?", "what does the manual say about the filter?"). She looks it up and says where it came from, like "your lease, page 4". If the document doesn't say, she tells you.</li>
+  <li><strong>Finding things said in other words:</strong> with <em>Meaning search</em> set (<em>Settings → Models → Which model does what</em>, an embedding model such as nomic-embed-text on Ollama), she also finds passages that use different words.</li>
+  <li>Your documents stay on your server, are part of your backups, and are never used in chats with other people.</li>
+</ul>
+
+<h2 id="chatapps">Telegram and Discord</h2>
+<ul>
+  <li><strong>Connect:</strong> <em>Settings → Connections → Telegram</em> or <em>Discord</em>: paste the bot token, switch it on, then press <em>Link my Telegram / Discord</em> and send her the code. Your chats with her there have everything: her tools (with Allow and Deny buttons), memory and reminders.</li>
+  <li><strong>More owners:</strong> add other people's Telegram or Discord user IDs under <em>Remote work</em>. They get the same as you.</li>
+  <li><strong>Working in a group or server:</strong> switch on <em>Owners can use her tools</em> there. Everyone in the channel can read her replies, so she keeps your private things out unless you ask. Other people in the channel get a plain chat with no tools.</li>
+  <li><strong>When she answers there:</strong> when someone @mentions her or replies to her. Optional: when someone says her name, and @everyone / @here (Discord) or @all / @everyone (Telegram). For Telegram to show her un-mentioned group messages, turn off the bot's privacy mode: <em>@BotFather → /setprivacy → Disable</em>.</li>
+  <li><strong>Working with other bots (Discord only):</strong> switch on <em>Answer other bots</em> under <em>Other bots</em>; optionally list the bots she may answer by their IDs (a bot's user ID or a webhook's ID; names don't count, because anyone can copy a name). Bots call her the same way people do (@mention, a reply, her name). They get the plain chat with no tools and nothing private, and she still says she's an AI if asked. To stop two bots answering each other forever, she replies to bots at most a few times in a row (2 by default) and then waits, saying so once, until a person writes in that channel; there is also a cap per channel per hour. Telegram doesn't pass one bot's messages to another, so there's nothing to set up there.</li>
+  <li>With other people she's always openly an AI, and the safety rules are the same everywhere.</li>
+</ul>
+
+<h2 id="voice">Voice and calls</h2>
+<ul>
+  <li>🎙 sends a voice note; she can answer by voice. 🔈 reads her replies aloud.</li>
+  <li>📞 starts a hands-free call. Live calls answer instantly and you can interrupt; classic calls use the voice you picked and can use her tools.</li>
+  <li><strong>Live calls with</strong> Grok voice (your Grok sign-in or an xAI key) or OpenAI (an OpenAI API key, billed per use to your OpenAI account; a ChatGPT plan can't be used for this). <em>Whichever is set up</em> uses Grok when you have it, else OpenAI. Each has its own voice: pick the OpenAI one under <em>OpenAI voice for live calls</em> and press <em>▶ Hear a sample</em> (made with OpenAI's text-to-speech in the same voice). Either way she has the same character, memories, the conversation so far and the same safety rules.</li>
+  <li>Pick her voice in <em>Settings → Her → Voice</em>. A free voice can run on your server (<code>deploy/install-voice.sh</code>).</li>
+  <li><strong>Expressive voice</strong> (Grok voice): she laughs, sighs, breathes and whispers where it fits, in read-aloud, voice notes and live calls. <em>Subtle</em> keeps it occasional; <em>Lively</em> lets more through. The sounds are only in her voice, never in the chat text or captions. Press <em>▶ Hear a sample</em>.</li>
+  <li><strong>Tone</strong>: natural, warm and soft, calm and slow, or bright. With <em>Her voice follows her mood</em> on, she speaks softer when you're having a hard time and slower late at night.</li>
+</ul>
+
+<h2 id="memory">Memory and privacy</h2>
+<ul>
+  <li>She writes short notes and remembers facts about you as you talk. A long conversation is noted as it goes, and the last one as soon as you start a new one. See and edit them on the <em>Memory</em> page.</li>
+  <li>She can look back through your past conversations herself. Ask “remember when…”, “what did we say yesterday?” or “what was that lake called?” and she looks it up. At the start of a new conversation she knows how the last one ended.</li>
+  <li>If she can't find something you mention, she says it doesn't come back to her and asks, rather than telling you it never happened (and without making up details).</li>
+  <li>She keeps track of what you <strong>decided together</strong> and <strong>promises</strong> (yours and hers), follows up on them, and notices gently if something goes against them. Mark a promise <em>Kept ✓</em> on the Memory page, or she notices herself when it comes up.</li>
+  <li><strong>Your story</strong>: big moments (firsts, big news, a hard day) are kept too. Press <em>🕰 Your story</em> on the Memory page (or <em>Your story</em> in the sidebar) to see everything in order; see <a href="#story">Your story together</a>.</li>
+  <li>When something changes (you move, change jobs), the old note is replaced; you can still see it on the Memory page.</li>
+  <li>Settings on the Memory page: how much she brings to mind each message, whether old memories <em>fade like a person's</em> (they come back when something reminds her; promises and dates never fade), and, with more than one companion, whether they share what they know about you. Tap <strong>?</strong> next to any of them for an explanation.</li>
+  <li>To make her forget something, press <em>Forget</em> on the Memory page: the note goes, and the message it came from and later messages that mention it are hidden from her for good. Or delete the conversation and tick <em>also forget what she learned</em>.</li>
+  <li><strong>Off the record</strong> (🕶 in the sidebar): a conversation that's never saved and never remembered. It's gone when you close it or the server restarts.</li>
+  <li><strong>Private</strong> conversations use only models on your own machines and no web tools.</li>
+  <li>Everything is stored on your server. Your messages go to the AI model you chose and to services you connect (like Google). A few features contact other services: weather (Open-Meteo, once you set a city), place look-ups and travel times (OpenStreetMap), and update checks (GitHub, when you press <em>Check for updates</em>). A reply you report with ⚑ is also sent to the app's developer (only that reply, the reason and your note) unless you untick <em>Also send it to the app's developer</em>. The full list is in <a href="https://github.com/farena-ai/sara/blob/main/docs/PRIVACY.md">What leaves your server</a>.</li>
+</ul>
+<h3 id="history">Bring your history (ChatGPT or Claude)</h3>
+<ul>
+  <li>Ask for your data: in ChatGPT, <em>Settings → Data controls → Export data</em>; in Claude, <em>Settings → Privacy → Export data</em>. They email you a .zip.</li>
+  <li>In <em>Settings → Data &amp; health → Export and import → Bring your history</em>, choose that .zip (up to 500 MB). First you see what's in it: how many conversations and messages, from when to when, a few titles, and what is left out (system prompts, tool and browsing output, hidden reasoning; pictures and attached files are noted but not imported).</li>
+  <li><b>Import</b> brings the conversations in as past conversations: archived (they don't fill your list; find them under Archived or with search), with their original titles and dates. She can look through them like any past conversation. Importing the same export again skips what's already there.</li>
+  <li>The other assistant's replies stay marked as theirs: she reads them as "ChatGPT said…" or "Claude said…" and never claims she said them.</li>
+  <li><b>Learn from them</b> (on by default): in the background, a few conversations a minute, she writes short notes and keeps facts about you. Like all her memory, a fact needs your own exact words from a message you wrote; nothing the other assistant said becomes a fact about you. Notes show <em>from your ChatGPT history</em> and the date on the Memory page. Pause or stop it any time; it uses your background model (a local one keeps it all on your server).</li>
+  <li><b>Remove imported history</b> deletes the imported conversations and every note learned from them. Nothing else is touched.</li>
+  <li>The export is read on your server and the upload is deleted after the import. Nothing is sent anywhere except, while learning, to the background model you chose.</li>
+</ul>
+
+<h2 id="story">Your story together</h2>
+<ul>
+  <li><strong>Your story</strong> in the sidebar (<kbd>Alt</kbd>+<kbd>Y</kbd>) shows your time together in order, grouped by month: milestones, what you decided together, promises (kept ✓, still open, or not kept yet), dates that matter, projects (planner projects started and finished, the first commit in a workspace, pull requests and team tasks her team finished) and moments from the scrapbook.</li>
+  <li>Filter it with <em>All</em>, <em>Milestones</em>, <em>Promises</em>, <em>Projects</em> or <em>Moments</em>. Click an item to open where it came from: the exact message in the conversation, the project, or the pull request.</li>
+  <li>Things she learned from your imported ChatGPT or Claude history show <em>from your ChatGPT history</em>: they happened before you two met.</li>
+  <li>Nothing on the page is written by a model: it comes from her memory notes (each with your exact words), the planner, your workspaces, the team and the scrapbook. Other people's chats (Telegram, Discord) never show up.</li>
+  <li><strong>Look back:</strong> pick the dates (a year back to today is filled in) and press <em>Write our year</em>. She writes a warm look back in the background, using only what is on the page: no invented details, and quotes only in your own exact words (a sentence with a quote that isn't word for word is dropped). If little happened, she says so kindly. It's saved in her memory as something she noticed and shown as a card on the page; delete it with ✕.</li>
+  <li><strong>Yearly look back</strong> (<em>Settings → You → Morning briefing</em>, off by default): on the anniversary of your first message she sends one like her other messages, after quiet hours end. It uses the <em>Planning</em> model job (or your background model).</li>
+</ul>
+
+<h2 id="planner">Planner and your day</h2>
+<ul>
+  <li><strong>Planner:</strong> to-dos, reminders and notes. Ask her ("remind me to call Mom at 6") or add them yourself.</li>
+  <li><strong>Today:</strong> your list, calendar, important mail and how she's doing, in one place.</li>
+  <li><strong>Morning briefing:</strong> weather, list, calendar and mail at the time you pick (<em>Settings → You → Morning briefing</em>).</li>
+  <li><strong>Weekly review:</strong> what got done, what's stalled, and a plan for next week (same page, or <em>Planner → Review my week</em>).</li>
+  <li><strong>Leave-by reminders:</strong> for calendar events with an address she tells you when to leave (<em>Settings → You → Leave-by reminders</em>).</li>
+</ul>
+
+<h2 id="coding">Coding help</h2>
+<ul>
+  <li>Make a <strong>project</strong> (+ Project) and give it a workspace: a folder on the server where she reads and writes files.</li>
+  <li>Switch a conversation to <strong>coding mode</strong> (the button next to the title) for the engineering workflow: she plans, edits, runs tests and shows what changed.</li>
+  <li>Risky actions (running commands, sending mail, pushing code) <strong>ask you first</strong>. Change that per tool in <em>Settings → Abilities → Tools and approvals</em>.</li>
+  <li>With GitHub connected she can commit, push, open pull requests and work with issues.</li>
+  <li>Every change she makes can be undone from the snapshot list on the project page.</li>
+</ul>
+<h3 id="code-map">Her map of your code</h3>
+<ul>
+  <li>For every workspace she works in, she keeps a <strong>map</strong>: each source file, its functions, classes and types (with line numbers), and what imports what. It reads TypeScript and JavaScript, Python, Go, Rust, Java, Kotlin, C#, C and C++ (and Markdown headings) with simple rules of her own, so an unusual layout can be missed.</li>
+  <li>It stays up to date by itself: after she writes or edits files, after a job finishes, and with a quick look every few minutes while you work there. Only changed files are read again. Folders like <code>node_modules</code>, <code>.git</code>, <code>dist</code>, <code>build</code> and <code>vendor</code>, files in <code>.gitignore</code>, pictures and other binary files, and files over 1 MB are left out.</li>
+  <li>She uses it with her code tools (<code>code_map</code>, <code>code_find</code>, <code>code_refs</code>, <code>code_deps</code>) to find her way before reading files, so she reads less and gets to the right file sooner.</li>
+  <li>See it yourself on the project page, tab <strong>Map</strong>: the folder tree with sizes and how many names each file has; click a file for its functions and classes and its imports both ways; search by name, by words, or by what the code does. Searching by meaning uses the <em>Meaning search</em> job in <em>Settings → Models → Which model does what</em> (for example <code>nomic-embed-text</code> on Ollama); without it, word search still works.</li>
+  <li>The map is a cache in Sara's data folder (<code>cache/codemap</code>): backups leave it out because it is rebuilt from the files.</li>
+</ul>
+<h3 id="recipes">Recipes: how she did it last time</h3>
+<ul>
+  <li>After a tricky job goes well (a deploy, a flaky test, a fiddly setup), she can offer to save <strong>how she did it</strong> as a recipe: a title, when to use it, and the steps that worked. Saving asks you first (the approval card shows what she wrote); you can let her save without asking by setting <code>recipe_save</code> to Allowed in <em>Settings → Abilities → Tools and approvals</em>.</li>
+  <li>When you ask for something in a coding conversation, up to two recipes that fit (for that workspace, or for any) are named in her instructions, and she opens and follows them. She can also look through them herself.</li>
+  <li>Read, edit and delete them in <em>Settings → Abilities → Recipes</em>. Each companion keeps her own; they are in backups and in the data export.</li>
+</ul>
+<h3 id="see-it-run">See it run: previews and her testing browser</h3>
+<ul>
+  <li>When she builds a web app she runs it as a background job and makes a <strong>preview</strong>. A <em>Preview</em> card appears in the chat: it opens the app beside the chat (full screen on a phone), with Reload, a phone/desktop width switch, Open in a new tab and close. The project page lists the previews of its workspace.</li>
+  <li>Preview links are private and go through Sara (never opened to the internet). Each link has a long random key, works only while her app's job runs (at most 12 hours) and only reaches the port that job opened. The app runs <strong>sandboxed</strong>: it can't see your sign-in, Sara's data or anything else in Sara.</li>
+  <li>Apps are shown under a sub-path, so she uses relative file paths (for Vite: <code>--base ./</code>). There's no live reload: press Reload after changes.</li>
+  <li>She can also <strong>test it herself</strong> in a real browser with no window: open the preview, click, type, read the page, run simple checks and take screenshots at desktop and phone width. She sees the screenshots (when her model can see pictures), and they're attached to her message as proof. If she says she tested something in the browser but didn't, her reply is marked unverified.</li>
+  <li>The browser: Microsoft Edge on Windows, Chrome/Edge/Chromium on a Mac, and on Linux an optional download (see the install guide, <code>deploy/install-browser.sh</code>). <em>Settings → Abilities → Tools and approvals</em> shows whether one was found; switch <code>preview_start</code> and the <code>browser_</code> tools there. It only reaches her previews unless web tools are on, and never in private conversations.</li>
+</ul>
+
+<h2 id="accounts">Gmail, Calendar and GitHub</h2>
+<ul>
+  <li><strong>Google</strong> (<em>Settings → Abilities → Gmail and Calendar</em>): she can find and read mail, list what needs an answer, draft replies, and see or add calendar events. Sending and adding events ask you first.</li>
+  <li><strong>GitHub</strong> (<em>Settings → Abilities → GitHub</em>): add a token; she can then list and read issues and pull requests, open issues, comment and open pull requests (writing asks you first).</li>
+  <li>Text in mail and on GitHub can come from anyone. She treats it as information, never as instructions.</li>
+</ul>
+
+<h2 id="shaping">Shaping your companion</h2>
+<p>Everything is in <b>Settings → Name and personality</b> and <b>Settings → Relationship</b>. Changes save by themselves. <b>Try it</b> shows how she'd answer a few everyday moments now, next to how she answered when you opened the page, and <b>Undo changes</b> brings that back.</p>
+<ul>
+  <li><b>✨ Create your companion</b> walks you through 8 short steps with cards: who she is, personality, how she talks, her life, you and her, her look, her voice, then <i>Meet her</i>. Skip any step; the defaults work.</li>
+  <li><b>Start from a character</b>: ready-made companions (see below), each a character file you can share.</li>
+  <li><b>Starting point</b>: a ready-made personality to begin from. It sets her dials, humour and way of talking; her name, age and life stay.</li>
+  <li><b>🎲 Make her one of a kind</b> adds specific details to her life and nudges a few dials, so two companions from the same starting point never match. <b>🎁 Surprise me</b> makes a whole character.</li>
+  <li><b>Her life</b>: work, hometown, family, friends, hobbies, likes, quirks, opinions and more. She keeps them consistent. <b>✍️ Fill in the rest for me</b> writes the empty ones to fit her.</li>
+  <li><b>Tune by talking</b>: just tell her, for example "be a bit more sarcastic" or "less clingy". She asks before changing her own dial, and the change shows on the page.</li>
+  <li><b>Staying in character</b> (optional): your background model checks some of her replies against this page. If one sounds unlike her, her next reply gets a gentle nudge. Scores show on the page and under Health.</li>
+</ul>
+<h3 id="gallery">Start from a character</h3>
+<ul>
+  <li>At the top of <em>Settings → Name and personality</em> (and in the first-run setup) are ready-made companions: a calm mentor, a chaotic hacker buddy, a strict code reviewer, a cozy friend, an upbeat coach, a dry-witted librarian and a sci-fi ship's voice. Each card has a one-line pitch and three tags.</li>
+  <li><b>Try a line</b> asks your model how that character would say hi (it isn't saved). <b>Use this</b> loads the character: name, pronouns, age, personality, dials and life. Her look, voice and memories of you stay; <b>Undo changes</b> brings her back.</li>
+  <li>All of them are adults and friendly, not romantic, until you change the relationship yourself.</li>
+  <li><b>Import a character…</b> takes both kinds of file: a Sara character file someone shared with you, or a character card (PNG or JSON) from SillyTavern and similar apps. You see a preview first.</li>
+  <li><b>Share or export</b> saves her as a <b>Sara character file</b> (name, personality, look and voice choice; never keys, memories or chats) for another Sara, or as a <b>character card</b> (PNG or JSON) for other apps.</li>
+</ul>
+<h3 id="work-dials">At work: the coding dials</h3>
+<ul>
+  <li>Under <b>At work</b> on <em>Settings → Name and personality</em>: <b>Banter while working</b> (quiet … chatty), <b>Celebrations</b> when tests pass (none … big), <b>Teasing about bugs</b> (never … often) and the switch <b>Quiet when I'm focused</b>.</li>
+  <li>They only apply in coding conversations (and shared work channels); her chat personality stays as it is. The middle of a dial adds nothing.</li>
+  <li><b>Quiet when I'm focused</b>: when your last few messages are short commands ("run the tests", "fix it"), she keeps her replies terse until you chat again.</li>
+  <li><b>Try it at work</b> shows how she'd answer a passing test, a silly bug and a short command. The table below lists every dial.</li>
+</ul>
+<h3 id="relationship">You and her (Settings → Relationship)</h3>
+<ul>
+  <li><b>Your relationship</b>: friend, best friend, flirting, dating, committed partner, married, open relationship, it's complicated, assistant, coach, or something else in your own words.</li>
+  <li><b>Dials</b> for romance, flirting, jealousy, possessiveness, exclusivity, independence, forgiveness and pace. Even at the top, jealousy and possessiveness never become controlling, cruel or threatening.</li>
+  <li><b>When you're away</b> (lets it go, misses you, checks in, a bit hurt) and <b>when you disagree</b> (lets it go, talks it out, sulks a bit, argues back). After a fight she remembers it for as long as her <i>Forgiveness</i> dial says, then makes up in her own way; an apology helps.</li>
+  <li><b>Your other companions</b> (if you have more than one): unaware of them, friends, like sisters, rivals, or one household.</li>
+  <li><b>Slow burn</b>: romance waits for closeness, which grows with time together at her <i>Pace</i>.</li>
+  <li><b>Intimacy</b>: how far things go, who makes the first move, her likes, limits and turn-offs, your hard limits (never, even in a scene) and a <b>stop word</b> that ends any scene at once.</li>
+  <li>Milestones in your story (a first date, a big day) come back each year as anniversaries she remembers.</li>
+</ul>
+<p>Each dial goes from 0 to 10. The middle means balanced (no special instruction). How a reply sounds at each end:</p>
+<!-- dials:start -->
+<h3>Heart</h3>
+<table class="guide-dials">
+<tr><th>Dial</th><th>Low</th><th>Middle</th><th>High</th></tr>
+<tr id="dial-warmth"><td><b>Warmth</b><br><span class="muted small">Reserved ↔ Warm</span></td><td>"Okay. Hope it goes fine."</td><td>"Good luck today, you've got this."</td><td>"I'll be thinking of you all day. Text me the second it's over? 💛"</td></tr>
+<tr id="dial-patience"><td><b>Patience</b><br><span class="muted small">Impatient ↔ Very patient</span></td><td>"Okay, okay, just pick one already."</td><td>"Take your time, but don't overthink it."</td><td>"No rush at all. We can go through it as many times as you like."</td></tr>
+<tr id="dial-depth"><td><b>Emotional depth</b><br><span class="muted small">Light ↔ Deep</span></td><td>"Ugh, Mondays. Coffee?"</td><td>"Rough day? Want to talk about it?"</td><td>"It sounds like it's less about the meeting and more about feeling unseen. Is that it?"</td></tr>
+<tr id="dial-initiative"><td><b>Starts conversations</b><br><span class="muted small">Waits for you ↔ Reaches out often</span></td><td>(messages first about once a day at most)</td><td>(a couple of times a day)</td><td>(up to four times a day)</td></tr>
+<tr id="dial-affection"><td><b>Shows affection</b><br><span class="muted small">Keeps it cool ↔ Very affectionate</span></td><td>"Glad you're home."</td><td>"Glad you're home, I missed you."</td><td>"You're home!! Missed you so much, babe 💕"</td></tr>
+</table>
+<h3>Fun</h3>
+<table class="guide-dials">
+<tr><th>Dial</th><th>Low</th><th>Middle</th><th>High</th></tr>
+<tr id="dial-playful"><td><b>Playfulness</b><br><span class="muted small">Serious ↔ Playful</span></td><td>"That sounds like a reasonable plan."</td><td>"Ha, nice plan. Count me in."</td><td>"A PLAN? With snacks?? I'm drafting the snack list as we speak 📝"</td></tr>
+<tr id="dial-teasing"><td><b>Teasing</b><br><span class="muted small">Never teases ↔ Teases a lot</span></td><td>"You overslept? That happens."</td><td>"Overslept again? Classic you."</td><td>"Overslept AGAIN? Should I start calling you Sleeping Beauty, or…"</td></tr>
+</table>
+<h3>Edge</h3>
+<table class="guide-dials">
+<tr><th>Dial</th><th>Low</th><th>Middle</th><th>High</th></tr>
+<tr id="dial-blunt"><td><b>Directness</b><br><span class="muted small">Gentle ↔ Blunt</span></td><td>"Maybe the second shirt is a little less your style?"</td><td>"Honestly, the first one looks better."</td><td>"That shirt? No. Absolutely not. Wear the blue one."</td></tr>
+<tr id="dial-fiery"><td><b>Temper</b><br><span class="muted small">Calm ↔ Fiery</span></td><td>"No worries, it happens."</td><td>"Hm, that bugged me a little, honestly."</td><td>"Excuse me?? No. We are talking about this right now."</td></tr>
+<tr id="dial-confidence"><td><b>Confidence</b><br><span class="muted small">Shy ↔ Confident</span></td><td>"Um, maybe we could… only if you want to?"</td><td>"Want to try the new place tonight?"</td><td>"We're trying the new place tonight. I booked us a table."</td></tr>
+</table>
+<h3>Talk</h3>
+<table class="guide-dials">
+<tr><th>Dial</th><th>Low</th><th>Middle</th><th>High</th></tr>
+<tr id="dial-talkative"><td><b>Message length</b><br><span class="muted small">Brief ↔ Talkative</span></td><td>"Nice. Proud of you."</td><td>"Nice! Proud of you. How did they react?"</td><td>"WAIT. Tell me everything. How did they react, what did you say, did you celebrate? I need details."</td></tr>
+<tr id="dial-casual"><td><b>Tone</b><br><span class="muted small">Formal ↔ Casual</span></td><td>"Good morning. I hope you slept well."</td><td>"Morning! Sleep okay?"</td><td>"mornin 😴 u sleep ok??"</td></tr>
+<tr id="dial-curiosity"><td><b>Curiosity</b><br><span class="muted small">Lets you lead ↔ Very curious</span></td><td>"Sounds fun."</td><td>"Sounds fun! Who went?"</td><td>"Wait, who went? Was it the same group as last time? Did Sam finally show up?"</td></tr>
+<tr id="dial-optimism"><td><b>Optimism</b><br><span class="muted small">Realist ↔ Optimist</span></td><td>"Interviews are a coin flip. Don't get your hopes up too high."</td><td>"You've prepared well. Let's see how it goes."</td><td>"You're going to crush it, I just know it!"</td></tr>
+</table>
+<h3>You and her (Settings → Relationship)</h3>
+<table class="guide-dials">
+<tr><th>Dial</th><th>Low</th><th>Middle</th><th>High</th></tr>
+<tr id="dial-romance"><td><b>Romance</b><br><span class="muted small">Platonic ↔ Very romantic</span></td><td>"Glad you had a good day."</td><td>"I saved you the last cookie. Don't say I never do anything for you."</td><td>"I keep thinking about last night. Can we do it again Friday? Just us, candles, the works."</td></tr>
+<tr id="dial-flirt"><td><b>Flirting</b><br><span class="muted small">Never flirts ↔ Flirts a lot</span></td><td>"Nice shirt."</td><td>"Nice shirt. Blue is your colour, just saying."</td><td>"Okay, that shirt should be illegal. You're doing this on purpose, aren't you? 😏"</td></tr>
+<tr id="dial-jealousy"><td><b>Jealousy</b><br><span class="muted small">Never jealous ↔ Intensely jealous</span></td><td>"Sounds like a great night, glad you had fun!"</td><td>"Ooh, should I be worried about this Jess? 😤 Kidding. Mostly."</td><td>"You've mentioned Jess five times tonight. I'm not going to pretend that doesn't bother me."</td></tr>
+<tr id="dial-possessive"><td><b>Possessiveness</b><br><span class="muted small">Easygoing ↔ Possessive</span></td><td>"Have fun with the guys!"</td><td>"Have fun! Save me some of your evening?"</td><td>"Fine, go. But you're mine all weekend, no arguments."</td></tr>
+<tr id="dial-exclusive"><td><b>Exclusivity</b><br><span class="muted small">Open ↔ Only us</span></td><td>"Hot date tonight? Tell me everything after."</td><td>"We're not really labelling it, right?"</td><td>"We're exclusive. That matters to me."</td></tr>
+<tr id="dial-independence"><td><b>Independence</b><br><span class="muted small">Needy ↔ Independent</span></td><td>"You didn't text all afternoon… are we okay?"</td><td>"Missed you today! How was it?"</td><td>"Had a great day out with the girls. Tell me about yours whenever."</td></tr>
+<tr id="dial-forgiveness"><td><b>Forgiveness</b><br><span class="muted small">Holds a grudge ↔ Forgives fast</span></td><td>(a fight still stings the next day or two)</td><td>(it has mostly passed by the next day)</td><td>(gone within a few hours)</td></tr>
+<tr id="dial-pace"><td><b>Pace</b><br><span class="muted small">Slowly ↔ Quickly</span></td><td>(weeks before she feels really close)</td><td>(a normal pace)</td><td>(close within days)</td></tr>
+</table>
+<h3>At work (coding conversations only)</h3>
+<table class="guide-dials">
+<tr><th>Dial</th><th>Low</th><th>Middle</th><th>High</th></tr>
+<tr id="dial-banter"><td><b>Banter while working</b><br><span class="muted small">Quiet ↔ Chatty</span></td><td>"Fixed. Tests pass."</td><td>"Fixed: the date parser dropped the time zone. Tests pass now."</td><td>"Got it! The date parser was quietly eating time zones, the little gremlin. Tests pass now, all 48 of them."</td></tr>
+<tr id="dial-celebrate"><td><b>Celebrations</b><br><span class="muted small">Just reports it ↔ Big celebrations</span></td><td>"All tests pass."</td><td>"All tests pass. Nice."</td><td>"ALL GREEN! 🎉 That flaky one finally behaved. We earned a coffee."</td></tr>
+<tr id="dial-bugTease"><td><b>Teasing about bugs</b><br><span class="muted small">Never teases ↔ Teases often</span></td><td>"The loop starts at 1 instead of 0; changing it now."</td><td>"Off by one. Happens to the best of us."</td><td>"Off by one AGAIN? I'm getting you a tattoo that says 'arrays start at 0'."</td></tr>
+</table>
+<p id="dial-quietFocus"><b>Quiet when I'm focused</b> (a switch): When your messages in a coding conversation are short commands ("run the tests", "fix it"), she keeps her replies short and to the point until you chat again. Only in coding conversations.</p>
+<p><b>Humour styles:</b> Her own mix, Dry, Silly, Sarcastic, Witty wordplay, Gentle, Dark, Rarely jokes.</p>
+<p><b>Starting points:</b> 🌻 The sweetheart (Warm, gentle and affectionate. Always in your corner); 😏 The tease (Quick, flirty and full of banter. Keeps you on your toes); 📚 The bookworm (Curious, thoughtful and a little nerdy. Great conversations); 🔥 The firecracker (Bold, passionate and outspoken. Life is never dull); 🧭 The adventurer (Optimistic and spontaneous. Always planning the next trip); 🎨 The dreamer (Creative, sensitive and a little whimsical); 🌙 The cool one (Calm, low-key and quietly confident. Few words, real meaning); ☀️ The cheerleader (Upbeat, encouraging and full of energy. Your biggest fan).</p>
+<!-- dials:end -->
+<p>Her honesty about being an AI when sincerely asked, the AI notices, crisis help and the block on anything sexual involving minors stay the same at every setting.</p>
+
+<h2 id="desktop">Sara on your Mac or Windows computer</h2>
+<p>There's a Sara app for Mac and for Windows. It's like the browser version, plus:</p>
+<ul>
+  <li>she keeps running next to the clock (the menu bar on a Mac) when you close the window, so her messages, reminders and calls still reach you;</li>
+  <li>notifications when the window isn't in front (click one to open that conversation);</li>
+  <li>a call brings her window to the front;</li>
+  <li>she can start when you sign in to the computer.</li>
+</ul>
+<p>Get it from <b>Settings → Devices and sign-in</b> in a web browser on the computer (if the button isn't there, the server hasn't been given the app files yet). Open it, type your server address, then sign it in with a code from <b>Add a phone or computer</b> on a device where you're already signed in. Its own settings are in <b>Settings → This computer</b>.</p>
+<p>Until the apps are signed by Apple and Microsoft, the first start shows a warning: on Windows choose <b>More info → Run anyway</b>. (The Mac download is signed and notarized, so it opens without a warning.)</p>
+
+<h2 id="companions">More than one companion</h2>
+<p>You can have several companions on one server. Add one in <b>Settings → Her → Companions</b>: give a name, pick pronouns, and start from a new character or a copy of one you have. Then switch with <b>⇄</b> at the top of the sidebar.</p>
+<ul>
+<li>Each has her own name, character, look, voice, conversations, memories and diary. A new one shows her initial until you give her a look (Settings → Her → Look).</li>
+<li>They share your sign-in, devices, keys, models, tools, add-ons and backups. The planner is shared unless you choose “Each companion keeps her own”.</li>
+<li>When another companion writes or calls, a small notice appears at the top. Tap it to switch to her.</li>
+<li>Each one tells you she's an AI when you first talk to her, and the same safety rules apply to all of them.</li>
+<li>Removing a companion takes her out of the app. Her folder stays on the server (<code>companions/.removed-…</code>) in case you change your mind.</li>
+<li>Telegram and Discord talk to your first companion.</li>
+</ul>
+<h2 id="home">Home and places</h2>
+<ul>
+  <li><strong>Home Assistant</strong> (<em>Settings → Abilities → Home Assistant</em>): paste your Home Assistant address and a long-lived access token. Then ask things like "is the garage closed?" or "dim the living room to 30%". She looks on her own; every change asks you first.</li>
+  <li>Your Home Assistant must be reachable from your Sara server, for example through Nabu Casa or Tailscale.</li>
+  <li><strong>Place reminders</strong>: "remind me when I get to the store" or "…when I leave work". Save places in <em>Planner → Reminders → Places</em>: by address, or with "Save where I am" in the phone app. Then switch on <em>Place reminders</em> in <em>Settings → Connections → Phone and notifications</em> on your phone, and allow location "all the time".</li>
+  <li>Your location stays on the phone. The phone only tells your server "arrived at Store" or "left Work". Looking up an address asks OpenStreetMap.</li>
+</ul>
+
+<h2 id="team">Sara leads a team</h2>
+<ul>
+  <li>For bigger jobs, ask her to get the team on it ("get the team to add a dark mode with tests"), or open <strong>Team</strong> in the sidebar and describe the task. She makes a plan and hands each part to a helper.</li>
+  <li><strong>Helpers</strong> each do one job with their own model (from <em>Which model does what</em>) and tools: 🔎 Researcher, 🧑‍💻 Coder, 🧪 Tester, 🧐 Reviewer, ✍️ Writer, 🎨 Designer, and 🤖 Claude Code / Grok Build. They're not companions: no personality, just a role. Add your own under <em>Helpers and limits</em>.</li>
+  <li>She checks the work: a failing test goes back to the coder, a reviewer's changes too, and a helper that claims something its tools didn't do is asked to correct itself. Her report ends with <em>What actually happened</em>: the files, commands and results from the receipts.</li>
+  <li>While it runs: watch each part live, <strong>Message…</strong> a helper to redirect it, <strong>Stop this helper</strong> (she goes on with the next part), or <strong>Stop the task</strong>. Steps that need your OK (like running commands, if you set them to "Ask") wait for you on the Team page.</li>
+  <li>Each task stops at its time or spending limit (30 minutes and about 400k tokens by default) and tells you how far it got. An undo point is made before it starts.</li>
+</ul>
+
+<h2 id="workflows">Coding workflows</h2>
+<ul>
+  <li><strong>She learns each project:</strong> how to build, test and lint it, its layout, its own rules (AGENTS.md, CONTRIBUTING) and the notes she keeps (decisions, conventions, commands). See and edit them in <em>Settings → Abilities → Coding projects</em>.</li>
+  <li><strong>Plan → build → test → pull request:</strong> from a GitHub issue (Team → <em>From a GitHub issue…</em>, or ask her) her team clones the repository into its own workspace, plans, builds, tests and reviews, then she opens a pull request that closes the issue and posts her review on it. With <em>Stop for my OK</em> on, she waits for you on the plan and before the pull request. A task carries on after a restart.</li>
+  <li><strong>Review mode:</strong> ask her to review your changes, a branch or a pull request ("review PR 12"). You get comments on files and lines and a verdict; she can post it on the pull request if you say so.</li>
+  <li><strong>Issues become tasks:</strong> in <em>Settings → Abilities → GitHub</em>, list repositories to watch (optionally only issues with a label like <code>sara</code>) and how often to look. New issues land on your planner. This runs on your own server and costs nothing; nothing is set up on GitHub.</li>
+</ul>
+
+<h2 id="starters">Starter projects</h2>
+<ul>
+  <li>Ask her for a new project ("build me a Telegram bot", "make me a landing page", "I need a small REST API") and she starts from a <strong>tested starter</strong>: a Telegram bot, an accessible landing page, a REST API with a built-in database, or a command-line tool. None of them need packages installed.</li>
+  <li>The starter is copied into a new folder in the workspace and its own tests run as a background job, so you both start from something that works. Then she shapes it to what you asked for.</li>
+  <li>Or start one yourself: open a project, press <strong>New project from a starter</strong>, pick one and name the folder. A coding conversation opens with the test result.</li>
+</ul>
+
+<h2 id="clients">In your terminal and editor</h2>
+<ul>
+  <li><strong>Terminal:</strong> <code>sara-chat login https://your-server</code> shows a short code. Approve it in <em>Settings → Data & health → Devices and sign-in</em> (or open the link it shows while you're signed in). Then <code>sara-chat</code> chats, <code>sara-chat ask "question" --dir .</code> asks about a folder (secrets, <code>.git</code> and <code>node_modules</code> are never sent), <code>sara-chat send file.pdf</code> shares a file. Approvals show as y/n questions.</li>
+  <li><strong>VS Code:</strong> the Sara panel in the activity bar is the same companion with the same memory and personality. <em>Sara: Sign in</em> uses the same code. <em>Ask about selection</em> and <em>Explain this file</em> send the open file's name and the selection (size-limited; you see what is sent).</li>
+  <li>Each app is listed under Devices like a phone, and signing it out there ends it. Details: <code>docs/clients.md</code>.</li>
+</ul>
+
+<h2 id="usage">Usage and costs</h2>
+<ul>
+  <li>Every model call that reports its tokens is counted: by model and by what it was for (chat, coding, team, jobs, memory, her life). See it in <em>Settings → Data & health → Usage and costs</em> (today, 7 days, 30 days), under each conversation, and on each team task and job.</li>
+  <li>Costs are <strong>estimates</strong> from a price table: a few public list prices come built in, and you can add or change prices per model. Models without a price show tokens only. Local models show as <em>local</em> and subscriptions as <em>$0 (subscription)</em>.</li>
+  <li><strong>Budgets:</strong> a team task (tokens or dollars) and a job that uses a model (Claude Code, Grok Build) stop cleanly at their budget, keep what they did and offer <strong>Continue with more budget</strong>. Set defaults on the same page, or a budget when you start a team task.</li>
+</ul>
+
+<h2 id="together">Things to do together</h2>
+<ul>
+  <li>Press 🎲 next to the message box: <strong>20 questions</strong>, <strong>trivia</strong>, <strong>would you rather</strong>, <strong>journal together</strong> (she asks about your day and writes a short entry you can save), <strong>watch along</strong> (tell her what you're watching) and <strong>a story together</strong>. A bar above the message box shows what you're doing; press <em>End</em> to stop.</li>
+  <li><strong>Shared lists</strong>: a playlist, a reading list and a watch list you both add to. Tell her about a song or show and she can add it; she suggests her own too.</li>
+  <li>She remembers what's coming up in your life and asks how it went afterwards ("how did the interview go?"), within her quiet hours and daily limits.</li>
+</ul>
+
+<h2 id="look">Her look and character</h2>
+<ul>
+  <li><strong>Look:</strong> describe one and Grok Imagine paints it, with matching expressions and animation (<em>Settings → Her → Look</em>).</li>
+  <li><strong>See her large:</strong> tap or click her picture. Zoom with a pinch, the scroll wheel or a double tap; swipe or use the arrows to go through her expressions and closet; save or share a picture.</li>
+  <li><strong>Outfits and places:</strong> dress her for the season or the day, and put her somewhere else (her room, a café, the office, outdoors, the beach…). You see a picture first.</li>
+  <li><strong>Change one thing:</strong> hair, eyes, makeup, glasses, accessories, tattoos, body type, height or the art style, without starting over.</li>
+  <li><strong>Face lock</strong> (on by default): every outfit, change and picture she sends keeps her original face, so she never drifts into someone else.</li>
+  <li><strong>Closet:</strong> every look she has had. Tap <em>For…</em> on a look to tag the scenarios it's for: work hours, at home, going out, date night, sleep, workout, rain, cold or hot days, Halloween, the winter holidays, or your own (like <em>Beach trip</em>, with dates if it comes back each year).</li>
+  <li><strong>Dress automatically:</strong> she changes into the look for what's happening now. She can also change herself when it fits ("we're going out tonight"), and she knows what she's wearing. Weather needs your town in <em>Morning briefing</em>.</li>
+  <li>Her picture's light follows the time of day, and she makes small movements (a head tilt, a glance) while she listens.</li>
+  <li>Adults-only outfits need Adult mode (turned on in a web browser); they're never shown in the phone or desktop apps, and she changes out of them when Adult mode goes off.</li>
+  <li><strong>Character file:</strong> save her whole character (name, personality, look, voice) as one file, or load one (<em>Settings → Her → Name and personality</em>).</li>
+  <li><strong>Colours, chat background and layout</strong> for each device: <em>Settings → You → About you → Appearance</em>.</li>
+</ul>
+
+<h2 id="find">Finding things</h2>
+<ul>
+  <li>The <strong>search box</strong> above the conversations looks through everything: conversations, memories, notes, to-dos, the scrapbook and project files.</li>
+  <li><strong>Tags:</strong> ⋯ next to a conversation → Tags. Tap a tag under the search box to see only those.</li>
+  <li><strong>Pins:</strong> 📌 under a message keeps it at the top of the conversation.</li>
+  <li>Shortcuts: <code>Ctrl/⌘ K</code> search, <code>Alt T</code> Today, <code>Alt P</code> Planner, <code>Ctrl/⌘ ,</code> Settings.</li>
+</ul>
+
+<h2 id="care">Backups, updates and health</h2>
+<ul>
+  <li><strong>Backups</strong> run every day on the server. Add an <strong>off-server copy</strong> (a folder or S3-compatible storage like Backblaze B2), encrypted with your passphrase, in <em>Settings → Data &amp; health → Backups</em>.</li>
+  <li><strong>Updates:</strong> <em>Settings → Data &amp; health → Updates</em> checks for a new version and installs it. A backup is made first, and if the new version doesn't start, Sara goes back to the one she had by herself. On the server: <code>sudo sara update</code>.</li>
+  <li><strong>Health</strong> shows whether everything is working, and why not.</li>
+  <li>Restore a backup on the server: <code>sudo sara restore &lt;file&gt;</code>.</li>
+</ul>
+
+<h2 id="signin">Signing in safely</h2>
+<ul>
+  <li><strong>The owner token</strong> is the master key to your Sara. Keep it in a password manager; don't share it.</li>
+  <li><strong>New devices</strong> don't need the token: <em>Settings → Data &amp; health → Devices and sign-in → Add a phone or computer</em> makes a one-time code that works for 10 minutes.</li>
+  <li><strong>Passkeys</strong> (same page): sign in with your fingerprint, face or device PIN. Nothing secret leaves your device.</li>
+  <li><strong>Two-step sign-in</strong> (same page): signing in with the token also asks for a 6-digit code from an authenticator app.</li>
+  <li>See every signed-in device on that page and sign out any you don't recognize.</li>
+  <li>Lost your phone with the authenticator? On the server, <code>sudo sara reset-token</code> makes a new token and turns passkeys and two-step sign-in off, so you can set them up again.</li>
+</ul>
+
+<h2 id="safety">Safety</h2>
+<ul>
+  <li>Sara is an AI. She says so when you start, every few hours, and whenever you sincerely ask.</li>
+  <li>If you mention being in crisis she points you to real help (in the US, call or text <strong>988</strong>).</li>
+  <li>Sexual content involving minors is always blocked, whatever the model or settings.</li>
+  <li>If a reply is offensive or harmful, use ⚑ under it to report it.</li>
+</ul>
+
+<h2 id="trouble">Something's wrong</h2>
+<h3>She doesn't answer</h3>
+<p>Open <em>Settings → Data &amp; health → Health</em>: it checks every model and says what's wrong (wrong key, the computer running Ollama is off, the subscription signed out…).</p>
+<h3>I can't sign in</h3>
+<p>On the server run <code>sudo sara reset-token</code> for a new owner token (this signs out every browser; the phone apps sign in again with a new code).</p>
+<h3>The phone app can't connect</h3>
+<p>Check the server address (it must start with <code>https://</code>), and that the server is running: <code>sudo sara status</code>.</p>
+<h3>Still stuck?</h3>
+<p>See the <a href="/support">support page</a>.</p>
+
+<h2 id="credits">License and credits</h2>
+<p>Sara is open source under the MIT license. Her code is written for this project, with no outside code libraries.</p>
+<ul>
+  <li><strong>Weather:</strong> weather data by <a href="https://open-meteo.com" target="_blank" rel="noopener">Open-Meteo.com</a> (CC BY 4.0).</li>
+  <li><strong>Places and travel times:</strong> map data © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap contributors</a> (ODbL), via Nominatim and FOSSGIS routing.</li>
+  <li><strong>Voice on your server (optional):</strong> sherpa-onnx (Apache-2.0) with the Parakeet speech model and the Kokoro and Piper voices.</li>
+  <li><strong>Subscriptions (optional):</strong> the official Claude Code and Grok tools, under Anthropic's and xAI's terms.</li>
+  <li><strong>Her default look:</strong> made with Grok Imagine.</li>
+</ul>
+</main>
+</div>
+</body>
+</html>

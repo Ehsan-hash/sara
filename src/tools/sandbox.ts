@@ -1,0 +1,544 @@
+// Process sandbox for the shell tool. On Linux with bubblewrap, commands run in fresh namespaces
+// with a read-only system, only the workspace writable, and none of Sara's data (keys, database)
+// visible. On macOS, the system's own sandbox-exec (Seatbelt) does the same with a generated
+// profile. Without either (Windows), commands run directly in the workspace (clearly labelled), and
+// the command tools ask the owner before every command unless the owner chose otherwise.
+import { spawn, spawnSync } from 'node:child_process';
+import { chmodSync, chownSync, existsSync, lstatSync, mkdtempSync, readdirSync, readFileSync, readlinkSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { homedir, tmpdir } from 'node:os';
+import { dirname, join, posix, win32 } from 'node:path';
+
+/**
+ * The workspace is HOME for commands, so this acts as git's global config: a default identity and
+ * branch name. Repository config (`git config user.name ...`) still takes precedence.
+ */
+export function ensureGitConfig(workspace: string): void {
+  const file = join(workspace, '.gitconfig');
+  try {
+    lstatSync(file);
+    return; // already there (a file or a link: never written through)
+  } catch {
+    /* create it */
+  }
+  try {
+    // 'wx': fails instead of following a link planted in the meantime.
+    writeFileSync(file, '[user]\n\tname = Sara\n\temail = sara@localhost\n[init]\n\tdefaultBranch = main\n[safe]\n\tdirectory = *\n', { flag: 'wx' });
+  } catch {
+    /* someone else made it */
+  }
+  excludeOwnFiles(workspace);
+}
+
+/**
+ * When the workspace itself is a git repository, the app's own files in it (this .gitconfig, the
+ * task files handed to Claude Code / Grok Build, caches tools write to HOME) are kept out of
+ * commits through the repository's local exclude list (never committed, never pushed).
+ */
+export function excludeOwnFiles(workspace: string): void {
+  const info = join(workspace, '.git', 'info');
+  const file = join(info, 'exclude');
+  try {
+    if (!lstatSync(join(workspace, '.git')).isDirectory()) return;
+    if (!existsSync(info)) return;
+    let cur = '';
+    try {
+      if (lstatSync(file).isSymbolicLink()) return;
+      cur = readFileSync(file, 'utf8');
+    } catch {
+      cur = '';
+    }
+    // The workspace is HOME for commands, so tools leave their caches and histories at its top.
+    const own = ['/.gitconfig', '/.sara-task-*', '/.npm/', '/npm-cache/', '/.cache/', '/.local/', '/.pnpm-store/', '/.bash_history', '/.node_repl_history', '/.python_history', '/.lesshst', '/.wget-hsts'];
+    const want = own.filter((l) => !cur.split(/\r?\n/).includes(l));
+    if (want.length) writeFileSync(file, `${cur}${cur && !cur.endsWith('\n') ? '\n' : ''}# Sara's own files\n${want.join('\n')}\n`);
+  } catch {
+    /* not a repository */
+  }
+}
+
+/**
+ * 'user' mode: the workspace belongs to the tools user's group (setgid, so new files do too) and the
+ * data folders above it can be passed through but not listed or read.
+ */
+export function prepareForToolsUser(workspace: string, gid: number): void {
+  try {
+    const st = statSync(workspace);
+    if (st.gid !== gid || (st.mode & 0o2070) !== 0o2070) {
+      // First use: hand everything already in it to the tools group (once).
+      const walk = (p: string) => {
+        const e = lstatSync(p);
+        if (e.isSymbolicLink()) return;
+        chownSync(p, e.uid, gid);
+        chmodSync(p, e.isDirectory() ? (e.mode & 0o7777) | 0o2070 : (e.mode & 0o7777) | 0o060);
+        if (e.isDirectory()) for (const n of readdirSync(p)) walk(join(p, n));
+      };
+      walk(workspace);
+    }
+    // Its parents (the workspaces folder and the data folder): passable (x) but not readable.
+    for (let d = dirname(workspace), i = 0; i < 2; d = dirname(d), i++) {
+      const st = statSync(d);
+      if ((st.mode & 0o001) === 0) chmodSync(d, (st.mode & 0o7770) | 0o001);
+    }
+  } catch {
+    // not root or not Linux: nothing to prepare
+  }
+}
+
+/**
+ * 'user' mode, at startup: nothing in the data folder is readable by other accounts, except the
+ * workspaces and MCP homes the tools user works in (prepared when used). The folder itself stays
+ * passable so the tools user can reach its workspace by path.
+ */
+export function lockDataDir(dataDir: string): void {
+  const skip = new Set([join(dataDir, 'workspaces'), join(dataDir, 'mcp')]);
+  const walk = (p: string) => {
+    if (skip.has(p)) return;
+    let st;
+    try {
+      st = lstatSync(p);
+    } catch {
+      return;
+    }
+    if (st.isSymbolicLink()) return;
+    if (st.mode & 0o007) chmodSync(p, st.mode & 0o7770);
+    if (st.isDirectory()) for (const n of readdirSync(p)) walk(join(p, n));
+  };
+  walk(dataDir);
+  chmodSync(dataDir, 0o711);
+  for (const d of skip) if (existsSync(d)) chmodSync(d, (statSync(d).mode & 0o7770) | 0o001);
+}
+
+export type SandboxMode = 'bwrap' | 'user' | 'seatbelt' | 'none';
+
+export interface SandboxInfo {
+  mode: SandboxMode;
+  /** Allow network access inside the sandbox (git clone, npm install, curl). */
+  network: boolean;
+  detail: string;
+  /** 'user' mode: the unprivileged account commands run as. */
+  uid?: number;
+  gid?: number;
+  /** 'seatbelt' mode: Sara's data folder, which commands may not read. */
+  dataDir?: string;
+}
+
+/** The macOS sandbox tool (ships with every macOS). */
+export const SANDBOX_EXEC = '/usr/bin/sandbox-exec';
+
+/** What the owner is told when commands run without a sandbox. */
+export function noSandboxNote(platform: NodeJS.Platform = process.platform): string {
+  if (platform === 'win32') return 'No sandbox on Windows: she asks before every command.';
+  if (platform === 'darwin') return 'No sandbox on this Mac: she asks before every command.';
+  return 'No sandbox: she asks before every command.';
+}
+
+export type SandboxPreference = 'auto' | 'bwrap' | 'seatbelt' | 'none';
+
+export function detectSandbox(preference: SandboxPreference = 'auto', network = true, opts: { dataDir?: string } = {}): SandboxInfo {
+  if (preference === 'none') return { mode: 'none', network, detail: `Sandbox switched off by configuration (SARA_SANDBOX=none). ${noSandboxNote()}` };
+  if (process.platform === 'darwin') {
+    const probe = existsSync(SANDBOX_EXEC) ? spawnSync(SANDBOX_EXEC, ['-p', '(version 1)(allow default)', '/usr/bin/true'], { timeout: 5000 }) : undefined;
+    if (probe?.status === 0) return { mode: 'seatbelt', network, ...(opts.dataDir ? { dataDir: opts.dataDir } : {}), detail: "macOS sandbox: only the workspace writable; your home folder (documents, keys, mail) and Sara's data hidden." };
+    if (preference !== 'auto') throw new Error('Sandbox required but the macOS sandbox (sandbox-exec) is not working.');
+    return { mode: 'none', network, detail: `The macOS sandbox (sandbox-exec) isn't working. ${noSandboxNote('darwin')}` };
+  }
+  if (process.platform !== 'linux') {
+    if (preference !== 'auto') throw new Error(`Sandbox required, but there is no command sandbox on ${process.platform === 'win32' ? 'Windows' : process.platform}.`);
+    return { mode: 'none', network, detail: `Commands run directly in the workspace. ${noSandboxNote()}` };
+  }
+  if (preference === 'seatbelt') throw new Error('The seatbelt sandbox is for macOS; use bwrap or auto on Linux.');
+  const probe = spawnSync('bwrap', [...bwrapArgs('/tmp', network), '/bin/sh', '-c', 'true'], { timeout: 5000 });
+  if (probe.status === 0) return { mode: 'bwrap', network, detail: 'bubblewrap: read-only system, workspace writable, Sara data hidden.' };
+  const why = probe.error ? 'bubblewrap is not installed' : `bubblewrap failed: ${String(probe.stderr).trim().slice(0, 200)}`;
+  if (preference === 'bwrap') throw new Error(`Sandbox required but ${why}.`);
+  // Containers (Docker) usually can't use bubblewrap. Running as root there, commands run as a
+  // separate unprivileged user that can't read Sara's data (keys, database), only the workspace.
+  const toolsUser = process.env.SARA_TOOLS_USER;
+  if (toolsUser && process.getuid?.() === 0) {
+    const id = (flag: string) => Number(String(spawnSync('id', [flag, toolsUser]).stdout).trim());
+    const uid = id('-u');
+    const gid = id('-g');
+    if (Number.isInteger(uid) && uid > 0 && Number.isInteger(gid) && gid > 0) {
+      return { mode: 'user', network, uid, gid, detail: `separate user "${toolsUser}": commands can't read Sara's data, only the workspace.` };
+    }
+  }
+  return { mode: 'none', network, detail: `${why}; commands run directly. Install bubblewrap for isolation. ${noSandboxNote('linux')}` };
+}
+
+/** A string in a Seatbelt profile (SBPL): double quotes with backslash escapes. */
+export function sbplString(s: string): string {
+  if (/[\0\n\r]/.test(s)) throw new Error('A sandbox path may not contain line breaks.');
+  return `"${s.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
+}
+
+const realOr = (p: string) => {
+  try {
+    return realpathSync(p);
+  } catch {
+    return p;
+  }
+};
+
+export interface SeatbeltPaths {
+  workspace: string;
+  /** This run's own temporary folder (TMPDIR). */
+  tmp: string;
+  /** Sara's data folder: never readable (except the workspace inside it). */
+  dataDir?: string;
+  /** The owner's home folder (for ~/.ssh, ~/Library/Keychains and similar). */
+  home?: string;
+  /** Extra folders (a coding agent's own sign-in folder). */
+  binds?: Bind[];
+  /** Node's (and Sara's) own program folder: readable even when it is under the home folder. */
+  runtime?: string;
+}
+
+/** Mach services a sandboxed command may look up on macOS (everything else is denied). */
+export const SEATBELT_MACH_SERVICES = [
+  'com.apple.system.opendirectoryd.libinfo',
+  'com.apple.system.opendirectoryd.membership',
+  'com.apple.system.DirectoryService.libinfo_v1',
+  'com.apple.system.logger',
+  'com.apple.logd',
+  'com.apple.logd.events',
+  'com.apple.system.notification_center',
+  'com.apple.SystemConfiguration.configd',
+  'com.apple.SystemConfiguration.DNSConfiguration',
+  'com.apple.mDNSResponder',
+  'com.apple.dnssd.service',
+  'com.apple.cfprefsd.daemon',
+  'com.apple.cfprefsd.agent',
+  'com.apple.diagnosticd',
+] as const;
+
+/**
+ * The macOS sandbox profile for one command. Seatbelt applies the last rule that matches, so the
+ * order is: reading allowed broadly; then Sara's data and the owner's secrets hidden; then the
+ * workspace and this run's temporary folder readable and writable again. Network only when on.
+ */
+export function seatbeltProfile(p: SeatbeltPaths, network: boolean): string {
+  const home = p.home ?? homedir();
+  // The owner's whole home folder is hidden (documents, photos, mail, keys…): her commands use the
+  // workspace as their home, so they never need it. Only the workspace, this run's temp folder and
+  // Node/Sara's own program folder (it may live in ~/Applications) are opened again below.
+  // Security review (M6): also every other user's home (/Users), mounted disks and backup drives
+  // (/Volumes, where copies of her vault key may live) and the per-user temporary folders
+  // (/var/folders: other runs' temp folders, the testing browser's profiles); this run's own temp
+  // folder is opened again below.
+  const hidden = [...(p.dataDir ? [p.dataDir] : []), home, '/Users', '/Volumes', '/var/folders'];
+  // The same folder can be reached through /private (/var, /tmp, /etc are links on macOS).
+  const both = (d: string) => [...new Set([d, realOr(d)])];
+  const sub = (d: string) => both(d).map((x) => `(subpath ${sbplString(x)})`).join(' ');
+  const writable = [p.workspace, p.tmp, ...(p.binds ?? []).filter((b) => b.rw).map((b) => b.src)];
+  const readable = [...(p.binds ?? []).filter((b) => !b.rw).map((b) => b.src), ...(p.runtime ? [p.runtime] : [])];
+  // Tools such as git look up every folder above the working folder (stat, not listing). The
+  // workspace lies inside the hidden data folder, so those folders themselves may be looked up,
+  // never listed or read (verified on macOS 27: without this git says "Invalid path").
+  const ancestors = new Set<string>();
+  for (const d of [...writable, ...readable]) {
+    for (const x of both(d)) {
+      for (let a = posix.dirname(x); a !== '/' && a !== '.'; a = posix.dirname(a)) ancestors.add(a);
+    }
+  }
+  return [
+    '(version 1)',
+    '(deny default)',
+    '(allow process-exec)',
+    '(allow process-fork)',
+    '(allow signal (target same-sandbox))',
+    '(allow sysctl-read)',
+    // Security review (M6): only the system services everyday command-line tools need (user
+    // lookups, logging, notifications, network settings, DNS, certificate checks, preferences).
+    // Not LaunchServices or Apple Events (`open -a`, `osascript` could start programs outside the
+    // sandbox), not the pasteboard, not the keychain (securityd).
+    `(allow mach-lookup ${SEATBELT_MACH_SERVICES.map((n) => `(global-name ${sbplString(n)})`).join(' ')} (global-name-regex #"^com\\.apple\\.trustd"))`,
+    '(allow ipc-posix-shm)',
+    '(allow ipc-posix-sem)',
+    '(allow user-preference-read)',
+    '(allow iokit-open)',
+    '(allow pseudo-tty)',
+    '(allow file-read*)',
+    `(deny file-read* file-write* ${hidden.map(sub).join(' ')})`,
+    `(allow file-read* file-write* ${writable.map(sub).join(' ')})`,
+    ...(readable.length ? [`(allow file-read* ${readable.map(sub).join(' ')})`] : []),
+    ...(ancestors.size ? [`(allow file-read-metadata ${[...ancestors].map((a) => `(literal ${sbplString(a)})`).join(' ')})`] : []),
+    '(allow file-write* (literal "/dev/null") (literal "/dev/zero") (literal "/dev/dtracehelper") (regex #"^/dev/tty") (regex #"^/dev/fd/") (regex #"^/dev/ttys"))',
+    '(allow file-ioctl (regex #"^/dev/"))',
+    network ? '(allow network*)' : '(allow network* (remote unix-socket (path-literal "/private/var/run/mDNSResponder")))',
+  ].join('\n');
+}
+
+/** Where commands find programs when they run outside bubblewrap. */
+export function commandPath(platform: NodeJS.Platform = process.platform, execPath = process.execPath): string {
+  // Sara's own Node first (the installers bring a private one), so node/npm/npx are current.
+  const own = dirname(execPath);
+  // Apple's /usr/bin/git, make, clang… are shims (xcrun) that write a lookup cache into the user's
+  // temporary folder, which the sandbox doesn't allow (a planted cache could redirect the owner's
+  // own tools). The real programs in the developer folder come first instead.
+  const dev = platform === 'darwin' ? developerBin() : undefined;
+  if (platform === 'darwin') return [own, '/opt/homebrew/bin', '/opt/homebrew/sbin', '/usr/local/bin', ...(dev ? [dev] : []), '/usr/bin', '/bin', '/usr/sbin', '/sbin'].join(':');
+  return `${runtimeMountArgs().length ? `${RUNTIME_MOUNT}/bin:` : ''}/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin`;
+}
+
+let devBin: string | null | undefined;
+/** The Xcode / command line tools program folder on this Mac (`xcode-select -p`/usr/bin), if any. */
+export function developerBin(): string | undefined {
+  if (devBin !== undefined) return devBin ?? undefined;
+  devBin = null;
+  if (process.platform !== 'darwin') return undefined;
+  try {
+    const r = spawnSync('/usr/bin/xcode-select', ['-p'], { timeout: 5000, encoding: 'utf8' });
+    const dir = r.status === 0 ? posix.join(String(r.stdout).trim(), 'usr', 'bin') : '';
+    if (dir.startsWith('/') && existsSync(posix.join(dir, 'git'))) devBin = dir;
+  } catch {
+    devBin = null;
+  }
+  return devBin ?? undefined;
+}
+
+/** Git for Windows' bash, when it's there (commands are written for sh); else cmd.exe. */
+export function windowsShell(env: NodeJS.ProcessEnv = process.env, exists: (p: string) => boolean = existsSync): { file: string; args: (cmd: string) => string[]; sh: boolean } {
+  const candidates = [
+    `${env.ProgramFiles ?? 'C:\\Program Files'}\\Git\\bin\\bash.exe`,
+    `${env['ProgramFiles(x86)'] ?? 'C:\\Program Files (x86)'}\\Git\\bin\\bash.exe`,
+    ...(env.LOCALAPPDATA ? [`${env.LOCALAPPDATA}\\Programs\\Git\\bin\\bash.exe`] : []),
+  ];
+  for (const c of candidates) if (exists(c)) return { file: c, args: (cmd) => ['-c', cmd], sh: true };
+  return { file: env.ComSpec ?? 'cmd.exe', args: (cmd) => ['/d', '/s', '/c', cmd], sh: false };
+}
+
+/**
+ * The environment of a command on Windows (no sandbox there). Keeps what programs need to find
+ * themselves (LOCALAPPDATA/APPDATA: Python, npm and Git look there; without them the Python install
+ * manager thinks nothing is installed and downloads a new Python into the workspace), and leaves
+ * the WindowsApps folder off the PATH: its python/python3 are store aliases, not real programs.
+ */
+export function windowsToolEnv(env: NodeJS.ProcessEnv, workspace: string, execPath = process.execPath): Record<string, string> {
+  const keep = ['SYSTEMROOT', 'SystemRoot', 'WINDIR', 'ComSpec', 'PATHEXT', 'ProgramFiles', 'ProgramFiles(x86)', 'ProgramData', 'NUMBER_OF_PROCESSORS', 'PROCESSOR_ARCHITECTURE', 'LOCALAPPDATA', 'APPDATA'];
+  const path = (env.PATH ?? env.Path ?? '')
+    .split(';')
+    .filter((p) => p && !/[\\/]Microsoft[\\/]WindowsApps[\\/]?$/i.test(p.trim()));
+  const out: Record<string, string> = { PATH: [win32.dirname(execPath), ...path].join(';'), USERPROFILE: workspace };
+  for (const k of keep) if (env[k] !== undefined) out[k] = env[k]!;
+  return out;
+}
+
+/** A short hint for the model when a program couldn't listen because the port is taken. */
+export function portInUseHint(output: string): string {
+  if (!/EADDRINUSE|address already in use|WinError 100(13|48)|Only one usage of each socket address|forbidden by its access permissions/i.test(output)) return '';
+  const port = /EADDRINUSE[^\n]*?:(\d{2,5})\b/.exec(output)?.[1] ?? /\bport\s+(\d{2,5})\b/i.exec(output)?.[1];
+  return `\n[hint: ${port ? `port ${port} is` : 'that port is'} already used by another program on this computer (or blocked). Don't ask for admin rights: start it again on another port, e.g. 5173, 8137 or 8765, and check it's free first.]`;
+}
+
+/** Where Sara's own Node runtime appears inside the sandbox (read-only). */
+export const RUNTIME_MOUNT = '/opt/sara-node';
+
+/**
+ * Sara's private Node (e.g. /opt/sara/node) mounted read-only, so shell commands and MCP servers get
+ * a current Node/npm/npx even when the system one is old. Nothing else from /opt is visible.
+ */
+export function runtimeMountArgs(execPath = process.execPath): string[] {
+  const root = dirname(dirname(execPath));
+  if (process.platform !== 'linux' || root.startsWith('/usr') || root === '/' || !existsSync(join(root, 'bin', 'npx'))) return [];
+  return ['--ro-bind', root, RUNTIME_MOUNT];
+}
+
+function systemDirArgs(): string[] {
+  const args: string[] = ['--ro-bind', '/usr', '/usr'];
+  for (const d of ['/bin', '/sbin', '/lib', '/lib64', '/lib32']) {
+    if (!existsSync(d)) continue;
+    const st = lstatSync(d);
+    if (st.isSymbolicLink()) args.push('--symlink', readlinkSync(d), d);
+    else args.push('--ro-bind', d, d);
+  }
+  // /etc is needed for DNS, TLS roots and user lookups. /opt, /home, /root, /var and /srv are
+  // deliberately not mounted: on shared servers they hold other applications' files.
+  args.push('--ro-bind', '/etc', '/etc');
+  args.push(...runtimeMountArgs());
+  return args;
+}
+
+export function bwrapArgs(workspace: string, network: boolean, binds: Bind[] = []): string[] {
+  return [
+    ...systemDirArgs(),
+    '--proc', '/proc',
+    '--dev', '/dev',
+    '--tmpfs', '/tmp',
+    '--tmpfs', '/var/lib',
+    '--bind', workspace, '/workspace',
+    '--chdir', '/workspace',
+    '--unshare-all',
+    ...(network ? ['--share-net'] : []),
+    '--die-with-parent',
+    '--new-session',
+    '--setenv', 'HOME', '/workspace',
+    ...binds.flatMap((b) => [b.rw ? '--bind' : '--ro-bind', b.src, b.dest]),
+  ];
+}
+
+/** An extra folder made visible inside the sandbox (e.g. a coding agent's own sign-in folder). */
+export interface Bind {
+  src: string;
+  dest: string;
+  rw?: boolean;
+}
+
+export interface RunResult {
+  exitCode: number | null;
+  output: string;
+  timedOut: boolean;
+  ms: number;
+}
+
+const SAFE_ENV = (home: string): NodeJS.ProcessEnv => ({
+  PATH: commandPath(),
+  HOME: home,
+  LANG: 'C.UTF-8',
+  TERM: 'dumb',
+  GIT_TERMINAL_PROMPT: '0',
+});
+
+/** Runs a shell command in the workspace. Never passes Sara's own environment (secrets) through. */
+export interface RunOptions {
+  timeoutMs: number;
+  signal: AbortSignal;
+  maxBytes?: number;
+  gitName?: string;
+  /** Output as it arrives (background jobs show progress). */
+  onOutput?: (text: string) => void;
+  /** Extra environment for this command only (never Sara's own environment). */
+  env?: Record<string, string>;
+  /** Extra folders inside the sandbox (bubblewrap); with other modes they're used in place. */
+  binds?: Bind[];
+  /** Phase 49: the started process (a preview only reaches ports this process tree listens on). */
+  onSpawn?: (pid: number) => void;
+}
+
+export function runCommand(command: string, workspace: string, sandbox: SandboxInfo, opts: RunOptions): Promise<RunResult> {
+  const maxBytes = opts.maxBytes ?? 200_000;
+  const started = Date.now();
+  try {
+    ensureGitConfig(workspace);
+  } catch {
+    // read-only or missing workspace: the command will report it
+  }
+  // No core dumps; cap single files at 4 GB (sh only: cmd.exe has no ulimit).
+  const winShell = sandbox.mode === 'none' && process.platform === 'win32' ? windowsShell() : undefined;
+  if (!winShell || winShell.sh) command = `ulimit -c 0 2>/dev/null; ulimit -f 8388608 2>/dev/null; ${command}`;
+  let file: string;
+  let args: string[];
+  let cwd: string;
+  let env: NodeJS.ProcessEnv;
+  // macOS and Windows: each run gets its own temporary folder (bubblewrap has its own /tmp; Linux
+  // without it keeps the system one, which the separate tools user can write to).
+  let runTmp: string | undefined;
+  if (sandbox.mode === 'seatbelt' || (sandbox.mode === 'none' && process.platform !== 'linux')) {
+    try {
+      runTmp = mkdtempSync(join(tmpdir(), 'sara-run-'));
+    } catch {
+      runTmp = undefined;
+    }
+  }
+  const tmpEnv = runTmp ? (process.platform === 'win32' ? { TMPDIR: runTmp, TEMP: runTmp, TMP: runTmp } : { TMPDIR: runTmp }) : {};
+  if (sandbox.mode === 'bwrap') {
+    file = 'bwrap';
+    args = [...bwrapArgs(workspace, sandbox.network, opts.binds), '/bin/sh', '-c', command];
+    cwd = workspace;
+    env = SAFE_ENV('/workspace');
+  } else if (sandbox.mode === 'user') {
+    file = '/bin/sh';
+    args = ['-c', command];
+    cwd = workspace;
+    env = SAFE_ENV(workspace);
+    prepareForToolsUser(workspace, sandbox.gid!);
+  } else if (sandbox.mode === 'seatbelt') {
+    file = SANDBOX_EXEC;
+    const ws = realOr(workspace);
+    args = ['-p', seatbeltProfile({ workspace: ws, tmp: realOr(runTmp ?? tmpdir()), runtime: realOr(dirname(dirname(process.execPath))), ...(sandbox.dataDir ? { dataDir: realOr(sandbox.dataDir) } : {}), ...(opts.binds ? { binds: opts.binds } : {}) }, sandbox.network), '/bin/sh', '-c', command];
+    cwd = ws;
+    env = SAFE_ENV(ws);
+  } else if (process.platform === 'win32') {
+    file = winShell!.file;
+    args = winShell!.args(command);
+    cwd = workspace;
+    env = { ...SAFE_ENV(workspace), ...windowsToolEnv(process.env, workspace) };
+  } else {
+    file = '/bin/sh';
+    args = ['-c', command];
+    cwd = workspace;
+    env = SAFE_ENV(workspace);
+  }
+
+  return new Promise((resolvePromise) => {
+  // Commits made in the workspace carry the companion's name (repo config still wins for user.name).
+  if (opts.gitName) env = { ...env, GIT_AUTHOR_NAME: opts.gitName, GIT_COMMITTER_NAME: opts.gitName };
+  if (opts.env) env = { ...env, ...opts.env };
+  env = { ...env, ...tmpEnv };
+    const child = spawn(file, args, { cwd, env, detached: process.platform !== 'win32', windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'], ...(sandbox.mode === 'user' ? { uid: sandbox.uid, gid: sandbox.gid } : {}) });
+    if (child.pid) opts.onSpawn?.(child.pid);
+    const chunks: Buffer[] = [];
+    let size = 0;
+    let truncated = false;
+    const take = (b: Buffer) => {
+      opts.onOutput?.(b.toString('utf8'));
+      if (size >= maxBytes) {
+        truncated = true;
+        return;
+      }
+      chunks.push(b.subarray(0, maxBytes - size));
+      size += b.length;
+    };
+    child.stdout.on('data', take);
+    child.stderr.on('data', take);
+    let timedOut = false;
+    const kill = () => {
+      try {
+        if (child.pid && process.platform !== 'win32') process.kill(-child.pid, 'SIGKILL');
+        // Windows: the whole tree (bash and whatever it started), not just the shell.
+        else if (child.pid) spawn('taskkill', ['/pid', String(child.pid), '/T', '/F'], { stdio: 'ignore', windowsHide: true }).on('error', () => child.kill('SIGKILL'));
+        else child.kill('SIGKILL');
+      } catch {
+        // already gone
+      }
+    };
+    const timer = setTimeout(() => {
+      timedOut = true;
+      kill();
+    }, opts.timeoutMs);
+    const onAbort = () => kill();
+    opts.signal.addEventListener('abort', onAbort, { once: true });
+    let done = false;
+    let graceTimer: ReturnType<typeof setTimeout> | undefined;
+    const finish = (exitCode: number | null, extra = '') => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      clearTimeout(graceTimer);
+      opts.signal.removeEventListener('abort', onAbort);
+      if (runTmp) {
+        try {
+          rmSync(runTmp, { recursive: true, force: true, maxRetries: 3 });
+        } catch {
+          // a program still holds a file in it (Windows): the system cleans its temp folder
+        }
+      }
+      let output = Buffer.concat(chunks).toString('utf8') + extra;
+      if (truncated) output += `\n[output truncated at ${maxBytes} bytes]`;
+      if (exitCode !== 0) output += portInUseHint(output);
+      resolvePromise({ exitCode, output, timedOut, ms: Date.now() - started });
+    };
+    child.on('error', (err) => finish(null, `Failed to start: ${err.message}`));
+    child.on('close', (code) => finish(code));
+    // The shell has ended, but something it started (a server left running with &, or on Windows a
+    // program taskkill missed) may still hold its output open, and 'close' would never come. Give it a
+    // moment, then stop reading and answer, so the tool never hangs.
+    child.on('exit', (code) => {
+      graceTimer = setTimeout(() => {
+        child.stdout?.destroy();
+        child.stderr?.destroy();
+        finish(code, timedOut ? '' : '\n[a program it started is still running in the background]');
+      }, 3000);
+      graceTimer.unref?.();
+    });
+  });
+}

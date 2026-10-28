@@ -1,0 +1,6 @@
+{
+  "name": "fixture-proj",
+  "type": "module",
+  "main": "src/main.ts",
+  "scripts": { "start": "node src/main.ts", "test": "node --test" }
+}

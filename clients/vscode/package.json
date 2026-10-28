@@ -1,0 +1,111 @@
+{
+  "name": "sara-vscode",
+  "displayName": "Sara",
+  "description": "Sara, your self-hosted companion and coding partner, in VS Code: the same memory and personality, with the open file and selection as context.",
+  "version": "0.52.0",
+  "publisher": "sara-local",
+  "private": true,
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "main": "./extension.js",
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": false,
+      "description": "Sara sends the open file to your own server with your sign-in, so it only runs in folders you trust."
+    },
+    "virtualWorkspaces": false
+  },
+  "activationEvents": [
+    "onView:sara.chat",
+    "onCommand:sara.signIn"
+  ],
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "sara",
+          "title": "Sara",
+          "icon": "media/sara.svg"
+        }
+      ]
+    },
+    "views": {
+      "sara": [
+        {
+          "type": "webview",
+          "id": "sara.chat",
+          "name": "Chat"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "sara.signIn",
+        "title": "Sara: Sign in"
+      },
+      {
+        "command": "sara.signOut",
+        "title": "Sara: Sign out"
+      },
+      {
+        "command": "sara.askSelection",
+        "title": "Sara: Ask about selection"
+      },
+      {
+        "command": "sara.explainFile",
+        "title": "Sara: Explain this file"
+      },
+      {
+        "command": "sara.sendToLibrary",
+        "title": "Sara: Send file to her library"
+      },
+      {
+        "command": "sara.newConversation",
+        "title": "Sara: New conversation"
+      }
+    ],
+    "menus": {
+      "editor/context": [
+        {
+          "command": "sara.askSelection",
+          "when": "editorHasSelection",
+          "group": "sara@1"
+        },
+        {
+          "command": "sara.explainFile",
+          "group": "sara@2"
+        }
+      ],
+      "explorer/context": [
+        {
+          "command": "sara.sendToLibrary",
+          "when": "!explorerResourceIsFolder",
+          "group": "sara@1"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Sara",
+      "properties": {
+        "sara.server": {
+          "type": "string",
+          "default": "",
+          "scope": "application",
+          "description": "Your Sara server's address, e.g. https://sara.example.com (set by Sara: Sign in)."
+        },
+        "sara.maxContextChars": {
+          "type": "number",
+          "default": 12000,
+          "minimum": 1000,
+          "maximum": 60000,
+          "description": "Most characters of the open file or selection sent with a question (the panel shows what was sent)."
+        }
+      }
+    }
+  }
+}

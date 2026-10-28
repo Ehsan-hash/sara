@@ -1,0 +1,80 @@
+// Server → browser push channel (GET /api/events). Used for things that happen outside a turn:
+// reminders arriving, memory written, and (later) Sara's proactive messages.
+import { EventEmitter } from 'node:events';
+
+export type HubEvent = (
+  | { type: 'message'; conversationId: string; message: { id: number; role: string; content: string; createdAt: string; meta?: Record<string, unknown> }; reason: 'reminder' | 'proactive' | 'job' | 'reply' }
+  /** A background job started, made progress or ended (Phase 13). */
+  | { type: 'job'; job: import('./jobs.ts').Job }
+  | { type: 'planner'; what: 'tasks' | 'reminders' | 'notes' }
+  | { type: 'memory'; conversationId: string }
+  /** Phase 26: she is calling (or the ring ended: answered, missed, declined, cancelled). */
+  | { type: 'ring'; ring: import('./calls.ts').Ring }
+  /** Phase 36: her look changed (closet, outfit for the scenario). */
+  | { type: 'look' }
+  /** Phase 44: a library document was added, read, learned from or removed. */
+  | { type: 'library'; id: number }
+  /** Phase 51: "Bring your history": an import or its learning made progress. */
+  | { type: 'history-import'; status: import('./history-import/index.ts').HistoryStatus }
+  /** Phase 50: a recipe was saved, changed or deleted. */
+  | { type: 'recipes' }
+  /** Phase 52: device-code sign-in requests waiting for the owner. */
+  | { type: 'device'; pending: number }
+  /** Phase 39: a team task changed (plan, a helper's progress, the end). */
+  | { type: 'team'; task: { id: number; status: string; conversationId: string; approvals?: number } }
+  /** A turn started or ended in a conversation (any device, Telegram or Discord): the other open
+   * apps refresh it, so a chat can be picked up anywhere. */
+  | { type: 'turn'; conversationId: string; state: 'started' | 'ended' }
+  /** Phase 49: a preview link opened (or closed: null) in a conversation. */
+  | { type: 'preview'; conversationId: string; preview: { url: string; port: number; workspace: string; jobId: number } | null }
+  /** Phase 53: a look back was written (or failed). */
+  | { type: 'story'; what: 'lookback'; id?: number; error?: string }
+) & {
+  /** Phase 31: which companion it came from (set by her CompanionHub). */
+  companion?: string;
+};
+
+export class EventHub {
+  readonly #em = new EventEmitter();
+
+  constructor() {
+    this.#em.setMaxListeners(100);
+  }
+
+  publish(ev: HubEvent): void {
+    this.#em.emit('event', ev);
+  }
+
+  subscribe(fn: (ev: HubEvent) => void): () => void {
+    this.#em.on('event', fn);
+    return () => this.#em.off('event', fn);
+  }
+
+  /** Every companion's events (the app's live stream); on a plain hub, the same as subscribe. */
+  subscribeAll(fn: (ev: HubEvent) => void): () => void {
+    return this.subscribe(fn);
+  }
+}
+
+/** Phase 31: a companion's view of the shared hub; what she publishes carries her id. */
+export class CompanionHub extends EventHub {
+  readonly #base: EventHub;
+  readonly #id: string;
+  constructor(base: EventHub, id: string) {
+    super();
+    this.#base = base;
+    this.#id = id;
+  }
+  override publish(ev: HubEvent): void {
+    this.#base.publish({ ...ev, companion: this.#id });
+  }
+  /** Only her own events (bridges, workers). */
+  override subscribe(fn: (ev: HubEvent) => void): () => void {
+    return this.#base.subscribe((ev) => {
+      if (!ev.companion || ev.companion === this.#id) fn(ev);
+    });
+  }
+  override subscribeAll(fn: (ev: HubEvent) => void): () => void {
+    return this.#base.subscribe(fn);
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "name": "sara-agents",
+  "private": true,
+  "description": "Official vendor CLIs Sara drives for subscription models (installed by deploy/install-agents.sh).",
+  "dependencies": {
+    "@anthropic-ai/claude-code": "2.1.310",
+    "@xai-official/grok": "1.0.70"
+  }
+}

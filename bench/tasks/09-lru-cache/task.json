@@ -1,0 +1,7 @@
+{
+  "title": "LRU cache: eviction, stats and memoize",
+  "kind": "bug",
+  "lang": "js",
+  "prompt": "This LRU cache evicts the wrong entries, its hit rate is wrong, and memoize() keeps calling the function for some results. README.md says how it must behave. Find and fix the bugs in src/lru.js, src/stats.js and src/memo.js, and make sure the tests pass (add tests for what you fix).",
+  "hidden": ["node", "--test", "__hidden__/hidden.test.js"]
+}

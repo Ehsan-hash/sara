@@ -1,0 +1,7 @@
+{
+  "title": "Slugs that follow a written spec",
+  "kind": "feature",
+  "lang": "js",
+  "prompt": "slugify() in this project only lowercases and swaps spaces for dashes. SPEC.md describes what it must really do (accents, special letters, separators, a length limit that doesn't cut words). Make slugify and uniqueSlug follow SPEC.md exactly; the work is split over src/text.js and src/slug.js. Add tests.",
+  "hidden": ["node", "--test", "__hidden__/hidden.test.js"]
+}

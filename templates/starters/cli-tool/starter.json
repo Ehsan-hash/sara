@@ -1,0 +1,7 @@
+{
+  "title": "Command-line tool",
+  "description": "A Node command-line tool with no packages: argument parsing, --help, exit codes, reading files or standard input, and tests.",
+  "language": "Node.js",
+  "test": "node --test",
+  "run": "node cli.js --help"
+}

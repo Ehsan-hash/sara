@@ -1,0 +1,118 @@
+{
+  "eval": "code map (scripts/eval-codemap.ts)",
+  "date": "2026-10-27T06:20:01.809Z",
+  "model": "qwen3.8:27b-mtp-q4_K_M",
+  "embed": "nomic-embed-text",
+  "files": 262,
+  "withoutCodeTools": {
+    "passed": 8,
+    "of": 8,
+    "toolCalls": 17,
+    "filesRead": 3,
+    "seconds": 45,
+    "questions": [
+      {
+        "ask": "Where is the owner token checked on sign-in? Name the file.",
+        "pass": true,
+        "toolCalls": 6
+      },
+      {
+        "ask": "Which file reads PDF files?",
+        "pass": true,
+        "toolCalls": 1
+      },
+      {
+        "ask": "What calls disclosureText? List the files.",
+        "pass": true,
+        "toolCalls": 1
+      },
+      {
+        "ask": "Which file decides when the AI disclosure is due again?",
+        "pass": true,
+        "toolCalls": 2
+      },
+      {
+        "ask": "Where does the code restore a workspace snapshot? Name the file.",
+        "pass": true,
+        "toolCalls": 1
+      },
+      {
+        "ask": "Which file splits library documents into passages?",
+        "pass": true,
+        "toolCalls": 1
+      },
+      {
+        "ask": "Where is the Telegram bot long polling implemented?",
+        "pass": true,
+        "toolCalls": 2
+      },
+      {
+        "ask": "Which file encrypts the secrets vault, and with what cipher?",
+        "pass": true,
+        "toolCalls": 3
+      }
+    ]
+  },
+  "withCodeTools": {
+    "passed": 8,
+    "of": 8,
+    "toolCalls": 21,
+    "filesRead": 4,
+    "seconds": 95,
+    "questions": [
+      {
+        "ask": "Where is the owner token checked on sign-in? Name the file.",
+        "pass": true,
+        "toolCalls": 4
+      },
+      {
+        "ask": "Which file reads PDF files?",
+        "pass": true,
+        "toolCalls": 2
+      },
+      {
+        "ask": "What calls disclosureText? List the files.",
+        "pass": true,
+        "toolCalls": 1
+      },
+      {
+        "ask": "Which file decides when the AI disclosure is due again?",
+        "pass": true,
+        "toolCalls": 7
+      },
+      {
+        "ask": "Where does the code restore a workspace snapshot? Name the file.",
+        "pass": true,
+        "toolCalls": 2
+      },
+      {
+        "ask": "Which file splits library documents into passages?",
+        "pass": true,
+        "toolCalls": 2
+      },
+      {
+        "ask": "Where is the Telegram bot long polling implemented?",
+        "pass": true,
+        "toolCalls": 2
+      },
+      {
+        "ask": "Which file encrypts the secrets vault, and with what cipher?",
+        "pass": true,
+        "toolCalls": 1
+      }
+    ]
+  },
+  "everyRunThatDay": [
+    {
+      "at": "2026-10-27T06:20:01.809Z",
+      "with": "8/8",
+      "without": "8/8"
+    },
+    {
+      "at": "2026-10-27T06:23:25.493Z",
+      "with": "7/8",
+      "without": null
+    }
+  ],
+  "source": "2026-10-27-codemap.json"
+}

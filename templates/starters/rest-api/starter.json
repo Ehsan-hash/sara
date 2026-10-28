@@ -1,0 +1,7 @@
+{
+  "title": "REST API",
+  "description": "A JSON REST API in plain Node: node:http + node:sqlite (built in), CRUD for items, input checks, tests with node --test.",
+  "language": "Node.js",
+  "test": "node --test",
+  "run": "node server.js"
+}

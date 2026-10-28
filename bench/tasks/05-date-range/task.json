@@ -1,0 +1,8 @@
+{
+  "title": "Dates: an off-by-one and a time-zone bug",
+  "kind": "bug",
+  "lang": "js",
+  "prompt": "Booking quotes from this project are wrong: stays come out a night or two short and weekend prices land on the wrong days, depending on the computer's time zone. Fix the bugs (they are spread over src/dates.js, src/range.js and src/booking.js) so everything follows README.md on any time zone, and make the tests pass.",
+  "hidden": ["node", "--test", "__hidden__/hidden.test.js"],
+  "env": { "TZ": "America/Chicago" }
+}

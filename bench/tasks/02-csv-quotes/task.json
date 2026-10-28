@@ -1,0 +1,7 @@
+{
+  "title": "CSV reader: quoted fields",
+  "kind": "bug",
+  "lang": "js",
+  "prompt": "This CSV reader breaks on real files: quoted fields with commas, doubled quotes and line breaks inside quotes come out wrong. README.md describes the format it must support. Fix the reader so it follows README.md, keep parseCsv and toObjects working the same way for simple files, and add tests for the cases you fix.",
+  "hidden": ["node", "--test", "__hidden__/hidden.test.js"]
+}

@@ -1,0 +1,7 @@
+{
+  "title": "Python ledger: from floats to exact money",
+  "kind": "refactor",
+  "lang": "python",
+  "prompt": "This ledger keeps money in floats, so cents get lost and interest rounds the wrong way. Switch the whole package (ledger/parse.py, ledger/book.py, ledger/fmt.py) to decimal.Decimal as README.md describes, keep the public API the same, fix the fee rule from README.md while you're there, and make sure the tests pass.",
+  "hidden": ["{python}", "__hidden__/test_hidden.py"]
+}

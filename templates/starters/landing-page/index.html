@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>__PROJECT_NAME__</title>
+  <meta name="description" content="A short sentence that says what this is and who it is for.">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <a class="skip" href="#main">Skip to the content</a>
+  <header class="site-header">
+    <a class="brand" href="#top" id="top">__PROJECT_NAME__</a>
+    <nav aria-label="Main">
+      <ul>
+        <li><a href="#features">Features</a></li>
+        <li><a href="#pricing">Pricing</a></li>
+        <li><a href="#contact">Contact</a></li>
+      </ul>
+    </nav>
+  </header>
+
+  <main id="main">
+    <section class="hero" aria-labelledby="hero-title">
+      <h1 id="hero-title">Say what you do in one clear line</h1>
+      <p class="lead">One or two sentences about the problem you solve and for whom.</p>
+      <p><a class="button" href="#contact">Get started</a></p>
+      <img src="hero.svg" alt="A simple illustration of the product" width="640" height="360">
+    </section>
+
+    <section id="features" aria-labelledby="features-title">
+      <h2 id="features-title">Features</h2>
+      <ul class="cards">
+        <li><h3>Fast</h3><p>A short benefit, in plain words.</p></li>
+        <li><h3>Simple</h3><p>Another benefit people care about.</p></li>
+        <li><h3>Yours</h3><p>A third one, if you have it.</p></li>
+      </ul>
+    </section>
+
+    <section id="pricing" aria-labelledby="pricing-title">
+      <h2 id="pricing-title">Pricing</h2>
+      <p>One plan, no surprises: <strong>$9 a month</strong>.</p>
+    </section>
+
+    <section id="contact" aria-labelledby="contact-title">
+      <h2 id="contact-title">Contact</h2>
+      <form class="contact" action="mailto:hello@example.com" method="post" enctype="text/plain">
+        <label for="name">Your name</label>
+        <input id="name" name="name" autocomplete="name" required>
+        <label for="email">Email</label>
+        <input id="email" name="email" type="email" autocomplete="email" required>
+        <label for="message">Message</label>
+        <textarea id="message" name="message" rows="4" required></textarea>
+        <button type="submit">Send</button>
+      </form>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <p>&copy; __PROJECT_NAME__</p>
+  </footer>
+</body>
+</html>

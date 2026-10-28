@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Report a security problem privately
+    url: https://github.com/farena-ai/sara/security/advisories/new
+    about: Please don't open a public issue for security problems.
+  - name: Install and setup help
+    url: https://github.com/farena-ai/sara/blob/main/docs/INSTALL.md
+    about: Install steps, Docker, reverse proxies, updates and troubleshooting.
+  - name: Extending Sara
+    url: https://github.com/farena-ai/sara/blob/main/docs/EXTENDING.md
+    about: How to add tools, bridges, characters, MCP servers, languages and starters.

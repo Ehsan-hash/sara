@@ -1,0 +1,33 @@
+{
+  "name": "sara",
+  "version": "1.0.0",
+  "private": true,
+  "license": "MIT",
+  "description": "Sara — a self-hosted AI companion and assistant for coding, creating and managing things.",
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "start": "node src/main.ts",
+    "dev": "node --watch src/main.ts",
+    "test": "node --test --test-reporter=spec \"test/**/*.test.ts\"",
+    "test:sandbox": "node --test --test-reporter=spec test/sandbox.linux.test.ts",
+    "typecheck": "tsc -p tsconfig.json",
+    "check": "npm run typecheck && npm test",
+    "eval:consistency": "node scripts/eval-consistency.ts",
+    "bench:overhead": "node scripts/bench-overhead.ts",
+    "eval:memory": "node scripts/eval-memory.ts",
+    "eval:continuity": "node scripts/eval-continuity.ts",
+    "eval:library": "node scripts/eval-library.ts",
+    "eval:codemap": "node scripts/eval-codemap.ts",
+    "bench:coding": "node scripts/bench-coding.ts",
+    "results:publish": "node scripts/publish-results.ts",
+    "docs": "node scripts/build-docs.ts",
+    "links": "node scripts/check-links.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^24.19.2",
+    "typescript": "^7.0.2"
+  }
+}

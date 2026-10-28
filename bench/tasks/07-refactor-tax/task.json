@@ -1,0 +1,7 @@
+{
+  "title": "Refactor: one home for the tax rules",
+  "kind": "refactor",
+  "lang": "js",
+  "prompt": "The tax rules are copied into both src/orders.js and src/invoice.js. Refactor: create src/tax.js that exports taxRate(region) and computeTax(amountCents, region), move the rate table there (it must exist only in src/tax.js), and make orders.js and invoice.js import and use it. Behaviour must not change at all: other tests you can't see check the exact results of orderTotal, invoiceLines and invoiceText, including errors and upper/lower-case regions. Keep every existing export.",
+  "hidden": ["node", "--test", "__hidden__/hidden.test.js"]
+}

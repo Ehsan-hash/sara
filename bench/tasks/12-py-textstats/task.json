@@ -1,0 +1,7 @@
+{
+  "title": "Python text statistics: tokenizer rules and new functions",
+  "kind": "feature",
+  "lang": "python",
+  "prompt": "README.md describes the textstats package, but tokenize() doesn't follow its rules yet and top_words() and summary() don't exist. Make tokenize follow README.md, add top_words and summary where README.md says they belong (importable from the textstats package), and add tests.",
+  "hidden": ["{python}", "__hidden__/test_hidden.py"]
+}

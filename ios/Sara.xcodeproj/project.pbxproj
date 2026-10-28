@@ -1,0 +1,503 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		8003650EE2C27FC5AFCACAE1 /* SaraWidget.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 7D9BAE797A37B5DBEF2954F4 /* SaraWidget.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		A0344D6CAB03DCFDC77C4535 /* SaraShare.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 5EC6F2B7471F40B01EC5AC10 /* SaraShare.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		02700FD6B7ECD5BA02076371 = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 48AEE7A8E682AD531B52371D;
+			proxyType = 1;
+			remoteGlobalIDString = 43DB8FC3672C38E69E105FB2;
+			remoteInfo = SaraWidget;
+		};
+		F66897DFF5275731ECAE419B = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 48AEE7A8E682AD531B52371D;
+			proxyType = 1;
+			remoteGlobalIDString = 331FB8DB8468D7E2394056D3;
+			remoteInfo = SaraShare;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		03B4494E9449096935A32340 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				8003650EE2C27FC5AFCACAE1 /* SaraWidget.appex in Embed Foundation Extensions */,
+				A0344D6CAB03DCFDC77C4535 /* SaraShare.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
+/* Begin PBXFileReference section */
+		902924CD919DDFAB9A0CD6CA /* Sara.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Sara.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		7D9BAE797A37B5DBEF2954F4 /* SaraWidget.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = SaraWidget.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		5EC6F2B7471F40B01EC5AC10 /* SaraShare.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = SaraShare.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedRootGroup section */
+		08ADE36B3C95B141EEA4604F /* Sara */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = Sara;
+			sourceTree = "<group>";
+		};
+		0248FE3BF53D8480D454D966 /* Shared */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = Shared;
+			sourceTree = "<group>";
+		};
+		7592AC2D8EA525B2576FE794 /* SaraWidget */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = SaraWidget;
+			sourceTree = "<group>";
+		};
+		7E404A835C54B4D3DCE3018B /* SaraShare */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = SaraShare;
+			sourceTree = "<group>";
+		};
+/* End PBXFileSystemSynchronizedRootGroup section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		282A85F646A97C77DC7077E8 = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		C163E4AAE880ACEE74296437 = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A7335ADDCB285A320CD7F1D9 = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		9F250364946326D1770E0224 = {
+			isa = PBXGroup;
+			children = (
+				08ADE36B3C95B141EEA4604F /* Sara */,
+				7592AC2D8EA525B2576FE794 /* SaraWidget */,
+				7E404A835C54B4D3DCE3018B /* SaraShare */,
+				0248FE3BF53D8480D454D966 /* Shared */,
+				3A4387D17DC6AA38180E9FBB /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		3A4387D17DC6AA38180E9FBB /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				902924CD919DDFAB9A0CD6CA /* Sara.app */,
+				7D9BAE797A37B5DBEF2954F4 /* SaraWidget.appex */,
+				5EC6F2B7471F40B01EC5AC10 /* SaraShare.appex */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		0B0EC51013729A5003E56CF1 /* Sara */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 4C6FA60F5A1D781756EC23BA;
+			buildPhases = (
+				821F848ECC565495BFB3DA21,
+				282A85F646A97C77DC7077E8,
+				48250ECE50C73EF5E528CDEC,
+				03B4494E9449096935A32340 /* Embed Foundation Extensions */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				7ECF9F0921C381A07415DD6C,
+				6FA3B1F67B9CA435C32782F4,
+			);
+			fileSystemSynchronizedGroups = (
+				08ADE36B3C95B141EEA4604F /* Sara */,
+				0248FE3BF53D8480D454D966 /* Shared */,
+			);
+			name = Sara;
+			productName = Sara;
+			productReference = 902924CD919DDFAB9A0CD6CA /* Sara.app */;
+			productType = "com.apple.product-type.application";
+		};
+		43DB8FC3672C38E69E105FB2 /* SaraWidget */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = BFD9C7B7261B69E757DFE286;
+			buildPhases = (
+				821BEA65354965BFF20DE089,
+				C163E4AAE880ACEE74296437,
+				345978752A5693AE9F152963,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				7592AC2D8EA525B2576FE794 /* SaraWidget */,
+				0248FE3BF53D8480D454D966 /* Shared */,
+			);
+			name = SaraWidget;
+			productName = SaraWidget;
+			productReference = 7D9BAE797A37B5DBEF2954F4 /* SaraWidget.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
+		331FB8DB8468D7E2394056D3 /* SaraShare */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = FF169077C47CB57A68C3523B;
+			buildPhases = (
+				C3C5922F048249194D9538E8,
+				A7335ADDCB285A320CD7F1D9,
+				D828592F85FDFED1CD3C46CA,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				7E404A835C54B4D3DCE3018B /* SaraShare */,
+				0248FE3BF53D8480D454D966 /* Shared */,
+			);
+			name = SaraShare;
+			productName = SaraShare;
+			productReference = 5EC6F2B7471F40B01EC5AC10 /* SaraShare.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		48AEE7A8E682AD531B52371D /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 2700;
+				LastUpgradeCheck = 2700;
+				TargetAttributes = {
+					0B0EC51013729A5003E56CF1 = {
+						CreatedOnToolsVersion = 27.0;
+					};
+					43DB8FC3672C38E69E105FB2 = {
+						CreatedOnToolsVersion = 27.0;
+					};
+					331FB8DB8468D7E2394056D3 = {
+						CreatedOnToolsVersion = 27.0;
+					};
+				};
+			};
+			buildConfigurationList = 38250E60E691DE8390A58BE3;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = 9F250364946326D1770E0224;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 3A4387D17DC6AA38180E9FBB /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				0B0EC51013729A5003E56CF1 /* Sara */,
+				43DB8FC3672C38E69E105FB2 /* SaraWidget */,
+				331FB8DB8468D7E2394056D3 /* SaraShare */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		48250ECE50C73EF5E528CDEC = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		345978752A5693AE9F152963 = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D828592F85FDFED1CD3C46CA = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		821F848ECC565495BFB3DA21 = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		821BEA65354965BFF20DE089 = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		C3C5922F048249194D9538E8 = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		7ECF9F0921C381A07415DD6C = {
+			isa = PBXTargetDependency;
+			target = 43DB8FC3672C38E69E105FB2 /* SaraWidget */;
+			targetProxy = 02700FD6B7ECD5BA02076371;
+		};
+		6FA3B1F67B9CA435C32782F4 = {
+			isa = PBXTargetDependency;
+			target = 331FB8DB8468D7E2394056D3 /* SaraShare */;
+			targetProxy = F66897DFF5275731ECAE419B;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		9D3A6728EA22F8DA4C529416 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = "$(SARA_TEAM_ID)";
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.0;
+				MARKETING_VERSION = 0.24.0;
+				CURRENT_PROJECT_VERSION = 1;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_TESTABILITY = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				ONLY_ACTIVE_ARCH = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		952249C00EA7F43FAAA1EA90 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = "$(SARA_TEAM_ID)";
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.0;
+				MARKETING_VERSION = 0.24.0;
+				CURRENT_PROJECT_VERSION = 1;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				SWIFT_COMPILATION_MODE = wholemodule;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		2DBC39092AA5D51919CD6C93 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				PRODUCT_BUNDLE_IDENTIFIER = com.backstagecoding.sara;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				INFOPLIST_FILE = "Config/Sara-Info.plist";
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = Sara;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UIStatusBarStyle = UIStatusBarStyleLightContent;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationPortrait;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "For voice notes and live calls with your companion.";
+				INFOPLIST_KEY_NSCameraUsageDescription = "To take photos to share with your companion.";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "To choose photos to share with your companion.";
+				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "To save her pictures to your photos.";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = "Config/Sara.entitlements";
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
+				ENABLE_PREVIEWS = NO;
+				INFOPLIST_KEY_NSFaceIDUsageDescription = "To unlock the app when the app lock is on.";
+			};
+			name = Debug;
+		};
+		660C9EE1888F2BB8692BC596 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				PRODUCT_BUNDLE_IDENTIFIER = com.backstagecoding.sara;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				INFOPLIST_FILE = "Config/Sara-Info.plist";
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = Sara;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UIStatusBarStyle = UIStatusBarStyleLightContent;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationPortrait;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "For voice notes and live calls with your companion.";
+				INFOPLIST_KEY_NSCameraUsageDescription = "To take photos to share with your companion.";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "To choose photos to share with your companion.";
+				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "To save her pictures to your photos.";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = "Config/Sara.entitlements";
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
+				ENABLE_PREVIEWS = NO;
+				INFOPLIST_KEY_NSFaceIDUsageDescription = "To unlock the app when the app lock is on.";
+			};
+			name = Release;
+		};
+		E79DC70940D19904842F0937 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				PRODUCT_BUNDLE_IDENTIFIER = com.backstagecoding.sara.widget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				INFOPLIST_FILE = "Config/SaraWidget-Info.plist";
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "Sara";
+				CODE_SIGN_ENTITLEMENTS = "Config/SaraWidget.entitlements";
+				SKIP_INSTALL = YES;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks";
+				ENABLE_PREVIEWS = NO;
+			};
+			name = Debug;
+		};
+		7715643CE1456AE717620E60 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				PRODUCT_BUNDLE_IDENTIFIER = com.backstagecoding.sara.widget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				INFOPLIST_FILE = "Config/SaraWidget-Info.plist";
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "Sara";
+				CODE_SIGN_ENTITLEMENTS = "Config/SaraWidget.entitlements";
+				SKIP_INSTALL = YES;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks";
+				ENABLE_PREVIEWS = NO;
+			};
+			name = Release;
+		};
+		199AFC9D207AB5CED237E5A7 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				PRODUCT_BUNDLE_IDENTIFIER = com.backstagecoding.sara.share;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				INFOPLIST_FILE = "Config/SaraShare-Info.plist";
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "Send to Sara";
+				CODE_SIGN_ENTITLEMENTS = "Config/SaraShare.entitlements";
+				SKIP_INSTALL = YES;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks";
+				ENABLE_PREVIEWS = NO;
+			};
+			name = Debug;
+		};
+		5FBB1E113696FE5EFEE52290 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				PRODUCT_BUNDLE_IDENTIFIER = com.backstagecoding.sara.share;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				INFOPLIST_FILE = "Config/SaraShare-Info.plist";
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "Send to Sara";
+				CODE_SIGN_ENTITLEMENTS = "Config/SaraShare.entitlements";
+				SKIP_INSTALL = YES;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks";
+				ENABLE_PREVIEWS = NO;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		38250E60E691DE8390A58BE3 = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				9D3A6728EA22F8DA4C529416 /* Debug */,
+				952249C00EA7F43FAAA1EA90 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		4C6FA60F5A1D781756EC23BA = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				2DBC39092AA5D51919CD6C93 /* Debug */,
+				660C9EE1888F2BB8692BC596 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		BFD9C7B7261B69E757DFE286 = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				E79DC70940D19904842F0937 /* Debug */,
+				7715643CE1456AE717620E60 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		FF169077C47CB57A68C3523B = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				199AFC9D207AB5CED237E5A7 /* Debug */,
+				5FBB1E113696FE5EFEE52290 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 48AEE7A8E682AD531B52371D /* Project object */;
+}

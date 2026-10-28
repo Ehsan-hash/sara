@@ -1,0 +1,36 @@
+# Umbrel app manifest for Sara (Phase 57). In the store repository (getumbrel/umbrel-apps) the
+# folder is sara/ with this file, docker-compose.yml and gallery images.
+manifestVersion: 1
+id: sara
+storage:
+  dataRoot: data
+category: ai
+name: Sara
+version: "0.55.5"
+tagline: A self-hosted AI companion and coding partner
+description: >-
+  Sara is a self-hosted AI companion and assistant for coding, creating and managing things: chat
+  with memory, a planner, coding tools, photos and voice, all on your Umbrel. You choose the AI
+  model (local with an Ollama app, or your own provider account); your data and keys stay on your
+  Umbrel.
+
+
+  First start: open Sara's logs (right-click the app, Troubleshoot) and copy the owner token printed
+  there. Sign in with it once and keep it in your password manager.
+releaseNotes: >-
+  See https://github.com/farena-ai/sara/blob/main/CHANGELOG.md
+developer: Frank Arena and Backstage Coding
+website: https://sara.backstagecoding.com
+dependencies: []
+repo: https://github.com/farena-ai/sara
+support: https://github.com/farena-ai/sara/issues
+port: 7860
+gallery:
+  - 1.jpg
+  - 2.jpg
+  - 3.jpg
+path: ""
+defaultUsername: ""
+defaultPassword: ""
+submitter: Backstage Coding
+submission: https://github.com/getumbrel/umbrel-apps/pull/0

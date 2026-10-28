@@ -1,0 +1,88 @@
+{
+  "eval": "library (scripts/eval-library.ts)",
+  "date": "2026-10-27",
+  "model": "qwen3.8:27b-mtp-q4_K_M",
+  "embed": "nomic-embed-text",
+  "passMark": "7/8 every run + 3 real notes from the lease",
+  "runs": [
+    {
+      "run": 1,
+      "passed": 8,
+      "of": 8,
+      "questions": [
+        {
+          "ask": "When does my lease end?",
+          "pass": true
+        },
+        {
+          "ask": "What's the late fee if I pay rent late?",
+          "pass": true
+        },
+        {
+          "ask": "Can I get a dog?",
+          "pass": true
+        },
+        {
+          "ask": "How much notice do I need to give before moving out?",
+          "pass": true
+        },
+        {
+          "ask": "Who services the boiler and what's their number?",
+          "pass": true
+        },
+        {
+          "ask": "What temperature do I bake grandma's lemon cake at?",
+          "pass": true
+        },
+        {
+          "ask": "Which parking space is mine?",
+          "pass": true
+        },
+        {
+          "ask": "Does my lease say anything about using the swimming pool?",
+          "pass": true
+        }
+      ]
+    },
+    {
+      "run": 2,
+      "passed": 8,
+      "of": 8,
+      "questions": [
+        {
+          "ask": "When does my lease end?",
+          "pass": true
+        },
+        {
+          "ask": "What's the late fee if I pay rent late?",
+          "pass": true
+        },
+        {
+          "ask": "Can I get a dog?",
+          "pass": true
+        },
+        {
+          "ask": "How much notice do I need to give before moving out?",
+          "pass": true
+        },
+        {
+          "ask": "Who services the boiler and what's their number?",
+          "pass": true
+        },
+        {
+          "ask": "What temperature do I bake grandma's lemon cake at?",
+          "pass": true
+        },
+        {
+          "ask": "Which parking space is mine?",
+          "pass": true
+        },
+        {
+          "ask": "Does my lease say anything about using the swimming pool?",
+          "pass": true
+        }
+      ]
+    }
+  ],
+  "source": "2026-10-27-library-meaning.json"
+}

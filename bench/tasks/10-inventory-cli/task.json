@@ -1,0 +1,7 @@
+{
+  "title": "Command-line tool: output formats and a filter",
+  "kind": "feature",
+  "lang": "js",
+  "prompt": "bin/inv.js is a small command-line tool that lists stock from a JSON file. README.md describes options it doesn't have yet: --format csv|json|table (also written --format=csv), --low N, and an error for an unknown format. Implement them (the code is split over bin/inv.js, src/args.js and src/format.js), try the tool yourself on the sample file, and add tests.",
+  "hidden": ["node", "--test", "__hidden__/hidden.test.js"]
+}

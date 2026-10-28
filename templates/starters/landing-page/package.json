@@ -1,0 +1,10 @@
+{
+  "name": "__PROJECT_NAME__",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "A static landing page.",
+  "scripts": {
+    "test": "node --test"
+  }
+}

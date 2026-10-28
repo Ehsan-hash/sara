@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.backstagecoding.sara</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>sara</string>
+			</array>
+		</dict>
+	</array>
+	<!-- Phase 29: place reminders (opt-in). The location stays on the iPhone. -->
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>To save a place for reminders like "when I get to the store". Your location stays on this iPhone.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>To remind you when you arrive at or leave a place you saved, even when Sara is closed. Your location stays on this iPhone: Sara only tells your server "arrived at Store".</string>
+	<!-- Live calls keep going with the screen locked (Phase 18). They are CallKit calls (no PushKit, so no voip mode). -->
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>audio</string>
+	</array>
+	<!-- Sara runs on the owner's own server, at an address they type in (often a home network
+	     address over plain http), so the app can't know the domains in advance. -->
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsArbitraryLoads</key>
+		<true/>
+	</dict>
+</dict>
+</plist>

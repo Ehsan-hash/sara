@@ -1,0 +1,21 @@
+node_modules/
+# Runtime data: conversations, settings, encrypted secrets, master key, owner token.
+data/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+# Never commit credentials of any kind.
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+.secrets/
+outputs/
+keystore.properties
+
+# Phase 33: desktop app build output and downloaded SDKs
+desktop/windows/build/
+desktop/windows/third_party/
+desktop/mac/build/

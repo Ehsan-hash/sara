@@ -1,0 +1,8 @@
+{
+  "items": [
+    { "sku": "A1", "name": "Bolt, small", "qty": 120 },
+    { "sku": "B2", "name": "Nut \"hex\"", "qty": 3 },
+    { "sku": "C3", "name": "Washer", "qty": 0 },
+    { "sku": "D4", "name": "Hinge", "qty": 14 }
+  ]
+}

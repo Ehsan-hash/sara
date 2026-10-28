@@ -1,0 +1,52 @@
+# Repository tasks benchmark
+
+Small, original coding tasks written for Sara (none are copied from other benchmarks). Each one is
+a tiny project with a request that needs reading several files, running the tests and editing more
+than one module. Run them with [`scripts/bench-tasks.ts`](../scripts/bench-tasks.ts); results and
+how to read them are in [docs/RESULTS.md](../docs/RESULTS.md).
+
+```sh
+node scripts/bench-tasks.ts --mode verify            # no model: every task fails at the start and passes on the reference
+node scripts/bench-tasks.ts --mode agent --model <m>  # through her agent loop (tools, runs tests)
+node scripts/bench-tasks.ts --mode raw --model <m>    # the same model, every file in one prompt, no tools
+node scripts/publish-results.ts                       # writes docs/results/tasks-*.json
+```
+
+## Layout
+
+```
+bench/
+  tasks/<id>/
+    task.json   title, kind (bug | feature | refactor), lang (js | python), the request, the hidden-test command
+    start/      the project she gets (copied into a fresh workspace)
+    hidden/     tests she never sees; copied in as __hidden__/ after she's done
+  solutions/<id>/   reference solution: files laid over start/ (only used by --mode verify)
+```
+
+| Task | Kind | Language | What it needs |
+|---|---|---|---|
+| 01-cart-totals | bug | JS | Three bugs in three modules, against a README's rules |
+| 02-csv-quotes | bug | JS | A CSV reader that handles quotes and line breaks |
+| 03-event-emitter | feature | JS | `once`, `off`, unsubscribe and a snapshot rule, in two modules |
+| 04-slugify-spec | feature | JS | Slugs that follow a written SPEC.md exactly |
+| 05-date-range | bug | JS | An off-by-one and a time-zone bug (hidden tests run in America/Chicago) |
+| 06-config-merge | bug | JS | Deep merge and environment variables per SPEC.md |
+| 07-refactor-tax | refactor | JS | Move duplicated rules into one module without changing behaviour |
+| 08-router-params | feature | JS | Params, wildcards and route precedence |
+| 09-lru-cache | bug | JS | Eviction order, hit rate and memoize, across three modules |
+| 10-inventory-cli | feature | JS | Output formats and a filter for a command-line tool |
+| 11-py-gradebook | bug | Python | Weighted averages, grade letters and shared places |
+| 12-py-textstats | feature | Python | Tokenizer rules and two new functions |
+| 13-py-ledger-decimal | refactor | Python | Floats to `Decimal` across a package |
+| 14-py-ini-spec | feature | Python | A settings-file reader that follows SPEC.md |
+
+## Adding a task
+
+1. Write a small project in `tasks/<nn-name>/start/` with its own tests (some may fail) and a
+   README or SPEC that states every rule the hidden tests check. A hidden test must never check
+   something the request or the docs don't say.
+2. Write `task.json` (copy one) and the hidden tests in `hidden/`.
+3. Put your reference solution in `solutions/<nn-name>/` (only the files that change).
+4. `node scripts/bench-tasks.ts --mode verify --only <nn-name>` must say `OK`.
+
+JavaScript tasks use only Node's built-in test runner; Python tasks only the standard library.

@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Approve an app</title>
+  <meta name="theme-color" content="#121016">
+  <link rel="icon" href="/icon-192.png">
+  <link rel="stylesheet" href="/style.css">
+  <script type="module" src="/device.js"></script>
+</head>
+<body>
+  <section class="screen card-screen">
+    <div class="card">
+      <h1 id="dv-title">Approve an app</h1>
+      <p class="muted" id="dv-intro">An app (the terminal client or VS Code) asked to sign in with a code.</p>
+      <form id="dv-find">
+        <label for="dv-code-in" id="dv-code-label">Type the code the app shows</label>
+        <input id="dv-code-in" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="12" placeholder="ABCD-EFGH">
+        <p class="actions-left"><button id="dv-check" type="submit">Check</button></p>
+      </form>
+      <div id="dv-what" hidden>
+        <p class="small"><strong id="dv-name" data-raw></strong> · <code id="dv-code" data-raw></code></p>
+        <p class="small muted" id="dv-where" data-raw></p>
+        <p class="small" id="dv-warn"></p>
+        <label for="dv-proof" id="dv-proof-label"></label>
+        <input id="dv-proof" type="password" autocomplete="off" spellcheck="false">
+        <p class="actions-left"><button id="dv-yes" type="button">Approve</button> <button id="dv-pk" type="button" class="ghost" hidden>Use a passkey</button> <button id="dv-no" type="button" class="ghost">Deny</button></p>
+      </div>
+      <p class="actions-left"><a id="dv-signin" class="button ghost" href="/" hidden>Sign in first</a></p>
+      <p id="dv-status" class="small" role="status"></p>
+    </div>
+  </section>
+</body>
+</html>

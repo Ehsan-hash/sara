@@ -1,0 +1,7 @@
+{
+  "title": "Landing page",
+  "description": "A static, accessible, responsive landing page (HTML + CSS, no build step) with checks for accessibility basics.",
+  "language": "HTML/CSS",
+  "test": "node --test",
+  "run": "open index.html in a browser"
+}

@@ -1,0 +1,31 @@
+{
+  "Version": "1.76.1-t1234",
+  "TUN": true,
+  "BackendState": "Running",
+  "AuthURL": "",
+  "TailscaleIPs": [
+    "100.101.102.103",
+    "fd7a:115c:a1e0::1"
+  ],
+  "Self": {
+    "ID": "n1",
+    "PublicKey": "nodekey:0000",
+    "HostName": "box",
+    "DNSName": "box.tailnet-1234.ts.net.",
+    "OS": "windows",
+    "UserID": 1,
+    "TailscaleIPs": [
+      "100.101.102.103",
+      "fd7a:115c:a1e0::1"
+    ],
+    "Online": true,
+    "Active": true
+  },
+  "MagicDNSSuffix": "tailnet-1234.ts.net",
+  "CurrentTailnet": {
+    "Name": "example-tailnet",
+    "MagicDNSSuffix": "tailnet-1234.ts.net",
+    "MagicDNSEnabled": true
+  },
+  "Peer": {}
+}

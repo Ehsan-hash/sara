@@ -1,0 +1,31 @@
+# Umbrel app compose for Sara (Phase 57). Umbrel's app_proxy serves the web UI on the port in
+# umbrel-app.yml and forwards to APP_HOST (<app id>_<service>_1). Sara signs people in herself, so
+# Umbrel's own login in front of her is off (PROXY_AUTH_ADD).
+# Umbrel pins images by digest: scripts/update-packaging.ts --image-digest sha256:… adds it.
+version: "3.7"
+
+services:
+  app_proxy:
+    environment:
+      APP_HOST: sara_server_1
+      APP_PORT: 7860
+      PROXY_AUTH_ADD: "false"
+
+  server:
+    image: ghcr.io/farena-ai/sara:0.55.5
+    restart: on-failure
+    environment:
+      # Proxy-secret mode (see proxyTrust in src/server.ts): X-Forwarded-For counts only on requests
+      # carrying X-Sara-Proxy with this per-install secret. Umbrel's app proxy can't add that header,
+      # so no address in X-Forwarded-For is ever believed: another container on the Umbrel network
+      # can't fake one to dodge the sign-in limit (attempts count for the proxy connection).
+      # X-Forwarded-Proto is still read. APP_SEED is Umbrel's per-install secret for this app.
+      SARA_TRUST_PROXY: "1"
+      SARA_PROXY_SECRET: ${APP_SEED}
+      SARA_SECURE_COOKIES: "0"
+    volumes:
+      - ${APP_DATA_DIR}/data:/data
+    cap_drop: [ALL]
+    cap_add: [SETUID, SETGID, CHOWN, FOWNER, DAC_OVERRIDE, KILL]
+    security_opt:
+      - no-new-privileges:true

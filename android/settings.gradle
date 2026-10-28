@@ -1,0 +1,9 @@
+// Sara's phone app (Android). Plain Android: no extra libraries.
+dependencyResolutionManagement {
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+rootProject.name = 'sara-android'
+include ':app'

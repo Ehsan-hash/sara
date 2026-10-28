@@ -1,0 +1,59 @@
+# CasaOS / ZimaOS app for Sara (Phase 57): standard Docker Compose plus the x-casaos store metadata
+# (https://github.com/IceWhaleTech/CasaOS-AppStore/blob/main/docs/specs/compose-and-x-casaos.md).
+# In the store repository it goes in Apps/Sara/docker-compose.yml (with an icon file next to it).
+name: sara
+services:
+  sara:
+    image: ghcr.io/farena-ai/sara:0.55.5
+    container_name: sara
+    restart: unless-stopped
+    ports:
+      - target: 7860
+        published: "7860"
+        protocol: tcp
+    environment:
+      SARA_SECURE_COOKIES: "0"
+      SARA_TRUST_PROXY: "0"
+    volumes:
+      - type: bind
+        source: /DATA/AppData/$AppID/data
+        target: /data
+    # Same hardening as Sara's own docker-compose.yml: only what her command sandbox needs.
+    cap_drop: [ALL]
+    cap_add: [SETUID, SETGID, CHOWN, FOWNER, DAC_OVERRIDE, KILL]
+    security_opt:
+      - no-new-privileges:true
+x-casaos:
+  id: com.backstagecoding.sara
+  main: sara
+  index: /
+  port_map: "7860"
+  scheme: http
+  icon: https://raw.githubusercontent.com/farena-ai/sara/main/web/icon-512.png
+  title:
+    en_US: Sara
+  tagline:
+    en_US: A self-hosted AI companion and coding partner
+  description:
+    en_US: >-
+      Sara is a self-hosted AI companion and assistant for coding, creating and managing things:
+      chat with memory, a planner, coding tools, photos and voice, on your own server. You choose
+      the AI model (local with Ollama, or your own provider account); your data and keys stay on
+      this machine.
+  tips:
+    before_install:
+      en_US: >-
+        After the first start, open the app's logs and copy the owner token printed there. Sign in
+        with it once and keep it in your password manager.
+  author: Backstage Coding
+  developer: Frank Arena and Backstage Coding
+  category: AI
+  architectures:
+    - amd64
+    - arm64
+  version: "0.55.5"
+  update_at: "2026-10-27"
+  website: https://sara.backstagecoding.com/
+  repo: https://github.com/farena-ai/sara
+  support: https://github.com/farena-ai/sara/issues
+  docs: https://github.com/farena-ai/sara/blob/main/docs/INSTALL.md

@@ -1,0 +1,7 @@
+{
+  "title": "Python gradebook: averages, letters and ranking",
+  "kind": "bug",
+  "lang": "python",
+  "prompt": "The gradebook report is wrong: weighted averages are off, missing scores crash it, some letter grades are wrong, and students with the same average get different places. README.md says how it must work. Fix the bugs in gradebook/grades.py and gradebook/report.py and make the tests pass (add tests for what you fix).",
+  "hidden": ["{python}", "__hidden__/test_hidden.py"]
+}

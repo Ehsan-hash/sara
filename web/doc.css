@@ -1,0 +1,29 @@
+/* Privacy, support and help pages (served to everyone; the app's CSP allows no inline styles). */
+body { margin: 0; background: #121016; color: #eee9f3; font: 16px/1.6 system-ui, -apple-system, "Segoe UI", sans-serif; }
+main { max-width: 760px; margin: 0 auto; padding: 40px 22px 80px; }
+h1 { font-size: 28px; margin: 0 0 4px; } h2 { font-size: 19px; margin: 30px 0 6px; }
+p, li { color: #d9d2e2; } .muted { color: #a49cae; font-size: 14px; } a { color: #f3a6bf; }
+code { background: #241f2b; padding: 1px 5px; border-radius: 5px; }
+
+/* Help page */
+.wrap { display: grid; grid-template-columns: 230px 1fr; max-width: 1080px; margin: 0 auto; gap: 34px; padding: 34px 22px 90px; }
+nav { position: sticky; top: 20px; align-self: start; font-size: 14px; }
+nav a { display: block; padding: 5px 10px; border-radius: 8px; color: #d9d2e2; text-decoration: none; }
+nav a:hover { background: #241f2b; }
+nav .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 18px; margin-bottom: 14px; color: #eee9f3; }
+nav .brand img { width: 30px; height: 30px; border-radius: 50%; }
+body.help main { max-width: none; margin: 0; padding: 0; min-width: 0; }
+body.help h1 { font-size: 30px; margin: 0 0 6px; } body.help h2 { font-size: 21px; margin: 44px 0 8px; padding-top: 6px; border-top: 1px solid #322b3a; } h3 { font-size: 16px; margin: 20px 0 4px; }
+table { border-collapse: collapse; width: 100%; font-size: 14px; margin: 10px 0; }
+th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid #322b3a; vertical-align: top; }
+th { color: #a49cae; font-weight: 600; }
+.tip { background: #1b1820; border: 1px solid #322b3a; border-radius: 12px; padding: 10px 14px; margin: 12px 0; }
+@media (max-width: 760px) { .wrap { grid-template-columns: 1fr; gap: 10px; } nav { position: static; display: flex; flex-wrap: wrap; gap: 4px; } nav .brand { width: 100%; } nav a { padding: 3px 8px; border: 1px solid #322b3a; } }
+
+/* Phase 34: the dial guide */
+.guide-dials { width: 100%; border-collapse: collapse; margin: 6px 0 14px; font-size: 14px; }
+.guide-dials th, .guide-dials td { text-align: left; vertical-align: top; padding: 6px 8px; border-bottom: 1px solid rgba(127,127,127,0.25); }
+.guide-dials th { font-size: 12px; text-transform: uppercase; letter-spacing: .05em; opacity: .7; }
+.guide-dials td:first-child { width: 22%; }
+.small { font-size: 12px; }
+@media (max-width: 640px) { .guide-dials { font-size: 13px; } .guide-dials td, .guide-dials th { padding: 5px 4px; } }

@@ -1,0 +1,1006 @@
+{
+  "benchmark": "HumanEval (openai/human-eval, MIT)",
+  "mode": "raw",
+  "model": "qwen3.8:27b-mtp-q4_K_M",
+  "started": "2026-10-27T09:46:31.865Z",
+  "finished": "2026-10-27T10:02:19.577Z",
+  "python": "Python 3.14.9",
+  "platform": "win32",
+  "tasks": 164,
+  "passed": 161,
+  "pass1": 98.2,
+  "minutes": 15.8,
+  "failed": [
+    "HumanEval/32",
+    "HumanEval/47",
+    "HumanEval/145"
+  ],
+  "stopped": [],
+  "runs": [
+    {
+      "task": "HumanEval/0",
+      "pass": true,
+      "seconds": 3,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/1",
+      "pass": true,
+      "seconds": 9,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/2",
+      "pass": true,
+      "seconds": 6,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/3",
+      "pass": true,
+      "seconds": 4,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/4",
+      "pass": true,
+      "seconds": 4,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/5",
+      "pass": true,
+      "seconds": 19,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/6",
+      "pass": true,
+      "seconds": 5,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/7",
+      "pass": true,
+      "seconds": 4,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/8",
+      "pass": true,
+      "seconds": 11,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/9",
+      "pass": true,
+      "seconds": 7,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/10",
+      "pass": true,
+      "seconds": 6,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/11",
+      "pass": true,
+      "seconds": 5,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/12",
+      "pass": true,
+      "seconds": 5,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/13",
+      "pass": true,
+      "seconds": 5,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/14",
+      "pass": true,
+      "seconds": 4,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/15",
+      "pass": true,
+      "seconds": 10,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/16",
+      "pass": true,
+      "seconds": 4,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/17",
+      "pass": true,
+      "seconds": 10,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/18",
+      "pass": true,
+      "seconds": 5,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/19",
+      "pass": true,
+      "seconds": 9,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/20",
+      "pass": true,
+      "seconds": 7,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/21",
+      "pass": true,
+      "seconds": 4,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/22",
+      "pass": true,
+      "seconds": 9,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/23",
+      "pass": true,
+      "seconds": 5,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/24",
+      "pass": true,
+      "seconds": 4,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/25",
+      "pass": true,
+      "seconds": 5,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/26",
+      "pass": true,
+      "seconds": 4,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/27",
+      "pass": true,
+      "seconds": 3,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/28",
+      "pass": true,
+      "seconds": 10,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/29",
+      "pass": true,
+      "seconds": 4,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/30",
+      "pass": true,
+      "seconds": 9,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/31",
+      "pass": true,
+      "seconds": 4,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/32",
+      "pass": false,
+      "seconds": 18,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/33",
+      "pass": true,
+      "seconds": 7,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/34",
+      "pass": true,
+      "seconds": 4,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/35",
+      "pass": true,
+      "seconds": 10,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/36",
+      "pass": true,
+      "seconds": 17,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/37",
+      "pass": true,
+      "seconds": 6,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/38",
+      "pass": true,
+      "seconds": 6,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/39",
+      "pass": true,
+      "seconds": 6,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/40",
+      "pass": true,
+      "seconds": 6,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/41",
+      "pass": true,
+      "seconds": 10,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/42",
+      "pass": true,
+      "seconds": 4,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/43",
+      "pass": true,
+      "seconds": 14,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/44",
+      "pass": true,
+      "seconds": 6,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/45",
+      "pass": true,
+      "seconds": 8,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/46",
+      "pass": true,
+      "seconds": 7,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/47",
+      "pass": false,
+      "seconds": 13,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/48",
+      "pass": true,
+      "seconds": 7,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/49",
+      "pass": true,
+      "seconds": 11,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/50",
+      "pass": true,
+      "seconds": 2,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/51",
+      "pass": true,
+      "seconds": 3,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/52",
+      "pass": true,
+      "seconds": 2,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/53",
+      "pass": true,
+      "seconds": 1,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/54",
+      "pass": true,
+      "seconds": 3,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/55",
+      "pass": true,
+      "seconds": 3,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/56",
+      "pass": true,
+      "seconds": 2,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/57",
+      "pass": true,
+      "seconds": 3,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/58",
+      "pass": true,
+      "seconds": 2,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/59",
+      "pass": true,
+      "seconds": 3,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/60",
+      "pass": true,
+      "seconds": 2,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/61",
+      "pass": true,
+      "seconds": 3,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/62",
+      "pass": true,
+      "seconds": 3,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/63",
+      "pass": true,
+      "seconds": 4,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/64",
+      "pass": true,
+      "seconds": 3,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/65",
+      "pass": true,
+      "seconds": 5,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/66",
+      "pass": true,
+      "seconds": 2,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/67",
+      "pass": true,
+      "seconds": 5,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/68",
+      "pass": true,
+      "seconds": 5,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/69",
+      "pass": true,
+      "seconds": 4,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/70",
+      "pass": true,
+      "seconds": 4,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/71",
+      "pass": true,
+      "seconds": 4,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/72",
+      "pass": true,
+      "seconds": 4,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/73",
+      "pass": true,
+      "seconds": 3,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/74",
+      "pass": true,
+      "seconds": 4,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/75",
+      "pass": true,
+      "seconds": 6,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/76",
+      "pass": true,
+      "seconds": 8,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/77",
+      "pass": true,
+      "seconds": 9,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/78",
+      "pass": true,
+      "seconds": 4,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/79",
+      "pass": true,
+      "seconds": 3,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/80",
+      "pass": true,
+      "seconds": 4,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/81",
+      "pass": true,
+      "seconds": 8,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/82",
+      "pass": true,
+      "seconds": 2,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/83",
+      "pass": true,
+      "seconds": 6,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/84",
+      "pass": true,
+      "seconds": 3,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/85",
+      "pass": true,
+      "seconds": 2,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/86",
+      "pass": true,
+      "seconds": 5,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/87",
+      "pass": true,
+      "seconds": 5,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/88",
+      "pass": true,
+      "seconds": 4,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/89",
+      "pass": true,
+      "seconds": 5,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/90",
+      "pass": true,
+      "seconds": 4,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/91",
+      "pass": true,
+      "seconds": 5,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/92",
+      "pass": true,
+      "seconds": 7,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/93",
+      "pass": true,
+      "seconds": 9,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/94",
+      "pass": true,
+      "seconds": 12,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/95",
+      "pass": true,
+      "seconds": 5,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/96",
+      "pass": true,
+      "seconds": 4,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/97",
+      "pass": true,
+      "seconds": 4,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/98",
+      "pass": true,
+      "seconds": 3,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/99",
+      "pass": true,
+      "seconds": 7,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/100",
+      "pass": true,
+      "seconds": 3,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/101",
+      "pass": true,
+      "seconds": 4,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/102",
+      "pass": true,
+      "seconds": 9,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/103",
+      "pass": true,
+      "seconds": 4,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/104",
+      "pass": true,
+      "seconds": 4,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/105",
+      "pass": true,
+      "seconds": 5,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/106",
+      "pass": true,
+      "seconds": 4,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/107",
+      "pass": true,
+      "seconds": 5,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/108",
+      "pass": true,
+      "seconds": 6,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/109",
+      "pass": true,
+      "seconds": 7,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/110",
+      "pass": true,
+      "seconds": 3,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/111",
+      "pass": true,
+      "seconds": 4,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/112",
+      "pass": true,
+      "seconds": 3,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/113",
+      "pass": true,
+      "seconds": 5,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/114",
+      "pass": true,
+      "seconds": 4,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/115",
+      "pass": true,
+      "seconds": 6,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/116",
+      "pass": true,
+      "seconds": 8,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/117",
+      "pass": true,
+      "seconds": 5,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/118",
+      "pass": true,
+      "seconds": 8,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/119",
+      "pass": true,
+      "seconds": 4,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/120",
+      "pass": true,
+      "seconds": 4,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/121",
+      "pass": true,
+      "seconds": 3,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/122",
+      "pass": true,
+      "seconds": 4,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/123",
+      "pass": true,
+      "seconds": 4,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/124",
+      "pass": true,
+      "seconds": 12,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/125",
+      "pass": true,
+      "seconds": 5,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/126",
+      "pass": true,
+      "seconds": 7,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/127",
+      "pass": true,
+      "seconds": 6,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/128",
+      "pass": true,
+      "seconds": 3,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/129",
+      "pass": true,
+      "seconds": 10,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/130",
+      "pass": true,
+      "seconds": 12,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/131",
+      "pass": true,
+      "seconds": 3,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/132",
+      "pass": true,
+      "seconds": 23,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/133",
+      "pass": true,
+      "seconds": 4,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/134",
+      "pass": true,
+      "seconds": 6,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/135",
+      "pass": true,
+      "seconds": 3,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/136",
+      "pass": true,
+      "seconds": 3,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/137",
+      "pass": true,
+      "seconds": 4,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/138",
+      "pass": true,
+      "seconds": 4,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/139",
+      "pass": true,
+      "seconds": 4,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/140",
+      "pass": true,
+      "seconds": 5,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/141",
+      "pass": true,
+      "seconds": 6,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/142",
+      "pass": true,
+      "seconds": 6,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/143",
+      "pass": true,
+      "seconds": 6,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/144",
+      "pass": true,
+      "seconds": 4,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/145",
+      "pass": false,
+      "seconds": 32,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/146",
+      "pass": true,
+      "seconds": 4,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/147",
+      "pass": true,
+      "seconds": 16,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/148",
+      "pass": true,
+      "seconds": 4,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/149",
+      "pass": true,
+      "seconds": 3,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/150",
+      "pass": true,
+      "seconds": 3,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/151",
+      "pass": true,
+      "seconds": 10,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/152",
+      "pass": true,
+      "seconds": 3,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/153",
+      "pass": true,
+      "seconds": 5,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/154",
+      "pass": true,
+      "seconds": 7,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/155",
+      "pass": true,
+      "seconds": 3,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/156",
+      "pass": true,
+      "seconds": 4,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/157",
+      "pass": true,
+      "seconds": 3,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/158",
+      "pass": true,
+      "seconds": 5,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/159",
+      "pass": true,
+      "seconds": 4,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/160",
+      "pass": true,
+      "seconds": 3,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/161",
+      "pass": true,
+      "seconds": 3,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/162",
+      "pass": true,
+      "seconds": 2,
+      "toolCalls": 0
+    },
+    {
+      "task": "HumanEval/163",
+      "pass": true,
+      "seconds": 4,
+      "toolCalls": 0
+    }
+  ],
+  "source": "2026-10-27-coding-raw.json"
+}

@@ -1,0 +1,31 @@
+<?xml version="1.0"?>
+<!-- Unraid Community Applications template for Sara (Phase 57). Lives in a templates repository
+     (see README.md); TemplateURL points at this file once the sara repository is public. -->
+<Container version="2">
+  <Name>Sara</Name>
+  <Repository>ghcr.io/farena-ai/sara:latest</Repository>
+  <Registry>https://github.com/farena-ai/sara/pkgs/container/sara</Registry>
+  <Network>bridge</Network>
+  <MyIP/>
+  <Shell>bash</Shell>
+  <Privileged>false</Privileged>
+  <Support>https://github.com/farena-ai/sara/issues</Support>
+  <Project>https://sara.backstagecoding.com/</Project>
+  <ReadMe>https://github.com/farena-ai/sara/blob/main/docs/INSTALL.md</ReadMe>
+  <Overview>Sara is a self-hosted AI companion and coding partner: chat, memory, a planner, coding tools, photos and voice, all on your own server. You choose the AI model (local with Ollama, or your own provider account); your data and keys stay in her data folder.&#xD;
+&#xD;
+First start: open the container's log (the log icon) and copy the owner token printed there; sign in with it once and keep it in your password manager. Reset it with: docker exec Sara node src/main.ts --reset-token (then restart the container).&#xD;
+&#xD;
+Plain HTTP is fine on your home network; for access from outside, put an HTTPS reverse proxy in front and set Secure cookies and Trust proxy to 1.</Overview>
+  <Category>Productivity: Tools:Utilities</Category>
+  <WebUI>http://[IP]:[PORT:7860]/</WebUI>
+  <TemplateURL>https://raw.githubusercontent.com/farena-ai/sara/main/packaging/unraid/sara.xml</TemplateURL>
+  <Icon>https://raw.githubusercontent.com/farena-ai/sara/main/web/icon-512.png</Icon>
+  <ExtraParams>--cap-drop=ALL --cap-add=SETUID --cap-add=SETGID --cap-add=CHOWN --cap-add=FOWNER --cap-add=DAC_OVERRIDE --cap-add=KILL --security-opt=no-new-privileges:true --log-opt max-size=10m --log-opt max-file=3</ExtraParams>
+  <License>MIT</License>
+  <Requires>An AI model: Ollama (another container or machine) or an account with an AI provider. About 300 MB of memory for Sara herself.</Requires>
+  <Config Name="Web UI port" Target="7860" Default="7860" Mode="tcp" Description="Sara's web address port." Type="Port" Display="always" Required="true" Mask="false">7860</Config>
+  <Config Name="Data" Target="/data" Default="/mnt/user/appdata/sara" Mode="rw" Description="Her data: database, memories, keys (encrypted), photos and backups. Back it up." Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/sara</Config>
+  <Config Name="Secure cookies" Target="SARA_SECURE_COOKIES" Default="0" Mode="" Description="1 when you reach her through HTTPS (a reverse proxy)." Type="Variable" Display="advanced" Required="false" Mask="false">0</Config>
+  <Config Name="Trust proxy" Target="SARA_TRUST_PROXY" Default="0" Mode="" Description="1 when a reverse proxy in front of her sets X-Forwarded-For." Type="Variable" Display="advanced" Required="false" Mask="false">0</Config>
+</Container>

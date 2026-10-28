@@ -1,0 +1,354 @@
+#!/usr/bin/env bash
+# Sara admin command (installed to /usr/local/bin/sara by deploy/install.sh).
+#
+#   (every command except help and version needs root: sudo sara …)
+#   sara status              is Sara running, data size, last backup
+#   sara doctor              deeper checks: database, every model provider, backups, off-server copy
+#   sara update              back up, pull the latest code, reinstall, restart, check health
+#                            (goes back to the previous version by itself if the check fails)
+#   sara check-updates       is a newer version available? (what changed)
+#   sara backup [file]       back up now (default: /var/lib/sara/backups/…)
+#   sara backups             list backups
+#   sara restore <file>      stop Sara, restore a backup (current data is kept aside), start Sara
+#                            (.enc off-server copies: asks for the backup passphrase)
+#   sara logs [-f]           service log
+#   sara reset-token         print a new owner token (signs out every browser)
+#   sara access              how you reach her now (and her address)
+#   sara access <how>        change it: tailscale | local | domain | lan
+#                            (domain: --domain sara.example.com [--email you@example.com];
+#                            also --port N, --yes to ask nothing), then restarts her
+#   sara uninstall           remove Sara from this server; your data is kept unless you add
+#                            --delete-data (a last backup is made first either way)
+#   sara version
+set -euo pipefail
+
+APP_DIR=/opt/sara
+# "0.10.0 (abc1234)": the version from package.json and the git revision when known.
+app_version() {
+  local v r
+  v="$(sed -n 's/.*"version": *"\([^"]*\)".*/\1/p' "$APP_DIR/package.json" 2>/dev/null | head -1)"
+  r="$(cat "$APP_DIR/REVISION" 2>/dev/null || true)"
+  echo "${v:-?}${r:+ ($r)}"
+}
+DATA_DIR=/var/lib/sara
+ENV_FILE=/etc/sara/sara.env
+SRC_FILE=/etc/sara/source-dir
+
+log() { printf '\033[1;35m[sara]\033[0m %s\n' "$*"; }
+die() { printf '\033[1;31m[sara]\033[0m %s\n' "$*" >&2; exit 1; }
+
+NODE_BIN="$(sed -n 's#^ExecStart=\([^ ]*\) .*#\1#p' /etc/systemd/system/sara.service 2>/dev/null | head -1 || true)"
+[[ -x "${NODE_BIN:-}" ]] || NODE_BIN="$APP_DIR/node/bin/node"
+# A value from sara.env without surrounding quotes (systemd's EnvironmentFile strips them too).
+unquote() { local v="$1"; v="${v%\"}"; v="${v#\"}"; v="${v%\'}"; v="${v#\'}"; printf '%s' "$v"; }
+env_get() { unquote "$(grep -E "^$1=" "$ENV_FILE" 2>/dev/null | tail -1 | cut -d= -f2- || true)"; }
+PORT="$(env_get SARA_PORT)"
+PORT="${PORT:-7860}"
+# Health checks go to the address Sara listens on (loopback when she listens on every address).
+HOST="$(env_get SARA_HOST)"
+case "$HOST" in ''|0.0.0.0|::|'[::]') HOST=127.0.0.1 ;; esac
+if [[ "$HOST" == *:* && "$HOST" != \[* ]]; then HOST="[$HOST]"; fi
+HEALTH="http://${HOST}:${PORT}/api/health"
+
+as_sara() {
+  [[ -x "$NODE_BIN" ]] || die "Can't find Sara's Node.js. Re-run deploy/install.sh."
+  local envs=(SARA_DATA="$DATA_DIR" HOME=/tmp)
+  [[ -f "$ENV_FILE" ]] && while IFS= read -r line; do
+    [[ "$line" =~ ^SARA_[A-Z0-9_]+= ]] && envs+=("${line%%=*}=$(unquote "${line#*=}")")
+  done <"$ENV_FILE"
+  runuser -u sara -- env "${envs[@]}" "$NODE_BIN" --disable-warning=ExperimentalWarning "$APP_DIR/src/main.ts" "$@"
+}
+
+need_root() { [[ $EUID -eq 0 ]] || die "Run as root: sudo sara $*"; }
+
+# Phase 46b: how she's reached (shared with the installers).
+load_access() {
+  local lib=""
+  for f in "$APP_DIR/lib-access.sh" "$(cat "$SRC_FILE" 2>/dev/null || true)/deploy/lib-access.sh"; do
+    if [[ -f "$f" ]]; then lib="$f"; break; fi
+  done
+  [[ -n "$lib" ]] || die "Can't find lib-access.sh. Re-run the installer (sudo /opt/sara-src/deploy/install.sh)."
+  # shellcheck source=deploy/lib-access.sh
+  . "$lib"
+}
+access_cmd() {
+  local mode="" yes=0 port=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --domain) SARA_DOMAIN="${2:-}"; shift 2 ;;
+      --domain=*) SARA_DOMAIN="${1#*=}"; shift ;;
+      --email) SARA_EMAIL="${2:-}"; shift 2 ;;
+      --email=*) SARA_EMAIL="${1#*=}"; shift ;;
+      --port) port="${2:-}"; shift 2 ;;
+      --port=*) port="${1#*=}"; shift ;;
+      --yes|-y) yes=1; shift ;;
+      -*) die "Unknown option: $1 (sara access [tailscale|local|domain|lan] [--domain D] [--email E] [--port N] [--yes])" ;;
+      *) [[ -z "$mode" ]] || die "Only one way at a time (tailscale, local, domain or lan)."; mode="$1"; shift ;;
+    esac
+  done
+  [[ -f "$ENV_FILE" ]] || die "Sara isn't installed here ($ENV_FILE is missing)."
+  load_access
+  if [[ -z "$mode" ]]; then
+    sa_show
+    return 0
+  fi
+  mode="${mode,,}"
+  case "$mode" in this-computer|localhost) mode=local ;; home|home-network|network) mode=lan ;; web|own-domain) mode=domain ;; esac
+  sa_valid_mode "$mode" || die "Unknown way to reach her: '$mode'. Choose one of: tailscale, local, domain, lan."
+  SA_INTERACTIVE=0
+  if [[ $yes -eq 0 ]] && (exec </dev/tty) 2>/dev/null; then SA_INTERACTIVE=1; fi
+  port="${port:-$PORT}"
+  sa_valid_port "$port" || die "The port must be a number from 1024 to 65535."
+  if [[ "$port" != "$PORT" ]] && sa_port_busy "$port"; then die "Something else is already using port $port. Pick another (--port N)."; fi
+  if [[ "$mode" == domain && -z "${SARA_DOMAIN:-}" && "$(sa_env_get SARA_ACCESS)" == domain ]]; then
+    SARA_DOMAIN="$(sa_env_get SARA_PUBLIC_URL)"; SARA_DOMAIN="${SARA_DOMAIN#https://}"
+  fi
+  [[ "$mode" == lan ]] && warn "Home network means plain HTTP: anyone on that network can see your sign-in. Use it only on a network you trust."
+  sa_check "$mode" "$port" || die "Nothing was changed; she's still reached as before ($(sa_mode_label "$(sa_current_mode)"))."
+  sa_prepare "$mode"
+  sa_apply "$mode" "$port"
+  log "Restarting Sara..."
+  systemctl restart sara
+  PORT="$(env_get SARA_PORT)"; PORT="${PORT:-7860}"
+  HOST="$(env_get SARA_HOST)"
+  case "$HOST" in ''|0.0.0.0|::|'[::]') HOST=127.0.0.1 ;; esac
+  if [[ "$HOST" == *:* && "$HOST" != \[* ]]; then HOST="[$HOST]"; fi
+  HEALTH="http://${HOST}:${PORT}/api/health"
+  healthy || die "Sara didn't come back after the change. Check: sudo sara logs"
+  log "Done: $(sa_mode_label "$mode")."
+  sa_print_next
+}
+
+status() {
+  # The status endpoint needs the owner session, so read it locally through the CLI instead.
+  if curl -fsS "$HEALTH" >/dev/null 2>&1; then
+    log "Sara $(app_version) is running on ${HOST}:${PORT} (since $(systemctl show sara -p ActiveEnterTimestamp --value))"
+  else
+    log "Sara is NOT answering on port ${PORT}. Last log lines:"
+    journalctl -u sara -n 15 --no-pager || true
+    return 1
+  fi
+  log "Data: $(du -sh "$DATA_DIR" 2>/dev/null | cut -f1) in $DATA_DIR; disk free: $(df -h --output=avail "$DATA_DIR" | tail -1 | tr -d ' ')"
+  local last
+  last="$(ls -1t "$DATA_DIR/backups"/sara-*.tar.gz 2>/dev/null | head -1 || true)"
+  if [[ -n "$last" ]]; then log "Last backup: $(basename "$last") ($(du -h "$last" | cut -f1))"; else log "No backups yet."; fi
+  log "Full checks: Settings → Data & health → Health in the app, or: sudo sara doctor"
+}
+
+# Phase 23: update status for Settings → Updates (readable by Sara, written by root).
+# The status lives in a folder only root can write (sara may read it): root never writes into
+# sara's own data folder, where she could plant symlinks.
+STATUS_DIR=/var/lib/sara-updater
+STATUS_FILE="$STATUS_DIR/update-status.json"
+json_str() { printf '%s' "$1" | tr -d '\000-\011\013-\037' | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e ':a;N;$!ba;s/\n/\\n/g'; }
+write_status() {
+  # state, message, [extra json fields]
+  install -d -o root -g sara -m 750 "$STATUS_DIR"
+  local tmp
+  tmp="$(mktemp "$STATUS_DIR/.status.XXXXXX")"
+  printf '{"state":"%s","message":"%s","at":"%s","version":"%s"%s}\n' "$1" "$(json_str "$2")" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$(json_str "$(app_version)")" "${3:-}" > "$tmp"
+  chgrp sara "$tmp" && chmod 640 "$tmp"
+  mv -f "$tmp" "$STATUS_FILE"
+}
+# A temporary folder only root can write to, that the sara user can still reach a file in.
+root_tmpdir() { local d; d="$(mktemp -d /var/tmp/sara-root.XXXXXX)"; chmod 711 "$d"; echo "$d"; }
+src_dir() {
+  local d
+  d="$(cat "$SRC_FILE" 2>/dev/null || true)"
+  [[ -d "$d/.git" ]] || { write_status failed "This server wasn't installed from a git checkout, so it can't update itself. See docs/INSTALL.md."; die "No source checkout recorded in $SRC_FILE. Run deploy/install.sh from a git checkout once."; }
+  echo "$d"
+}
+healthy() {
+  for _ in $(seq 1 40); do
+    curl -fsS "$HEALTH" >/dev/null 2>&1 && return 0
+    sleep 0.5
+  done
+  return 1
+}
+check_updates() {
+  local SRC_DIR behind changes
+  SRC_DIR="$(src_dir)"
+  write_status checking "Checking for updates…"
+  local err
+  err="$(mktemp)"
+  if ! git -C "$SRC_DIR" fetch -q 2>"$err"; then
+    write_status failed "Couldn't reach the update server: $(head -c 300 "$err")"
+    rm -f "$err"
+    die "git fetch failed"
+  fi
+  rm -f "$err"
+  behind="$(git -C "$SRC_DIR" rev-list --count 'HEAD..@{u}' 2>/dev/null || echo 0)"
+  if [[ "$behind" -gt 0 ]]; then
+    latest="$(git -C "$SRC_DIR" show '@{u}:package.json' 2>/dev/null | sed -n 's/.*"version": *"\([^"]*\)".*/\1/p' | head -1)"
+    changes="$(git -C "$SRC_DIR" log --no-merges --format='%s' -n 12 'HEAD..@{u}')"
+    current="$(sed -n 's/.*"version": *"\([^"]*\)".*/\1/p' "$APP_DIR/package.json" | head -1)"
+    if [[ -n "$latest" && "$latest" != "$current" ]]; then msg="Sara $latest is available."; else msg="An update is available ($behind change$([[ $behind -eq 1 ]] || echo s))."; fi
+    write_status available "$msg" ",\"latest\":\"$(json_str "${latest:-}")\",\"behind\":$behind,\"changes\":\"$(json_str "$changes")\""
+    log "Update available: ${latest:-newer} ($behind changes)."
+  else
+    write_status current "Sara is up to date."
+    log "Up to date."
+  fi
+}
+do_update() {
+  local SRC_DIR before after
+  SRC_DIR="$(src_dir)"
+  write_status updating "Backing up first…"
+  log "Backing up first..."
+  if ! as_sara --backup; then write_status failed "The backup failed, so nothing was changed."; die "Backup failed; not updating."; fi
+  before="$(git -C "$SRC_DIR" rev-parse HEAD)"
+  write_status updating "Getting the new version…"
+  log "Pulling the latest code in $SRC_DIR..."
+  if ! git -C "$SRC_DIR" pull --ff-only -q; then write_status failed "Couldn't download the update; nothing was changed."; die "git pull failed"; fi
+  after="$(git -C "$SRC_DIR" rev-parse HEAD)"
+  if [[ "$before" == "$after" && "${1:-}" != "--force" ]]; then
+    write_status current "Sara is up to date."
+    log "Already up to date (${after:0:7})."
+    return 0
+  fi
+  write_status updating "Installing and restarting (about a minute)…"
+  if "$SRC_DIR/deploy/install.sh" && healthy; then
+    # The demo server (if installed) runs the same code.
+    if systemctl list-unit-files sara-demo.service >/dev/null 2>&1 && systemctl is-enabled sara-demo >/dev/null 2>&1; then
+      systemctl restart sara-demo && log "Restarted the demo server too."
+    fi
+    write_status updated "Updated to Sara $(app_version)." ",\"from\":\"${before:0:7}\",\"to\":\"${after:0:7}\""
+    log "Updated ${before:0:7} → ${after:0:7}."
+  else
+    log "The new version didn't start properly. Going back to ${before:0:7}..."
+    git -C "$SRC_DIR" reset -q --hard "$before"
+    "$SRC_DIR/deploy/install.sh" || true
+    if healthy; then
+      write_status rolledback "The update didn't start properly, so Sara went back to the version she had. Nothing was lost." ",\"from\":\"${before:0:7}\",\"tried\":\"${after:0:7}\""
+      die "Update failed; rolled back to ${before:0:7}."
+    fi
+    write_status failed "The update failed and going back didn't start either. On the server run: sudo sara status (and sudo sara restore <latest backup> if needed)."
+    die "Update failed and the rollback didn't start. Check: journalctl -u sara -n 50"
+  fi
+}
+
+case "${1:-help}" in
+  # status and logs read root-only places (the journal, Sara's data folder); doctor runs as sara.
+  status) need_root status; status ;;
+  doctor) need_root doctor; as_sara --doctor ;;
+  version) echo "Sara $(app_version)" ;;
+  backup)
+    need_root backup
+    if [[ -n "${2:-}" ]]; then
+      out="$(realpath -m "$2")"
+      # Sara writes into a file root made, in a folder only root can change (no symlink swaps).
+      d="$(root_tmpdir)"
+      tmp="$d/backup.tar.gz"
+      install -o sara -g sara -m 600 /dev/null "$tmp"
+      as_sara --backup "$tmp"
+      chown root:root "$tmp" && mv -f "$tmp" "$out" && chmod 600 "$out"
+      rmdir "$d"
+      log "Backup written: $out (contains your keys: keep it private)"
+    else
+      as_sara --backup
+    fi
+    ;;
+  backups) ls -lh "$DATA_DIR/backups" 2>/dev/null || log "No backups yet." ;;
+  restore)
+    need_root restore
+    [[ -n "${2:-}" && -f "$2" ]] || die "Usage: sudo sara restore <backup.tar.gz>"
+    file="$(realpath "$2")"
+    log "Stopping Sara..."
+    systemctl stop sara
+    d="$(root_tmpdir)"
+    tmp="$d/restore.tar.gz"
+    install -o sara -g sara -m 600 "$file" "$tmp"
+    if [[ "$(head -c 8 "$file")" == "SARAENC1" ]]; then
+      # Encrypted off-server copy. Passed through the environment (not the command line, which
+      # other users can see).
+      read -rsp "Backup passphrase: " SARA_BACKUP_PASSPHRASE; echo
+      export SARA_BACKUP_PASSPHRASE
+    fi
+    if as_sara --restore "$tmp"; then rc=0; else rc=$?; fi
+    unset SARA_BACKUP_PASSPHRASE
+    rm -rf -- "$d"
+    systemctl start sara
+    [[ $rc -eq 0 ]] || die "Restore failed; Sara was started again with the data she had."
+    sleep 2
+    status
+    ;;
+  update) need_root update; do_update "${2:-}" ;;
+  check-updates) need_root check-updates; check_updates ;;
+  # Started by sara-updater.path when Settings → Updates asks (the request file holds one word).
+  web-request)
+    need_root web-request
+    rf="$DATA_DIR/update-request"
+    req=""
+    # Only a plain file sara wrote: never follow a symlink she might have planted.
+    if [[ -f "$rf" && ! -L "$rf" ]]; then req="$(head -c 16 -- "$rf" 2>/dev/null | tr -cd 'a-z' || true)"; fi
+    rm -f -- "$rf"
+    case "$req" in
+      check) check_updates ;;
+      update) do_update ;;
+      *) log "Ignored an unknown request: '$req'" ;;
+    esac
+    ;;
+  logs) need_root logs; shift; journalctl -u sara --no-pager -n 200 "$@" ;;
+  access) need_root access; shift; access_cmd "$@" ;;
+  reset-token)
+    need_root reset-token
+    as_sara --reset-token
+    systemctl restart sara
+    ;;
+  uninstall)
+    need_root uninstall
+    shift
+    delete_data=0
+    yes=0
+    for a in "$@"; do
+      case "$a" in
+        --delete-data) delete_data=1 ;;
+        --yes|-y) yes=1 ;;
+        *) die "Unknown option: $a (sara uninstall [--delete-data] [--yes])" ;;
+      esac
+    done
+    if [[ $delete_data -eq 1 ]]; then
+      log "This removes Sara AND all her data: conversations, memories, documents, keys."
+    else
+      log "This removes Sara from this server. Your data stays in $DATA_DIR (and /etc/sara)."
+    fi
+    if [[ $yes -ne 1 ]]; then
+      read -rp "Type 'remove' to go ahead: " answer
+      [[ "$answer" == "remove" ]] || die "Nothing was changed."
+    fi
+    last=""
+    if [[ -d "$DATA_DIR" ]] && systemctl is-active --quiet sara; then
+      # A last backup, outside the data folder when the data goes too.
+      if [[ $delete_data -eq 1 ]]; then
+        last="/root/sara-final-backup-$(date +%Y%m%d-%H%M%S).tar.gz"
+        d="$(root_tmpdir)"
+        install -o sara -g sara -m 600 /dev/null "$d/b.tar.gz"
+        if as_sara --backup "$d/b.tar.gz"; then chown root:root "$d/b.tar.gz" && mv -f "$d/b.tar.gz" "$last" && chmod 600 "$last"; else last=""; log "The last backup failed; going on."; fi
+        rm -rf -- "$d"
+      else
+        as_sara --backup >/dev/null && last="$DATA_DIR/backups" || log "The last backup failed; going on."
+      fi
+    fi
+    # Take her out of Tailscale serve / the Caddyfile (Tailscale and Caddy themselves stay).
+    if [[ -f "$ENV_FILE" ]] && (load_access) >/dev/null 2>&1; then load_access; sa_unconfigure "$(sa_current_mode)" || true; fi
+    for unit in sara-updater.path sara-updater.service sara-demo.service sara.service; do
+      systemctl disable --now "$unit" >/dev/null 2>&1 || true
+      rm -f "/etc/systemd/system/$unit"
+    done
+    systemctl daemon-reload
+    rm -rf -- "$APP_DIR" /opt/sara-agents /opt/sara-voice /var/lib/sara-updater /var/lib/sara-demo
+    if id sara-demo >/dev/null 2>&1; then userdel sara-demo 2>/dev/null || true; fi
+    rm -f /etc/sara/source-dir /etc/sara/sara-demo.env
+    if [[ $delete_data -eq 1 ]]; then
+      rm -rf -- "$DATA_DIR" /etc/sara
+      if id sara >/dev/null 2>&1; then userdel sara 2>/dev/null || log "Couldn't remove the 'sara' user (remove it with: userdel sara)."; fi
+      log "Sara and her data are removed.${last:+ A last backup is in $last (it contains your keys: keep it private or delete it).}"
+    else
+      log "Sara is removed. Your data is still in $DATA_DIR${last:+ (with a fresh backup in $last)}."
+      log "Installing again later picks it up. To delete it too: sudo rm -rf $DATA_DIR /etc/sara && sudo userdel sara"
+    fi
+    rm -f /usr/local/bin/sara
+    ;;
+  help|-h|--help) sed -n '2,/^set -euo/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//' ;;
+  *) die "Unknown command: $1 (try: sara help)" ;;
+esac

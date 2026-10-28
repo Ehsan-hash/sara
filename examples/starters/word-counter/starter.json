@@ -1,0 +1,7 @@
+{
+  "title": "Word counter",
+  "description": "A tiny example starter: count words, lines and characters in text, with tests.",
+  "language": "Node.js",
+  "test": "node --test",
+  "run": "node cli.js README.md"
+}

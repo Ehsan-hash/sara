@@ -1,0 +1,7 @@
+{
+  "title": "Cart totals: bugs spread over three modules",
+  "kind": "bug",
+  "lang": "js",
+  "prompt": "The cart totals in this small project are wrong and the test suite fails. Read README.md for how totals must be worked out, find every bug (they are in more than one file), fix them, and make sure the tests pass.",
+  "hidden": ["node", "--test", "__hidden__/hidden.test.js"]
+}

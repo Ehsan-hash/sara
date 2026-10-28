@@ -1,0 +1,7 @@
+[Unit]
+Description=Sara: check for or install an update (requested from Settings → Updates)
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/sara web-request
+TimeoutStartSec=15min

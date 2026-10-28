@@ -1,0 +1,7 @@
+{
+  "title": "Python settings-file reader that follows a spec",
+  "kind": "feature",
+  "lang": "python",
+  "prompt": "The settings-file reader in inifile/ handles only the simplest files. SPEC.md describes the full format (both separators, comments, inline comments, continuation lines, case rules, errors) and the get/get_bool/get_int helpers. Make inifile/parser.py and inifile/access.py follow SPEC.md exactly, and add tests.",
+  "hidden": ["{python}", "__hidden__/test_hidden.py"]
+}

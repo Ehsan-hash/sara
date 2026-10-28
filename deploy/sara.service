@@ -1,0 +1,46 @@
+# Template: deploy/install.sh replaces @NODE@ with the Node.js 24+ binary path.
+[Unit]
+Description=Sara AI companion
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+# Files she creates are hers alone (database, uploads, library, backups).
+UMask=0077
+Type=simple
+User=sara
+Group=sara
+WorkingDirectory=/opt/sara
+Environment=NODE_ENV=production
+Environment=SARA_DATA=/var/lib/sara
+Environment=SARA_HOST=127.0.0.1
+Environment=SARA_PORT=7860
+EnvironmentFile=-/etc/sara/sara.env
+ExecStart=@NODE@ --disable-warning=ExperimentalWarning /opt/sara/src/main.ts
+Restart=on-failure
+RestartSec=3
+
+# Resource limits for Sara and every command she runs (shell tool, MCP servers). Raise them with a
+# drop-in: systemctl edit sara
+MemoryHigh=3G
+MemoryMax=4G
+CPUQuota=400%
+TasksMax=512
+
+# Hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+ReadWritePaths=/var/lib/sara
+StateDirectory=sara
+StateDirectoryMode=0700
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,25 @@
+# Sara as a TrueNAS SCALE custom app (Phase 57), for TrueNAS 24.10 "Electric Eel" and newer (apps
+# run on Docker). Apps → Discover Apps → ⋮ → Install via YAML, name it "sara", paste this file.
+# Before installing, create a dataset for her data (for example tank/apps/sara) and change the
+# host path below to it.
+services:
+  sara:
+    image: ghcr.io/farena-ai/sara:0.55.5
+    restart: unless-stopped
+    ports:
+      - "7860:7860"
+    environment:
+      TZ: Etc/UTC
+      # 1 for both when you reach her through HTTPS (a reverse proxy in front of her).
+      SARA_SECURE_COOKIES: "0"
+      SARA_TRUST_PROXY: "0"
+    volumes:
+      - /mnt/tank/apps/sara:/data
+    # Same hardening as Sara's own docker-compose.yml: only what her command sandbox needs.
+    cap_drop: [ALL]
+    cap_add: [SETUID, SETGID, CHOWN, FOWNER, DAC_OVERRIDE, KILL]
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }

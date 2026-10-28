@@ -1,0 +1,7 @@
+{
+  "title": "Telegram bot",
+  "description": "A Telegram bot in plain Node (no packages): long polling, commands, tests with a fake Telegram server.",
+  "language": "Node.js",
+  "test": "node --test",
+  "run": "TELEGRAM_BOT_TOKEN=... node bot.js"
+}

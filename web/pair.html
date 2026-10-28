@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sign in this device</title>
+  <meta name="theme-color" content="#121016">
+  <link rel="icon" href="/icon-192.png">
+  <link rel="stylesheet" href="/style.css">
+  <script type="module" src="/pair.js"></script>
+</head>
+<body>
+  <section class="screen card-screen">
+    <div class="card">
+      <h1 id="pair-title">Sign in this device</h1>
+      <p class="muted" id="pair-intro">A code from Settings → Devices and sign-in signs this phone or computer in, without the owner token.</p>
+      <p id="pair-store-row" hidden><a id="pair-store" class="button-link pair-app" rel="noopener"></a></p>
+      <label id="pair-code-row" class="pair-code"><span class="muted small" id="pair-code-label">Code</span><input id="pair-code" autocomplete="one-time-code" autocapitalize="characters" placeholder="XXXX-XXXX-XXXX" spellcheck="false"></label>
+      <button id="pair-browser" type="button">Sign in this browser</button>
+      <div id="pair-app-block" class="login-app-block" hidden>
+        <p class="or-divider"><span id="pair-or">Or use the phone app</span></p>
+        <a id="pair-app" class="button-link pair-app ghost">Open in the Sara app</a>
+      </div>
+      <p id="pair-note" class="muted small" hidden></p>
+      <p id="pair-status" class="small" role="status"></p>
+    </div>
+  </section>
+</body>
+</html>

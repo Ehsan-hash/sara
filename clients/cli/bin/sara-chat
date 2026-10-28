@@ -1,0 +1,4 @@
+#!/bin/sh
+# sara-chat launcher (Linux / Mac): put this folder on your PATH, or link it into ~/.local/bin.
+here=$(dirname "$(readlink -f "$0" 2>/dev/null || echo "$0")")
+exec node "$here/../sara.ts" "$@"

@@ -1,0 +1,198 @@
+{
+  "benchmark": "Sara repository tasks (bench/tasks, original)",
+  "mode": "agent",
+  "model": "qwen3.8:27b-mtp-q4_K_M",
+  "started": "2026-10-28T01:23:35.793Z",
+  "finished": "2026-10-28T01:35:10.326Z",
+  "python": "Python 3.14.9",
+  "platform": "win32",
+  "tasks": 14,
+  "passed": 11,
+  "pass1": 78.6,
+  "minutes": 11.6,
+  "failed": [
+    "01-cart-totals",
+    "04-slugify-spec",
+    "14-py-ini-spec"
+  ],
+  "stopped": [],
+  "runs": [
+    {
+      "task": "01-cart-totals",
+      "title": "Cart totals: bugs spread over three modules",
+      "kind": "bug",
+      "lang": "js",
+      "pass": false,
+      "seconds": 9,
+      "toolCalls": 14,
+      "filesChanged": 3
+    },
+    {
+      "task": "02-csv-quotes",
+      "title": "CSV reader: quoted fields",
+      "kind": "bug",
+      "lang": "js",
+      "pass": true,
+      "seconds": 30,
+      "toolCalls": 14,
+      "filesChanged": 4
+    },
+    {
+      "task": "03-event-emitter",
+      "title": "Event emitter: once, off and channels",
+      "kind": "feature",
+      "lang": "js",
+      "pass": true,
+      "seconds": 67,
+      "toolCalls": 20,
+      "filesChanged": 5
+    },
+    {
+      "task": "04-slugify-spec",
+      "title": "Slugs that follow a written spec",
+      "kind": "feature",
+      "lang": "js",
+      "pass": false,
+      "seconds": 45,
+      "toolCalls": 15,
+      "filesChanged": 4
+    },
+    {
+      "task": "05-date-range",
+      "title": "Dates: an off-by-one and a time-zone bug",
+      "kind": "bug",
+      "lang": "js",
+      "pass": true,
+      "seconds": 24,
+      "toolCalls": 17,
+      "filesChanged": 4
+    },
+    {
+      "task": "06-config-merge",
+      "title": "Config layers: deep merge and environment variables",
+      "kind": "bug",
+      "lang": "js",
+      "pass": true,
+      "seconds": 29,
+      "toolCalls": 14,
+      "filesChanged": 4
+    },
+    {
+      "task": "07-refactor-tax",
+      "title": "Refactor: one home for the tax rules",
+      "kind": "refactor",
+      "lang": "js",
+      "pass": true,
+      "seconds": 29,
+      "toolCalls": 11,
+      "filesChanged": 4
+    },
+    {
+      "task": "08-router-params",
+      "title": "URL router: parameters, wildcards and precedence",
+      "kind": "feature",
+      "lang": "js",
+      "pass": true,
+      "seconds": 188,
+      "toolCalls": 33,
+      "filesChanged": 4
+    },
+    {
+      "task": "09-lru-cache",
+      "title": "LRU cache: eviction, stats and memoize",
+      "kind": "bug",
+      "lang": "js",
+      "pass": true,
+      "seconds": 38,
+      "toolCalls": 21,
+      "filesChanged": 6
+    },
+    {
+      "task": "10-inventory-cli",
+      "title": "Command-line tool: output formats and a filter",
+      "kind": "feature",
+      "lang": "js",
+      "pass": true,
+      "seconds": 63,
+      "toolCalls": 28,
+      "filesChanged": 7
+    },
+    {
+      "task": "11-py-gradebook",
+      "title": "Python gradebook: averages, letters and ranking",
+      "kind": "bug",
+      "lang": "python",
+      "pass": true,
+      "seconds": 34,
+      "toolCalls": 15,
+      "filesChanged": 4
+    },
+    {
+      "task": "12-py-textstats",
+      "title": "Python text statistics: tokenizer rules and new functions",
+      "kind": "feature",
+      "lang": "python",
+      "pass": true,
+      "seconds": 65,
+      "toolCalls": 28,
+      "filesChanged": 8
+    },
+    {
+      "task": "13-py-ledger-decimal",
+      "title": "Python ledger: from floats to exact money",
+      "kind": "refactor",
+      "lang": "python",
+      "pass": true,
+      "seconds": 21,
+      "toolCalls": 15,
+      "filesChanged": 5
+    },
+    {
+      "task": "14-py-ini-spec",
+      "title": "Python settings-file reader that follows a spec",
+      "kind": "feature",
+      "lang": "python",
+      "pass": false,
+      "seconds": 52,
+      "toolCalls": 16,
+      "filesChanged": 4
+    }
+  ],
+  "source": "2026-10-28-tasks-agent.json",
+  "byKind": {
+    "bug": {
+      "passed": 5,
+      "of": 6
+    },
+    "feature": {
+      "passed": 4,
+      "of": 6
+    },
+    "refactor": {
+      "passed": 2,
+      "of": 2
+    }
+  },
+  "everyRun": [
+    {
+      "started": "2026-10-28T00:56:55.824Z",
+      "passed": 11,
+      "of": 14,
+      "failed": [
+        "01-cart-totals",
+        "07-refactor-tax",
+        "14-py-ini-spec"
+      ]
+    },
+    {
+      "started": "2026-10-28T01:23:35.793Z",
+      "passed": 11,
+      "of": 14,
+      "failed": [
+        "01-cart-totals",
+        "04-slugify-spec",
+        "14-py-ini-spec"
+      ]
+    }
+  ]
+}
