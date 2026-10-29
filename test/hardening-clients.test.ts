@@ -70,6 +70,6 @@ test('terminal client: --server with another address never receives the saved to
   const io: Io = { out: () => undefined, err: (s: string) => (err += s), color: false } as Io;
   const code = await main(['status', '--server', evilUrl], io, dir);
   assert.equal(code, 1);
-  assert.match(err, /signed in to https:\/\/sara\.example\.com, not/);
+  assert.match(err, /No saved server called .*signed in to "sara\.example\.com" \(sara\.example\.com\)/);
   assert.deepEqual(seen, [], 'nothing was sent to the other server');
 });

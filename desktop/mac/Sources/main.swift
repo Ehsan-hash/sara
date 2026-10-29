@@ -7,6 +7,7 @@
 // Server.swift); `Sara --run-server` is launchd's supervisor and `Sara --cli …` the `sara` command.
 // Phase 55: the first launch asks "Run Sara on this Mac" or "Connect to a Sara somewhere else"; the
 // menu switches both ways later, and an unreachable server shows "Can't reach your Sara".
+// Phase 68: several Sara servers, each with its own sign-in (Servers.swift).
 import AppKit
 import ServiceManagement
 import UserNotifications
@@ -76,21 +77,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
   var setupSheet: SetupSheet?
   var serverState = "Checking…"
   var serverItems: [NSMenuItem] = []
+  /// Phase 68: the saved server the web view's data store belongs to, and one being removed.
+  var webServerId: String?
+  var pendingRemove: String?
 
   // MARK: start-up
-  func applicationDidFinishLaunching(_ note: Notification) {
-    buildMenu()
+  /// The web view, on the data store of the server it shows (Phase 68: one store per server).
+  func makeWebView(store: WKWebsiteDataStore, for id: String?) {
     let config = WKWebViewConfiguration()
-    config.websiteDataStore = .default()
+    config.websiteDataStore = store
     config.applicationNameForUserAgent = "Version/18.0 Safari/605.1.15 SaraDesktop/1 (Mac)"
     config.mediaTypesRequiringUserActionForPlayback = []
     config.userContentController.addScriptMessageHandler(self, contentWorld: .page, name: "sara")
     config.userContentController.addUserScript(WKUserScript(source: shim, injectionTime: .atDocumentStart, forMainFrameOnly: true))
+    if let old = web {
+      old.stopLoading()
+      old.configuration.userContentController.removeAllScriptMessageHandlers()
+    }
     web = WKWebView(frame: .zero, configuration: config)
     web.navigationDelegate = self
     web.uiDelegate = self
     web.setValue(false, forKey: "drawsBackground")
     web.allowsBackForwardNavigationGestures = true
+    webServerId = id
+    window?.contentView = web
+  }
+
+  func applicationDidFinishLaunching(_ note: Notification) {
+    buildMenu()
+    // Phase 68: the saved servers (the one from before 1.8 becomes the first, as it was).
+    let current = Servers.active
+    makeWebView(store: Servers.dataStore(current), for: current?.id)
 
     let frame = NSRect(x: 0, y: 0, width: 1100, height: 780)
     window = NSWindow(contentRect: frame, styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView], backing: .buffered, defer: false)
@@ -109,7 +126,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
       img.isTemplate = true
       statusItem.button?.image = img
     } else { statusItem.button?.title = "S" }
-    statusItem.button?.toolTip = "Sara"
+    statusItem.button?.toolTip = current.map { "Sara · \($0.name)" } ?? "Sara"
     statusItem.menu = statusMenu()
 
     UNUserNotificationCenter.current().delegate = self
@@ -267,11 +284,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
   }
 
   func showSetup(_ error: String = "") {
-    let last = htmlEscape(prefs.string(forKey: "lastServer") ?? "")
+    // Phase 68: with a Sara already here, this page adds another one; Back returns to her.
+    let here = Servers.active
+    let last = here == nil ? htmlEscape(prefs.string(forKey: "lastServer") ?? "") : ""
+    let back = here.map { "<p>Your other Saras stay signed in.</p><button class=g id=k>Back to \(htmlEscape($0.name))</button>" } ?? ""
     let html = """
-    <!doctype html><html><head>\(pageStyle)</head><body><div class=c><h1>Connect to your Sara</h1><p>Type the address of your Sara (the one you open in a web browser,
+    <!doctype html><html><head>\(pageStyle)</head><body><div class=c><h1>\(here == nil ? "Connect to your Sara" : "Add a Sara")</h1><p>Type the address of \(here == nil ? "your" : "another") Sara (the one you open in a web browser,
     for example <b>sara.example.com</b>).</p><input id=u autofocus placeholder='sara.example.com' value='\(last)'><p id=e>\(htmlEscape(error))</p><button id=b>Continue</button>
-    <p>Next you sign in with a code from Settings → Devices and sign-in on a device where you're already signed in.</p>\(local.hasBundledServer ? "<p><a href='#' id=l style='color:#e3a3c3'>Or run Sara on this Mac instead</a></p>" : "")</div><script>
+    <p>Next you sign in with a code from Settings → Devices and sign-in on a device where you're already signed in.</p>\(local.hasBundledServer ? "<p><a href='#' id=l style='color:#e3a3c3'>Or run Sara on this Mac instead</a></p>" : "")\(back)</div><script>
+    const k=document.getElementById('k');if(k)k.onclick=()=>webkit.messageHandlers.sara.postMessage({m:'retry'});
     const l=document.getElementById('l');if(l)l.onclick=(e)=>{e.preventDefault();webkit.messageHandlers.sara.postMessage({m:'setupLocal'})};
     const go=()=>webkit.messageHandlers.sara.postMessage({m:'setServer',url:document.getElementById('u').value});
     document.getElementById('b').onclick=go;document.getElementById('u').onkeydown=e=>e.key==='Enter'&&go();</script></body></html>
@@ -283,9 +304,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
     let why = isLocalServer
       ? (local.stopped ? "She is stopped on this Mac. Start her from the menu bar: Sara server → Start." : "She runs on this Mac and may still be starting; if not, her log says why (Sara server → Open data folder → logs).")
       : "Check your internet connection, that the address is right, and that Sara is running there."
+    // Phase 68: the other saved Saras are one click away.
+    let others = Servers.list().filter { $0.id != Servers.activeId }.map { "<button class=g data-id='\(htmlEscape($0.id))'>\(htmlEscape($0.name))</button>" }.joined()
     let html = """
-    <!doctype html><html><head>\(pageStyle)</head><body><div class=c><h1>Can't reach your Sara</h1><p>Sara at <b>\(htmlEscape(server ?? ""))</b> isn't answering.</p><p>\(htmlEscape(why))</p><button id=r>Try again</button><button class=g id=s>Change address</button></div><script>
+    <!doctype html><html><head>\(pageStyle)</head><body><div class=c><h1>Can't reach your Sara</h1><p>Sara at <b>\(htmlEscape(server ?? ""))</b> isn't answering.</p><p>\(htmlEscape(why))</p><button id=r>Try again</button><button class=g id=s>Add a Sara</button>\(others)</div><script>
     document.getElementById('r').onclick=()=>webkit.messageHandlers.sara.postMessage({m:'retry'});
+    for(const b of document.querySelectorAll('[data-id]'))b.onclick=()=>webkit.messageHandlers.sara.postMessage({m:'useServer',id:b.dataset.id});
     document.getElementById('s').onclick=()=>webkit.messageHandlers.sara.postMessage({m:'changeServer'});
     setTimeout(()=>webkit.messageHandlers.sara.postMessage({m:'retry'}),30000);</script></body></html>
     """
@@ -309,10 +333,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         showSetup("That doesn't look like a web address. Try something like sara.example.com.")
         return replyHandler(nil, nil)
       }
-      prefs.set(o, forKey: "server")
       prefs.set(o, forKey: "lastServer")
-      prefs.set(o == local.localURL, forKey: "localServer")
-      openServer("/pair")
+      // Phase 68: a saved server again, or a new one next to the others (nobody is signed out).
+      if !Servers.list().contains(where: { $0.url == o }) && Servers.list().contains(where: { $0.url != o }) && !Servers.canHoldSeveral {
+        alert("Several Saras need macOS 14", "This Mac can keep one Sara server signed in. Remove the other one first (Sara server → Remove…), or update macOS.")
+        return replyHandler(nil, nil)
+      }
+      useServer(Servers.idFor(o), path: "/pair")
       return replyHandler(true, nil)
     case "retry":
       openServer()
@@ -324,7 +351,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
       showSetup()
       return replyHandler(true, nil)
     case "changeServer":
-      if isLocalServer { showSetup() } else { forgetServer() }
+      showSetup()
+      return replyHandler(true, nil)
+    case "useServer" where !fromServer:
+      useServer(body["id"] as? String ?? "")
       return replyHandler(true, nil)
     default: break
     }
@@ -352,6 +382,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
       showWindow()
       NSApp.requestUserAttention(.criticalRequest)
       replyHandler(true, nil)
+    // Phase 68: the page's ⇄ menu. Names and hosts only: no sign-in ever goes to a page.
+    case "servers": replyHandler(Servers.json(), nil)
+    case "useServer":
+      replyHandler(true, nil)
+      useServer(body["id"] as? String ?? "")
+    case "addServer":
+      replyHandler(true, nil)
+      addServerFromMenu()
+    case "removeServer":
+      replyHandler(true, nil)
+      removeServer(body["id"] as? String ?? "")
+    case "renameServer", "serverName":
+      let byUser = kind == "renameServer"
+      let id = byUser ? body["id"] as? String ?? "" : Servers.activeId ?? ""
+      let name = (body["name"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+      if !name.isEmpty, let p = Servers.list().first(where: { $0.id == id }), byUser || !p.named {
+        Servers.update(id) { s in
+          s.name = Servers.uniqueName(name, url: s.url, except: s.id)
+          if byUser { s.named = true }
+        }
+        if id == Servers.activeId { statusItem?.button?.toolTip = "Sara · \(Servers.active?.name ?? name)" }
+      }
+      replyHandler(Servers.json(), nil)
     default: replyHandler(nil, "Unknown")
     }
   }
@@ -399,10 +452,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
     decisionHandler(disposition.lowercased().hasPrefix("attachment") || !response.canShowMIMEType ? .download : .allow)
   }
 
+  func webView(_ webView: WKWebView, didFinish nav: WKNavigation!) {
+    // Phase 68: removing a server that wasn't in use: now it's open, sign out there.
+    if let r = pendingRemove, r == Servers.activeId, isServer(webView.url) {
+      pendingRemove = nil
+      removeActiveServer()
+    }
+    #if DEBUG
+    testHook(webView)
+    #endif
+  }
+
   #if DEBUG
   // Test builds only (swiftc -D DEBUG): SARA_TEST_JS runs that script after each page load and
   // appends its result to SARA_TEST_OUT, so the app can be checked over SSH without a screen.
-  func webView(_ webView: WKWebView, didFinish nav: WKNavigation!) {
+  func testHook(_ webView: WKWebView) {
     let env = ProcessInfo.processInfo.environment
     guard let js = env["SARA_TEST_JS"].flatMap({ try? String(contentsOfFile: $0, encoding: .utf8) }), let out = env["SARA_TEST_OUT"] else { return }
     webView.callAsyncJavaScript(js, arguments: [:], in: nil, in: .page) { result in

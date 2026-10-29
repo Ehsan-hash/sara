@@ -53,21 +53,34 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
     // Tapping a notification opens that conversation; Reply sends without opening the app.
     func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse, withCompletionHandler completionHandler: @escaping () -> Void) {
         let info = response.notification.request.content.userInfo
+        // Phase 68: which saved server sent it (servers from 1.8 on say; older ones: the one in use).
+        let profile = info["profile"] as? String
         if let r = response as? UNTextInputNotificationResponse, let conv = info["conversationId"] as? String {
-            Self.sendReply(r.userText, conversation: conv, completion: completionHandler)
+            Task { @MainActor in
+                if let profile, profile != AppModel.shared.activeId, let p = Servers.list().first(where: { $0.id == profile }) {
+                    // Another server's reply goes to that server, with its own sign-in.
+                    Self.sendReply(r.userText, conversation: conv, server: p.url, cookie: await Servers.cookie(p), completion: completionHandler)
+                } else {
+                    Self.sendReply(r.userText, conversation: conv, completion: completionHandler)
+                }
+            }
             return
         }
         let url = info["url"] as? String
         Task { @MainActor in
-            if let url, url.hasPrefix("/") { AppModel.shared.open(path: url) }
+            let path = url.flatMap { $0.hasPrefix("/") ? $0 : nil } ?? "/"
+            if let profile, profile != AppModel.shared.activeId, Servers.list().contains(where: { $0.id == profile }) {
+                AppModel.shared.switchTo(profile, path: path)
+            } else if url != nil { AppModel.shared.open(path: path) }
             completionHandler()
         }
     }
 
     /// Sends a reply typed into a notification; her answer arrives as a notification.
-    static func sendReply(_ text: String, conversation: String, completion: @escaping () -> Void) {
+    static func sendReply(_ text: String, conversation: String, server given: String? = nil, cookie givenCookie: String? = nil, completion: @escaping () -> Void) {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty, let server = SharedStore.server,
+        let cookie = given == nil ? SharedStore.cookie : givenCookie
+        guard !trimmed.isEmpty, let server = given ?? SharedStore.server,
               let id = conversation.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed),
               let url = URL(string: server + "/api/conversations/" + id + "/messages")
         else { return completion() }
@@ -76,7 +89,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         req.timeoutInterval = 20
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         req.setValue("SaraPhone/1 (iOS)", forHTTPHeaderField: "User-Agent")
-        if let c = SharedStore.cookie { req.setValue(c, forHTTPHeaderField: "Cookie") }
+        if let c = cookie { req.setValue(c, forHTTPHeaderField: "Cookie") }
         req.httpBody = try? JSONSerialization.data(withJSONObject: ["content": trimmed, "background": true])
         URLSession.shared.dataTask(with: req) { _, res, _ in
             let status = (res as? HTTPURLResponse)?.statusCode ?? 0

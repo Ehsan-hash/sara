@@ -8,6 +8,11 @@ target_include_directories(Sara PRIVATE "${WV2}/include" src)
 target_link_libraries(Sara PRIVATE "${WV2}/x64/WebView2LoaderStatic.lib" shlwapi shell32 ole32 version advapi32 user32)
 target_compile_definitions(Sara PRIVATE UNICODE _UNICODE)
 target_compile_options(Sara PRIVATE /W4 /permissive- /utf-8)
+# Phase 68: test hooks (a separate data folder via SARA_DESKTOP_TEST_DIR), only when asked for.
+option(SARA_TEST_HOOKS "Build Sara.exe with test hooks (never for release)" OFF)
+if(SARA_TEST_HOOKS)
+  target_compile_definitions(Sara PRIVATE SARA_TEST_HOOKS)
+endif()
 # Our own manifest (DPI awareness, common controls) is in sara.rc.
 target_link_options(Sara PRIVATE /MANIFEST:NO)
 

@@ -292,9 +292,9 @@ extension AppDelegate {
   }
 
   func useLocalServer() {
-    prefs.set(local.localURL, forKey: "server")
+    // Phase 68: this Mac's Sara is one of the saved servers.
+    useServer(Servers.idFor(local.localURL))
     prefs.set(true, forKey: "localServer")
-    openServer()
   }
 
   var isLocalServer: Bool { prefs.bool(forKey: "localServer") && local.active }
@@ -466,9 +466,11 @@ extension AppDelegate {
     status.isEnabled = false
     m.addItem(status)
     m.addItem(.separator())
+    // Phase 68: the saved servers (✓ the one in use), Add a Sara…, Remove.
+    addServerItems(to: m)
+    m.addItem(.separator())
     if !local.active {
       // Connected to a Sara somewhere else (or nothing chosen yet).
-      m.addItem(withTitle: "Connect to a different Sara…", action: #selector(connectElsewhere), keyEquivalent: "")
       if local.hasBundledServer { m.addItem(withTitle: "Set up Sara on this Mac…", action: #selector(setUpFromMenu), keyEquivalent: "") }
       if local.configured {
         // Switched off: her data is still here until it's deleted.
@@ -494,29 +496,15 @@ extension AppDelegate {
 
   @objc func setUpFromMenu() { showWindow(); chooseLocal() }
 
-  /// Connected to a Sara somewhere else: a different address. This app signs out of the old one and
-  /// keeps nothing from it (its website data is cleared), so the new one never gets the old sign-in.
-  @objc func connectElsewhere() {
-    showWindow()
-    if let s = server {
-      let a = NSAlert()
-      a.messageText = "Connect to a different Sara?"
-      a.informativeText = "This app signs out of \(s) and forgets it. Then you type the new address and sign in there with a code. Nothing changes on \(s)."
-      a.addButton(withTitle: "Connect to a different Sara")
-      a.addButton(withTitle: "Cancel")
-      guard a.runModal() == .alertFirstButtonReturn else { return }
-    }
-    forgetServer()
-  }
-
-  /// Signs this app out of the server it shows and asks for an address.
+  /// Phase 68: this Mac's Sara stopped: forget her entry here (the others stay signed in).
   func forgetServer() {
-    prefs.removeObject(forKey: "server")
-    prefs.removeObject(forKey: "localServer")
-    WKWebsiteDataStore.default().removeData(ofTypes: WKWebsiteDataStore.allWebsiteDataTypes(), modifiedSince: .distantPast) { [weak self] in
-      self?.refreshServerState()
-      self?.showSetup()
+    if let p = Servers.list().first(where: { $0.url == local.localURL }) {
+      if p.id == Servers.activeId { return removeActiveServer() }
+      Servers.remove(p.id)
     }
+    prefs.removeObject(forKey: "localServer")
+    refreshServerState()
+    showSetup()
   }
 
   /// Sara runs on this Mac: stop her here and connect to a Sara somewhere else instead.
@@ -605,12 +593,16 @@ extension AppDelegate {
       DispatchQueue.global().async {
         let notes = self.local.uninstall(deleteData: delete, backupDir: NSHomeDirectory() + "/Desktop")
         DispatchQueue.main.async {
-          prefs.removeObject(forKey: "server")
+          // Phase 68: only this Mac's Sara is forgotten; other saved servers stay signed in.
+          let mine = Servers.list().first { $0.url == self.local.localURL }
+          if let mine {
+            Servers.remove(mine.id)
+            if mine.store == nil { WKWebsiteDataStore.default().removeData(ofTypes: WKWebsiteDataStore.allWebsiteDataTypes(), modifiedSince: .distantPast) {} }
+          }
           prefs.removeObject(forKey: "localServer")
-          WKWebsiteDataStore.default().removeData(ofTypes: WKWebsiteDataStore.allWebsiteDataTypes(), modifiedSince: .distantPast) {}
           self.refreshServerState()
           self.alert("Sara's server is uninstalled", notes.joined(separator: "\n") + "\n\nTo remove the app too, drag Sara from Applications to the Trash.")
-          self.showSetup()
+          if let next = Servers.list().max(by: { $0.lastUsed < $1.lastUsed }) { self.useServer(next.id) } else { self.showSetup() }
         }
       }
     }

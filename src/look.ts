@@ -112,6 +112,8 @@ export interface LookMeta {
   scenarios?: string[];
   /** Adults-only: shown and worn only with Adult mode on. */
   adult?: boolean;
+  /** The art style the look was made in (a LOOK_STYLES id or words), so her later pictures keep it. */
+  style?: string;
 }
 
 export interface SavedLook extends LookMeta {
@@ -270,7 +272,7 @@ export class LookBuilder {
     if (!v || v.length > 200) throw new Error('Say how to change it (up to 200 characters).');
     if (ADULT_ONLY.test(v)) throw new Error('The look must be an adult.');
     const ask = part === 'style' ? `Redraw this exact picture as ${LOOK_STYLES[v] ?? v}. The same person, face, hair, clothes, pose, framing and background.` : `${KEEP} Only change ${p.ask}: ${v}. Nothing else changes.`;
-    await this.#editDraft(current, ask, { ...this.currentMeta() });
+    await this.#editDraft(current, ask, { ...this.currentMeta(), ...(part === 'style' ? { style: v } : {}) });
   }
 
   /** Phase 36: the current look somewhere else. */
@@ -293,7 +295,7 @@ export class LookBuilder {
       });
       mkdirSync(dirname(this.draftFile), { recursive: true, mode: 0o700 });
       writeFileSync(this.draftFile, img, { mode: 0o600 });
-      this.#writeDraftMeta({ newFace: true, place: 'room' });
+      this.#writeDraftMeta({ newFace: true, place: 'room', style: LOOK_STYLES[style] ? style : 'illustrated' });
       this.status = { state: 'draft-ready', step: 1, total: 1 };
     } catch (err) {
       this.status = { state: 'failed', step: 0, total: 1, error: (err as Error).message };
@@ -436,7 +438,7 @@ export class LookBuilder {
     await this.#editDraft(
       current,
       `${KEEP.replace('clothes, ', '').replace(where ? 'background, lighting' : '', where ? 'lighting' : '')} Only change the clothes${where ? ` and the background (${where})` : ' (and anything said below about the background)'}: ${wear}. The same person, same face and hair, same expression, same framing and art style.`,
-      { wear: OUTFITS[outfit]?.label ? `${OUTFITS[outfit].label.toLowerCase()} (${wear})` : wear, place: opts.place ?? this.currentMeta().place, ...(adult ? { adult: true } : {}) },
+      { wear: OUTFITS[outfit]?.label ? `${OUTFITS[outfit].label.toLowerCase()} (${wear})` : wear, place: opts.place ?? this.currentMeta().place, ...(this.currentMeta().style ? { style: this.currentMeta().style } : {}), ...(adult ? { adult: true } : {}) },
     );
   }
 

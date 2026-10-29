@@ -28,7 +28,8 @@ struct RootView: View {
         ZStack {
             saraBackground.ignoresSafeArea()
             if model.screen == .web, model.server != nil {
-                WebView(model: model)
+                // Phase 68: a new web view (on that server's own data store) for each server.
+                WebView(model: model).id(model.activeId)
             } else {
                 SetupView()
             }
@@ -41,8 +42,8 @@ struct RootView: View {
             if link.refused {
                 Button("OK", role: .cancel) {}
             } else if switching(link) {
-                // Switching servers is the careful choice; Cancel is the default.
-                Button("Switch server", role: .destructive) { Task { await model.accept(link) } }
+                // Adding a server from a link is the careful choice; Cancel is the default.
+                Button("Add", role: .destructive) { Task { await model.accept(link) } }
                 Button("Cancel", role: .cancel) {}
             } else {
                 // Without a code: open that server's sign-in page (code or owner token there).
@@ -69,14 +70,15 @@ extension RootView {
         Binding(get: { model.switchError != nil }, set: { if !$0 { model.switchError = nil } })
     }
 
+    /// A server that isn't saved yet (Phase 68: it's added next to the others).
     private func switching(_ link: AppModel.PairLink) -> Bool {
-        model.server != nil && model.server != link.server
+        model.server != nil && model.server != link.server && !Servers.list().contains { $0.url == link.server }
     }
 
     private var pairTitle: String {
         guard let link = model.pairLink else { return "" }
         if link.refused { return "This link can't be used" }
-        if switching(link) { return "Switch server?" }
+        if switching(link) { return "Add this Sara?" }
         return link.code != nil ? "Sign in with a code" : "Open your Sara"
     }
 
@@ -85,12 +87,12 @@ extension RootView {
             return "The pairing link doesn't hold a plain server address, so the app won't open it. Make a new code in Sara on your computer: Settings → Data & health → Devices and sign-in → Add a phone."
         }
         var m = switching(link)
-            ? "This link wants to move the app to another server.\n\nNow: \(model.server ?? "")\nNew: \(link.server)"
+            ? "Add \(link.server) to this app? Your other Saras stay signed in; switch between them from the ⇄ button at the top."
             : "Sign in to \(link.server)?"
         if link.server.hasPrefix("http://") && !AppModel.isPrivateHost(link.server) {
             m += "\n\n⚠ This address uses plain http on the open internet: anyone on the way could read your messages. Only continue if you set it up that way."
         }
-        if switching(link) { m += "\n\nOnly switch if you made this link yourself." }
+        if switching(link) { m += "\n\nOnly add it if you made this link yourself." }
         return m
     }
 }

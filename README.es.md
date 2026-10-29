@@ -13,7 +13,7 @@ prueba software en un entorno aislado, en tu propio servidor y con los modelos q
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="License: MIT"></a>
   <img src="https://img.shields.io/badge/node-%E2%89%A5%2024-339933" alt="Node 24 or newer">
   <img src="https://img.shields.io/badge/runtime%20dependencies-0-brightgreen" alt="Zero runtime dependencies">
-  <img src="https://img.shields.io/badge/tests-678%20passing-brightgreen" alt="678 tests passing">
+  <img src="https://img.shields.io/badge/tests-719%20passing-brightgreen" alt="719 tests passing">
   <a href="docs/RESULTS.md"><img src="https://img.shields.io/badge/HumanEval%20pass%401-96.3%25-informational" alt="HumanEval pass@1 96.3%"></a>
   <a href="https://github.com/farena-ai/sara/releases/latest"><img src="https://img.shields.io/github/v/release/farena-ai/sara?label=release" alt="Latest release"></a>
   <a href="https://github.com/farena-ai/sara/pkgs/container/sara"><img src="https://img.shields.io/badge/docker-amd64%20%7C%20arm64-2496ED" alt="Docker image for amd64 and arm64"></a>
@@ -27,7 +27,7 @@ prueba software en un entorno aislado, en tu propio servidor y con los modelos q
   <sub>Una sesión real y sin editar con un modelo local (qwen3.8 27B en Ollama, una RTX 5090) en un servidor de pruebas desechable: charla con su personalidad, escribe la app, pide permiso antes de arrancar un servidor, abre la vista previa y la prueba en su propio navegador. El último fotograma es la app con números ya escritos.</sub>
 </p>
 
-> **Estado:** 1.7, licencia MIT, con siete versiones con novedades desde la 1.0 (todas abajo). La
+> **Estado:** 1.8, licencia MIT, con ocho versiones con novedades desde la 1.0 (todas abajo). La
 > [app de Android](https://play.google.com/store/apps/details?id=com.backstagecoding.sara) está en Google
 > Play; la app de iPhone y la versión del Mac App Store llegarán en cuanto Apple las apruebe. Lee
 > [docs/DISCLOSURES.md](docs/DISCLOSURES.md) antes de usar o compartir Sara.
@@ -36,6 +36,7 @@ prueba software en un entorno aislado, en tu propio servidor y con los modelos q
 
 | Versión | Qué te trae |
 |---|---|
+| **1.8** · Varios servidores en una app | Ten **todas tus Saras en una sola app** (casa y trabajo, o varias en un servidor) y cambia desde un menú sin cerrar sesión: las apps de Windows y Mac, Android y iPhone, VS Code, `sara-chat` y el puente MCP. Cada una conserva su propio inicio de sesión; los archivos, el micrófono y la cámara solo van a la que estás usando. [Cómo funciona](docs/SERVERS.md) |
 | **1.7** · Modo local privado | Un interruptor, **Nada sale de este ordenador**, aplicado en el código en un único punto: solo se puede llegar a este ordenador, los modelos en la nube y las herramientas en línea se pausan, y sus chats, su memoria y su biblioteca siguen funcionando. Las apps de Windows y Mac encuentran Ollama (o te ayudan a instalarlo), sugieren un modelo que cabe en tu tarjeta gráfica y lo descargan con barra de progreso. [Qué garantiza](docs/PRIVATE_LOCAL.md) |
 | **1.6** · Chats de grupo | Reúne a **de dos a cuatro de tus compañeras en una conversación**: cada una responde con su propia personalidad, voz y color; elige quién contesta (quien encaje, todas, por turnos o solo a quien menciones con @) y cuánto charlan entre ellas. La seguridad, los avisos de IA y el ajuste adulto más estricto valen para toda la sala. [Cómo funciona](docs/GROUP_CHATS.md) |
 | **1.5** · Tráela desde otra app | Múdate desde **ChatGPT, Claude, Character.AI, SillyTavern, Replika, Nomi o Kindroid**. Lee la exportación en tu propio servidor, luego te enseña lo que ha aprendido (datos con tus propias palabras, vuestra historia juntos, su estilo) y solo guarda lo que tú apruebes. [Cómo exportar desde cada app](docs/IMPORT.md) |
@@ -50,7 +51,6 @@ Todas las versiones: [CHANGELOG.md](CHANGELOG.md) · [versiones](https://github.
 
 | Versión | Función |
 |---|---|
-| 1.8 | **Varios servidores en una app:** las apps de escritorio, del móvil y las demás guardan una lista de tus Saras y cambian entre ellas sin cerrar sesión |
 | 1.9 | **Videollamadas** con su avatar en movimiento y con sincronización labial |
 | 1.10 | **Nuestros momentos:** un álbum de fotos compartido con sus pies de foto |
 | 2.0 | **Modo hogar:** varias personas en un servidor, cada una con sus propias compañeras y sus datos privados |
@@ -201,8 +201,8 @@ prueba comprobaba. Lo que aporta hoy es la forma de trabajar (ejecuta las prueba
 antes de pasos arriesgados, muestra lo que se ejecutó), no una puntuación más alta en estos
 conjuntos. Detalles, resultados por tarea y cómo repetirlo: [docs/RESULTS.md](docs/RESULTS.md).
 
-Además, `npm run check`: una comprobación de tipos y 685 pruebas automáticas con un modelo falso
-programado (sin red, sin GPU): 678 pasan en Windows y las otras 7 son pruebas del aislamiento solo
+Además, `npm run check`: una comprobación de tipos y 727 pruebas automáticas con un modelo falso
+programado (sin red, sin GPU): 719 pasan en Windows y las otras 8 son pruebas del aislamiento solo
 para Linux, que se ejecutan en un servidor Linux.
 
 ## Cómo se compara Sara

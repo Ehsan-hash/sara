@@ -27,9 +27,20 @@ final class Notify {
     }
 
     static void message(Context c, String name, String conversationId, long id, String text, String kind) {
+        Servers.Profile p = Servers.active(c);
+        message(c, name, conversationId, id, text, kind, p == null ? null : p.id, null);
+    }
+
+    /**
+     * Phase 68: `server` is the saved server it came from (tapping it opens that one); `from` is
+     * shown under the name when the app has more than one.
+     */
+    static void message(Context c, String name, String conversationId, long msgId, String text, String kind, String server, String from) {
         NotificationManager nm = manager(c);
         if (nm == null) return;
-        Intent open = new Intent(c, MainActivity.class).putExtra("conv", conversationId).setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+        // Message ids are per server: keep two servers' notifications apart.
+        long id = server == null || "s1".equals(server) ? msgId : msgId * 31 + server.hashCode();
+        Intent open = new Intent(c, MainActivity.class).putExtra("conv", conversationId).putExtra("server", server).setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
         Notification.Builder b = new Notification.Builder(c, CHANNEL)
                 .setSmallIcon(R.drawable.ic_notify)
                 .setColor(COLOR)
@@ -40,9 +51,10 @@ final class Notify {
                 .setGroup("messages")
                 .setAutoCancel(true)
                 .setContentIntent(PendingIntent.getActivity(c, (int) id, open, PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT));
+        if (from != null) b.setSubText(from);
         if (conversationId != null && !conversationId.isEmpty()) {
             RemoteInput input = new RemoteInput.Builder(KEY_REPLY).setLabel("Reply to " + name).build();
-            Intent reply = new Intent(c, ReplyReceiver.class).putExtra("conv", conversationId).putExtra("id", (int) id).putExtra("name", name);
+            Intent reply = new Intent(c, ReplyReceiver.class).putExtra("conv", conversationId).putExtra("id", (int) id).putExtra("name", name).putExtra("server", server);
             // Mutable: Android fills in the typed reply.
             PendingIntent pi = PendingIntent.getBroadcast(c, (int) id, reply, PendingIntent.FLAG_MUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
             b.addAction(new Notification.Action.Builder(Icon.createWithResource(c, R.drawable.ic_notify), "Reply", pi).addRemoteInput(input).setAllowGeneratedReplies(true).build());

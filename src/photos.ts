@@ -15,6 +15,7 @@ import type { UploadStore } from './uploads.ts';
 import type { Vault } from './vault.ts';
 import { personalize } from './identity.ts';
 import { identityOf, type Persona } from './persona.ts';
+import { LOOK_STYLES } from './look.ts';
 
 export const PHOTO_KEY_VAULT = 'images:xai';
 export const DEFAULT_IMAGE_MODEL = 'grok-imagine-image-quality';
@@ -59,7 +60,7 @@ export interface PhotoDeps {
   /** Phase 36: her current look's file for a built-in picture path (custom looks), if any. */
   lookFile?: (rel: string) => string | undefined;
   /** Phase 36: what she's wearing and where (words), and her locked face. */
-  wearing?: () => { wear?: string; place?: string } | undefined;
+  wearing?: () => { wear?: string; place?: string; style?: string } | undefined;
   faceRef?: () => Buffer | undefined;
   fetch?: FetchLike;
   now?: () => Date;
@@ -79,6 +80,18 @@ export async function xaiImageKey(d: Pick<PhotoDeps, 'vault' | 'xaiProviderKey' 
   return d.vault.get(PHOTO_KEY_VAULT) || (await d.grokToken?.()) || d.xaiProviderKey();
 }
 
+/**
+ * The art style her pictures keep: the one her look was made in (an anime or painted look stays
+ * anime or painted, never turned into a photo). Looks made before the style was remembered say
+ * "the same style as the first picture".
+ */
+export function artStyleLine(style: string | undefined): string {
+  const words = style ? (LOOK_STYLES[style] ?? style) : '';
+  if (style === 'photo') return `Natural, candid photo, as if she took it or a friend did; realistic lighting (${words}).`;
+  if (words) return `Keep the art style of the first picture exactly: ${words}. It is not a photograph. Natural and candid, as if she took it or a friend did.`;
+  return 'Keep the art style of the first picture exactly: if it is a painted illustration, anime or 3D, the new picture is too, not a photograph. Natural and candid, as if she took it or a friend did.';
+}
+
 const dataUrl = (buf: Buffer, mime = 'image/jpeg') => `data:${mime};base64,${buf.toString('base64')}`;
 
 /** Calls Grok Imagine (edit from her portrait). Returns JPEG/PNG bytes. */
@@ -93,7 +106,7 @@ export async function generatePhoto(d: PhotoDeps, scene: string, signal?: AbortS
   const w = d.wearing?.();
   const now = w?.wear || w?.place ? ` ${personalize(`Unless the scene says otherwise, she is wearing ${w.wear ?? 'what she wears in the picture'}${w.place ? ` and is at ${w.place}` : ''}.`, identityOf(who))}` : '';
   const face = d.faceRef?.();
-  const prompt = `${personalize('A new photo of this same person', identityOf(who))}${look}. ${personalize('Keep her face, features, hair color and style identical so she is clearly the same person.', identityOf(who))}${face ? ' Her face is exactly the face in the second picture.' : ''} Scene: ${scene}.${now} ${personalize('Natural, candid photo, as if she took it or a friend did; realistic lighting. She is an adult.', identityOf(who))} No text or watermarks.`;
+  const prompt = `${personalize('A new picture of this same person', identityOf(who))}${look}. ${personalize('Keep her face, features, hair color and style identical so she is clearly the same person.', identityOf(who))}${face ? ' Her face is exactly the face in the second picture.' : ''} Scene: ${scene}.${now} ${personalize(artStyleLine(w?.style), identityOf(who))} ${personalize('She is an adult.', identityOf(who))} No text or watermarks.`;
   const res = await (d.fetch ?? netFetch)('https://api.x.ai/v1/images/edits', {
     method: 'POST',
     headers: { authorization: `Bearer ${key}`, 'content-type': 'application/json' },

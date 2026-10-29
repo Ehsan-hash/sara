@@ -1294,3 +1294,19 @@ body.private-local .pl-card { border-color: var(--accent); }
 .lm-installed li { display: flex; align-items: center; gap: 8px; }
 .lm-installed .lm-name { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .pl-switch { font-weight: 600; color: var(--accent-2); }
+
+/* ---------- Phase 68: several Saras in one app ---------- */
+.server-btn { flex: none; font-size: 12px; padding: 2px 10px; border-radius: 999px; background: transparent; color: var(--text); border: 1px solid var(--border); white-space: nowrap; max-width: 14em; overflow: hidden; text-overflow: ellipsis; }
+.server-btn:hover { background: var(--panel-2); }
+@media (max-width: 520px) {
+  .server-btn { padding: 2px 8px; }
+  .server-btn span { display: inline-block; max-width: 5em; overflow: hidden; text-overflow: ellipsis; vertical-align: bottom; }
+}
+.servers-list li > span:first-child { font-weight: 600; }
+.servers-list .badge { font-size: 11px; padding: 1px 8px; border-radius: 999px; border: 1px solid var(--accent); color: var(--accent-2); }
+.servers-list li > span.muted { flex: 1; min-width: 8em; }
+/* On a phone: the name and address on one line, the badge and buttons together on the next. */
+@media (max-width: 520px) {
+  .servers-list li > span.muted { flex: 1 0 60%; }
+  .servers-list li > :nth-child(3) { margin-left: auto; }
+}

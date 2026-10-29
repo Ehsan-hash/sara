@@ -21,6 +21,8 @@ const RAW = [
   '#log-problems', '.gallery-head', '.gallery-pitch', '.gallery-line', '.gallery-tags',
   // Phase 66: group chats name every member (the line under the title, the member cards).
   '#conv-summary', '#gc-members',
+  // Phase 68: the saved servers' names (one may well be called Sara).
+  '#servers-list', '#server-btn-name',
 ].join(',');
 const ATTRS = ['placeholder', 'title', 'aria-label', 'alt', 'data-tip', 'aria-description'];
 const NAME_RE = /\b(Sara|she|her|hers|herself|She|Her|Hers|Herself)\b/;

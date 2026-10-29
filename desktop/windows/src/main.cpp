@@ -4,8 +4,12 @@
 // /pair page for the sign-in code). No credentials are stored here: the sign-in is the server's
 // session cookie, kept in this user's WebView2 profile.
 // Phase 55: works the same against a Sara on another computer or server (the installer's
-// "Connect to a Sara somewhere else" installs only this app): "Connect to a different Sara…" in the
-// tray menu, and a "can't reach your Sara" page with Try again and Change address.
+// "Connect to a Sara somewhere else" installs only this app): a different server from the tray menu,
+// and a "can't reach your Sara" page with Try again.
+// Phase 68: several Sara servers in one app, each with its own sign-in. Every server has its own
+// WebView2 profile (cookies, storage, cache: kept apart, encrypted by WebView2 with this Windows
+// user's DPAPI key); the first one is the profile used before 1.8, so an update keeps its sign-in.
+// The tray menu and the page's ⇄ menu switch between them without signing out.
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
 #include <windows.h>
@@ -17,24 +21,34 @@
 #include <string>
 #include <map>
 #include <vector>
+#include <ctime>
 #include "WebView2.h"
 #include "resource.h"
 
 using Microsoft::WRL::Callback;
 using Microsoft::WRL::ComPtr;
 
-static const wchar_t* kVersion = L"0.33.0";
+static const wchar_t* kVersion = L"0.68.0";
 static const wchar_t* kWindowClass = L"SaraDesktopWindow";
 static const UINT WM_APP_TRAY = WM_APP + 1;
 static const UINT WM_APP_SHOW = WM_APP + 2;
 static const UINT WM_APP_BALLOON = WM_APP + 3;
+static const UINT WM_APP_SWITCH = WM_APP + 4;   // switch to g_switchTo (from the message loop)
+static const UINT WM_APP_REMOVED = WM_APP + 5;  // finish removing a server (sign-in cleared)
 static const UINT kTrayId = 1;
-enum MenuId { ID_OPEN = 100, ID_LOGIN, ID_QUIT, ID_CHANGE };
+static const UINT_PTR kRemoveTimer = 7;
+enum MenuId { ID_OPEN = 100, ID_LOGIN, ID_QUIT, ID_CHANGE, ID_SERVER0 = 200 };
 
 static HINSTANCE g_inst;
 static HWND g_wnd;
 static ComPtr<ICoreWebView2Controller> g_controller;
 static ComPtr<ICoreWebView2> g_web;
+static ComPtr<ICoreWebView2Environment> g_env;
+static std::wstring g_profile;       // Phase 68: the server in use (s1, s2, …)
+static std::wstring g_switchTo, g_switchPath;
+static std::wstring g_removing;      // being signed out and forgotten
+static std::wstring g_removeAfterLoad;
+static std::wstring g_nextPath = L"/";
 static NOTIFYICONDATAW g_tray{};
 static std::wstring g_server;        // e.g. https://sara.example.com (origin, no trailing slash)
 static std::wstring g_pendingConv;   // conversation to open when a notification is clicked
@@ -43,6 +57,15 @@ static bool g_toldAboutTray = false;
 
 // ---------- small helpers ----------
 static std::wstring dataDir() {
+#ifdef SARA_TEST_HOOKS
+  // Test builds only (cmake -DSARA_TEST_HOOKS=ON): a data folder of their own, so a test run never
+  // touches the real app's settings or sign-ins on this PC. Release builds don't contain this.
+  wchar_t t[MAX_PATH];
+  if (GetEnvironmentVariableW(L"SARA_DESKTOP_TEST_DIR", t, MAX_PATH) > 0) {
+    CreateDirectoryW(t, nullptr);
+    return t;
+  }
+#endif
   wchar_t* p = nullptr;
   std::wstring dir;
   if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_LocalAppData, 0, nullptr, &p))) dir = std::wstring(p) + L"\\Sara";
@@ -58,6 +81,12 @@ static std::wstring getPref(const wchar_t* key, const wchar_t* def = L"") {
 }
 static void setPref(const wchar_t* key, const std::wstring& v) { WritePrivateProfileStringW(L"sara", key, v.c_str(), iniPath().c_str()); }
 static bool prefOn(const wchar_t* key, bool def) { return getPref(key, def ? L"1" : L"0") == L"1"; }
+static std::wstring getIni(const std::wstring& section, const wchar_t* key) {
+  wchar_t buf[2048];
+  GetPrivateProfileStringW(section.c_str(), key, L"", buf, 2048, iniPath().c_str());
+  return buf;
+}
+static void setIni(const std::wstring& section, const wchar_t* key, const std::wstring& v) { WritePrivateProfileStringW(section.c_str(), key, v.c_str(), iniPath().c_str()); }
 
 static std::wstring exePath() {
   wchar_t buf[MAX_PATH];
@@ -221,6 +250,149 @@ static bool sameOrigin(const std::wstring& uri) {
   return !o.empty() && o == g_server;
 }
 
+// ---------- Phase 68: the saved servers ----------
+// desktop.ini: [servers] list=s1,s2 active=s2; [server.s1] url, name, named, emoji, lastUsed.
+// No sign-in is stored here: each server's sign-in is its session cookie in its own WebView2
+// profile (s1: the default profile, as before 1.8; the others: "sara-<id>").
+struct Profile {
+  std::wstring id, url, name, emoji;
+  bool named = false;
+  long long lastUsed = 0;
+};
+static std::wstring hostOfUrl(const std::wstring& url) {
+  size_t p = url.find(L"://");
+  return p == std::wstring::npos ? url : url.substr(p + 3);
+}
+static std::vector<std::wstring> profileIds() {
+  std::vector<std::wstring> out;
+  std::wstring list = getIni(L"servers", L"list"), cur;
+  for (wchar_t c : list + L",") {
+    if (c == L',') {
+      if (!cur.empty()) out.push_back(cur);
+      cur.clear();
+    } else if (iswalnum(c)) cur += c;
+  }
+  return out;
+}
+static void setProfileIds(const std::vector<std::wstring>& ids) {
+  std::wstring list;
+  for (auto& i : ids) list += (list.empty() ? L"" : L",") + i;
+  setIni(L"servers", L"list", list);
+}
+static Profile loadProfile(const std::wstring& id) {
+  std::wstring sec = L"server." + id;
+  Profile p;
+  p.id = id;
+  p.url = getIni(sec, L"url");
+  p.name = getIni(sec, L"name");
+  if (p.name.empty()) p.name = hostOfUrl(p.url);
+  p.emoji = getIni(sec, L"emoji");
+  p.named = getIni(sec, L"named") == L"1";
+  p.lastUsed = _wtoi64(getIni(sec, L"lastUsed").c_str());
+  return p;
+}
+static void saveProfile(const Profile& p) {
+  std::wstring sec = L"server." + p.id;
+  setIni(sec, L"url", p.url);
+  setIni(sec, L"name", p.name);
+  setIni(sec, L"named", p.named ? L"1" : L"0");
+  setIni(sec, L"emoji", p.emoji);
+  setIni(sec, L"lastUsed", std::to_wstring(p.lastUsed));
+}
+static std::vector<Profile> profiles() {
+  std::vector<Profile> out;
+  for (auto& id : profileIds()) {
+    Profile p = loadProfile(id);
+    if (!p.url.empty()) out.push_back(p);
+  }
+  return out;
+}
+static std::wstring lower(std::wstring s) {
+  for (auto& c : s) c = towlower(c);
+  return s;
+}
+/** A name no other saved server uses: "Sara", then "Sara (127.0.0.1:7882)". */
+static std::wstring uniqueName(const std::wstring& wanted, const std::wstring& url, const std::wstring& self) {
+  auto taken = [&](const std::wstring& n) {
+    for (auto& p : profiles())
+      if (p.id != self && lower(p.name) == lower(n)) return true;
+    return false;
+  };
+  std::wstring base = wanted.empty() ? hostOfUrl(url) : wanted.substr(0, 60);
+  if (!taken(base)) return base;
+  std::wstring withHost = base + L" (" + hostOfUrl(url) + L")";
+  if (!taken(withHost)) return withHost;
+  for (int i = 2;; i++)
+    if (!taken(withHost + L" " + std::to_wstring(i))) return withHost + L" " + std::to_wstring(i);
+}
+/** The saved server at exactly this address, or a new one (not signed in yet). */
+static std::wstring profileFor(const std::wstring& url) {
+  for (auto& p : profiles())
+    if (p.url == url) return p.id;
+  auto ids = profileIds();
+  std::wstring id;
+  for (int i = 1;; i++) {
+    id = L"s" + std::to_wstring(i);
+    bool used = false;
+    for (auto& x : ids) used = used || x == id;
+    if (!used && loadProfile(id).url.empty()) break;
+  }
+  Profile p;
+  p.id = id;
+  p.url = url;
+  p.name = uniqueName(L"", url, id);
+  saveProfile(p);
+  ids.push_back(id);
+  setProfileIds(ids);
+  return id;
+}
+/** Makes it the one in use (the address is also kept in "server", as before 1.8). */
+static void activate(const std::wstring& id) {
+  Profile p = loadProfile(id);
+  p.lastUsed = (long long)time(nullptr);
+  saveProfile(p);
+  g_profile = id;
+  g_server = p.url;
+  setIni(L"servers", L"active", id);
+  setPref(L"server", p.url);
+  std::wstring tip = L"Sara · " + p.name;
+  wcsncpy_s(g_tray.szTip, tip.c_str(), _TRUNCATE);
+  if (g_tray.hWnd) {
+    g_tray.uFlags = NIF_TIP;
+    Shell_NotifyIconW(NIM_MODIFY, &g_tray);
+  }
+}
+/** The one server saved before 1.8 becomes profile s1, with its sign-in, with nothing to do. */
+static void migrateProfiles() {
+  if (!profileIds().empty() || g_server.empty()) return;
+  Profile p;
+  p.id = L"s1";
+  p.url = g_server;
+  p.name = hostOfUrl(g_server);
+  p.lastUsed = (long long)time(nullptr);
+  saveProfile(p);
+  setProfileIds({L"s1"});
+  setIni(L"servers", L"active", L"s1");
+}
+static void forgetProfile(const std::wstring& id) {
+  auto ids = profileIds();
+  std::vector<std::wstring> keep;
+  for (auto& x : ids)
+    if (x != id) keep.push_back(x);
+  setProfileIds(keep);
+  WritePrivateProfileStringW((L"server." + id).c_str(), nullptr, nullptr, iniPath().c_str());
+}
+static std::wstring serversJson() {
+  std::wstring out = L"{\"servers\":[";
+  bool first = true;
+  for (auto& p : profiles()) {
+    out += (first ? L"" : L",") + std::wstring(L"{\"id\":\"") + jsonEscape(p.id) + L"\",\"name\":\"" + jsonEscape(p.name) + L"\",\"host\":\"" + jsonEscape(hostOfUrl(p.url)) +
+           L"\",\"emoji\":\"" + jsonEscape(p.emoji) + L"\",\"active\":" + (p.id == g_profile ? L"true" : L"false") + L"}";
+    first = false;
+  }
+  return out + L"]}";
+}
+
 // ---------- start with Windows ----------
 static const wchar_t* kRunKey = L"Software\\Microsoft\\Windows\\CurrentVersion\\Run";
 static bool startAtLogin() {
@@ -379,7 +551,7 @@ static void addTray() {
   g_tray.uCallbackMessage = WM_APP_TRAY;
   g_tray.hIcon = (HICON)LoadImageW(g_inst, MAKEINTRESOURCEW(IDI_SARA), IMAGE_ICON, GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON), 0);
   g_tray.hBalloonIcon = (HICON)LoadImageW(g_inst, MAKEINTRESOURCEW(IDI_SARA), IMAGE_ICON, GetSystemMetrics(SM_CXICON), GetSystemMetrics(SM_CYICON), 0);
-  wcscpy_s(g_tray.szTip, L"Sara");
+  if (!g_tray.szTip[0]) wcscpy_s(g_tray.szTip, L"Sara");
   if (!Shell_NotifyIconW(NIM_ADD, &g_tray)) logLine(L"tray icon failed (" + std::to_wstring(GetLastError()) + L")");
 }
 
@@ -387,7 +559,12 @@ static void trayMenu() {
   HMENU m = CreatePopupMenu();
   AppendMenuW(m, MF_STRING, ID_OPEN, L"Open Sara");
   AppendMenuW(m, MF_STRING | (startAtLogin() ? MF_CHECKED : 0), ID_LOGIN, L"Start with Windows");
-  AppendMenuW(m, MF_STRING, ID_CHANGE, L"Connect to a different Sara…");
+  // Phase 68: the saved servers (✓ the one in use); switching keeps every sign-in.
+  AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
+  auto list = profiles();
+  for (size_t i = 0; i < list.size() && i < 50; i++)
+    AppendMenuW(m, MF_STRING | (list[i].id == g_profile ? MF_CHECKED : 0), ID_SERVER0 + i, ((list[i].emoji.empty() ? L"" : list[i].emoji + L" ") + list[i].name + L"  (" + hostOfUrl(list[i].url) + L")").c_str());
+  AppendMenuW(m, MF_STRING, ID_CHANGE, L"Add a Sara…");
   AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
   AppendMenuW(m, MF_STRING, ID_QUIT, L"Quit Sara");
   POINT pt;
@@ -420,15 +597,19 @@ static std::wstring htmlEscape(const std::wstring& s) {
 
 static void showSetup(const std::wstring& error = L"") {
   std::wstring port = localPort();
+  // Phase 68: with a Sara already here, this page adds another one; Back returns to her.
+  Profile here = g_profile.empty() ? Profile{} : loadProfile(g_profile);
+  bool adding = !here.url.empty();
   std::wstring html = std::wstring(L"<!doctype html><html><head>") + kPageStyle +
-                      L"</head><body><div class=c><h1>Welcome to Sara</h1><p>Type the address of your Sara (the one you open in a web browser, "
+                      L"</head><body><div class=c><h1>" + (adding ? L"Add a Sara" : L"Welcome to Sara") + L"</h1><p>Type the address of " + (adding ? L"another" : L"your") + L" Sara (the one you open in a web browser, "
                       L"for example <b>sara.example.com</b>).</p><input id=u autofocus placeholder='sara.example.com' value='" +
-                      htmlEscape(getPref(L"lastServer")) +
+                      htmlEscape(adding ? L"" : getPref(L"lastServer")) +
                       L"'><p id=e>" + htmlEscape(error) +
                       L"</p><button id=b>Continue</button><p>Next you sign in with a code from Settings → Devices and sign-in on a device where "
                       L"you're already signed in.</p>" +
                       (port.empty() ? L"" : L"<p><a href='#' id=l style='color:#e3a3c3'>Or use Sara on this computer</a></p>") +
-                      L"</div><script>const go=()=>chrome.webview.postMessage({m:'setServer',url:document.getElementById('u').value});"
+                      (adding ? L"<p>Your other Saras stay signed in.</p><button class=g id=k>Back to " + htmlEscape(here.name) + L"</button>" : L"") +
+                      L"</div><script>const k=document.getElementById('k');if(k)k.onclick=()=>chrome.webview.postMessage({m:'retry'});const go=()=>chrome.webview.postMessage({m:'setServer',url:document.getElementById('u').value});"
                       L"const l=document.getElementById('l');if(l)l.onclick=(e)=>{e.preventDefault();chrome.webview.postMessage({m:'useLocal'})};"
                       L"document.getElementById('b').onclick=go;document.getElementById('u').onkeydown=e=>e.key==='Enter'&&go();</script></body></html>";
   if (g_web) g_web->NavigateToString(html.c_str());
@@ -444,54 +625,103 @@ static void showOffline() {
   std::wstring why = serverIsLocal()
       ? L"She runs on this computer and may still be starting. If she doesn't answer in a minute, open a terminal and run <b>sara status</b> (and <b>sara logs</b>)."
       : L"Check your internet connection, that the address is right, and that Sara is running there.";
+  // Phase 68: the other saved Saras are one click away.
+  std::wstring others;
+  for (auto& p : profiles())
+    if (p.id != g_profile) others += L"<button class=g data-id='" + htmlEscape(p.id) + L"'>" + htmlEscape(p.name) + L"</button>";
   std::wstring html = std::wstring(L"<!doctype html><html><head>") + kPageStyle + L"</head><body><div class=c><h1>Can't reach your Sara</h1><p>Sara at <b>" +
                       htmlEscape(g_server) + L"</b> isn't answering.</p><p>" + why +
-                      L"</p><button id=r>Try again</button><button class=g id=s>Change address</button></div><script>document.getElementById('r').onclick=()=>chrome.webview.postMessage({m:'retry'});"
+                      L"</p><button id=r>Try again</button><button class=g id=s>Add a Sara</button>" + others +
+                      L"</div><script>document.getElementById('r').onclick=()=>chrome.webview.postMessage({m:'retry'});"
+                      L"for(const b of document.querySelectorAll('[data-id]'))b.onclick=()=>chrome.webview.postMessage({m:'useServer',id:b.dataset.id});"
                       L"document.getElementById('s').onclick=()=>chrome.webview.postMessage({m:'changeServer'});setTimeout(()=>chrome.webview.postMessage({m:'retry'}),30000);</script></body></html>";
   if (g_web) g_web->NavigateToString(html.c_str());
 }
 
-/** Connect to a different Sara: this app signs out of the old one and keeps nothing from it (its
- *  cookies, storage and cache in the app's web view profile are cleared), then asks for the new
- *  address. The new server can never receive the old one's sign-in. */
-static void forgetServer() {
-  g_server.clear();
-  setPref(L"server", L"");
-  if (!g_web) return;
-  ComPtr<ICoreWebView2_2> w2;
-  if (SUCCEEDED(g_web.As(&w2))) {
-    ComPtr<ICoreWebView2CookieManager> cm;
-    if (SUCCEEDED(w2->get_CookieManager(&cm))) cm->DeleteAllCookies();
-  }
-  ComPtr<ICoreWebView2_13> w13;
-  ComPtr<ICoreWebView2Profile> profile;
-  ComPtr<ICoreWebView2Profile2> p2;
-  if (SUCCEEDED(g_web.As(&w13)) && SUCCEEDED(w13->get_Profile(&profile)) && SUCCEEDED(profile.As(&p2))) {
-    g_web->NavigateToString(L"<!doctype html><html><body style='background:#121016'></body></html>");
-    HRESULT hr = p2->ClearBrowsingDataAll(Callback<ICoreWebView2ClearBrowsingDataCompletedHandler>([](HRESULT) -> HRESULT {
-                    logLine(L"signed out of the old server (browsing data cleared)");
-                    showSetup();
-                    return S_OK;
-                  }).Get());
-    if (SUCCEEDED(hr)) return;
-  }
-  showSetup();
-}
-
-/** Tray menu → Connect to a different Sara… */
+/** Phase 68: "Add a Sara…" (tray menu, the page's ⇄ menu, the offline page): the address page.
+ *  Nothing is signed out; the new server gets a WebView2 profile of its own. */
 static void changeServerFromMenu() {
   showWindow();
-  if (!g_server.empty()) {
-    std::wstring q = L"Connect to a different Sara?\n\nThis app signs out of " + g_server +
-                     L" and forgets it. Then you type the new address and sign in there with a code. Nothing changes on " + g_server + L".";
-    if (MessageBoxW(g_wnd, q.c_str(), L"Sara", MB_YESNO | MB_ICONQUESTION) != IDYES) return;
-  }
-  forgetServer();
+  showSetup();
 }
 
 static void openServer(const std::wstring& path = L"/") {
   if (g_server.empty()) return showSetup();
-  g_web->Navigate((g_server + path).c_str());
+  if (g_web) g_web->Navigate((g_server + path).c_str());
+}
+
+static void createController();
+/** Phase 68: shows another saved server in its own WebView2 profile; every sign-in is kept. */
+static void switchTo(const std::wstring& id, const std::wstring& path = L"/") {
+  if (loadProfile(id).url.empty()) return;
+  if (id == g_profile && g_web) {
+    activate(id);
+    return openServer(path);
+  }
+  activate(id);
+  g_nextPath = path;
+  if (g_controller) g_controller->Close();
+  g_controller.Reset();
+  g_web.Reset();
+  createController();
+}
+/** Asks for a switch from the message loop (not from inside a WebView2 callback). */
+static void postSwitch(const std::wstring& id, const std::wstring& path = L"/") {
+  g_switchTo = id;
+  g_switchPath = path;
+  PostMessageW(g_wnd, WM_APP_SWITCH, 0, 0);
+}
+
+/** Removing the server in use: sign out on the server (from its own page), then clear its
+ *  WebView2 profile, forget it and show the most recently used other one. */
+static void removeActive() {
+  g_removing = g_profile;
+  SetTimer(g_wnd, kRemoveTimer, 5000, nullptr);  // offline: forget it here anyway
+  if (g_web) g_web->ExecuteScript(L"fetch('/api/logout',{method:'POST',headers:{'content-type':'application/json'},body:'{}'}).catch(()=>{}).finally(()=>chrome.webview.postMessage({m:'loggedOut'}))", nullptr);
+}
+static void finishRemove() {
+  KillTimer(g_wnd, kRemoveTimer);
+  if (g_removing.empty()) return;
+  std::wstring id = g_removing;
+  auto done = [id]() {
+    forgetProfile(id);
+    logLine(L"forgot server " + id + L" (its sign-in was cleared)");
+    g_removing.clear();
+    PostMessageW(g_wnd, WM_APP_REMOVED, 0, 0);
+  };
+  ComPtr<ICoreWebView2_13> w13;
+  ComPtr<ICoreWebView2Profile> profile;
+  ComPtr<ICoreWebView2Profile2> p2;
+  if (g_web && SUCCEEDED(g_web.As(&w13)) && SUCCEEDED(w13->get_Profile(&profile)) && SUCCEEDED(profile.As(&p2))) {
+    g_web->NavigateToString(L"<!doctype html><html><body style='background:#121016'></body></html>");
+    HRESULT hr = p2->ClearBrowsingDataAll(Callback<ICoreWebView2ClearBrowsingDataCompletedHandler>([done](HRESULT) -> HRESULT {
+                    done();
+                    return S_OK;
+                  }).Get());
+    if (SUCCEEDED(hr)) return;
+  }
+  done();
+}
+static void removeServer(const std::wstring& id) {
+  if (loadProfile(id).url.empty() || !g_removing.empty()) return;
+  if (id == g_profile) return removeActive();
+  // Its sign-in is in its own profile: open it, then sign out there (see NavigationCompleted).
+  g_removeAfterLoad = id;
+  postSwitch(id);
+}
+/** After a removal: the most recently used other server, or the address page. */
+static void afterRemove() {
+  Profile best;
+  for (auto& p : profiles())
+    if (best.id.empty() || p.lastUsed > best.lastUsed) best = p;
+  if (best.id.empty()) {
+    g_profile.clear();
+    g_server.clear();
+    setPref(L"server", L"");
+    setIni(L"servers", L"active", L"");
+    return showSetup();
+  }
+  switchTo(best.id);
 }
 
 // ---------- the bridge (window.SaraDesktop in the page) ----------
@@ -536,23 +766,49 @@ static void onMessage(const std::wstring& json, const std::wstring& source) {
   if (kind == L"setServer") {
     std::wstring o = originOf(m[L"url"]);
     if (o.empty()) return showSetup(L"That doesn't look like a web address. Try something like sara.example.com.");
-    g_server = o;
-    setPref(L"server", o);
     setPref(L"lastServer", o);
-    return openServer(L"/pair");
+    // Phase 68: a saved server again, or a new one next to the others (nobody is signed out).
+    return postSwitch(profileFor(o), L"/pair");
   }
   if (kind == L"retry") return openServer();
-  if (kind == L"changeServer") return forgetServer();
+  if (kind == L"changeServer") return changeServerFromMenu();
+  if (kind == L"useServer" && !fromServer) return postSwitch(m[L"id"]);
   if (kind == L"useLocal") {
     std::wstring port = localPort();
     if (port.empty()) return showSetup();
-    g_server = L"http://127.0.0.1:" + port;
-    setPref(L"server", g_server);
-    setPref(L"lastServer", g_server);
-    return openServer();
+    std::wstring o = L"http://127.0.0.1:" + port;
+    setPref(L"lastServer", o);
+    return postSwitch(profileFor(o));
   }
   if (!fromServer) return;  // everything else only from the owner's own server
   if (kind == L"getPrefs") return reply(id, prefsJson());
+  // Phase 68: the page's ⇄ menu. Names and hosts only: no sign-in ever goes to a page.
+  if (kind == L"servers") return reply(id, serversJson());
+  if (kind == L"useServer") {
+    reply(id, L"true");
+    return postSwitch(m[L"id"]);
+  }
+  if (kind == L"addServer") {
+    reply(id, L"true");
+    return showSetup();
+  }
+  if (kind == L"removeServer") {
+    reply(id, L"true");
+    return removeServer(m[L"id"]);
+  }
+  if (kind == L"renameServer" || kind == L"serverName") {
+    bool byUser = kind == L"renameServer";
+    Profile p = loadProfile(byUser ? m[L"id"] : g_profile);
+    std::wstring name = m[L"name"];
+    if (!p.url.empty() && !name.empty() && (byUser || !p.named)) {
+      p.name = uniqueName(name, p.url, p.id);
+      if (byUser) p.named = true;
+      saveProfile(p);
+      if (p.id == g_profile) activate(p.id);
+    }
+    return reply(id, serversJson());
+  }
+  if (kind == L"loggedOut") return finishRemove();
   if (kind == L"setPref") {
     const std::wstring& key = m[L"key"];
     bool on = m[L"value"] == L"true";
@@ -581,18 +837,11 @@ static void onMessage(const std::wstring& json, const std::wstring& source) {
   }
 }
 
-static void createWebView() {
-  std::wstring userData = dataDir() + L"\\WebView";
-  HRESULT hr = CreateCoreWebView2EnvironmentWithOptions(
-      nullptr, userData.c_str(), nullptr,
-      Callback<ICoreWebView2CreateCoreWebView2EnvironmentCompletedHandler>([](HRESULT res, ICoreWebView2Environment* env) -> HRESULT {
-        if (FAILED(res) || !env) {
-          if (MessageBoxW(g_wnd, L"Sara needs Microsoft Edge WebView2, which is part of Windows 11 and most Windows 10 PCs. Open the download page?", L"Sara", MB_YESNO | MB_ICONWARNING | MB_SETFOREGROUND) == IDYES)
-            ShellExecuteW(nullptr, L"open", L"https://developer.microsoft.com/microsoft-edge/webview2/", nullptr, nullptr, SW_SHOWNORMAL);
-          PostQuitMessage(1);
-          return S_OK;
-        }
-        env->CreateCoreWebView2Controller(g_wnd, Callback<ICoreWebView2CreateCoreWebView2ControllerCompletedHandler>([](HRESULT r2, ICoreWebView2Controller* ctl) -> HRESULT {
+/** Phase 68: the web view for the server in use, in that server's own WebView2 profile (s1: the
+ *  default profile, the one used before 1.8; others: "sara-<id>"), so sign-ins stay apart. */
+static void createController() {
+  if (!g_env) return;
+  auto done = Callback<ICoreWebView2CreateCoreWebView2ControllerCompletedHandler>([](HRESULT r2, ICoreWebView2Controller* ctl) -> HRESULT {
           if (FAILED(r2) || !ctl) return S_OK;
           g_controller = ctl;
           g_controller->get_CoreWebView2(&g_web);
@@ -646,6 +895,11 @@ static void createWebView() {
             std::wstring u = uri ? uri : L"";
             CoTaskMemFree(uri);
             if (!ok && sameOrigin(u) && st != COREWEBVIEW2_WEB_ERROR_STATUS_OPERATION_CANCELED) showOffline();
+            // Phase 68: removing a server that wasn't in use: now it's open, sign out there.
+            if (!g_removeAfterLoad.empty() && g_removeAfterLoad == g_profile && sameOrigin(u)) {
+              g_removeAfterLoad.clear();
+              removeActive();
+            }
             return S_OK;
           }).Get(), nullptr);
           // Microphone (calls, voice messages) and notifications: allowed for the owner's server only.
@@ -681,11 +935,38 @@ static void createWebView() {
                 return S_OK;
               }
             }
-            openServer();
+            std::wstring path = g_nextPath;
+            g_nextPath = L"/";
+            openServer(path);
             return S_OK;
           }).Get());
           return S_OK;
-        }).Get());
+  });
+  ComPtr<ICoreWebView2Environment10> env10;
+  if (!g_profile.empty() && g_profile != L"s1" && SUCCEEDED(g_env.As(&env10))) {
+    ComPtr<ICoreWebView2ControllerOptions> opts;
+    if (SUCCEEDED(env10->CreateCoreWebView2ControllerOptions(&opts))) {
+      opts->put_ProfileName((L"sara-" + g_profile).c_str());
+      env10->CreateCoreWebView2ControllerWithOptions(g_wnd, opts.Get(), done.Get());
+      return;
+    }
+  }
+  g_env->CreateCoreWebView2Controller(g_wnd, done.Get());
+}
+
+static void createWebView() {
+  std::wstring userData = dataDir() + L"\\WebView";
+  HRESULT hr = CreateCoreWebView2EnvironmentWithOptions(
+      nullptr, userData.c_str(), nullptr,
+      Callback<ICoreWebView2CreateCoreWebView2EnvironmentCompletedHandler>([](HRESULT res, ICoreWebView2Environment* env) -> HRESULT {
+        if (FAILED(res) || !env) {
+          if (MessageBoxW(g_wnd, L"Sara needs Microsoft Edge WebView2, which is part of Windows 11 and most Windows 10 PCs. Open the download page?", L"Sara", MB_YESNO | MB_ICONWARNING | MB_SETFOREGROUND) == IDYES)
+            ShellExecuteW(nullptr, L"open", L"https://developer.microsoft.com/microsoft-edge/webview2/", nullptr, nullptr, SW_SHOWNORMAL);
+          PostQuitMessage(1);
+          return S_OK;
+        }
+        g_env = env;
+        createController();
         return S_OK;
       }).Get());
   if (FAILED(hr)) {
@@ -744,6 +1025,20 @@ static LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
     case WM_APP_BALLOON:
       showBalloonNow();
       return 0;
+    case WM_APP_SWITCH:
+      if (!g_switchTo.empty()) {
+        std::wstring id = g_switchTo, path = g_switchPath;
+        g_switchTo.clear();
+        showWindow();
+        switchTo(id, path.empty() ? L"/" : path);
+      }
+      return 0;
+    case WM_APP_REMOVED:
+      afterRemove();
+      return 0;
+    case WM_TIMER:
+      if (wp == kRemoveTimer) finishRemove();
+      return 0;
     case WM_APP_TRAY:
       switch (LOWORD(lp)) {
         case WM_LBUTTONUP:
@@ -767,6 +1062,16 @@ static LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
         case ID_OPEN: showWindow(); break;
         case ID_LOGIN: setStartAtLogin(!startAtLogin()); break;
         case ID_CHANGE: changeServerFromMenu(); break;
+        default:
+          if (LOWORD(wp) >= ID_SERVER0 && LOWORD(wp) < ID_SERVER0 + 50) {
+            auto list = profiles();
+            size_t i = LOWORD(wp) - ID_SERVER0;
+            if (i < list.size()) {
+              showWindow();
+              switchTo(list[i].id);
+            }
+          }
+          break;
         case ID_QUIT:
           g_quitting = true;
           SendMessageW(h, WM_CLOSE, 0, 0);
@@ -787,7 +1092,11 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR cmd, int show) {
     return 0;
   }
   // One Sara at a time: a second start just shows the first.
+#ifdef SARA_TEST_HOOKS
+  HANDLE single = CreateMutexW(nullptr, TRUE, GetEnvironmentVariableW(L"SARA_DESKTOP_TEST_DIR", nullptr, 0) > 0 ? L"Local\\SaraDesktopAppTest" : L"Local\\SaraDesktopApp");
+#else
   HANDLE single = CreateMutexW(nullptr, TRUE, L"Local\\SaraDesktopApp");
+#endif
   if (GetLastError() == ERROR_ALREADY_EXISTS) {
     if (HWND other = FindWindowW(kWindowClass, nullptr)) PostMessageW(other, WM_APP_SHOW, 0, 0);
     return 0;
@@ -813,6 +1122,14 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR cmd, int show) {
       }
     }
     if (argv) LocalFree(argv);
+  }
+  // Phase 68: the saved servers. Before 1.8 there was one: it becomes s1 with its sign-in. An
+  // address set by the installer or --server is a saved one again, or added next to the others.
+  migrateProfiles();
+  if (!g_server.empty()) activate(profileFor(g_server));
+  else {
+    std::wstring act = getIni(L"servers", L"active");
+    if (!act.empty() && !loadProfile(act).url.empty()) activate(act);
   }
 
   WNDCLASSEXW wc{sizeof(wc)};

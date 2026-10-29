@@ -119,8 +119,9 @@ test('pair link: both phone apps clean the address and refuse look-alikes before
     assert.match(src, /isPrivateHost/, 'plain http outside a private network gets a warning');
   }
   assert.match(java, /Net\.pairOrigin\(server\)/);
-  assert.match(java, /"Switch server"/);
-  assert.match(ui, /Button\("Switch server", role: \.destructive\)/);
+  // Phase 68: a link to another server adds it next to the others (Cancel stays the default).
+  assert.match(java, /R\.string\.servers_add_title/);
+  assert.match(ui, /Button\("Add", role: \.destructive\)/);
   assert.match(ui, /Button\("Cancel", role: \.cancel\)/);
   // iPhone: the old sign-in stays until the new server answered as Sara.
   assert.match(swift, /await Self\.reachable\(link\.server\)/);

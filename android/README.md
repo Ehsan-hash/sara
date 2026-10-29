@@ -56,6 +56,10 @@ then run `./gradlew assembleRelease`.
   connection to your server and shows her messages the moment they arrive. Android shows a small
   "Instant notifications are on" note for this (in the Silent section). Off: she's checked about
   every 15 minutes. No Google Firebase or other outside service is involved either way.
+- **Several Saras** (Phase 68): add another server by scanning its QR code (**Add this Sara?**) or
+  from **⇄** at the top; each keeps its sign-in (the ones not in use are kept encrypted with a key in
+  the Android Keystore), notifications come from all of them and open the right one. See
+  [docs/SERVERS.md](../docs/SERVERS.md).
 - **App lock**: fingerprint, face or your screen lock after 30 seconds away; the app is hidden in
   the recent-apps view while the lock is on. **Hide the message text on the lock screen** is
   there too.

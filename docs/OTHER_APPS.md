@@ -227,6 +227,13 @@ answers back. The key comes from `SARA_API_KEY` (or `--key-file`), never the com
 
 The same bridge works for any MCP app that only starts programs (`node sara-mcp.ts --server …`).
 
+Phase 68: with `sara-chat` signed in to several Saras, `--server <name>` (or `SARA_SERVER=<name>`)
+picks one of them by the name `sara-chat servers` shows, and the bridge uses that server's own
+sign-in from sara-chat's config (no API key needed). Two entries in `claude_desktop_config.json`
+with `"args": ["…/sara-mcp.ts", "--server", "home"]` and `"--server", "work"` give the app both.
+A `SARA_API_KEY` is only used with a full address, never sent to a server picked by name.
+[SERVERS.md](SERVERS.md)
+
 `node sara-mcp.ts --describe` starts the bridge with no server: it answers `initialize` (with
 Sara's version) and `tools/list` with all her tools, write tools included, and nothing else
 (every tool call says how to connect). It exists for MCP directories such as

@@ -220,18 +220,27 @@ test('installer and apps: the same address rule (https unless home network, IP o
   assert.match(swift, /\(plainHTTPHost\(host\) \? "http:\/\/" : "https:\/\/"\)/);
 });
 
-test('Windows app: change address forgets the old sign-in; a clear unreachable page', () => {
+test('Windows app: several servers, each in its own WebView2 profile; removing one clears only its sign-in; a clear unreachable page', () => {
   const cpp = readFileSync(join(ROOT, 'desktop', 'windows', 'src', 'main.cpp'), 'utf8');
-  assert.match(cpp, /L"Connect to a different Sara…"/);
+  // Phase 68: "Add a Sara…" replaces "Connect to a different Sara…" (which signed out of the old one).
+  assert.match(cpp, /L"Add a Sara…"/);
+  assert.doesNotMatch(cpp, /Connect to a different Sara/);
   assert.match(cpp, /case ID_CHANGE: changeServerFromMenu\(\)/);
-  const forget = cpp.slice(cpp.indexOf('static void forgetServer()'), cpp.indexOf('static void changeServerFromMenu()'));
-  assert.match(forget, /DeleteAllCookies\(\)/);
-  assert.match(forget, /ClearBrowsingDataAll/);
+  // s1 keeps the default profile (the sign-in from before 1.8); the others get their own.
+  assert.match(cpp, /g_profile != L"s1"[\s\S]{0,400}put_ProfileName\(\(L"sara-" \+ g_profile\)/);
+  assert.match(cpp, /static void migrateProfiles\(\)/);
+  const remove = cpp.slice(cpp.indexOf('static void finishRemove()'), cpp.indexOf('static void removeServer('));
+  assert.match(remove, /ClearBrowsingDataAll/);
+  assert.match(cpp, /fetch\('\/api\/logout',\{method:'POST',headers:\{'content-type':'application\/json'\}/, 'signs out on the server first');
   assert.match(cpp, /<h1>Can't reach your Sara<\/h1>/);
-  assert.match(cpp, /id=s>Change address<\/button>/);
+  assert.match(cpp, /id=s>Add a Sara<\/button>/);
   assert.match(cpp, /htmlEscape\(g_server\)/, 'the address is shown');
   assert.doesNotMatch(cpp, /AppendMenuW\([^)]*L"(Start|Stop|Logs)/, 'no server items in the tray menu');
   assert.match(cpp, /installedBySetup\(\)/);
+  // The page only gets names and hosts.
+  const json = cpp.slice(cpp.indexOf('static std::wstring serversJson()'), cpp.indexOf('// ---------- start with Windows'));
+  assert.doesNotMatch(json, /jsonEscape\(p\.url\)/);
+  assert.match(json, /hostOfUrl\(p\.url\)/);
 });
 
 test('Mac: no LaunchDaemon left; the two choices and switching both ways', () => {
@@ -251,7 +260,11 @@ test('Mac: no LaunchDaemon left; the two choices and switching both ways', () =>
   assert.match(server, /\(--mode daemon\) was removed/);
   assert.match(setup, /Run Sara on this Mac/);
   assert.match(setup, /Connect to a Sara somewhere else/);
-  assert.match(setup, /"Connect to a different Sara…"/);
+  // Phase 68: the saved servers and "Add a Sara…" (Servers.swift) replace "Connect to a different Sara…".
+  const servers = readFileSync(join(mac, 'Sources', 'Servers.swift'), 'utf8');
+  assert.match(servers, /"Add a Sara…"/);
+  assert.match(setup, /addServerItems\(to: m\)/);
+  assert.match(servers, /WKWebsiteDataStore\(forIdentifier: uuid\)/);
   assert.match(setup, /"Set up Sara on this Mac…"/);
   assert.match(setup, /"Connect to a Sara somewhere else instead…"/);
   assert.match(setup, /Her data stays in ~\/Library\/Application Support\/Sara until you uninstall with sara uninstall --delete-data/);

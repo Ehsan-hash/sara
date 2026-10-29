@@ -387,7 +387,7 @@ function buildCompanion(id: string, dir: string): Companion {
     lookFile: (rel) => app.look?.fileFor(rel),
     wearing: () => {
       const meta = app.look?.custom ? app.look.currentMeta() : {};
-      return { wear: meta.wear, place: meta.place ? (PLACES[meta.place]?.prompt ?? meta.place) : undefined };
+      return { wear: meta.wear, place: meta.place ? (PLACES[meta.place]?.prompt ?? meta.place) : undefined, style: meta.style };
     },
     faceRef: () => app.look?.faceRef(),
     customPortrait: () => {

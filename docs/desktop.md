@@ -17,6 +17,18 @@ What they add over a browser tab:
 | Start when you sign in | Login Items | Start with Windows |
 | Microphone for calls and voice messages | ✓ (asks once) | ✓ |
 | Settings → Connections → This computer | ✓ | ✓ |
+| Several Sara servers, each signed in, switched from a menu (Phase 68) | ✓ (macOS 14+) | ✓ |
+
+## Several servers (Phase 68)
+
+Both apps keep a list of Sara servers, each with its own sign-in (Windows: its own WebView2
+profile; Mac: its own WebKit data store), and switch without signing out: the tray icon's list
+(Windows) or the menu bar's *Sara server* menu (Mac), and the **⇄** button in the app's top bar
+once there are two. *Add a Sara…* replaces *Connect to a different Sara…* (which used to sign out
+of the old server); *Remove* signs out of one server only. The server used before 1.8 becomes the
+first in the list, still signed in. Notifications, the microphone and files you pick go to the
+server in use only, and the desktop apps notify for that server only. Details for every app:
+[SERVERS.md](SERVERS.md).
 
 ## Two ways to use the apps (Phase 55)
 
@@ -40,14 +52,14 @@ HTTP (the Windows installer, the Windows app and the Mac app use the same rule).
   data stays). Uninstalling an app-only install removes the app, its settings and its sign-in here;
   no server's data is touched. Silent: `Sara-Setup.exe /VERYSILENT /MODE=remote
   /SERVER=sara.example.com`.
-- **The Windows app** (any install): tray menu → *Connect to a different Sara…* (asks first; signs
-  this app out of the old server and clears its web view profile — cookies, storage, cache — so the
-  new server never receives the old one's sign-in), and a *Can't reach your Sara* page with the
-  address, *Try again* and *Change address*. There are no server items (start, stop, logs) in its
+- **The Windows app** (any install): tray menu → *Add a Sara…* and the list of saved servers
+  (Phase 68: each in its own web view profile, so no server receives another's sign-in; before 1.8
+  this was *Connect to a different Sara…*, which signed out of the old one), and a *Can't reach your
+  Sara* page with the address, *Try again*, *Add a Sara* and the other saved servers. There are no server items (start, stop, logs) in its
   menu; with her server on the same PC, `sara status` and `sara logs` do that.
 - **Mac:** the first launch shows the two choices. The menu bar's *Sara server* menu switches later
-  without reinstalling: when connected elsewhere, *Connect to a different Sara…* and *Set up Sara on
-  this Mac…*; when she runs on the Mac, *Connect to a Sara somewhere else instead…* (after a confirm:
+  without reinstalling: the saved servers (Phase 68), *Add a Sara…*, and when connected elsewhere
+  *Set up Sara on this Mac…*; when she runs on the Mac, *Connect to a Sara somewhere else instead…* (after a confirm:
   she stops and her LaunchAgent is unregistered; her data stays in
   `~/Library/Application Support/Sara` until `sara uninstall --delete-data`, and *Set up Sara on this
   Mac…* brings her back as she was).
@@ -102,9 +114,9 @@ a Sara somewhere else*. How it works:
 2. On a device where you're already signed in: Settings → Devices and sign-in → **Add a phone or
    computer**, and type the code in the app.
 
-The app keeps only the server address and its own settings. The sign-in is the server's session
-cookie, stored in the app's own web view profile; sign it out from Settings → Devices and sign-in
-like any other device. Adult mode can't be turned on from the apps (web browser only).
+The app keeps only the server addresses and its own settings. Each sign-in is that server's session
+cookie, stored in the app's own web view profile for that server; sign it out from Settings →
+Devices and sign-in like any other device, or remove the server in the app (Phase 68). Adult mode can't be turned on from the apps (web browser only).
 
 ## Building
 
@@ -212,6 +224,8 @@ sheet and skips the owner-key sheet. Release builds don't contain them. The serv
 driven entirely over SSH with `Sara.app/Contents/MacOS/Sara --cli setup|status|stop|start|uninstall…`
 (`SMAppService.agent` registers fine from an SSH session). The Windows app can be driven with
 `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=<port>` and `--portable` (runs
-without installing itself). Phase 55 was checked that way: the installer in remote mode
+without installing itself). Phase 68: a test build (`cmake -DSARA_TEST_HOOKS=ON`, never for
+release) also honours `SARA_DESKTOP_TEST_DIR=<folder>` (its own settings, web view profiles and
+single-instance lock), so it runs next to the real app without touching its sign-ins. Phase 55 was checked that way: the installer in remote mode
 (`/VERYSILENT /CURRENTUSER /MODE=remote /SERVER=http://127.0.0.1:<port>` against a scratch server),
 then pairing with a code, *Connect to a different Sara…*, the unreachable page and the uninstall.

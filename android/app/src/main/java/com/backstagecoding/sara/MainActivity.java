@@ -92,6 +92,12 @@ public class MainActivity extends Activity {
         if (handlePairLink(getIntent())) return;
         takeShare(getIntent());
         takeRing(getIntent());
+        // Phase 68: the saved servers (the one from before 1.8 becomes the first, as it was).
+        Servers.list(this);
+        // Opened from a notification of another saved server: that one first.
+        String from = getIntent() == null ? null : getIntent().getStringExtra("server");
+        Servers.Profile cur = Servers.active(this);
+        if (from != null && cur != null && !from.equals(cur.id) && Servers.useId(this, from) != null) LiveInbox.restart(this);
         String server = Net.server(this);
         if (server == null) showSetup(null, null);
         else showWeb(server, getIntent());
@@ -107,13 +113,31 @@ public class MainActivity extends Activity {
             return;
         }
         String conv = intent.getStringExtra("conv");
+        // Phase 68: a notification from another saved server opens that server.
+        String from = intent.getStringExtra("server");
+        Servers.Profile cur = Servers.active(this);
+        if (from != null && cur != null && !from.equals(cur.id)) {
+            switchTo(from, intent);
+            return;
+        }
         if (web != null && conv != null) web.loadUrl(Net.server(this) + "/#c=" + Uri.encode(conv));
+    }
+
+    /** Phase 68: shows another saved server; every server keeps its sign-in. */
+    private void switchTo(String id, Intent intent) {
+        Servers.Profile p = Servers.useId(this, id);
+        if (p == null) return;
+        LiveInbox.restart(this);
+        WidgetProvider.refreshAsync(this);
+        Toast.makeText(this, getString(R.string.servers_now, p.name), Toast.LENGTH_SHORT).show();
+        showWeb(p.url, intent);
     }
 
     /**
      * sara://pair?s=<server>&c=<code> (from the pairing page): connects to that server and signs
      * in with the one-time code. Without c (the access QR's sign-in page) it connects and shows
-     * that server's sign-in. Always asks first, so a link can't quietly switch servers.
+     * that server's sign-in. Always asks first, so a link can't quietly switch servers. Phase 68:
+     * another server is added next to the ones already here (nobody is signed out).
      */
     private boolean handlePairLink(Intent intent) {
         Uri u = intent == null ? null : intent.getData();
@@ -139,31 +163,35 @@ public class MainActivity extends Activity {
                     .show();
             return true;
         }
-        boolean switching = current != null && !Net.sameOrigin(current, url);
+        // Already saved (any of them): sign in there again. A new one: added next to the others.
+        boolean adding = current != null && !Net.sameOrigin(current, url) && Servers.byOrigin(this, url) == null;
         android.text.SpannableStringBuilder msg = new android.text.SpannableStringBuilder();
-        if (switching) {
-            msg.append("This link wants to move the app to another server.\n\nNow: ");
-            msg.append(current);
-            msg.append("\nNew: ");
+        int start;
+        if (adding) {
+            String m = getString(R.string.servers_add_message, url);
+            msg.append(m);
+            start = m.indexOf(url);
+            msg.setSpan(new android.text.style.StyleSpan(Typeface.BOLD), start, start + url.length(), android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
         } else {
             msg.append("Sign in to ");
+            start = msg.length();
+            msg.append(url);
+            msg.setSpan(new android.text.style.StyleSpan(Typeface.BOLD), start, msg.length(), android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            msg.append("?");
         }
-        int start = msg.length();
-        msg.append(url);
-        msg.setSpan(new android.text.style.StyleSpan(Typeface.BOLD), start, msg.length(), android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-        if (!switching) msg.append("?");
         if (url.startsWith("http://") && !Net.isPrivateHost(url)) {
             msg.append("\n\n⚠ This address uses plain http on the open internet: anyone on the way could read your messages. Only continue if you set it up that way.");
         }
-        if (switching) msg.append("\n\nOnly switch if you made this link yourself.");
+        if (adding) msg.append("\n\n").append(getString(R.string.servers_add_only_yours));
+        boolean switching = adding;
         android.app.AlertDialog.Builder b = new android.app.AlertDialog.Builder(this)
-                .setTitle(switching ? "Switch server?" : code != null ? "Sign in with a code" : "Open your Sara")
+                .setTitle(adding ? getString(R.string.servers_add_title) : code != null ? "Sign in with a code" : "Open your Sara")
                 .setMessage(msg)
                 .setOnCancelListener(d -> back.run());
-        if (switching) {
-            // Cancel is the main (default) choice; switching is the careful, red one.
-            b.setPositiveButton("Cancel", (d, w) -> back.run());
-            b.setNegativeButton("Switch server", (d, w) -> connect(url, code));
+        if (adding) {
+            // Cancel is the main (default) choice; adding a server from a link is the careful one.
+            b.setPositiveButton(getString(R.string.servers_cancel), (d, w) -> back.run());
+            b.setNegativeButton(getString(R.string.servers_add), (d, w) -> connect(url, code));
         } else {
             b.setPositiveButton("Sign in", (d, w) -> connect(url, code));
             b.setNegativeButton("Cancel", (d, w) -> back.run());
@@ -181,9 +209,13 @@ public class MainActivity extends Activity {
         return true;
     }
 
-    /** Saves the server and opens it; with a pairing code, signs in on the way. */
+    /**
+     * Opens that server (a saved one, or a new one added to the list); with a pairing code, signs
+     * in on the way. The server that was in use stays signed in (Phase 68).
+     */
     private void connect(String url, String code) {
-        Net.prefs(this).edit().putString("server", url).putLong("lastId", 0).apply();
+        Servers.use(this, url);
+        LiveInbox.restart(this);
         Intent i = new Intent();
         if (code != null && !code.trim().isEmpty()) i.putExtra("pair", code.trim());
         showWeb(url, i);
@@ -192,7 +224,9 @@ public class MainActivity extends Activity {
     // ---------- setup ----------
 
     private void showSetup(String prefill, String error) {
-        web = null;
+        dropWeb();
+        // Phase 68: with a Sara already here, this screen adds another one (Back returns).
+        final Servers.Profile here = Servers.active(this);
         int pad = dp(24);
         LinearLayout box = new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL);
@@ -200,7 +234,7 @@ public class MainActivity extends Activity {
         box.setPadding(pad, pad, pad, pad);
         box.setBackgroundColor(Color.parseColor("#141318"));
 
-        TextView title = text("Connect to your companion", 24, Color.WHITE);
+        TextView title = text(here != null ? getString(R.string.servers_add_a_sara) : "Connect to your companion", 24, Color.WHITE);
         title.setTypeface(Typeface.DEFAULT_BOLD);
         TextView help = text("Type the address of your Sara server: the same one you open in your browser, for example sara.example.com or 192.168.1.20:7860.", 15, Color.parseColor("#D0CCD8"));
         help.setPadding(0, dp(12), 0, dp(16));
@@ -276,7 +310,7 @@ public class MainActivity extends Activity {
         demo.setText("Try the demo");
         demo.setAllCaps(false);
         demo.setOnClickListener(v -> {
-            Net.prefs(this).edit().putString("server", DEMO_SERVER).putLong("lastId", 0).apply();
+            Servers.use(this, DEMO_SERVER);
             Intent i = new Intent();
             i.putExtra("demo", true);
             showWeb(DEMO_SERVER, i);
@@ -293,13 +327,30 @@ public class MainActivity extends Activity {
         box.addView(go);
         box.addView(demoHelp);
         box.addView(demo);
+        if (here != null) {
+            Button back = new Button(this);
+            back.setText(getString(R.string.servers_back, here.name));
+            back.setAllCaps(false);
+            back.setOnClickListener(v -> showWeb(here.url, null));
+            box.addView(back);
+        }
         keepClearOfBars(box, pad);
         setContentView(box);
     }
 
     // ---------- the app ----------
 
+    /** Lets go of the web view (switching servers or showing the setup screen). */
+    private void dropWeb() {
+        if (web == null) return;
+        WebView old = web;
+        web = null;
+        if (root != null) root.removeView(old);
+        old.destroy();
+    }
+
     private void showWeb(String server, Intent intent) {
+        dropWeb();
         // Test builds only: lets a developer inspect the page from a computer (chrome://inspect).
         if ((getApplicationInfo().flags & ApplicationInfo.FLAG_DEBUGGABLE) != 0) WebView.setWebContentsDebuggingEnabled(true);
         web = new WebView(this);
@@ -704,7 +755,64 @@ public class MainActivity extends Activity {
 
         @JavascriptInterface
         public void changeServer() {
-            runOnUiThread(() -> showSetup(Net.server(MainActivity.this), null));
+            runOnUiThread(() -> showSetup(null, null));
+        }
+
+        // ---- Phase 68: several Saras in one app (the page shows the list; sign-ins stay here) ----
+
+        /** {"servers":[{id,name,host,active,emoji}]}: names and hosts only, never a sign-in. */
+        @JavascriptInterface
+        public String servers() {
+            return Servers.json(MainActivity.this);
+        }
+
+        @JavascriptInterface
+        public void useServer(String id) {
+            runOnUiThread(() -> switchTo(id, null));
+        }
+
+        @JavascriptInterface
+        public void addServer() {
+            runOnUiThread(() -> showSetup(null, null));
+        }
+
+        /** Forgets that server's sign-in only (signing this phone out there first). */
+        @JavascriptInterface
+        public void removeServer(String id) {
+            Context c = MainActivity.this;
+            Servers.Profile p = Servers.find(Servers.list(c), id);
+            if (p == null) return;
+            new Thread(() -> {
+                try {
+                    Net.postJson(c, p.url + "/api/logout", "{}");
+                } catch (Exception ignored) {
+                    // offline: the sign-in is forgotten here anyway
+                }
+                Servers.Profile was = Servers.active(c);
+                boolean wasActive = was != null && was.id.equals(id);
+                Servers.Profile now = Servers.remove(c, id);
+                runOnUiThread(() -> {
+                    if (!wasActive) {
+                        if (web != null) web.evaluateJavascript("window.saraServersChanged&&window.saraServersChanged()", null);
+                        return;
+                    }
+                    LiveInbox.restart(c);
+                    if (now == null) showSetup(null, null);
+                    else showWeb(now.url, null);
+                });
+            }).start();
+        }
+
+        @JavascriptInterface
+        public void renameServer(String id, String name) {
+            Servers.rename(MainActivity.this, id, name, true);
+        }
+
+        /** The page tells the app her name on this server (names the entry until renamed). */
+        @JavascriptInterface
+        public void serverName(String name) {
+            Servers.Profile p = Servers.active(MainActivity.this);
+            if (p != null) Servers.rename(MainActivity.this, p.id, name, false);
         }
 
         /** Settings kept on the phone: instant, lockPrivate, appLock. */

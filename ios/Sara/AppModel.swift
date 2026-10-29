@@ -34,6 +34,10 @@ final class AppModel: ObservableObject {
 
     weak var web: WKWebView?
     var deviceToken: String?
+    /// Phase 68: the saved server in use (its own website data store and sign-in).
+    @Published var activeId: String?
+    /// A server being removed that wasn't in use: opened first, then signed out there.
+    var pendingRemove: String?
 
     // MARK: app lock (Phase 18)
 
@@ -86,6 +90,7 @@ final class AppModel: ObservableObject {
     init() {
         server = SharedStore.server
         screen = SharedStore.server == nil ? .setup : .web
+        activeId = Servers.active?.id
         #if DEBUG
         // Test runs: launch with -SaraTestServer <url> [-SaraTestCode <pairing code>].
         if let s = UserDefaults.standard.string(forKey: "SaraTestServer") {
@@ -133,6 +138,62 @@ final class AppModel: ObservableObject {
         screen = .setup
     }
 
+    // MARK: several servers (Phase 68)
+
+    /// Shows a saved server; every server keeps its sign-in in its own website data store.
+    func switchTo(_ id: String, path: String = "/") {
+        guard let p = Servers.list().first(where: { $0.id == id }) else { return }
+        saveCookies()
+        use(server: p.url, path: path)
+    }
+
+    /// The page's ⇄ menu → Remove: signs out on that server (from its own page) and forgets only it.
+    func removeServer(_ id: String) {
+        guard Servers.list().contains(where: { $0.id == id }) else { return }
+        if id != activeId {
+            pendingRemove = id
+            return switchTo(id)
+        }
+        removeActive()
+    }
+
+    func removeActive() {
+        guard let p = Servers.active else { return }
+        var finished = false
+        let finish = { [weak self] in
+            guard let self, !finished else { return }
+            finished = true
+            Task { @MainActor in
+                await Servers.forgetData(p)
+                Servers.remove(p.id)
+                SharedStore.cookie = nil
+                SharedStore.widgetJSON = nil
+                SharedStore.face = nil
+                if let next = Servers.list().max(by: { $0.lastUsed < $1.lastUsed }) {
+                    self.server = nil
+                    self.use(server: next.url, path: "/")
+                } else {
+                    self.server = nil
+                    self.activeId = nil
+                    SharedStore.server = nil
+                    self.screen = .setup
+                }
+                WidgetCenter.shared.reloadAllTimelines()
+            }
+        }
+        web?.evaluateJavaScript("fetch('/api/logout',{method:'POST',headers:{'content-type':'application/json'},body:'{}'}).then(()=>1,()=>0)") { _, _ in finish() }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 5) { finish() }  // offline: forget it here anyway
+    }
+
+    func renameServer(_ id: String, _ name: String, byUser: Bool) {
+        let n = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !n.isEmpty, let p = Servers.list().first(where: { $0.id == id }), byUser || !p.named else { return }
+        Servers.update(id) { s in
+            s.name = Servers.uniqueName(n, url: s.url, except: s.id)
+            if byUser { s.named = true }
+        }
+    }
+
     // MARK: connecting
 
     static func normalize(_ input: String) -> String {
@@ -171,8 +232,8 @@ final class AppModel: ObservableObject {
             || (p[0] == 169 && p[1] == 254) || (p[0] == 100 && (64...127).contains(p[1]))
     }
 
-    /// Accepting a pairing link: a different server must first answer /api/health as Sara; only
-    /// then is the old server's sign-in let go (so a dead or fake address can't sign you out).
+    /// Accepting a pairing link: a different server must first answer /api/health as Sara; it is
+    /// then added next to the others (Phase 68: nobody is signed out).
     func accept(_ link: PairLink) async {
         guard !link.refused else { return }
         let path = link.code.map { "/pair#" + ($0.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? $0) } ?? "/"
@@ -217,6 +278,11 @@ final class AppModel: ObservableObject {
             SharedStore.widgetJSON = nil
             SharedStore.face = nil
         }
+        // Phase 68: a saved server again, or a new one next to the others.
+        let id = Servers.idFor(s)
+        Servers.update(id) { $0.lastUsed = Date().timeIntervalSince1970 }
+        Servers.setActive(id)
+        activeId = id
         server = s
         SharedStore.server = s
         pending = path
@@ -240,6 +306,11 @@ final class AppModel: ObservableObject {
     /// The page says the owner is signed in: keep the widget's sign-in current and set up notifications.
     func signedIn() {
         saveCookies()
+        // Phase 68: a server being removed that wasn't in use is open now: sign out there.
+        if let r = pendingRemove, r == activeId {
+            pendingRemove = nil
+            return removeActive()
+        }
         #if DEBUG
         // Test runs: -SaraTestCall <conversation id> starts a call once signed in.
         if let conv = UserDefaults.standard.string(forKey: "SaraTestCall"), let server, !CallManager.shared.active {
@@ -284,7 +355,131 @@ final class AppModel: ObservableObject {
         let sandbox = "false"
         #endif
         let label = UIDevice.current.userInterfaceIdiom == .pad ? "iPad" : "iPhone"
-        let js = "fetch('/api/push/apns/register',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({token:'\(token)',sandbox:\(sandbox),label:'Sara app on \(label)'})}).catch(function(){})"
+        // Phase 68: with this app's id for the server, so a tap on its push opens the right one.
+        let profile = activeId ?? ""
+        let js = "fetch('/api/push/apns/register',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({token:'\(token)',sandbox:\(sandbox),label:'Sara app on \(label)',profile:'\(profile)'})}).catch(function(){})"
         web.evaluateJavaScript(js, completionHandler: nil)
+    }
+}
+
+
+// MARK: - Phase 68: the saved servers
+
+/// One Sara server this app is signed in to. No sign-in is stored here: each server's session
+/// cookie lives in a WebKit website data store of its own (the first one, from before 1.8, keeps
+/// the default store, so an update keeps its sign-in).
+struct SavedServer {
+    var id: String
+    var name: String
+    var named: Bool
+    var url: String
+    var emoji: String
+    var lastUsed: Double
+    var store: String?
+
+    var dict: [String: Any] {
+        var d: [String: Any] = ["id": id, "name": name, "named": named, "url": url, "emoji": emoji, "lastUsed": lastUsed]
+        if let store { d["store"] = store }
+        return d
+    }
+}
+
+enum Servers {
+    static func host(_ url: String) -> String {
+        guard let r = url.range(of: "://") else { return url }
+        return String(url[r.upperBound...])
+    }
+
+    /// The saved servers; the one server from before 1.8 becomes s1 (default store).
+    static func list() -> [SavedServer] {
+        if let raw = UserDefaults.standard.array(forKey: "servers") as? [[String: Any]] {
+            return raw.compactMap { d in
+                guard let id = d["id"] as? String, let url = d["url"] as? String else { return nil }
+                return SavedServer(id: id, name: d["name"] as? String ?? host(url), named: d["named"] as? Bool ?? false, url: url, emoji: d["emoji"] as? String ?? "", lastUsed: d["lastUsed"] as? Double ?? 0, store: d["store"] as? String)
+            }
+        }
+        guard let old = SharedStore.server else { return [] }
+        let one = SavedServer(id: "s1", name: host(old), named: false, url: old, emoji: "", lastUsed: Date().timeIntervalSince1970, store: nil)
+        save([one])
+        setActive("s1")
+        return [one]
+    }
+
+    static func save(_ l: [SavedServer]) { UserDefaults.standard.set(l.map(\.dict), forKey: "servers") }
+    static func setActive(_ id: String?) { UserDefaults.standard.set(id, forKey: "activeServer") }
+    static var active: SavedServer? {
+        let l = list()
+        let id = UserDefaults.standard.string(forKey: "activeServer")
+        return l.first { $0.id == id } ?? l.first
+    }
+
+    static func uniqueName(_ wanted: String, url: String, except id: String?) -> String {
+        let taken = Set(list().filter { $0.id != id }.map { $0.name.lowercased() })
+        let base = wanted.isEmpty ? host(url) : String(wanted.prefix(60))
+        if !taken.contains(base.lowercased()) { return base }
+        let withHost = "\(base) (\(host(url)))"
+        if !taken.contains(withHost.lowercased()) { return withHost }
+        var i = 2
+        while taken.contains("\(withHost) \(i)".lowercased()) { i += 1 }
+        return "\(withHost) \(i)"
+    }
+
+    /// The saved server at exactly this address, or a new one with a data store of its own.
+    static func idFor(_ url: String) -> String {
+        var l = list()
+        if let p = l.first(where: { $0.url == url }) { return p.id }
+        var n = 1
+        while l.contains(where: { $0.id == "s\(n)" }) { n += 1 }
+        let id = "s\(n)"
+        l.append(SavedServer(id: id, name: uniqueName("", url: url, except: id), named: false, url: url, emoji: "", lastUsed: Date().timeIntervalSince1970, store: id == "s1" ? nil : UUID().uuidString))
+        save(l)
+        return id
+    }
+
+    static func update(_ id: String, _ change: (inout SavedServer) -> Void) {
+        var l = list()
+        guard let i = l.firstIndex(where: { $0.id == id }) else { return }
+        change(&l[i])
+        save(l)
+    }
+
+    static func remove(_ id: String) {
+        save(list().filter { $0.id != id })
+        if UserDefaults.standard.string(forKey: "activeServer") == id { setActive(nil) }
+    }
+
+    /// The website data store of a server: its own, or the default one for s1.
+    static func dataStore(_ p: SavedServer?) -> WKWebsiteDataStore {
+        if let s = p?.store, let uuid = UUID(uuidString: s) { return WKWebsiteDataStore(forIdentifier: uuid) }
+        return .default()
+    }
+
+    /// Clears a server's sign-in (its whole data store) when it's removed.
+    @MainActor
+    static func forgetData(_ p: SavedServer) async {
+        if let s = p.store, let uuid = UUID(uuidString: s) {
+            try? await WKWebsiteDataStore.remove(forIdentifier: uuid)
+        } else {
+            await WKWebsiteDataStore.default().removeData(ofTypes: WKWebsiteDataStore.allWebsiteDataTypes(), modifiedSince: .distantPast)
+        }
+    }
+
+    /// The Cookie header of a saved server (for a reply typed into its notification).
+    @MainActor
+    static func cookie(_ p: SavedServer) async -> String? {
+        guard let host = URL(string: p.url)?.host else { return nil }
+        let cookies = await dataStore(p).httpCookieStore.allCookies()
+        let header = cookies.filter { c in
+            let d = c.domain.hasPrefix(".") ? String(c.domain.dropFirst()) : c.domain
+            return host == d || host.hasSuffix("." + d)
+        }.map { "\($0.name)=\($0.value)" }.joined(separator: "; ")
+        return header.isEmpty ? nil : header
+    }
+
+    /// {"servers":[…]} for the page: names and hosts only, never a sign-in.
+    static func json(active: String?) -> String {
+        let arr = list().map { ["id": $0.id, "name": $0.name, "host": host($0.url), "emoji": $0.emoji, "active": $0.id == active] as [String: Any] }
+        let data = (try? JSONSerialization.data(withJSONObject: ["servers": arr])) ?? Data("{\"servers\":[]}".utf8)
+        return String(data: data, encoding: .utf8) ?? "{\"servers\":[]}"
     }
 }

@@ -3,14 +3,17 @@
 // (Sara: Sign in shows a short code that you approve in Settings → Devices and sign-in). The
 // open file's name and the selection go along as context, size-capped, and the panel shows
 // exactly what was sent. The token is kept in VS Code's secret storage, never in settings.
+// Phase 68: several servers, each with its own sign-in (profiles.js); the status bar shows the one
+// in use and switches.
 'use strict';
 const vscode = require('vscode');
+const P = require('./profiles.js');
 const os = require('os');
 const path = require('path');
 const crypto = require('crypto');
 
 const TOKEN_KEY = 'sara.deviceToken';
-const VERSION = '0.52.0';
+const VERSION = '0.68.0';
 /** Files that are never sent (env files, keys, credentials). */
 const SECRET_FILE = /(^\.env($|\.)|^\.npmrc$|^\.netrc$|^id_(rsa|dsa|ecdsa|ed25519)|\.(pem|key|p12|pfx|jks|keystore|kdbx|asc|gpg)$|^credentials(\.\w+)?$|secret|password|\.tfstate$)/i;
 
@@ -105,36 +108,61 @@ function editorContext(editor, opts) {
   return { text, summary: `${rel} · ${lines} · ${code.length.toLocaleString()} characters${cut ? ' (cut)' : ''}` };
 }
 
-class SaraClient {
+/** The saved servers (profiles.js), in secret storage; the old single sign-in is moved in once. */
+class Servers {
   constructor(context) {
     this.context = context;
+    this.state = undefined;
+    this.listeners = [];
   }
-  get server() {
-    // Only the user-level value: a workspace's .vscode/settings.json can't redirect her (the setting
-    // is also application-scoped in package.json).
+  async load() {
+    if (this.state) return this.state;
+    const raw = await this.context.secrets.get(P.PROFILES_KEY);
+    if (raw) return (this.state = P.migrate(raw));
+    // Before 1.8: one token bound to the user-level sara.server setting.
     const c = vscode.workspace.getConfiguration('sara').inspect('server');
-    return normalizeServer((c && (c.globalValue || c.defaultValue)) || '');
+    const legacy = parseSaved(await this.context.secrets.get(TOKEN_KEY), c && c.globalValue);
+    const state = P.migrate(undefined, legacy);
+    if (state.servers.length) {
+      await this.save(state);
+      await this.context.secrets.delete(TOKEN_KEY);
+      const conv = this.context.workspaceState.get('sara.conversationId');
+      if (conv) await this.context.workspaceState.update(`sara.conversationId.${state.active}`, conv);
+    }
+    return (this.state = state);
   }
-  async saved() {
-    const c = vscode.workspace.getConfiguration('sara').inspect('server');
-    return parseSaved(await this.context.secrets.get(TOKEN_KEY), c && c.globalValue);
+  async save(state) {
+    this.state = state;
+    await this.context.secrets.store(P.PROFILES_KEY, JSON.stringify(state));
+    for (const f of this.listeners) f(state);
+  }
+  async active() {
+    return P.active(await this.load());
+  }
+  onChange(f) {
+    this.listeners.push(f);
+  }
+}
+
+class SaraClient {
+  constructor(context, servers) {
+    this.context = context;
+    this.servers = servers;
+  }
+  async profile() {
+    return this.servers.active();
   }
   async token() {
-    return tokenForServer(await this.saved(), this.server);
+    const p = await this.profile();
+    return p ? P.tokenFor(p, p.url) : undefined;
   }
+  /** `init.server`: an address being signed in to (no token is ever sent there). */
   async request(p, init = {}) {
-    const server = this.server;
-    if (!server) throw new Error('Set your Sara server first: run "Sara: Sign in".');
-    let token;
-    if (!init.noAuth) {
-      const saved = await this.saved();
-      token = tokenForServer(saved, server);
-      if (saved && !token) {
-        const err = new Error(`This editor was signed in to ${saved.server}, not ${server}. Run "Sara: Sign in" again to use this server.`);
-        err.status = 401;
-        throw err;
-      }
-    }
+    const profile = init.server ? undefined : await this.profile();
+    const server = init.server || (profile && profile.url);
+    if (!server) throw new Error('Add your Sara server first: run "Sara: Sign in".');
+    // A profile's token only ever goes to that profile's own address.
+    const token = init.noAuth || init.server ? undefined : P.tokenFor(profile, server);
     const headers = { 'user-agent': `SaraVSCode/${VERSION} (${os.platform()})` };
     if (token) headers.authorization = `Bearer ${token}`;
     if (init.body !== undefined) headers['content-type'] = 'application/json';
@@ -190,7 +218,7 @@ class SaraPanel {
 <meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="${css}"><title>Sara</title></head>
 <body><div id="status" class="status" role="status"></div><div id="log" class="log" aria-live="polite"></div>
 <form id="composer" class="composer"><textarea id="input" rows="3" placeholder="Message Sara (Enter sends, Shift+Enter for a new line)"></textarea>
-<div class="row"><button id="send" type="submit">Send</button><button id="stop" type="button" class="ghost" hidden>Stop</button><button id="new" type="button" class="ghost">New conversation</button><button id="signin" type="button" class="ghost" hidden>Sign in</button></div></form>
+<div class="row"><button id="send" type="submit">Send</button><button id="stop" type="button" class="ghost" hidden>Stop</button><button id="new" type="button" class="ghost">New conversation</button><button id="signin" type="button" class="ghost" hidden>Sign in</button><button id="switch" type="button" class="ghost" hidden>Switch server</button></div></form>
 <script nonce="${nonce}" src="${js}"></script></body></html>`;
     view.webview.onDidReceiveMessage((m) => void this.onMessage(m));
     void this.refresh();
@@ -202,25 +230,38 @@ class SaraPanel {
   }
 
   async refresh() {
+    const p = await this.client.profile();
     const token = await this.client.token();
-    if (!token || !this.client.server) return this.post({ type: 'state', signedIn: false, server: this.client.server });
+    if (!token || !p) return this.post({ type: 'state', signedIn: false, server: p ? p.url : '' });
     try {
       const me = await this.client.json('/device/whoami');
       this.companion = me.companion || 'Sara';
-      this.post({ type: 'state', signedIn: true, server: this.client.server, companion: this.companion, device: me.device && me.device.label });
+      // Her name on that server names the profile until the user renames it.
+      const state = await this.client.servers.load();
+      const next = P.rename(state, p.id, this.companion, { herName: true });
+      if (JSON.stringify(next) !== JSON.stringify(state)) await this.client.servers.save(next);
+      const now = P.active(next);
+      this.post({ type: 'state', signedIn: true, server: p.url, serverName: now ? now.name : p.name, servers: next.servers.length, companion: this.companion, device: me.device && me.device.label });
     } catch (err) {
-      this.post({ type: 'state', signedIn: false, server: this.client.server, error: err.message });
+      this.post({ type: 'state', signedIn: false, server: p.url, error: err.message });
     }
+  }
+
+  /** This workspace's conversation on the server in use (each server keeps its own). */
+  async convKey() {
+    const p = await this.client.profile();
+    return `sara.conversationId.${p ? p.id : 'none'}`;
   }
 
   async onMessage(m) {
     if (m.type === 'send') return this.ask(String(m.text || ''));
     if (m.type === 'stop') return this.stop();
     if (m.type === 'new') {
-      await this.context.workspaceState.update('sara.conversationId', undefined);
+      await this.context.workspaceState.update(await this.convKey(), undefined);
       return this.post({ type: 'notice', text: 'The next message starts a new conversation.' });
     }
     if (m.type === 'signIn') return vscode.commands.executeCommand('sara.signIn');
+    if (m.type === 'switch') return vscode.commands.executeCommand('sara.switchServer');
     if (m.type === 'approve') {
       try {
         await this.client.json(`/approvals/${encodeURIComponent(m.approvalId)}`, { body: { approved: Boolean(m.approved) } });
@@ -231,7 +272,8 @@ class SaraPanel {
   }
 
   async conversation() {
-    const saved = this.context.workspaceState.get('sara.conversationId');
+    const key = await this.convKey();
+    const saved = this.context.workspaceState.get(key);
     if (saved) {
       try {
         await this.client.json(`/conversations/${encodeURIComponent(saved)}?limit=20`);
@@ -242,7 +284,7 @@ class SaraPanel {
     }
     // A coding conversation in her default workspace (same memory and personality as everywhere).
     const c = await this.client.json('/conversations', { body: { mode: 'coding' } });
-    await this.context.workspaceState.update('sara.conversationId', c.id);
+    await this.context.workspaceState.update(key, c.id);
     return c.id;
   }
 
@@ -269,7 +311,8 @@ class SaraPanel {
       if (!(await this.disclosure())) throw new Error('Accept the disclosure to chat.');
       const convId = await this.conversation();
       this.busy.convId = convId;
-      this.post({ type: 'user', text: question, ...(context ? { context: context.summary, sent: context.text } : {}) });
+      const p = await this.client.profile();
+      this.post({ type: 'user', text: question, ...(context ? { context: `${context.summary} → ${p ? p.name : ''}`, sent: context.text } : {}) });
       const content = context ? `${question}\n\n${context.text}` : question;
       const res = await this.client.request(`/conversations/${encodeURIComponent(convId)}/messages`, { body: { content }, signal: ctl.signal });
       if (!res.ok || !res.body) {
@@ -302,35 +345,38 @@ class SaraPanel {
   }
 }
 
-async function signIn(context, client, panel) {
+/** Signs in to a server (a new one, or the same address again) and makes it the one in use. */
+async function signIn(context, client, panel, opts = {}) {
+  const current = await client.profile();
   const server = normalizeServer(
-    (await vscode.window.showInputBox({ title: 'Sara: Sign in', prompt: "Your Sara server's address", value: client.server || 'https://', ignoreFocusOut: true, validateInput: (v) => (/^https?:\/\/[^/\s]+/i.test(v.trim()) ? undefined : 'An address like https://sara.example.com') })) || '',
+    (await vscode.window.showInputBox({ title: opts.adding ? 'Sara: Add a server' : 'Sara: Sign in', prompt: "Your Sara server's address (each server keeps its own sign-in)", value: opts.adding || !current ? 'https://' : current.url, ignoreFocusOut: true, validateInput: (v) => (/^https?:\/\/[^/\s]+/i.test(v.trim()) ? undefined : 'An address like https://sara.example.com') })) || '',
   );
   if (!server) return;
-  await vscode.workspace.getConfiguration('sara').update('server', server, vscode.ConfigurationTarget.Global);
   const name = `VS Code on ${os.platform() === 'win32' ? 'Windows' : os.platform() === 'darwin' ? 'Mac' : 'Linux'} (${os.hostname().slice(0, 30)})`;
   let start;
   try {
-    start = await client.json('/device/start', { body: { name }, noAuth: true });
+    start = await client.json('/device/start', { body: { name }, server });
   } catch (err) {
     return vscode.window.showErrorMessage(`Sara: ${err.message}`);
   }
   panel.post({ type: 'notice', text: `Approve the code ${start.code} in ${start.approveIn}, or open ${start.verifyUrl} where you're signed in and type the code.` });
   const open = 'Open the approval page';
-  void vscode.window.showInformationMessage(`Sara: approve the code ${start.code} (Settings → Devices and sign-in).`, open).then((pick) => {
+  void vscode.window.showInformationMessage(`Sara: approve the code ${start.code} on ${P.hostOf(server)} (Settings → Devices and sign-in).`, open).then((pick) => {
     if (pick === open) void vscode.env.openExternal(vscode.Uri.parse(start.verifyUrl));
   });
   await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: `Sara: waiting for you to approve ${start.code}…`, cancellable: true }, async (_p, cancel) => {
     const until = Date.parse(start.expiresAt);
     while (Date.now() < until && !cancel.isCancellationRequested) {
       await new Promise((r) => setTimeout(r, Math.max(1, start.interval || 2) * 1000));
-      const res = await client.request('/device/poll', { body: { pollToken: start.pollToken }, noAuth: true }).catch(() => undefined);
+      const res = await client.request('/device/poll', { body: { pollToken: start.pollToken }, server }).catch(() => undefined);
       if (!res) continue;
       const body = await res.json().catch(() => ({}));
       if (body.status === 'approved' && body.token) {
-        await context.secrets.store(TOKEN_KEY, JSON.stringify({ token: body.token, server }));
-        void vscode.window.showInformationMessage('Sara: signed in.');
-        return void panel.refresh();
+        await client.servers.save(P.upsert(await client.servers.load(), { url: server, token: body.token, deviceId: body.deviceId }));
+        await panel.refresh();
+        const p = await client.profile();
+        void vscode.window.showInformationMessage(`Sara: signed in to ${p ? p.name : server}. ${(await client.servers.load()).servers.length > 1 ? 'Switch servers from the status bar.' : ''}`);
+        return;
       }
       if (body.status === 'denied') return void vscode.window.showWarningMessage('Sara: the sign-in was denied.');
       if (res.status === 410) return void vscode.window.showWarningMessage('Sara: the code expired. Run "Sara: Sign in" again.');
@@ -338,21 +384,75 @@ async function signIn(context, client, panel) {
   });
 }
 
+/** Signs this editor out of one server and forgets only that server's token. */
+async function removeServer(client, panel, id) {
+  const state = await client.servers.load();
+  const p = state.servers.find((x) => x.id === id);
+  if (!p) return;
+  if (p.token) await fetch(`${p.url}/api/device/logout`, { method: 'POST', headers: { authorization: `Bearer ${p.token}`, 'content-type': 'application/json' }, body: '{}', redirect: 'error' }).catch(() => undefined);
+  await client.servers.save(P.remove(await client.servers.load(), id));
+  const now = await client.profile();
+  void vscode.window.showInformationMessage(`Sara: signed out of ${p.name}. This editor no longer has a token for it.${now ? ` Now using ${now.name}.` : ''}`);
+  void panel.refresh();
+}
+
+/** Sara: Switch server: the saved servers, then Add, Rename and Remove. */
+async function switchServer(context, client, panel) {
+  const state = await client.servers.load();
+  const items = state.servers.map((p) => ({ label: `${p.id === state.active ? '$(check) ' : ''}${p.emoji ? `${p.emoji} ` : ''}${p.name}`, description: P.hostOf(p.url), detail: p.id === state.active ? 'In use: Sara on this server can use the files you send from VS Code' : undefined, id: p.id }));
+  const add = { label: '$(add) Add a Sara…', description: 'sign in to another server', action: 'add' };
+  const ren = { label: '$(edit) Rename…', action: 'rename' };
+  const rem = { label: '$(trash) Remove a server…', description: 'signs out of that one only', action: 'remove' };
+  const pick = await vscode.window.showQuickPick([...items, add, ...(state.servers.length ? [ren, rem] : [])], { title: 'Sara: Switch server', placeHolder: 'Which Sara should this editor talk to?' });
+  if (!pick) return;
+  if (pick.action === 'add') return signIn(context, client, panel, { adding: true });
+  if (pick.action === 'rename' || pick.action === 'remove') {
+    const which = state.servers.length === 1 ? items[0] : await vscode.window.showQuickPick(items, { title: pick.action === 'remove' ? 'Remove which server?' : 'Rename which server?' });
+    if (!which) return;
+    const p = state.servers.find((x) => x.id === which.id);
+    if (pick.action === 'remove') {
+      const yes = 'Sign out and remove';
+      if ((await vscode.window.showWarningMessage(`Remove ${p.name} (${P.hostOf(p.url)})? This editor signs out of that server only; the others stay signed in.`, { modal: true }, yes)) === yes) await removeServer(client, panel, p.id);
+      return;
+    }
+    const to = await vscode.window.showInputBox({ title: 'Rename server', value: p.name, ignoreFocusOut: true });
+    if (to && to.trim()) await client.servers.save(P.rename(await client.servers.load(), p.id, to.trim()));
+    return void panel.refresh();
+  }
+  await client.servers.save(P.use(await client.servers.load(), pick.id));
+  panel.post({ type: 'clear' });
+  void panel.refresh();
+}
+
 function activate(context) {
-  const client = new SaraClient(context);
+  const servers = new Servers(context);
+  const client = new SaraClient(context, servers);
   const panel = new SaraPanel(context, client);
+  // The status bar: the server in use ("Sara on <server> can use this computer"); click to switch.
+  const bar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 50);
+  bar.command = 'sara.switchServer';
+  const paint = (state) => {
+    const st = P.statusText(state);
+    bar.text = st.text;
+    bar.tooltip = st.tooltip;
+    bar.show();
+  };
+  servers.onChange(paint);
+  void servers.load().then(paint);
   const max = () => Math.max(1000, Math.min(60000, Number(vscode.workspace.getConfiguration('sara').get('maxContextChars')) || 12000));
   context.subscriptions.push(
     vscode.window.registerWebviewViewProvider('sara.chat', panel, { webviewOptions: { retainContextWhenHidden: true } }),
+    bar,
     vscode.commands.registerCommand('sara.signIn', () => signIn(context, client, panel)),
+    vscode.commands.registerCommand('sara.addServer', () => signIn(context, client, panel, { adding: true })),
+    vscode.commands.registerCommand('sara.switchServer', () => switchServer(context, client, panel)),
     vscode.commands.registerCommand('sara.signOut', async () => {
-      if (await client.token()) await client.json('/device/logout', { body: {} }).catch(() => undefined);
-      await context.secrets.delete(TOKEN_KEY);
-      void vscode.window.showInformationMessage('Sara: signed out. This editor no longer has a token.');
-      void panel.refresh();
+      const p = await client.profile();
+      if (!p) return void vscode.window.showInformationMessage('Sara: this editor isn\'t signed in to any server.');
+      await removeServer(client, panel, p.id);
     }),
     vscode.commands.registerCommand('sara.newConversation', async () => {
-      await context.workspaceState.update('sara.conversationId', undefined);
+      await context.workspaceState.update(await panel.convKey(), undefined);
       panel.post({ type: 'notice', text: 'The next message starts a new conversation.' });
     }),
     vscode.commands.registerCommand('sara.askSelection', async () => {
@@ -377,18 +477,16 @@ function activate(context) {
       if (SECRET_FILE.test(name)) return vscode.window.showWarningMessage(`Sara: ${name} looks like a secret (keys, .env, passwords), so it isn't sent.`);
       try {
         const bytes = Buffer.from(await vscode.workspace.fs.readFile(target));
+        const p = await client.profile();
         const r = await client.json(`/library?${new URLSearchParams({ name, keep: '1' })}`, { bytes });
-        void vscode.window.showInformationMessage(`Sara: ${r.already ? 'already in' : 'added to'} her library: ${r.doc.name}. She reads it in the background.`);
+        void vscode.window.showInformationMessage(`Sara: ${r.already ? 'already in' : 'added to'} her library on ${p ? p.name : 'your server'}: ${r.doc.name}. She reads it in the background.`);
       } catch (err) {
         void vscode.window.showErrorMessage(`Sara: ${err.message}`);
       }
-    }),
-    vscode.workspace.onDidChangeConfiguration((e) => {
-      if (e.affectsConfiguration('sara.server')) void panel.refresh();
     }),
   );
 }
 
 function deactivate() {}
 
-module.exports = { activate, deactivate, normalizeServer, parseSaved, tokenForServer, sseEvents, SECRET_FILE };
+module.exports = { activate, deactivate, normalizeServer, parseSaved, tokenForServer, sseEvents, SECRET_FILE, profiles: P };

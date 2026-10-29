@@ -47,26 +47,34 @@ public class InboxJob extends JobService {
         return true;
     }
 
+    /** Phase 68: every saved server, each with its own sign-in. */
     static void check(Context c) {
-        String server = Net.server(c);
-        if (server == null) return;
-        long after = Net.prefs(c).getLong("lastId", 0);
+        Servers.Profile act = Servers.active(c);
+        java.util.List<Servers.Profile> all = Servers.list(c);
+        for (Servers.Profile p : all) check(c, p, act != null && act.id.equals(p.id), all.size() > 1);
+    }
+
+    private static void check(Context c, Servers.Profile p, boolean inUse, boolean several) {
+        if (MainActivity.DEMO_SERVER.equals(p.url)) return;
+        long after = inUse ? Net.prefs(c).getLong("lastId", p.lastId) : p.lastId;
         try {
-            Net.Response r = Net.get(c, server + "/api/phone/inbox?after=" + after);
+            Net.Response r = Net.get(c, p.url + "/api/phone/inbox?after=" + after);
             if (r.status != 200) return;
             JSONObject j = new JSONObject(r.text());
             long latest = j.optLong("latest", after);
-            Net.prefs(c).edit().putString("name", j.optString("name", "Sara")).apply();
-            // First check after connecting: start from now, don't replay old messages.
-            if (after > 0 && !MainActivity.visible) {
+            String name = j.optString("name", "Sara");
+            if (inUse) Net.prefs(c).edit().putString("name", name).apply();
+            Servers.rename(c, p.id, name, false);
+            // First check after connecting: start from now, don't replay old messages. While the
+            // app is open the chat shows the server in use; the others still notify.
+            if (after > 0 && !(inUse && MainActivity.visible)) {
                 JSONArray list = j.optJSONArray("messages");
-                String name = j.optString("name", "Sara");
                 for (int i = 0; list != null && i < list.length(); i++) {
                     JSONObject m = list.getJSONObject(i);
-                    Notify.message(c, name, m.optString("conversationId"), m.optLong("id"), m.optString("text"), m.optString("kind"));
+                    Notify.message(c, name, m.optString("conversationId"), m.optLong("id"), m.optString("text"), m.optString("kind"), p.id, several ? Servers.host(p.url) : null);
                 }
             }
-            Net.prefs(c).edit().putLong("lastId", Math.max(after, latest)).apply();
+            Servers.setLastId(c, p.id, Math.max(after, latest));
         } catch (Exception ignored) {
             // offline: try next time
         }

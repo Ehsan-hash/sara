@@ -9,12 +9,14 @@ struct WebView: UIViewRepresentable {
 
     func makeUIView(context: Context) -> WKWebView {
         let config = WKWebViewConfiguration()
+        // Phase 68: each saved server has its own website data store (its own sign-in).
+        config.websiteDataStore = Servers.dataStore(Servers.active)
         config.allowsInlineMediaPlayback = true
         config.mediaTypesRequiringUserActionForPlayback = []
         // "SaraPhone/1" tells the server and the page this is the phone app (no adult-mode switch here).
         config.applicationNameForUserAgent = "Mobile/15E148 Safari/604.1 SaraPhone/1"
         let ucc = WKUserContentController()
-        ucc.addUserScript(WKUserScript(source: Coordinator.bridge(appLock: AppModel.appLockOn, canLock: AppModel.canLock, places: PlacesManager.shared.state), injectionTime: .atDocumentStart, forMainFrameOnly: true))
+        ucc.addUserScript(WKUserScript(source: Coordinator.bridge(appLock: AppModel.appLockOn, canLock: AppModel.canLock, places: PlacesManager.shared.state, servers: Servers.json(active: model.activeId)), injectionTime: .atDocumentStart, forMainFrameOnly: true))
         ucc.add(context.coordinator, name: "sara")
         config.userContentController = ucc
 
@@ -65,10 +67,17 @@ struct WebView: UIViewRepresentable {
 
         /// window.SaraPhone: what the page can ask the app. Settings kept on the phone are read
         /// synchronously from here (the page reads them once).
-        static func bridge(appLock: Bool, canLock: Bool, places: String) -> String {
+        static func bridge(appLock: Bool, canLock: Bool, places: String, servers: String) -> String {
             """
+            window.__saraServers = \(servers);
             window.SaraPhone = {
               platform: 'ios',
+              servers: function () { return window.__saraServers; },
+              useServer: function (id) { window.webkit.messageHandlers.sara.postMessage({ cmd: 'useServer', id: String(id) }); },
+              addServer: function () { window.webkit.messageHandlers.sara.postMessage({ cmd: 'changeServer' }); },
+              removeServer: function (id) { window.webkit.messageHandlers.sara.postMessage({ cmd: 'removeServer', id: String(id) }); },
+              renameServer: function (id, name) { window.webkit.messageHandlers.sara.postMessage({ cmd: 'renameServer', id: String(id), name: String(name) }); },
+              serverName: function (name) { window.webkit.messageHandlers.sara.postMessage({ cmd: 'serverName', name: String(name) }); },
               prefs: { appLock: \(appLock) },
               canLock: \(canLock),
               addWidget: function () { return false; },
@@ -104,6 +113,15 @@ struct WebView: UIViewRepresentable {
             guard let body = message.body as? [String: Any], let cmd = body["cmd"] as? String else { return }
             switch cmd {
             case "changeServer": model.changeServer()
+            // Phase 68: the page's ⇄ menu (names and hosts only reach the page).
+            case "useServer":
+                if let id = body["id"] as? String { model.switchTo(id) }
+            case "removeServer":
+                if let id = body["id"] as? String { model.removeServer(id) }
+            case "renameServer", "serverName":
+                let byUser = cmd == "renameServer"
+                if let id = byUser ? body["id"] as? String : model.activeId { model.renameServer(id, body["name"] as? String ?? "", byUser: byUser) }
+                message.webView?.evaluateJavaScript("window.__saraServers=\(Servers.json(active: model.activeId));window.saraServersChanged&&window.saraServersChanged()", completionHandler: nil)
             case "ready":
                 model.signedIn()
                 model.registerToken()

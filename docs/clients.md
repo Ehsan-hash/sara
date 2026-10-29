@@ -73,6 +73,17 @@ The token is saved in `config.json` in your user's config folder, readable by yo
 `%APPDATA%\sara-chat` on Windows, `~/Library/Application Support/sara-chat` on a Mac,
 `~/.config/sara-chat` on Linux (`SARA_CHAT_CONFIG_DIR` overrides it).
 
+### Several servers (Phase 68)
+
+`config.json` holds a list of servers, each with its own device token; one is in use.
+`sara-chat servers add <address> [--name Work]` signs in to another one, `sara-chat servers`
+lists them, `servers use <name>` switches (no sign-out), `servers rename` and `servers remove`
+(signs out of that one only). `--server <name>` (name, id, address or host:port) uses another
+saved server for one command; it never sends a saved token to an address it wasn't issued by.
+`logout` signs out of the server in use. A config from before 1.8 becomes the first server with
+nothing to do. With several servers, `ask --dir` and `send` say which server they send to. More:
+[SERVERS.md](SERVERS.md).
+
 ## VS Code extension
 
 `clients/vscode/` is a VS Code extension in plain JavaScript (no packages, no build step). Build
@@ -84,8 +95,12 @@ code --install-extension outputs/vscode/sara-vscode-<version>.vsix
 ```
 
 - **Sara: Sign in** asks for your server's address and shows the code (with a button that opens
-  the approval page). The token is kept in VS Code's secret storage. **Sara: Sign out** removes
-  it.
+  the approval page). The token is kept in VS Code's secret storage. **Sara: Sign out of this
+  server** removes it.
+- Phase 68: **Sara: Add a server** and **Sara: Switch server** (also the status-bar item, which
+  names the server in use and says that Sara on it can use the files you send). Each server keeps
+  its own token (all in VS Code's secret storage) and each workspace its own conversation per
+  server; the sign-in from before 1.8 becomes the first server. [SERVERS.md](SERVERS.md).
 - The **Sara** icon in the activity bar opens the chat panel. Approvals show there with Allow /
   Decline; **Stop** stops her reply.
 - **Sara: Ask about selection** and **Sara: Explain this file** (also in the editor's right-click

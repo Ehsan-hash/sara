@@ -27,7 +27,14 @@
       case 'state':
         name = m.companion || name;
         $('#signin').hidden = m.signedIn;
-        $('#status').textContent = m.signedIn ? `${name} · ${m.server}` : m.error ? m.error : 'Not signed in. Press Sign in (or run "Sara: Sign in").';
+        $('#status').textContent = m.signedIn ? `${name} · ${m.serverName && m.serverName !== name ? `${m.serverName} · ` : ''}${m.server}` : m.error ? m.error : 'Not signed in. Press Sign in (or run "Sara: Sign in").';
+        $('#switch').hidden = !(m.servers > 1);
+        break;
+      case 'clear':
+        // Another server: its conversation isn't this one.
+        log.replaceChildren();
+        reply = null;
+        busy(false);
         break;
       case 'user': {
         const b = add(el('div', 'msg user'));
@@ -102,4 +109,5 @@
   $('#stop').addEventListener('click', () => vscode.postMessage({ type: 'stop' }));
   $('#new').addEventListener('click', () => vscode.postMessage({ type: 'new' }));
   $('#signin').addEventListener('click', () => vscode.postMessage({ type: 'signIn' }));
+  $('#switch').addEventListener('click', () => vscode.postMessage({ type: 'switch' }));
 })();

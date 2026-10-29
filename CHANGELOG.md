@@ -2,6 +2,43 @@
 
 Format: newest first. Versions follow `0.<phase>.<patch>` until 1.0.0.
 
+## 1.8.0 (2026-10-29): several servers in one app
+
+Phase 68. Every Sara app keeps a list of your Saras (home and work, or several on one host) and
+switches between them without signing out. See [docs/SERVERS.md](docs/SERVERS.md).
+
+- **Windows and Mac apps:** each server keeps its own sign-in (its own browser profile / website
+  data), so switching never signs you out of the others. The tray / "Sara server" menu lists your
+  Saras with a ✓ on the one in use, plus "Add a Sara…" and Remove (which also signs that app out on
+  that server). Existing installs move over still signed in. The Mac app needs macOS 14 for more
+  than one server.
+- **Android and iPhone:** a ⇄ button in the header and a "Your Saras" list (Switch, Rename, Remove,
+  Add). A pairing QR code now asks "Add this Sara?" instead of replacing the server. Android checks
+  every saved server for messages and notifications show which server they came from; tapping one
+  (or Reply) goes to the right Sara. iPhone pushes carry the server, so a tap switches to it.
+- **VS Code:** a status-bar item shows which Sara you're on; "Sara: Switch server", "Sara: Add a
+  server" and "Sign out of this server". Each workspace keeps its conversation per server
+  (extension 0.68.0).
+- **sara-chat:** `sara-chat servers add|use|rename|remove|list`, and `--server <name>` for one
+  command. A sign-in token is only ever sent to the server it belongs to.
+- **MCP bridge:** `--server <name>` (or `SARA_SERVER`) uses a Sara saved by sara-chat with that
+  server's own sign-in.
+- **What follows the server you pick:** everything the apps send from your computer or phone
+  (files and selections, the microphone in calls, the camera, your location for places,
+  notifications) goes only to the Sara in use, one at a time.
+- **Server:** iPhone push registration can carry which saved server it belongs to (older apps are
+  unchanged). No new public endpoint.
+
+Fixes:
+
+- **Fixed:** with an anime (or painted, 3D…) look, pictures she took on request ("send me a pic")
+  came out as realistic photos. The look now remembers its art style, and new pictures keep it;
+  looks made before this keep the style of her current picture.
+
+- **Fixed:** with an anime (or painted, 3D…) look, pictures she took on request ("send me a pic")
+  came out as realistic photos. The look now remembers its art style, and new pictures keep it;
+  looks made before this keep the style of her current picture.
+
 ## 1.7.1 (2026-10-28)
 
 - **Fixed (phones, Safari):** the conversation list opened with ☰ had no way to close it: it covered

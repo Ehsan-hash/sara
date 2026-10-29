@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Phase 68: the server switcher's own strings (the rest of the app is the web app, translated there). -->
+<resources>
+    <string name="servers_now">Jetzt: %1$s</string>
+    <string name="servers_add_title">Diese Sara hinzufügen?</string>
+    <string name="servers_add_message">%1$s zu dieser App hinzufügen? Deine anderen Saras bleiben angemeldet; wechsle mit der ⇄-Taste oben.</string>
+    <string name="servers_add_only_yours">Füge sie nur hinzu, wenn du diesen Link selbst erstellt hast.</string>
+    <string name="servers_add">Hinzufügen</string>
+    <string name="servers_cancel">Abbrechen</string>
+    <string name="servers_add_a_sara">Eine Sara hinzufügen</string>
+    <string name="servers_back">Zurück zu %1$s</string>
+</resources>

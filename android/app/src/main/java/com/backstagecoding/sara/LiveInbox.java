@@ -32,6 +32,16 @@ public class LiveInbox extends Service {
     private volatile HttpURLConnection current;
     private Thread thread;
 
+    /** Phase 68: another server is in use: reconnect to it. */
+    static void restart(Context c) {
+        try {
+            c.stopService(new Intent(c, LiveInbox.class));
+        } catch (Exception ignored) {
+            // not running
+        }
+        sync(c);
+    }
+
     /** Starts or stops the service to match the setting. */
     static void sync(Context c) {
         boolean on = Net.prefs(c).getBoolean("instant", false) && Net.server(c) != null;

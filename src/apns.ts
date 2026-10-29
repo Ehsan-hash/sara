@@ -73,7 +73,11 @@ export class ApnsSender {
     this.#origin = opts.origin ?? ((sandbox) => (sandbox ? 'https://api.sandbox.push.apple.com' : 'https://api.push.apple.com'));
     db.exec(SCHEMA);
     // Which signed-in device registered it, so signing that device out stops its notifications.
-    if (!(db.prepare("SELECT name FROM pragma_table_info('apns_devices')").all() as { name: string }[]).some((c) => c.name === 'session')) db.exec('ALTER TABLE apns_devices ADD COLUMN session TEXT');
+    const cols = (db.prepare("SELECT name FROM pragma_table_info('apns_devices')").all() as { name: string }[]).map((c) => c.name);
+    if (!cols.includes('session')) db.exec('ALTER TABLE apns_devices ADD COLUMN session TEXT');
+    // Phase 68: the app's own name for this server (its profile id), sent back with every push so
+    // an iPhone with several Saras opens the right one. Chosen by the app; never shown or used here.
+    if (!cols.includes('profile')) db.exec('ALTER TABLE apns_devices ADD COLUMN profile TEXT');
   }
 
   /** Drops iPhones whose sign-in is gone (signed out in Settings → Devices, or a new owner token). */
@@ -107,11 +111,16 @@ export class ApnsSender {
       lastOkAt: (r.last_ok_at as string | null) ?? null,
     }));
   }
-  register(token: string, sandbox: boolean, label: string, session?: string): void {
+  register(token: string, sandbox: boolean, label: string, session?: string, profile?: string): void {
     if (!/^[0-9a-f]{64,200}$/i.test(token)) throw new Error('Not a device token.');
+    const tag = profile && /^[\w-]{1,40}$/.test(profile) ? profile : null;
     this.#db
-      .prepare('INSERT INTO apns_devices (token, sandbox, label, created_at, session) VALUES (?, ?, ?, ?, ?) ON CONFLICT(token) DO UPDATE SET sandbox = excluded.sandbox, label = excluded.label, session = excluded.session, failures = 0')
-      .run(token.toLowerCase(), sandbox ? 1 : 0, label.slice(0, 80), this.#now().toISOString(), session ?? null);
+      .prepare('INSERT INTO apns_devices (token, sandbox, label, created_at, session, profile) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(token) DO UPDATE SET sandbox = excluded.sandbox, label = excluded.label, session = excluded.session, profile = excluded.profile, failures = 0')
+      .run(token.toLowerCase(), sandbox ? 1 : 0, label.slice(0, 80), this.#now().toISOString(), session ?? null, tag);
+  }
+  /** Phase 68: the app's profile id for each registered iPhone (null: an app from before 1.8). */
+  #profiles(): Map<string, string | null> {
+    return new Map((this.#db.prepare('SELECT token, profile FROM apns_devices').all() as { token: string; profile: string | null }[]).map((r) => [r.token, r.profile ?? null]));
   }
   unregister(token: string): void {
     this.#db.prepare('DELETE FROM apns_devices WHERE token = ?').run(token.toLowerCase());
@@ -163,10 +172,14 @@ export class ApnsSender {
     if (!k || !devices.length) return out;
     // A message in a conversation gets the Reply action (category SARA_REPLY in the app).
     const conversationId = /#c=([\w-]+)/.exec(p.url)?.[1];
-    const body = JSON.stringify({ aps: { alert: { title: p.title, body: p.body }, sound: 'default', 'thread-id': 'sara', 'mutable-content': 1, ...(conversationId ? { category: 'SARA_REPLY' } : {}) }, url: p.url, ...(conversationId ? { conversationId } : {}) });
+    const payload = { aps: { alert: { title: p.title, body: p.body }, sound: 'default', 'thread-id': 'sara', 'mutable-content': 1, ...(conversationId ? { category: 'SARA_REPLY' } : {}) }, url: p.url, ...(conversationId ? { conversationId } : {}) };
+    const profiles = this.#profiles();
     const auth = `bearer ${this.#token(k)}`;
     await Promise.all(
       devices.map(async (d) => {
+        // Phase 68: which of the app's saved servers this is (tapping it opens that one).
+        const tag = profiles.get(d.token);
+        const body = JSON.stringify(tag ? { ...payload, profile: tag } : payload);
         try {
           const r = await this.#post(this.#origin(d.sandbox), `/3/device/${d.token}`, { authorization: auth, 'apns-topic': k.bundleId, 'apns-push-type': 'alert', 'apns-priority': '10', 'content-type': 'application/json', ...(p.tag ? { 'apns-collapse-id': p.tag.slice(0, 64) } : {}) }, body);
           const reason = (() => {

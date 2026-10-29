@@ -6,4 +6,13 @@
     <string name="share_label">Send to Sara</string>
     <string name="shortcut_call">Call Sara</string>
     <string name="shortcut_call_long">Call Sara</string>
+    <!-- Phase 68: several Saras in one app -->
+    <string name="servers_now">Now showing %1$s</string>
+    <string name="servers_add_title">Add this Sara?</string>
+    <string name="servers_add_message">Add %1$s to this app? Your other Saras stay signed in; switch between them from the ⇄ button at the top.</string>
+    <string name="servers_add_only_yours">Only add it if you made this link yourself.</string>
+    <string name="servers_add">Add</string>
+    <string name="servers_cancel">Cancel</string>
+    <string name="servers_add_a_sara">Add a Sara</string>
+    <string name="servers_back">Back to %1$s</string>
 </resources>

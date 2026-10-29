@@ -135,6 +135,7 @@
         <button id="conv-settings-btn" class="ghost small" type="button" title="Model, workspace and mode for this conversation"><span id="conv-summary">…</span></button>
         <button id="speak-toggle" class="ghost small icon" type="button" title="Read her replies aloud" aria-pressed="false" hidden>🔈</button>
         <button id="pl-badge" class="pl-badge" type="button" title="Nothing leaves this computer: private local mode is on" hidden>🔒 <span>Only this computer</span></button>
+        <button id="server-btn" class="server-btn" type="button" title="Which server this app shows. Switch to another one" hidden>⇄ <span id="server-btn-name">Sara</span></button>
         <span class="ai-badge" title="Sara is an AI companion">AI companion</span>
       </header>
       <dialog id="ring" class="ring" aria-labelledby="ring-title" data-required="1">
@@ -561,6 +562,16 @@
       <div id="tags-chips" class="chips"></div>
       <div class="add-row"><input id="tags-new" maxlength="24" placeholder="New tag, e.g. health"><button id="tags-add" type="button" class="ghost">Add</button></div>
       <p class="actions-left"><button id="tags-save" type="button">Save</button> <span id="tags-status" class="muted small" role="status"></span></p>
+    </form>
+  </dialog>
+  <dialog id="servers-dialog" class="small-dialog" aria-label="Your Saras">
+    <form method="dialog" class="settings-body">
+      <h2>Your Saras</h2>
+      <p class="muted small">This app keeps its own sign-in for each server. Switching doesn't sign you out of the others.</p>
+      <ul id="servers-list" class="cmp-list servers-list"></ul>
+      <p id="servers-computer" class="muted small"></p>
+      <div id="servers-rename-row" class="add-row" hidden><label>New name <input id="servers-name" maxlength="40" autocomplete="off"> <button type="button" class="tip" data-tip="Only this app uses the name, to tell your Saras apart. It starts as her name on that server.">?</button></label><button id="servers-rename-save" type="button">Save</button></div>
+      <p class="actions-left"><button id="servers-add" type="button">Add a server</button> <span id="servers-status" class="muted small" role="status"></span></p>
     </form>
   </dialog>
   <dialog id="file-view" class="small-dialog">
@@ -1057,7 +1068,7 @@
       <label class="row"><input id="dk-login" type="checkbox"> Start Sara when I sign in to this computer <button type="button" class="tip" data-tip="Sara opens quietly next to the clock (menu bar on a Mac, system tray on Windows) when you sign in, so her messages, reminders and calls reach you without opening anything.">?</button></label>
       <label class="row"><input id="dk-keep" type="checkbox"> Keep running when I close the window <button type="button" class="tip" data-tip="Closing the window then just hides it: Sara stays next to the clock and can still notify you and ring. Quit from her icon there. Off = closing the window quits.">?</button></label>
       <label class="row"><input id="dk-notify" type="checkbox"> Show notifications <button type="button" class="tip" data-tip="Messages, reminders and calls from her appear as system notifications when the Sara window isn't in front. Click one to open that conversation.">?</button></label>
-      <p class="small"><button id="dk-test" type="button" class="ghost">Show a test notification</button> <button id="dk-server" type="button" class="ghost">Connect to a different server…</button> <span id="dk-status" class="muted small"></span></p>
+      <p class="small"><button id="dk-test" type="button" class="ghost">Show a test notification</button> <button id="dk-server" type="button" class="ghost">Your Saras…</button> <button type="button" class="tip" data-tip="Add another server to this app and switch between them without signing out. Notifications, the microphone and files you pick go to the one in use.">?</button> <span id="dk-status" class="muted small"></span></p>
       <p id="dk-version" class="muted small"></p>
         </section>
         <section class="settings-page" data-page="her-companions" data-group="Her" data-title="Companions" hidden>
@@ -1595,7 +1606,7 @@
       <div id="phone-app" hidden>
         <h3>Phone app</h3>
         <p class="muted small" id="phone-app-note">This phone checks for her messages about every 15 minutes and shows them as notifications (instantly while the app is open).</p>
-        <p class="small"><button id="phone-widget" type="button">Add her to your home screen</button> <button id="phone-server" type="button" class="ghost">Change server address</button></p>
+        <p class="small"><button id="phone-widget" type="button">Add her to your home screen</button> <button id="phone-server" type="button" class="ghost">Your Saras…</button> <button type="button" class="tip" data-tip="Add another server to this app (with a code or the QR code from Add a phone or computer) and switch between them. Notifications come from all of them.">?</button></p>
         <div id="phone-prefs" hidden data-nodirty data-noauto>
           <label class="row" id="phone-instant-row"><input id="phone-instant" type="checkbox"> Instant notifications <span class="muted small">(keeps a quiet connection to your server open; uses a little battery. Off: she's checked about every 15 minutes.)</span></label>
           <label class="row" id="phone-private-row"><input id="phone-private" type="checkbox"> Hide the message text on the lock screen</label>

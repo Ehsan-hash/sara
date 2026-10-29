@@ -18,7 +18,9 @@ public class ReplyReceiver extends BroadcastReceiver {
         String conv = intent.getStringExtra("conv");
         int id = intent.getIntExtra("id", 0);
         String name = intent.getStringExtra("name");
-        String server = Net.server(context);
+        // Phase 68: the reply goes to the server the notification came from, with its own sign-in.
+        Servers.Profile from = Servers.find(Servers.list(context), intent.getStringExtra("server"));
+        String server = from != null ? from.url : Net.server(context);
         if (text == null || text.toString().trim().isEmpty() || conv == null || server == null) return;
         Context c = context.getApplicationContext();
         PendingResult pending = goAsync();

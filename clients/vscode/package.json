@@ -2,7 +2,7 @@
   "name": "sara-vscode",
   "displayName": "Sara",
   "description": "Sara, your self-hosted companion and coding partner, in VS Code: the same memory and personality, with the open file and selection as context.",
-  "version": "0.52.0",
+  "version": "0.68.0",
   "publisher": "sara-local",
   "private": true,
   "license": "MIT",
@@ -22,7 +22,10 @@
   },
   "activationEvents": [
     "onView:sara.chat",
-    "onCommand:sara.signIn"
+    "onCommand:sara.signIn",
+    "onCommand:sara.switchServer",
+    "onCommand:sara.addServer",
+    "onStartupFinished"
   ],
   "contributes": {
     "viewsContainers": {
@@ -50,7 +53,15 @@
       },
       {
         "command": "sara.signOut",
-        "title": "Sara: Sign out"
+        "title": "Sara: Sign out of this server"
+      },
+      {
+        "command": "sara.switchServer",
+        "title": "Sara: Switch server"
+      },
+      {
+        "command": "sara.addServer",
+        "title": "Sara: Add a server"
       },
       {
         "command": "sara.askSelection",
@@ -96,7 +107,7 @@
           "type": "string",
           "default": "",
           "scope": "application",
-          "description": "Your Sara server's address, e.g. https://sara.example.com (set by Sara: Sign in)."
+          "description": "Before 1.8: your Sara server's address. Servers are now added with Sara: Add a server and switched with Sara: Switch server (kept in VS Code's secret storage); this is only read once to move an old sign-in over."
         },
         "sara.maxContextChars": {
           "type": "number",

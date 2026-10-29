@@ -8,13 +8,14 @@
 //   sara-chat ask "question" [--dir .]         one question; --dir sends a short folder overview
 //   sara-chat send <file> [--library]          share a file in the chat, or keep it in her library
 //   sara-chat approve                          answer approvals she is waiting for
-//   sara-chat logout                           sign this computer out
+//   sara-chat logout                           sign this computer out of the server in use
+//   sara-chat servers [add|use|rename|remove]  several Saras, each with its own sign-in (Phase 68)
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync, chmodSync, lstatSync } from 'node:fs';
 import { hostname, homedir, platform } from 'node:os';
 import { basename, join, relative, resolve, sep } from 'node:path';
 import { createInterface, type Interface } from 'node:readline';
 
-export const VERSION = '0.52.0';
+export const VERSION = '0.68.0';
 
 // ---------- output ----------
 export interface Io {
@@ -27,8 +28,29 @@ export interface Io {
 
 const paint = (on: boolean, code: string) => (s: string) => (on ? `\x1b[${code}m${s}\x1b[0m` : s);
 
-// ---------- config ----------
+// ---------- config: several servers (Phase 68) ----------
+/** One Sara server this computer is signed in to. The token is only ever sent to `url`. */
+export interface ServerProfile {
+  /** Short stable id (never changes, even when renamed). */
+  id: string;
+  /** What the user calls it; defaults to her name on that server. */
+  name: string;
+  /** True once the user renamed it (her name on the server no longer overwrites it). */
+  named?: boolean;
+  url: string;
+  token?: string;
+  deviceId?: string;
+  conversationId?: string;
+  lastUsed?: string;
+  emoji?: string;
+}
+
+/** config.json from 1.8 on: a list of servers and the one in use. */
 export interface Config {
+  version?: 2;
+  active?: string;
+  servers?: ServerProfile[];
+  // ---- before 1.8 (one server): read once and moved into servers[0] ----
   server?: string;
   token?: string;
   deviceId?: string;
@@ -43,24 +65,137 @@ export function configDir(env: NodeJS.ProcessEnv = process.env, os = platform())
   return join(env.XDG_CONFIG_HOME || join(homedir(), '.config'), 'sara-chat');
 }
 
-export function loadConfig(dir = configDir()): Config {
+/** host[:port] of a server address, for showing and for matching `--server`. */
+export function hostOf(url: string): string {
   try {
-    return JSON.parse(readFileSync(join(dir, 'config.json'), 'utf8')) as Config;
+    return new URL(url).host;
   } catch {
-    return {};
+    return url;
   }
+}
+
+/** A new id that isn't in `taken`: s1, s2, … */
+function nextId(taken: Iterable<string>): string {
+  const used = new Set(taken);
+  for (let i = 1; ; i++) if (!used.has(`s${i}`)) return `s${i}`;
+}
+
+/**
+ * The config in the 1.8 shape. An old single-server file becomes profile #1 (named after its
+ * address until her name is known), with nothing for the user to do; unknown fields are dropped.
+ */
+export function migrateConfig(raw: Config): Config & { servers: ServerProfile[] } {
+  const servers: ServerProfile[] = Array.isArray(raw.servers)
+    ? raw.servers.filter((p) => p && typeof p.url === 'string' && typeof p.id === 'string').map((p) => ({ ...p, name: String(p.name || hostOf(p.url)) }))
+    : [];
+  let active = typeof raw.active === 'string' ? raw.active : undefined;
+  if (!servers.length && typeof raw.server === 'string' && raw.server) {
+    let url = raw.server;
+    try {
+      url = normalizeServer(raw.server);
+    } catch {
+      /* keep as saved */
+    }
+    servers.push({ id: 's1', name: hostOf(url), url, ...(raw.token ? { token: raw.token } : {}), ...(raw.deviceId ? { deviceId: raw.deviceId } : {}), ...(raw.conversationId ? { conversationId: raw.conversationId } : {}) });
+    active = 's1';
+  }
+  if (!servers.some((p) => p.id === active)) active = servers[0]?.id;
+  return { version: 2, ...(active ? { active } : {}), servers };
+}
+
+export function loadConfig(dir = configDir()): Config & { servers: ServerProfile[] } {
+  let raw: Config = {};
+  try {
+    raw = JSON.parse(readFileSync(join(dir, 'config.json'), 'utf8')) as Config;
+  } catch {
+    /* none yet */
+  }
+  return migrateConfig(raw);
 }
 
 /** Saved readable by this user only (0600; on Windows the folder in %APPDATA% is already private). */
 export function saveConfig(c: Config, dir = configDir()): void {
+  const out = migrateConfig(c);
   mkdirSync(dir, { recursive: true, mode: 0o700 });
   const f = join(dir, 'config.json');
-  writeFileSync(f, JSON.stringify(c, null, 2) + '\n', { mode: 0o600 });
+  if (!out.servers.length) {
+    if (existsSync(f)) rmSync(f);
+    return;
+  }
+  writeFileSync(f, JSON.stringify(out, null, 2) + '\n', { mode: 0o600 });
   try {
     chmodSync(f, 0o600);
   } catch {
     /* Windows ignores it */
   }
+}
+
+/**
+ * The profile `want` names: its id, its name (any case), its address, or its host[:port]. Without
+ * `want`, the active one. Two servers on one host differ by port, so a bare host only matches when
+ * it's unambiguous.
+ */
+export function findProfile(cfg: Config, want?: string): ServerProfile | undefined {
+  const list = migrateConfig(cfg).servers;
+  if (want === undefined || want === '') return list.find((p) => p.id === migrateConfig(cfg).active);
+  const w = want.trim();
+  const lower = w.toLowerCase();
+  const byId = list.find((p) => p.id === w);
+  if (byId) return byId;
+  const byName = list.filter((p) => p.name.toLowerCase() === lower);
+  if (byName.length === 1) return byName[0];
+  let url: string | undefined;
+  try {
+    url = normalizeServer(w);
+  } catch {
+    url = undefined;
+  }
+  if (url) {
+    const byUrl = list.find((p) => p.url === url);
+    if (byUrl) return byUrl;
+    // "sara.example.com" typed for an http://… profile, or "127.0.0.1:7882".
+    const byHost = list.filter((p) => hostOf(p.url).toLowerCase() === hostOf(url).toLowerCase());
+    if (byHost.length === 1) return byHost[0];
+  }
+  return undefined;
+}
+
+/** A name that no other profile uses: "Sara", then "Sara (127.0.0.1:7882)". */
+export function uniqueName(cfg: Config, wanted: string, url: string, self?: string): string {
+  const others = migrateConfig(cfg).servers.filter((p) => p.id !== self).map((p) => p.name.toLowerCase());
+  const base = wanted.trim().slice(0, 60) || hostOf(url);
+  if (!others.includes(base.toLowerCase())) return base;
+  const withHost = `${base} (${hostOf(url)})`;
+  if (!others.includes(withHost.toLowerCase())) return withHost;
+  for (let i = 2; ; i++) if (!others.includes(`${withHost} ${i}`.toLowerCase())) return `${withHost} ${i}`;
+}
+
+/** Adds or replaces (same address) a signed-in server and makes it the active one. */
+export function upsertProfile(cfg: Config, add: { url: string; token: string; deviceId?: string; name?: string }, now = new Date()): Config & { servers: ServerProfile[] } {
+  const c = migrateConfig(cfg);
+  const url = normalizeServer(add.url);
+  const old = c.servers.find((p) => p.url === url);
+  const id = old?.id ?? nextId(c.servers.map((p) => p.id));
+  const named = Boolean(old?.named || add.name);
+  const name = old?.named && !add.name ? old.name : uniqueName(c, add.name ?? old?.name ?? hostOf(url), url, id);
+  // A new sign-in starts clean: the old token and conversation of that address are dropped.
+  const p: ServerProfile = { id, name, ...(named ? { named: true } : {}), url, token: add.token, ...(add.deviceId ? { deviceId: add.deviceId } : {}), lastUsed: now.toISOString(), ...(old?.emoji ? { emoji: old.emoji } : {}) };
+  const servers = old ? c.servers.map((x) => (x.id === id ? p : x)) : [...c.servers, p];
+  return { version: 2, active: id, servers };
+}
+
+/** The config with one profile changed. */
+export function updateProfile(cfg: Config, id: string, patch: Partial<ServerProfile>): Config & { servers: ServerProfile[] } {
+  const c = migrateConfig(cfg);
+  return { ...c, servers: c.servers.map((p) => (p.id === id ? { ...p, ...patch, id, url: p.url } : p)) };
+}
+
+/** The config without that profile (its token is gone with it); the next one becomes active. */
+export function removeProfile(cfg: Config, id: string): Config & { servers: ServerProfile[] } {
+  const c = migrateConfig(cfg);
+  const servers = c.servers.filter((p) => p.id !== id);
+  const active = c.active === id ? [...servers].sort((a, b) => String(b.lastUsed ?? '').localeCompare(String(a.lastUsed ?? '')))[0]?.id : c.active;
+  return { version: 2, ...(active ? { active } : {}), servers };
 }
 
 // ---------- HTTP ----------
@@ -72,7 +207,7 @@ export class ApiError extends Error {
   }
 }
 
-function normalizeServer(raw: string): string {
+export function normalizeServer(raw: string): string {
   let s = raw.trim();
   if (!/^https?:\/\//i.test(s)) s = `${/^(localhost|127\.|\[::1\])/.test(s) ? 'http' : 'https'}://${s}`;
   const u = new URL(s);
@@ -210,7 +345,7 @@ interface Conversation {
   channel?: string;
 }
 
-async function pickConversation(c: Client, cfg: Config, fresh: boolean, mode?: 'coding'): Promise<string> {
+async function pickConversation(c: Client, cfg: { conversationId?: string }, fresh: boolean, mode?: 'coding'): Promise<string> {
   if (!fresh && cfg.conversationId) {
     try {
       await c.json(`/conversations/${encodeURIComponent(cfg.conversationId)}?limit=20`);
@@ -331,7 +466,7 @@ export interface Args {
 export function parseArgs(argv: string[]): Args {
   const flags: Record<string, string | boolean> = {};
   const rest: string[] = [];
-  const withValue = new Set(['dir', 'server', 'conversation', 'message', 'name']);
+  const withValue = new Set(['dir', 'server', 'conversation', 'message', 'name', 'emoji']);
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--') {
@@ -347,14 +482,14 @@ export function parseArgs(argv: string[]): Args {
     else if (a === '-v') flags.version = true;
     else rest.push(a);
   }
-  const known = ['login', 'logout', 'chat', 'ask', 'send', 'approve', 'status', 'help'];
+  const known = ['login', 'logout', 'chat', 'ask', 'send', 'approve', 'status', 'servers', 'help'];
   const cmd = rest.length && known.includes(rest[0]) ? rest.shift()! : 'chat';
   return { cmd, rest, flags };
 }
 
 export const HELP = `sara-chat ${VERSION}: Sara in your terminal
 
-  sara-chat login <server>          sign in with a code you approve in Settings
+  sara-chat login <server>          sign in with a code you approve in Settings (adds the server)
   sara-chat                         chat (her latest conversation; --new for a new one)
   sara-chat ask "question"          one question and her answer
        --dir <folder>               also send a short overview of a folder (file list + README;
@@ -363,22 +498,33 @@ export const HELP = `sara-chat ${VERSION}: Sara in your terminal
        --message "text"             say something with it)
   sara-chat approve                 answer approvals she's waiting for (y/n)
   sara-chat status                  who you're signed in as, and where
-  sara-chat logout                  sign this computer out
+  sara-chat logout                  sign this computer out of the server in use (others stay)
 
-Options: --new (a new conversation)  --conversation <id>  --server <url>  --no-color
+Several Saras (each keeps its own sign-in):
+  sara-chat servers                 list them (* = the one in use)
+  sara-chat servers add <address>   sign in to another one (--name "Work")
+  sara-chat servers use <name>      switch to it
+  sara-chat servers rename <name> <new name>
+  sara-chat servers remove <name>   sign out of that one and forget it
+
+Options: --server <name> (use that server for this command only)  --new  --conversation <id>
+         --no-color
 While she replies, Ctrl+C stops her reply. At the prompt, Ctrl+C or /quit leaves.
 In chat: /new starts a new conversation, /quit leaves.`;
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-export async function login(serverArg: string | undefined, io: Io, dir = configDir(), opts: { name?: string; maxWaitMs?: number } = {}): Promise<number> {
+export async function login(serverArg: string | undefined, io: Io, dir = configDir(), opts: { name?: string; maxWaitMs?: number; label?: string } = {}): Promise<number> {
   const cfg = loadConfig(dir);
-  const server = serverArg ?? cfg.server;
+  // `login` without an address signs the server in use in again.
+  const server = serverArg ?? findProfile(cfg)?.url;
   if (!server) {
     io.err('Which server? Run: sara-chat login https://your-sara-address\n');
     return 2;
   }
-  const c = new Client(server);
+  // A saved name (`login work`) means that server's address; anything else is an address.
+  const url = findProfile(cfg, server)?.url ?? server;
+  const c = new Client(url);
   const bold = paint(io.color, '1');
   const name = opts.name ?? `sara-chat on ${platform() === 'win32' ? 'Windows' : platform() === 'darwin' ? 'Mac' : 'Linux'} (${hostname().slice(0, 30)})`;
   const r = await c.json<{ code: string; pollToken: string; verifyUrl: string; interval: number; expiresAt: string; approveIn: string }>('/device/start', { body: { name } });
@@ -389,8 +535,14 @@ export async function login(serverArg: string | undefined, io: Io, dir = configD
     const res = await c.raw('/device/poll', { body: { pollToken: r.pollToken } });
     const body = (await res.json().catch(() => ({}))) as { status?: string; token?: string; deviceId?: string; error?: string };
     if (body.status === 'approved' && body.token) {
-      saveConfig({ server: c.server, token: body.token, deviceId: body.deviceId }, dir);
-      io.out(`Signed in. Saved in ${join(dir, 'config.json')} (only your user can read it).\n`);
+      // Named after her on that server unless the user gave it a name.
+      const her = opts.label ?? (await companionName(new Client(c.server, body.token)));
+      const next = upsertProfile(loadConfig(dir), { url: c.server, token: body.token, ...(body.deviceId ? { deviceId: body.deviceId } : {}), ...(opts.label ? { name: opts.label } : {}) });
+      const added = next.servers.find((p) => p.id === next.active)!;
+      const saved = opts.label ? next : updateProfile(next, added.id, added.named ? {} : { name: uniqueName(next, her, added.url, added.id) });
+      saveConfig(saved, dir);
+      const shown = saved.servers.find((p) => p.id === added.id)!;
+      io.out(`Signed in to "${shown.name}" (${hostOf(shown.url)}), now the server in use. Saved in ${join(dir, 'config.json')} (only your user can read it).\n`);
       return 0;
     }
     if (body.status === 'denied') {
@@ -410,30 +562,90 @@ export async function login(serverArg: string | undefined, io: Io, dir = configD
   return 1;
 }
 
-function signedIn(io: Io, dir: string, flags: Record<string, string | boolean>): { c: Client; cfg: Config } | undefined {
+/**
+ * The server this command uses: `--server <name>` for this command only, else the one in use.
+ * A token only ever goes to the address it was issued by: `--server` can pick a saved server but
+ * never send a saved token somewhere else.
+ */
+function signedIn(io: Io, dir: string, flags: Record<string, string | boolean>): { c: Client; cfg: Config & { servers: ServerProfile[] }; profile: ServerProfile } | undefined {
   const cfg = loadConfig(dir);
-  if (!cfg.token || !(cfg.server || flags.server)) {
+  if (!cfg.servers.length) {
     io.err('Not signed in yet. Run: sara-chat login https://your-sara-address\n');
     return undefined;
   }
-  // The saved token only ever goes to the server it was issued by (--server can't redirect it).
-  if (flags.server && cfg.server) {
-    let same = false;
-    try {
-      same = normalizeServer(String(flags.server)) === normalizeServer(cfg.server);
-    } catch {
-      same = false;
-    }
-    if (!same) {
-      io.err(`This computer is signed in to ${cfg.server}, not ${String(flags.server)}. Your sign-in is only sent to the server it came from. To use the other one, run: sara-chat login ${String(flags.server)}\n`);
-      return undefined;
-    }
-  }
-  if (!cfg.server) {
-    io.err('Not signed in yet. Run: sara-chat login https://your-sara-address\n');
+  const want = typeof flags.server === 'string' ? flags.server : undefined;
+  const profile = findProfile(cfg, want);
+  if (!profile) {
+    const list = cfg.servers.map((p) => `"${p.name}" (${hostOf(p.url)})`).join(', ');
+    io.err(`No saved server called ${String(flags.server)}. This computer is signed in to ${list}; a sign-in is only sent to the server it came from. To add that one, run: sara-chat servers add ${String(flags.server)}\n`);
     return undefined;
   }
-  return { c: new Client(cfg.server, cfg.token), cfg };
+  if (!profile.token) {
+    io.err(`Not signed in to "${profile.name}" any more. Run: sara-chat login ${profile.url}\n`);
+    return undefined;
+  }
+  return { c: new Client(profile.url, profile.token), cfg, profile };
+}
+
+/** Remembers the conversation (and when it was used) for that server only. */
+function remember(dir: string, id: string, patch: Partial<ServerProfile>): void {
+  saveConfig(updateProfile(loadConfig(dir), id, { ...patch, lastUsed: new Date().toISOString() }), dir);
+}
+
+/** `sara-chat servers …`: list, add, use, rename, remove. */
+async function servers(rest: string[], flags: Record<string, string | boolean>, io: Io, dir: string): Promise<number> {
+  const sub = rest[0] ?? 'list';
+  const cfg = loadConfig(dir);
+  const pick = (want: string | undefined): ServerProfile | undefined => {
+    if (!want) return void io.err(`Which one? sara-chat servers ${sub} <name>\n`);
+    const p = findProfile(cfg, want);
+    if (!p) io.err(`No saved server called "${want}". See them with: sara-chat servers\n`);
+    return p;
+  };
+  if (sub === 'list' || sub === 'ls') {
+    if (!cfg.servers.length) return (io.out('No servers yet. Add one: sara-chat servers add https://your-sara-address\n'), 0);
+    for (const p of cfg.servers) io.out(`${p.id === cfg.active ? '*' : ' '} ${p.emoji ? `${p.emoji} ` : ''}${p.name}  ${p.url}${p.token ? '' : '  (signed out)'}\n`);
+    return 0;
+  }
+  if (sub === 'add') {
+    const url = rest[1] ?? (typeof flags.server === 'string' ? flags.server : undefined);
+    if (!url) return (io.err('Which address? sara-chat servers add https://your-sara-address\n'), 2);
+    return login(url, io, dir, typeof flags.name === 'string' ? { label: flags.name } : {});
+  }
+  if (sub === 'use' || sub === 'switch') {
+    const p = pick(rest[1]);
+    if (!p) return 1;
+    saveConfig(updateProfile({ ...cfg, active: p.id }, p.id, { lastUsed: new Date().toISOString() }), dir);
+    io.out(`Now using "${p.name}" (${hostOf(p.url)}). Your other servers stay signed in.\n`);
+    return 0;
+  }
+  if (sub === 'rename') {
+    const p = pick(rest[1]);
+    const to = rest.slice(2).join(' ').trim();
+    if (!p) return 1;
+    if (!to) return (io.err('Rename to what? sara-chat servers rename <name> <new name>\n'), 2);
+    const name = uniqueName(cfg, to, p.url, p.id);
+    saveConfig(updateProfile(cfg, p.id, { name, named: true, ...(typeof flags.emoji === 'string' ? { emoji: flags.emoji.slice(0, 8) } : {}) }), dir);
+    io.out(`Renamed to "${name}".\n`);
+    return 0;
+  }
+  if (sub === 'remove' || sub === 'rm') {
+    const p = pick(rest[1]);
+    if (!p) return 1;
+    return forget(p, io, dir);
+  }
+  io.err(`Unknown: servers ${sub}. Use list, add, use, rename or remove.\n`);
+  return 2;
+}
+
+/** Signs this computer out of one server and forgets only that server's sign-in. */
+async function forget(p: ServerProfile, io: Io, dir: string): Promise<number> {
+  if (p.token) await new Client(p.url, p.token).json('/device/logout', { body: {} }).catch(() => undefined);
+  const next = removeProfile(loadConfig(dir), p.id);
+  saveConfig(next, dir);
+  const now = next.servers.find((x) => x.id === next.active);
+  io.out(`Signed out of "${p.name}" (${hostOf(p.url)}). This computer no longer has a token for it.${now ? ` Now using "${now.name}".` : ''}\n`);
+  return 0;
 }
 
 async function companionName(c: Client): Promise<string> {
@@ -477,25 +689,36 @@ export async function main(argv: string[], io: Io, dir = configDir(), rl?: Inter
   if (flags.version) return (io.out(`${VERSION}\n`), 0);
   if (flags.help || cmd === 'help') return (io.out(`${HELP}\n`), 0);
   try {
-    if (cmd === 'login') return await login(rest[0] ?? (flags.server ? String(flags.server) : undefined), io, dir);
+    if (cmd === 'servers') return await servers(rest, flags, io, dir);
+    if (cmd === 'login') return await login(rest[0] ?? (flags.server ? String(flags.server) : undefined), io, dir, typeof flags.name === 'string' ? { label: flags.name } : {});
     if (cmd === 'logout') {
       const cfg = loadConfig(dir);
-      if (cfg.token && cfg.server) await new Client(cfg.server, cfg.token).json('/device/logout', { body: {} }).catch(() => undefined);
-      if (existsSync(join(dir, 'config.json'))) rmSync(join(dir, 'config.json'));
-      io.out('Signed out. This computer no longer has a token for Sara.\n');
-      return 0;
+      const p = findProfile(cfg, typeof flags.server === 'string' ? flags.server : undefined);
+      if (!p) {
+        io.out(cfg.servers.length ? `No saved server called ${String(flags.server)}.\n` : 'Signed out. This computer no longer has a token for Sara.\n');
+        return cfg.servers.length ? 1 : 0;
+      }
+      return await forget(p, io, dir);
     }
     const s = signedIn(io, dir, flags);
     if (!s) return 1;
-    const { c, cfg } = s;
+    const { c, profile } = s;
     if (cmd === 'status') {
       const me = await c.json<{ companion: string; device: { label: string } | null }>('/device/whoami');
-      io.out(`Signed in to ${c.server} as "${me.device?.label ?? 'this computer'}". Talking with ${me.companion}.${cfg.conversationId ? ` Conversation: ${cfg.conversationId}` : ''}\n`);
+      const better = me.companion ? uniqueName(loadConfig(dir), me.companion, profile.url, profile.id) : profile.name;
+      if (!profile.named && better !== profile.name) remember(dir, profile.id, { name: better });
+      const others = s.cfg.servers.length - 1;
+      io.out(`Signed in to ${c.server} as "${me.device?.label ?? 'this computer'}". Talking with ${me.companion}.${profile.conversationId ? ` Conversation: ${profile.conversationId}` : ''}${others ? ` (${others} other server${others > 1 ? 's' : ''} saved: sara-chat servers)` : ''}\n`);
       return 0;
     }
     const name = await companionName(c);
+    // Her name on that server names the profile until the user renames it.
+    if (!profile.named) {
+      const better = uniqueName(loadConfig(dir), name, profile.url, profile.id);
+      if (better !== profile.name) remember(dir, profile.id, { name: better });
+    }
     if (cmd === 'approve') {
-      const convId = String(flags.conversation || cfg.conversationId || (await pickConversation(c, cfg, false)));
+      const convId = String(flags.conversation || profile.conversationId || (await pickConversation(c, profile, false)));
       const conv = await c.json<{ activity: { approvals: { approvalId: string; summary: string; name: string }[] } | null }>(`/conversations/${encodeURIComponent(convId)}?limit=20`);
       const waiting = conv.activity?.approvals ?? [];
       if (!waiting.length) return (io.out('Nothing is waiting for your OK in this conversation.\n'), 0);
@@ -506,17 +729,19 @@ export async function main(argv: string[], io: Io, dir = configDir(), rl?: Inter
       return 0;
     }
     await ensureDisclosure(c, io);
+    // What leaves this computer goes to the server in use only, and says which one.
+    const where = s.cfg.servers.length > 1 ? ` to ${name} on ${hostOf(c.server)}` : '';
     if (cmd === 'ask') {
       const question = rest.join(' ').trim();
       if (!question) return (io.err('What should I ask? sara-chat ask "your question"\n'), 2);
       let content = question;
       if (flags.dir) {
         const ctx = folderContext(String(flags.dir === true ? '.' : flags.dir));
-        io.err(paint(io.color, '2')(`Sending: a list of ${ctx.shownFiles} entries (${ctx.files} files)${ctx.readme ? ` and ${ctx.readme} (${Math.round(ctx.readmeBytes / 1024)} KB)` : ''} from ${resolve(String(flags.dir === true ? '.' : flags.dir))}`) + '\n');
+        io.err(paint(io.color, '2')(`Sending${where}: a list of ${ctx.shownFiles} entries (${ctx.files} files)${ctx.readme ? ` and ${ctx.readme} (${Math.round(ctx.readmeBytes / 1024)} KB)` : ''} from ${resolve(String(flags.dir === true ? '.' : flags.dir))}`) + '\n');
         content = `${question}\n\n[From the terminal: the owner shared this folder overview with the question.]\n${ctx.text}`;
       }
-      const convId = flags.conversation ? String(flags.conversation) : await pickConversation(c, cfg, !flags.continue, flags.dir ? 'coding' : undefined);
-      saveConfig({ ...cfg, conversationId: convId }, dir);
+      const convId = flags.conversation ? String(flags.conversation) : await pickConversation(c, profile, !flags.continue, flags.dir ? 'coding' : undefined);
+      remember(dir, profile.id, { conversationId: convId });
       const stop = new AbortController();
       const onInt = () => stop.abort();
       process.once('SIGINT', onInt);
@@ -533,30 +758,31 @@ export async function main(argv: string[], io: Io, dir = configDir(), rl?: Inter
       if (SECRET_FILE.test(basename(file))) return (io.err(`${basename(file)} looks like a secret (keys, .env, passwords): not sent.\n`), 2);
       const bytes = readFileSync(file);
       const library = Boolean(flags.library);
-      const convId = library ? undefined : flags.conversation ? String(flags.conversation) : await pickConversation(c, cfg, Boolean(flags.new));
+      if (where) io.err(paint(io.color, '2')(`Sending ${basename(file)}${where}`) + '\n');
+      const convId = library ? undefined : flags.conversation ? String(flags.conversation) : await pickConversation(c, profile, Boolean(flags.new));
       const q = new URLSearchParams({ name: basename(file), keep: library ? '1' : '0', ...(convId ? { conversation: convId } : {}) });
       const r = await c.json<{ doc: { id: number; name: string }; already?: boolean }>(`/library?${q}`, { bytes });
       if (library) {
         io.out(`${r.already ? 'Already in' : 'Added to'} ${name}'s library: ${r.doc.name}. She reads it in the background.\n`);
         return 0;
       }
-      saveConfig({ ...cfg, conversationId: convId }, dir);
+      remember(dir, profile.id, { conversationId: convId });
       const res = await runTurn(c, convId!, String(flags.message || '(document)'), io, { docs: [r.doc.id], name });
       return res.error ? 1 : 0;
     }
     // Interactive chat.
-    let convId = flags.conversation ? String(flags.conversation) : await pickConversation(c, cfg, Boolean(flags.new));
-    saveConfig({ ...cfg, conversationId: convId }, dir);
+    let convId = flags.conversation ? String(flags.conversation) : await pickConversation(c, profile, Boolean(flags.new));
+    remember(dir, profile.id, { conversationId: convId });
     const line = rl ?? createInterface({ input: process.stdin, output: process.stdout, terminal: Boolean(process.stdin.isTTY) });
     io.ask = lineAsker(line);
-    io.out(paint(io.color, '2')(`Talking with ${name} (conversation ${convId}). /new for a new conversation, /quit to leave. Ctrl+C stops her reply.`) + '\n');
+    io.out(paint(io.color, '2')(`Talking with ${name}${where ? ` on ${hostOf(c.server)}` : ''} (conversation ${convId}). /new for a new conversation, /quit to leave. Ctrl+C stops her reply.`) + '\n');
     await interactive(io, line, async (text, stop) => {
       const t = text.trim();
       if (!t) return;
       if (t === '/quit' || t === '/exit') return 'quit';
       if (t === '/new') {
-        convId = await pickConversation(c, cfg, true);
-        saveConfig({ ...cfg, conversationId: convId }, dir);
+        convId = await pickConversation(c, profile, true);
+        remember(dir, profile.id, { conversationId: convId });
         io.out(paint(io.color, '2')(`New conversation ${convId}.`) + '\n');
         return;
       }

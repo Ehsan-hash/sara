@@ -2136,7 +2136,7 @@ export function createSaraServer(opts: ServerOptions): Server {
         }
         if (method === 'POST' && c === 'register') {
           try {
-            push.apns.register(String(body.token ?? ''), body.sandbox === true, typeof body.label === 'string' ? body.label : 'iPhone', auth.sessionId(cookies(req)[SESSION_COOKIE]));
+            push.apns.register(String(body.token ?? ''), body.sandbox === true, typeof body.label === 'string' ? body.label : 'iPhone', auth.sessionId(cookies(req)[SESSION_COOKIE]), typeof body.profile === 'string' ? body.profile : undefined);
           } catch (err) {
             throw new HttpError(400, (err as Error).message);
           }

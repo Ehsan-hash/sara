@@ -96,6 +96,8 @@ async function boot() {
   }
   const langChanged = await applyLanguage(session.language, session.appLanguage);
   setIdentity(session.identity);
+  // Phase 68: the apps name this server after her (until renamed) and show the server switcher.
+  void serversSignedIn(session.identity?.name);
   // Phase 67: the header shows when nothing may leave this computer.
   setPrivateBadge(Boolean(session.privateLocal));
   void loadCompanions();
@@ -3542,7 +3544,7 @@ if (window.SaraPhone) {
     if (!window.SaraPhone.addWidget())
       alert(ios ? t('Touch and hold an empty spot on your Home Screen, tap Edit → Add Widget, and choose Sara. For the Lock Screen: touch and hold it, tap Customize → Lock Screen → add a widget.') : t('Long-press an empty spot on your home screen, choose Widgets, and drag hers out.'));
   });
-  $('#phone-server').addEventListener('click', () => window.SaraPhone.changeServer());
+  $('#phone-server').addEventListener('click', () => (nativeServersApi() ? openServers() : window.SaraPhone.changeServer()));
 }
 // Shared to her from another app (Phase 18): text and photos land in the message box, ready to send.
 window.saraShare = async ({ text = '', images = [] } = {}) => {
@@ -8515,10 +8517,121 @@ if (window.SaraDesktop) {
       await loadDesktop();
     });
   }
-  $('#dk-server').addEventListener('click', () => {
-    if (confirm(t('Connect this app to a different Sara server? You will need to sign in there.'))) window.SaraDesktop.call('changeServer');
-  });
+  $('#dk-server').addEventListener('click', () => openServers());
   $('#dk-test').addEventListener('click', () => window.SaraDesktop.call('testNotification', { title: t('Sara'), body: t('Notifications from Sara will look like this.') }));
+}
+
+// ---------- Phase 68: several Saras in one app ----------
+// The desktop and phone apps keep a list of Sara servers, each with its own sign-in (kept by the
+// app, never by this page). The page only shows the list and asks the app to switch, add, rename
+// or remove; it never sees another server's sign-in.
+// `var` and a function: boot() can ask before this part of the file has run.
+var nativeServersMade;
+function nativeServersApi() {
+  if (nativeServersMade !== undefined) return nativeServersMade;
+  nativeServersMade = makeNativeServers();
+  return nativeServersMade;
+}
+function makeNativeServers() {
+  const d = window.SaraDesktop;
+  const ph = window.SaraPhone;
+  const parse = (r) => (typeof r === 'string' ? JSON.parse(r) : r);
+  if (d?.call) {
+    return {
+      kind: 'desktop',
+      list: () => d.call('servers'),
+      use: (id) => d.call('useServer', { id }),
+      add: () => d.call('addServer'),
+      remove: (id) => d.call('removeServer', { id }),
+      rename: (id, name) => d.call('renameServer', { id, name }),
+      report: (name) => d.call('serverName', { name }),
+    };
+  }
+  if (ph?.servers) {
+    return {
+      kind: 'phone',
+      list: async () => parse(ph.servers()),
+      use: async (id) => ph.useServer(id),
+      add: async () => ph.addServer(),
+      remove: async (id) => ph.removeServer(id),
+      rename: async (id, name) => ph.renameServer(id, name),
+      report: async (name) => ph.serverName?.(name),
+    };
+  }
+  return null;
+}
+let serversRenaming = '';
+
+/** Shows the header switcher once there's more than one Sara in this app. */
+async function renderServers() {
+  if (!nativeServersApi()) return;
+  const r = await Promise.race([nativeServersApi().list(), new Promise((res) => setTimeout(() => res(null), 3000))]).catch(() => null);
+  const list = Array.isArray(r?.servers) ? r.servers : [];
+  const cur = list.find((x) => x.active) ?? list[0];
+  $('#server-btn').hidden = list.length < 2;
+  if (cur) $('#server-btn-name').textContent = `${cur.emoji ? `${cur.emoji} ` : ''}${cur.name}`;
+  const ul = $('#servers-list');
+  ul.replaceChildren(
+    ...list.map((x) => {
+      const li = el('li');
+      const who = el('span', '', `${x.emoji ? `${x.emoji} ` : ''}${x.name}`);
+      const where = el('span', 'muted small', x.host ?? '');
+      li.append(who, where);
+      if (x.active) li.append(el('span', 'badge', t('In use')));
+      else li.append(btn(t('Switch'), async () => {
+        $('#servers-status').textContent = t('Switching…');
+        await nativeServersApi().use(x.id);
+      }, false));
+      li.append(btn(t('Rename'), () => {
+        serversRenaming = x.id;
+        $('#servers-name').value = x.name;
+        $('#servers-rename-row').hidden = false;
+        $('#servers-name').focus();
+      }));
+      const rm = btn(t('Remove'), async () => {
+        if (!confirm(t('Remove {name} from this app? It signs out of that server only; its conversations stay on it.', { name: x.name }))) return;
+        await nativeServersApi().remove(x.id);
+        await renderServers();
+      });
+      rm.classList.add('danger');
+      li.append(rm);
+      return li;
+    }),
+  );
+  if (cur) {
+    $('#servers-computer').textContent = nativeServersApi().kind === 'desktop'
+      ? t('{name} (the server in use) can use this computer: notifications, the microphone in calls and the files you pick. They follow the server you switch to, one at a time.', { name: cur.name })
+      : t('Notifications come from every server here; tapping one opens the right one. The microphone, camera and location go only to the one in use ({name}).', { name: cur.name });
+  }
+}
+function openServers() {
+  if (!nativeServersApi()) return;
+  $('#servers-rename-row').hidden = true;
+  $('#servers-status').textContent = '';
+  void renderServers();
+  $('#servers-dialog').showModal();
+}
+async function serversSignedIn(name) {
+  if (!nativeServersApi()) return;
+  if (name) await Promise.resolve(nativeServersApi().report(name)).catch(() => {});
+  await renderServers();
+}
+if (nativeServersApi()) {
+  $('#server-btn').addEventListener('click', openServers);
+  $('#servers-add').addEventListener('click', () => {
+    $('#servers-dialog').close();
+    void nativeServersApi().add();
+  });
+  $('#servers-rename-save').addEventListener('click', async () => {
+    const name = $('#servers-name').value.trim();
+    if (!name || !serversRenaming) return;
+    await nativeServersApi().rename(serversRenaming, name);
+    $('#servers-rename-row').hidden = true;
+    saved($('#servers-dialog'));
+    await renderServers();
+  });
+  // The app calls this when its list changed (added from a pairing link, renamed elsewhere).
+  window.saraServersChanged = () => void renderServers();
 }
 
 // Offer the desktop app (web browser on a Mac or Windows computer, when the server has the file).

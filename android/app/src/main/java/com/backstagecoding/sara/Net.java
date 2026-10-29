@@ -21,7 +21,7 @@ final class Net {
         return c.getSharedPreferences("sara", Context.MODE_PRIVATE);
     }
 
-    /** The server's address, e.g. https://sara.example.com (no trailing slash), or null. */
+    /** The address of the server in use, e.g. https://sara.example.com (no trailing slash), or null. */
     static String server(Context c) {
         return prefs(c).getString("server", null);
     }
@@ -100,9 +100,9 @@ final class Net {
      */
     private static void signIn(Context c, HttpURLConnection con, String url) {
         con.setInstanceFollowRedirects(false);
-        String server = server(c);
-        if (server == null || !sameOrigin(server, url)) return;
-        String cookie = CookieManager.getInstance().getCookie(server);
+        // Phase 68: the sign-in of the saved server at exactly this address (the one in use, or
+        // another one's put-away sign-in); never one server's sign-in for another.
+        String cookie = Servers.cookieFor(c, url);
         if (cookie != null) con.setRequestProperty("Cookie", cookie);
     }
 

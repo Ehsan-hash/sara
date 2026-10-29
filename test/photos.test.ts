@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { runTurn, historyFrom } from '../src/chat.ts';
-import { createPhotoTools, PHOTO_KEY_VAULT } from '../src/photos.ts';
+import { artStyleLine, createPhotoTools, PHOTO_KEY_VAULT } from '../src/photos.ts';
 import { call, makeApp, ROOT, tempDir, text } from './helpers.ts';
 
 test('share_photo attaches her portrait to the reply; take_photo uses xAI from her look; never minors', async (t) => {
@@ -54,4 +54,34 @@ test('share_photo attaches her portrait to the reply; take_photo uses xAI from h
   const tool = app.store.messages(conv.id).findLast((m) => m.role === 'tool')!;
   assert.match(tool.content, /never involve children/);
   assert.equal(sent.length, 1, 'no request was made');
+});
+
+test('pictures she takes keep the art style of her look (an anime look stays anime, not a photo)', async (t) => {
+  assert.match(artStyleLine('anime'), /anime/i);
+  assert.match(artStyleLine('anime'), /not a photograph/);
+  assert.doesNotMatch(artStyleLine('anime'), /realistic lighting/);
+  assert.match(artStyleLine('photo'), /realistic lighting/);
+  assert.match(artStyleLine(undefined), /same style|art style of the first picture/);
+
+  const { dir, cleanup } = tempDir();
+  const app = makeApp(dir, { now: new Date('2026-10-24T20:00:00Z') });
+  t.after(() => {
+    app.store.close();
+    cleanup();
+  });
+  app.settings.update({ providers: [{ id: 'p', label: 'P', kind: 'openai-compatible', baseUrl: 'http://x' }], defaultProviderId: 'p', defaultModel: 'm', ownerName: 'Alex', photos: { mode: 'new' }, toolPermissions: { take_photo: 'auto' } });
+  const sent: Record<string, unknown>[] = [];
+  const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==', 'base64');
+  const fakeFetch = async (_url: string, init?: RequestInit) => {
+    sent.push(JSON.parse(String(init?.body)));
+    return new Response(JSON.stringify({ data: [{ b64_json: png.toString('base64') }] }));
+  };
+  for (const tool of createPhotoTools({ webDir: join(ROOT, 'web'), uploads: app.uploads!, settings: app.settings, vault: app.vault, xaiProviderKey: () => undefined, customPortrait: () => undefined, persona: () => app.persona, wearing: () => ({ style: 'anime' }), fetch: fakeFetch as never })) app.tools.add(tool);
+  app.vault.set(PHOTO_KEY_VAULT, 'xai-test');
+  const conv = app.store.createConversation({});
+  app.script.push([call('c1', 'take_photo', { scene: 'selfie at the beach' })], text('Here!'));
+  for await (const _ of runTurn(app, conv.id, 'send me a pic')) void _;
+  assert.equal(sent.length, 1);
+  assert.match(String(sent[0].prompt), /anime/i);
+  assert.doesNotMatch(String(sent[0].prompt), /realistic lighting|candid photo/);
 });

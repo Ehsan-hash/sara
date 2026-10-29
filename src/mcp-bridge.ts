@@ -10,11 +10,15 @@
 //   node sara-mcp.ts --server http://127.0.0.1:7860 --key-file ~/.sara-api-key
 //   node sara-mcp.ts --describe      (no server: answers initialize and tools/list with her tools,
 //                                     for MCP directories that check a server by starting it)
+//   node sara-mcp.ts --server work   (Phase 68: a server saved by `sara-chat servers add`, by its
+//                                     name; uses that server's own sign-in from sara-chat's file.
+//                                     SARA_SERVER=work does the same)
 //
 // The key never goes on the command line (other programs on the computer can read that).
 // Logs go to stderr only (stdout is the protocol).
 import { readFileSync } from 'node:fs';
-import { homedir } from 'node:os';
+import { homedir, platform } from 'node:os';
+import { join } from 'node:path';
 import { createInterface } from 'node:readline';
 
 interface Options {
@@ -25,13 +29,60 @@ interface Options {
 }
 
 function usage(msg: string): never {
-  process.stderr.write(`sara-mcp: ${msg}\nUse: node sara-mcp.ts --server https://<her address> [--key-file <file>]  (or set SARA_URL and SARA_API_KEY)\n`);
+  process.stderr.write(`sara-mcp: ${msg}\nUse: node sara-mcp.ts --server https://<her address> [--key-file <file>]  (or set SARA_URL and SARA_API_KEY), or --server <name> of a server saved by sara-chat\n`);
   process.exit(2);
+}
+
+/** sara-chat's config folder (the same rule as clients/cli/sara.ts configDir). */
+export function chatConfigDir(env: NodeJS.ProcessEnv, os = platform()): string {
+  if (env.SARA_CHAT_CONFIG_DIR) return env.SARA_CHAT_CONFIG_DIR;
+  if (os === 'win32') return join(env.APPDATA || join(homedir(), 'AppData', 'Roaming'), 'sara-chat');
+  if (os === 'darwin') return join(homedir(), 'Library', 'Application Support', 'sara-chat');
+  return join(env.XDG_CONFIG_HOME || join(homedir(), '.config'), 'sara-chat');
+}
+
+interface ChatProfile {
+  id: string;
+  name: string;
+  url: string;
+  token?: string;
+}
+
+/**
+ * Phase 68: a server saved by `sara-chat servers add`, found by its id, name (any case), address
+ * or host[:port] in sara-chat's config.json (1.8 list, or the older single-server file). Returns
+ * its address and its own device token; the token is never paired with another address.
+ */
+export function chatProfile(want: string, env: NodeJS.ProcessEnv, os = platform()): { url: string; token: string; name: string } | undefined {
+  let raw: { servers?: ChatProfile[]; server?: string; token?: string } = {};
+  try {
+    raw = JSON.parse(readFileSync(join(chatConfigDir(env, os), 'config.json'), 'utf8')) as typeof raw;
+  } catch {
+    return undefined;
+  }
+  const list: ChatProfile[] = Array.isArray(raw.servers) ? raw.servers.filter((p) => p && typeof p.url === 'string') : raw.server ? [{ id: 's1', name: '', url: raw.server, ...(raw.token ? { token: raw.token } : {}) }] : [];
+  const w = want.trim();
+  const lower = w.toLowerCase();
+  const host = (u: string): string => {
+    try {
+      return new URL(/^https?:\/\//i.test(u) ? u : `http://${u}`).host.toLowerCase();
+    } catch {
+      return '';
+    }
+  };
+  const one = <T,>(xs: T[]): T | undefined => (xs.length === 1 ? xs[0] : undefined);
+  const p =
+    list.find((x) => x.id === w) ??
+    one(list.filter((x) => String(x.name ?? '').toLowerCase() === lower)) ??
+    list.find((x) => x.url.replace(/\/+$/, '') === w.replace(/\/+$/, '')) ??
+    one(list.filter((x) => host(x.url) && host(x.url) === host(w)));
+  if (!p || !p.token) return undefined;
+  return { url: p.url, token: p.token, name: p.name || host(p.url) };
 }
 
 export function parseArgs(argv: string[], env: NodeJS.ProcessEnv): Options {
   if (argv.includes('--describe')) return { server: '', key: '', describe: true };
-  let server = env.SARA_URL ?? '';
+  let server = env.SARA_URL ?? env.SARA_SERVER ?? '';
   let keyFile = env.SARA_API_KEY_FILE ?? '';
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
@@ -50,6 +101,17 @@ export function parseArgs(argv: string[], env: NodeJS.ProcessEnv): Options {
     }
   }
   if (!server) usage('say which server (--server or SARA_URL).');
+  // A name (not an address), or an address without a key: a server saved by sara-chat, with its
+  // own sign-in. A key from SARA_API_KEY is only used with an address typed out in full.
+  const isAddress = /^https?:\/\//i.test(server);
+  if (!isAddress || !key) {
+    const saved = chatProfile(server, env);
+    if (saved) {
+      process.stderr.write(`sara-mcp: using "${saved.name}" (${saved.url}) with sara-chat's sign-in for it.\n`);
+      server = saved.url;
+      key = saved.token;
+    } else if (!isAddress) usage(`no server called "${server}" in sara-chat (sara-chat servers lists them), and it isn't an address starting with https://.`);
+  }
   if (!key) usage('no API key (SARA_API_KEY or --key-file). Make one in Sara: Settings → Connections → Other apps.');
   let u: URL;
   try {
@@ -726,7 +788,7 @@ export const DESCRIBE_TOOLS = [
 const DESCRIBE_VERSIONS = ['2025-11-25', '2025-06-18', '2025-03-26'];
 
 /** Sara's version, for --describe when no package.json is next to this file. Kept equal to package.json by a test. */
-export const SARA_VERSION = '1.7.1';
+export const SARA_VERSION = '1.8.0';
 
 /** Sara's real version: package.json next to the repo when this runs from a checkout, else SARA_VERSION. */
 export function describeVersion(): string {

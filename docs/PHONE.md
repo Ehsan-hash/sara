@@ -55,6 +55,13 @@ notifications won't work, and it doesn't work away from home.)
 3. To hide message text on the lock screen, use the phone's own settings (iPhone: Settings →
    Notifications → Sara → Show Previews → When Unlocked).
 
+## Several Saras (Phase 68)
+
+The Sara app keeps more than one server, each signed in: scan the QR code of another server's
+*Add a phone or computer* and choose **Add** (or **⇄** at the top → **Add a server**). Switch from
+**⇄**; notifications come from all of them and tapping one opens the right server. Removing one
+signs the phone out of that server only. [SERVERS.md](SERVERS.md)
+
 ## Optional
 
 - **Place reminders** ("remind me when I get to the store"): save places in *Planner → Reminders

@@ -7,6 +7,9 @@ A small native app (Swift, no libraries) around Sara's web app, like the Android
   the short code. (Without a code you sign in with the owner token.)
 - **Instant notifications** through Apple's push service, sent by your own server (set up once in
   Settings → Connections → Phone and notifications → *iPhone app notifications*).
+- **Several Saras** (Phase 68): each server keeps its sign-in in a WebKit data store of its own;
+  switch from **⇄** at the top; pushes say which server sent them, so a tap (or Reply) goes to the
+  right one. See [docs/SERVERS.md](../docs/SERVERS.md).
 - **Widgets** for the Home Screen (small, medium) and Lock Screen: her face, mood and latest
   message. Tap to open that conversation.
 - **Reply from a notification**, and **Send to Sara** from any app's Share button (text, a link or

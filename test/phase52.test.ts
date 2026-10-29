@@ -309,7 +309,9 @@ test('terminal client end to end: login with the device code, ask about a folder
   assert.equal((await api('/api/device/approve', 'POST', { code, token })).status, 200);
   const exit = await new Promise<number | null>((r) => login.on('close', r));
   assert.equal(exit, 0, shown);
-  const cfg = JSON.parse(readFileSync(join(cfgDir, 'config.json'), 'utf8')) as { token: string; server: string };
+  // Phase 68: config.json holds a list of servers; this one is profile #1 and in use.
+  const saved = JSON.parse(readFileSync(join(cfgDir, 'config.json'), 'utf8')) as { active: string; servers: { id: string; token: string; url: string; conversationId?: string }[] };
+  const cfg = saved.servers.find((p) => p.id === saved.active)!;
   assert.match(cfg.token, /^sara_dev\./);
   if (process.platform !== 'win32') assert.equal(statSync(join(cfgDir, 'config.json')).mode & 0o777, 0o600);
   // ask --dir: a short listing + README; .env and node_modules never sent.
@@ -337,7 +339,7 @@ test('terminal client end to end: login with the device code, ask about a folder
   assert.equal(b.code, 0, b.err);
   assert.match(b.out, /Sara wants to: .*from-cli\.txt/);
   assert.match(b.out, /Wrote it\./);
-  const conv = app.store.getConversation(JSON.parse(readFileSync(join(cfgDir, 'config.json'), 'utf8')).conversationId)!;
+  const conv = app.store.getConversation(JSON.parse(readFileSync(join(cfgDir, 'config.json'), 'utf8')).servers[0].conversationId)!;
   assert.equal(readFileSync(join(workspaceDir(dir, conv.workspace), 'from-cli.txt'), 'utf8'), 'hi from the terminal');
   // Interactive chat with piped input (lines typed before she's ready aren't lost), then /quit.
   app.script.push(text('Hi from the chat.'));
@@ -369,13 +371,15 @@ test('VS Code: the .vsix has a manifest and the extension; the panel CSP is stri
   const pkg = JSON.parse(files.get('extension/package.json')!.toString()) as { contributes: { commands: { title: string }[]; viewsContainers: { activitybar: { id: string }[] } } };
   assert.deepEqual(pkg.contributes.commands.map((c) => c.title).filter((x) => /Sign in|Ask about selection|Explain this file|Send file to her library/.test(x)).length, 4);
   assert.equal(pkg.contributes.viewsContainers.activitybar[0].id, 'sara');
-  assert.match(files.get('extension.vsixmanifest')!.toString(), /Version="0\.52\.0"/);
+  const version = (JSON.parse(readFileSync(join(ROOT, 'clients', 'vscode', 'package.json'), 'utf8')) as { version: string }).version;
+  assert.ok(files.get('extension.vsixmanifest')!.toString().includes(`Version="${version}"`));
+  assert.ok(files.has('extension/profiles.js'), 'Phase 68: the server list logic ships');
   const ext = files.get('extension/extension.js')!.toString();
   const csp = /http-equiv="Content-Security-Policy" content="([^"]+)"/.exec(ext)![1];
   assert.match(csp, /^default-src 'none'; .*script-src 'nonce-\$\{nonce\}'/);
   assert.doesNotMatch(csp, /unsafe-inline|unsafe-eval|https?:|\*/);
   assert.doesNotMatch(ext, /style="|<script>|src="http/);
-  for (const f of ['extension.js', 'media/panel.js']) assert.equal(spawnSync(process.execPath, ['--check', join(ROOT, 'clients', 'vscode', f)]).status, 0, f);
+  for (const f of ['extension.js', 'profiles.js', 'media/panel.js']) assert.equal(spawnSync(process.execPath, ['--check', join(ROOT, 'clients', 'vscode', f)]).status, 0, f);
   assert.doesNotMatch(files.get('extension/media/panel.js')!.toString(), /fetch\(|XMLHttpRequest|WebSocket/, 'the page has no network of its own');
 });
 
