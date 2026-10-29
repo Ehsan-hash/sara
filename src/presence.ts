@@ -10,9 +10,10 @@
 // the REST API; no websocket client), only the chosen entities, and nothing is stored but the time
 // each kind last fired. Household members have no Home Assistant in 2.0, so presence is the
 // owner's only (docs/HOUSEHOLD.md).
-import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
+import { writeFileAtomic } from './fs-util.ts';
 import { join } from 'node:path';
-import { speechText } from './alexa.ts';
+import { FOR_SPEAKER, spokenText } from './spoken.ts';
 import { callRules, inQuietHours } from './calls.ts';
 import { bondContext, type AppContext } from './chat.ts';
 import { appLanguage, en, trOwner } from './i18n.ts';
@@ -203,9 +204,7 @@ export class PresenceWorker {
     }
   }
   #save(f: PresenceFile): void {
-    const tmp = `${this.#file()}.tmp`;
-    writeFileSync(tmp, JSON.stringify(f), { mode: 0o600 });
-    renameSync(tmp, this.#file());
+    writeFileAtomic(this.#file(), JSON.stringify(f), 0o600);
   }
 
   async #ha<T>(path: string, init: { method?: string; body?: unknown } = {}): Promise<T> {
@@ -318,7 +317,7 @@ export class PresenceWorker {
       const told = f.speakerToldAt ? Date.parse(f.speakerToldAt) : 0;
       const intro = now.getTime() - told >= DISCLOSURE_INTERVAL_MS ? `${disclosureText(app.persona.name, appLanguage(app.settings.get())).split(/(?<=[.!?。])\s/)[0]} ` : '';
       try {
-        await this.#ha('/api/services/tts/speak', { method: 'POST', body: { entity_id: speaker.tts, media_player_entity_id: speaker.player, message: speechText(`${intro}${text}`, 400) } });
+        await this.#ha('/api/services/tts/speak', { method: 'POST', body: { entity_id: speaker.tts, media_player_entity_id: speaker.player, message: spokenText(`${intro}${text}`, { ...FOR_SPEAKER, max: 400 }) } });
         if (intro) f.speakerToldAt = now.toISOString();
       } catch (err) {
         this.#save(f);

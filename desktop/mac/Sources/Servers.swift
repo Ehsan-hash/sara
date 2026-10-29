@@ -4,7 +4,7 @@
 // stored there. Each server's sign-in is its session cookie in a WebKit website data store of its
 // own: the first server (the one from before 1.8) keeps the default store, so an update keeps its
 // sign-in; every other one gets WKWebsiteDataStore(forIdentifier:) (macOS 14+), which WebKit keeps
-// apart from the others (and in this user's protected Library). The menu bar's "Sara server" menu
+// apart from the others (and in this user's protected Library). The menu bar's "Your Saras" menu
 // and the page's ⇄ menu switch between them without signing out.
 import AppKit
 import WebKit
@@ -147,7 +147,7 @@ extension AppDelegate {
   @objc func addServerFromMenu() {
     showWindow()
     if !Servers.list().isEmpty && !Servers.canHoldSeveral {
-      return alert("Several Saras need macOS 14", "This Mac can keep one Sara server signed in. To use another one, remove this one first (Sara server → Remove…), or update macOS.")
+      return alert("Several Saras need macOS 14", "This Mac can keep one Sara signed in. To use another one, remove this one first (Your Saras → Remove…), or update macOS.")
     }
     showSetup()
   }
@@ -207,12 +207,16 @@ extension AppDelegate {
     let list = Servers.list()
     let a = Servers.activeId
     for p in list {
-      let item = NSMenuItem(title: (p.emoji.isEmpty ? "" : p.emoji + " ") + "\(p.name)  (\(hostOf(p.url)))", action: #selector(useServerFromMenu(_:)), keyEquivalent: "")
+      // "Sara (host)", or just the host while she has no name yet (the same as the Windows tray).
+      let host = hostOf(p.url)
+      let label = (p.emoji.isEmpty ? "" : p.emoji + " ") + p.name + (p.name.lowercased() == host.lowercased() ? "" : "  (\(host))")
+      let item = NSMenuItem(title: label, action: #selector(useServerFromMenu(_:)), keyEquivalent: "")
       item.representedObject = p.id
       item.state = p.id == a ? .on : .off
       item.target = self
       m.addItem(item)
     }
+    if !list.isEmpty { m.addItem(.separator()) }
     let add = NSMenuItem(title: "Add a Sara…", action: #selector(addServerFromMenu), keyEquivalent: "")
     add.target = self
     m.addItem(add)

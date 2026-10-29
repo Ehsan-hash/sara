@@ -140,6 +140,21 @@ test('character file: export and load name, personality, look and voice choice; 
   assert.throws(() => parseCharacter({ ...file, look: { 'sara-avatar.jpg': file.look['sara-avatar.jpg'] } }), /no portrait/);
 });
 
+test('character file: her "Starts conversations" dial comes along (settings.proactive follows it)', async () => {
+  const file = await (await call('/api/character/export')).json();
+  const was = file.persona.traits?.initiative;
+  const want = was === 10 ? 0 : 10;
+  const next = { ...file, persona: { ...file.persona, traits: { ...(file.persona.traits ?? {}), initiative: want } } };
+  const r = await call('/api/character/import', { file: next, look: false, voice: false });
+  assert.equal(r.status, 200);
+  assert.equal(app.persona.traits?.initiative, want);
+  assert.deepEqual(
+    { maxPerDay: app.settings.get().proactive?.maxPerDay, minGapHours: app.settings.get().proactive?.minGapHours },
+    want === 10 ? { maxPerDay: 4, minGapHours: 3 } : { maxPerDay: 1, minGapHours: 24 },
+  );
+  assert.equal(JSON.parse(readFileSync(join(dir, 'persona.json'), 'utf8')).traits.initiative, want, 'saved to persona.json');
+});
+
 test('saved looks are kept out of the static files and need the owner', async () => {
   const id = (await (await call('/api/look')).json()).saved[0].id;
   assert.equal((await fetch(`${base}/api/look/saved/${id}.jpg`)).status, 401);

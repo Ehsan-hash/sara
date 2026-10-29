@@ -184,13 +184,23 @@ struct WebView: UIViewRepresentable {
             let e = error as NSError
             if e.code == NSURLErrorCancelled { return }
             let server = model.server ?? ""
+            let host = server.components(separatedBy: "://").last ?? server
+            // The same card as the desktop apps' "Can't reach your Sara" page, in the web app's colours.
             let html = """
             <!doctype html><meta name="viewport" content="width=device-width,initial-scale=1">
-            <body style="background:#121016;color:#eee9f3;font:17px -apple-system,sans-serif;padding:48px 28px">
-            <h2>Can't reach your companion</h2>
-            <p style="color:#a49cae">\(e.localizedDescription)</p>
-            <p><a style="color:#e0789a" href="\(server)/">Try again</a> &nbsp;·&nbsp; <a style="color:#e0789a" href="sara://setup">Change server</a></p>
-            </body>
+            <style>
+            :root{--bg:#121016;--panel:#1b1820;--text:#eee9f3;--muted:#a49cae;--accent:#e0789a;--border:#322b3a;--on-accent:#1a0f14}
+            *{box-sizing:border-box}html,body{height:100%;margin:0}
+            body{background:var(--bg);color:var(--text);font:17px/1.45 -apple-system,system-ui,sans-serif;display:grid;place-items:center;padding:20px;-webkit-user-select:none}
+            .c{width:100%;max-width:440px;background:var(--panel);border:1px solid var(--border);border-radius:20px;padding:26px 22px 22px}
+            h1{font-size:24px;line-height:1.2;margin:0 0 10px}p{color:var(--muted);margin:0 0 12px}b{color:var(--text)}.small{font-size:14px}
+            a{display:block;text-align:center;text-decoration:none;font-weight:600;padding:13px 16px;border-radius:12px;margin-top:10px}
+            .p{background:var(--accent);color:var(--on-accent);margin-top:20px}.g{border:1px solid var(--border);color:var(--text)}
+            </style>
+            <div class=c><h1>Can't reach your Sara</h1>
+            <p><b>\(htmlEscape(host))</b> isn't answering. Check your connection, that the address is right, and that Sara is running there.</p>
+            <p class=small>\(htmlEscape(e.localizedDescription))</p>
+            <a class=p href="\(htmlEscape(server))/">Try again</a><a class=g href="sara://setup">Add a Sara</a></div>
             """
             webView.loadHTMLString(html, baseURL: nil)
         }
@@ -233,4 +243,10 @@ struct WebView: UIViewRepresentable {
             return true
         }
     }
+}
+
+/// For text put into the app's own small pages.
+func htmlEscape(_ s: String) -> String {
+    s.replacingOccurrences(of: "&", with: "&amp;").replacingOccurrences(of: "<", with: "&lt;")
+        .replacingOccurrences(of: ">", with: "&gt;").replacingOccurrences(of: "'", with: "&#39;").replacingOccurrences(of: "\"", with: "&quot;")
 }

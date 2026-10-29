@@ -44,13 +44,39 @@ func htmlEscape(_ s: String) -> String {
     .replacingOccurrences(of: ">", with: "&gt;").replacingOccurrences(of: "'", with: "&#39;").replacingOccurrences(of: "\"", with: "&quot;")
 }
 
+/// The app's own pages (choose, connect, can't reach, starting): the web app's colours
+/// (web/style.css), light or dark like macOS. The same look as the Windows app's pages.
 let pageStyle = """
-<meta name=viewport content='width=device-width'><style>body{margin:0;font-family:-apple-system,system-ui,sans-serif;background:#121016;color:#eee;
-display:flex;align-items:center;justify-content:center;height:100vh}.c{max-width:420px;padding:28px;background:#1c1922;border-radius:16px;box-shadow:0 10px 40px #0006}
-h1{font-size:22px;margin:0 0 8px}p{color:#aaa;line-height:1.45;font-size:14px}input{width:100%;box-sizing:border-box;padding:10px 12px;border-radius:9px;
-border:1px solid #444;background:#0f0d12;color:#eee;font-size:15px}button{margin-top:14px;padding:10px 18px;border:0;border-radius:9px;background:#c76b98;color:#fff;
-font-size:15px;cursor:pointer}button.g{background:none;border:1px solid #555;color:#ccc;margin-left:8px}#e{color:#f88;font-size:13px;min-height:1em}</style>
+<meta name=viewport content='width=device-width'><style>
+:root{--bg:#121016;--panel:#1b1820;--panel-2:#241f2b;--text:#eee9f3;--muted:#a49cae;--accent:#e0789a;--accent-2:#f3a6bf;--border:#322b3a;--error:#ff8080;--on-accent:#1a0f14;color-scheme:dark}
+@media (prefers-color-scheme:light){:root{--bg:#faf7fb;--panel:#f1ecf4;--panel-2:#e8e1ed;--text:#241c2b;--muted:#6b6274;--accent:#c94f78;--accent-2:#a83d61;--border:#d9d0e0;--error:#c0303a;--on-accent:#fff;color-scheme:light}}
+*{box-sizing:border-box}html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--text);font:15px/1.5 -apple-system,system-ui,sans-serif;display:grid;place-items:center;padding:24px;-webkit-user-select:none;user-select:none}
+.c{width:100%;max-width:440px;background:var(--panel);border:1px solid var(--border);border-radius:16px;padding:30px 30px 26px;box-shadow:0 12px 40px #0003}
+.logo{display:block;width:64px;height:64px;border-radius:50%;margin:0 0 18px;background:var(--panel-2)}
+h1{font-size:22px;line-height:1.25;margin:0 0 8px;font-weight:650}
+p{color:var(--muted);margin:0 0 12px}b{color:var(--text);font-weight:600}
+label{display:block;font-weight:600;font-size:14px;margin:18px 0 6px}
+input{width:100%;font:inherit;padding:10px 12px;border-radius:10px;border:1px solid var(--border);background:var(--panel-2);color:var(--text);-webkit-user-select:text;user-select:text}
+input:focus{outline:2px solid var(--accent);outline-offset:-1px}
+.row{display:flex;flex-wrap:wrap;gap:8px;margin-top:18px}
+button{font:inherit;font-weight:600;padding:9px 18px;border:0;border-radius:10px;background:var(--accent);color:var(--on-accent);cursor:pointer}
+button:hover{background:var(--accent-2)}button:focus-visible{outline:2px solid var(--text);outline-offset:2px}
+button.g{background:transparent;color:var(--text);border:1px solid var(--border);font-weight:500}button.g:hover{border-color:var(--muted)}
+button.choice{display:block;width:100%;text-align:left;margin:12px 0 0;padding:16px 18px;border-radius:12px;border:1px solid var(--border);background:var(--panel-2);color:var(--text);font-size:16px}
+button.choice:hover{border-color:var(--accent);background:var(--panel-2)}button.choice span{display:block;font-weight:400;font-size:13px;color:var(--muted);margin-top:4px}
+.e{color:var(--error);font-size:14px;margin:8px 0 0}.e:empty{display:none}
+.small{font-size:13px}.sep{border-top:1px solid var(--border);margin:22px 0 0;padding-top:14px}.sep p{margin:0 0 8px}
+</style>
 """
+
+/// Her picture at the top of these pages (PageLogo.swift is made by scripts/make-app-icons.py).
+let pageLogo = "<img class=logo alt='' src='\(pageLogoDataURL)'>"
+
+/// A page that only says what's happening ("Starting Sara…").
+func statusPage(_ title: String, _ text: String = "") -> String {
+  "<!doctype html><html><head>\(pageStyle)</head><body><div class=c>\(pageLogo)<h1>\(htmlEscape(title))</h1>" + (text.isEmpty ? "" : "<p>\(htmlEscape(text))</p>") + "</div></body></html>"
+}
 
 /// The page side of window.SaraDesktop. call() returns a promise (WebKit replies to the message).
 let shim = """
@@ -76,7 +102,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
   let local = LocalServer()
   var setupSheet: SetupSheet?
   var serverState = "Checking…"
-  var serverItems: [NSMenuItem] = []
+  /// Menu items whose submenu is rebuilt each time it opens (Your Saras, Sara on this Mac).
+  var liveSubmenus: [(item: NSMenuItem, make: () -> NSMenu)] = []
   /// Phase 68: the saved server the web view's data store belongs to, and one being removed.
   var webServerId: String?
   var pendingRemove: String?
@@ -99,6 +126,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
     web.uiDelegate = self
     web.setValue(false, forKey: "drawsBackground")
     web.allowsBackForwardNavigationGestures = true
+    if let z = prefs.object(forKey: "zoom") as? Double { web.pageZoom = z }
     webServerId = id
     window?.contentView = web
   }
@@ -163,7 +191,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
   /// Returns true when it started (it then opens her page itself).
   func migrateFromDaemonIfNeeded() -> Bool {
     guard local.configured, local.readEnv()["SARA_MAC_RUN"] == "daemon" else { return false }
-    web.loadHTMLString("<!doctype html><html><head>\(pageStyle)</head><body><div class=c><h1>Updating Sara…</h1><p>She now runs while you're signed in to this Mac.</p></div></body></html>", baseURL: nil)
+    web.loadHTMLString(statusPage("Updating Sara…", "She now runs while you're signed in to this Mac."), baseURL: nil)
     DispatchQueue.global().async { [weak self] in
       guard let self else { return }
       let o = self.local.migrateFromDaemon() ?? LocalServer.Outcome()
@@ -206,18 +234,38 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
   var startAtLogin: Bool { SMAppService.mainApp.status == .enabled }
 
   // MARK: menus
+  // The menu bar menu and the Sara menu list the same things in the same order as the Windows
+  // tray menu: Open Sara · Settings… | Your Saras ▸ · Sara on this Mac ▸ | Open at Login · Help | Quit.
+
+  /// "Your Saras ▸" and, when the app carries her server, "Sara on this Mac ▸".
+  func addSubmenus(to m: NSMenu) {
+    let saras = NSMenuItem(title: "Your Saras", action: nil, keyEquivalent: "")
+    saras.submenu = sarasMenu()
+    liveSubmenus.append((item: saras, make: { [unowned self] in self.sarasMenu() }))
+    m.addItem(saras)
+    if local.hasBundledServer || local.configured {
+      let mac = NSMenuItem(title: "Sara on this Mac", action: nil, keyEquivalent: "")
+      mac.submenu = thisMacMenu()
+      liveSubmenus.append((item: mac, make: { [unowned self] in self.thisMacMenu() }))
+      m.addItem(mac)
+    }
+  }
+
   func buildMenu() {
     let main = NSMenu()
     let appItem = NSMenuItem()
     let appMenu = NSMenu()
     appMenu.addItem(withTitle: "About Sara", action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
-    let srv = NSMenuItem(title: "Sara server", action: nil, keyEquivalent: "")
-    srv.submenu = serverMenu()
-    serverItems.append(srv)
-    appMenu.addItem(srv)
+    appMenu.addItem(.separator())
+    appMenu.addItem(withTitle: "Settings…", action: #selector(openSettings), keyEquivalent: ",")
+    appMenu.addItem(.separator())
+    addSubmenus(to: appMenu)
     appMenu.delegate = self
     appMenu.addItem(.separator())
     appMenu.addItem(withTitle: "Hide Sara", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
+    let others = appMenu.addItem(withTitle: "Hide Others", action: #selector(NSApplication.hideOtherApplications(_:)), keyEquivalent: "h")
+    others.keyEquivalentModifierMask = [.command, .option]
+    appMenu.addItem(withTitle: "Show All", action: #selector(NSApplication.unhideAllApplications(_:)), keyEquivalent: "")
     appMenu.addItem(.separator())
     appMenu.addItem(withTitle: "Quit Sara", action: #selector(quit), keyEquivalent: "q")
     appItem.submenu = appMenu
@@ -236,32 +284,67 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
     let viewItem = NSMenuItem()
     let view = NSMenu(title: "View")
     view.addItem(withTitle: "Reload", action: #selector(reload), keyEquivalent: "r")
+    view.addItem(.separator())
+    view.addItem(withTitle: "Actual Size", action: #selector(zoomReset), keyEquivalent: "0")
+    view.addItem(withTitle: "Zoom In", action: #selector(zoomIn), keyEquivalent: "+")
+    view.addItem(withTitle: "Zoom Out", action: #selector(zoomOut), keyEquivalent: "-")
     viewItem.submenu = view
     main.addItem(viewItem)
     let winItem = NSMenuItem()
     let win = NSMenu(title: "Window")
-    win.addItem(withTitle: "Close", action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w")
     win.addItem(withTitle: "Minimize", action: #selector(NSWindow.performMiniaturize(_:)), keyEquivalent: "m")
+    win.addItem(withTitle: "Zoom", action: #selector(NSWindow.performZoom(_:)), keyEquivalent: "")
+    win.addItem(withTitle: "Close", action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w")
+    win.addItem(.separator())
+    win.addItem(withTitle: "Bring All to Front", action: #selector(NSApplication.arrangeInFront(_:)), keyEquivalent: "")
     winItem.submenu = win
     main.addItem(winItem)
+    let helpItem = NSMenuItem()
+    let help = NSMenu(title: "Help")
+    help.addItem(withTitle: "Sara Help", action: #selector(openHelp), keyEquivalent: "?")
+    helpItem.submenu = help
+    main.addItem(helpItem)
     NSApp.mainMenu = main
     NSApp.windowsMenu = win
+    NSApp.helpMenu = help
   }
 
   func statusMenu() -> NSMenu {
     let m = NSMenu()
     m.addItem(withTitle: "Open Sara", action: #selector(openFromMenu), keyEquivalent: "")
-    let login = NSMenuItem(title: "Open at Login", action: #selector(toggleLogin), keyEquivalent: "")
-    m.addItem(login)
-    let srv = NSMenuItem(title: "Sara server", action: nil, keyEquivalent: "")
-    srv.submenu = serverMenu()
-    serverItems.append(srv)
-    m.addItem(srv)
+    m.addItem(withTitle: "Settings…", action: #selector(openSettings), keyEquivalent: "")
+    m.addItem(.separator())
+    addSubmenus(to: m)
+    m.addItem(.separator())
+    m.addItem(withTitle: "Open at login", action: #selector(toggleLogin), keyEquivalent: "")
+    m.addItem(withTitle: "Help", action: #selector(openHelp), keyEquivalent: "")
     m.addItem(.separator())
     m.addItem(withTitle: "Quit Sara", action: #selector(quit), keyEquivalent: "")
     m.delegate = self
     return m
   }
+
+  /// Settings… and Help: that view of the web app (its #view= links), in the window.
+  func openView(_ view: String) {
+    showWindow()
+    guard server != nil else { return }
+    if isServer(web.url) {
+      // replaceState first: setting the hash it already has wouldn't open the view again.
+      web.evaluateJavaScript("history.replaceState(null,'',location.pathname);location.hash='view=\(view)'")
+    } else { openServer("/#view=\(view)") }
+  }
+  @objc func openSettings() { openView("settings") }
+  @objc func openHelp() { openView("help") }
+
+  // View → Zoom In / Out / Actual Size (remembered).
+  func setZoom(_ z: Double) {
+    let v = min(2.0, max(0.6, (z * 10).rounded() / 10))
+    prefs.set(v, forKey: "zoom")
+    web.pageZoom = v
+  }
+  @objc func zoomIn() { setZoom(web.pageZoom + 0.1) }
+  @objc func zoomOut() { setZoom(web.pageZoom - 0.1) }
+  @objc func zoomReset() { setZoom(1) }
 
   @objc func openFromMenu() { showWindow() }
   @objc func reload() {
@@ -283,31 +366,36 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
     web.load(URLRequest(url: url))
   }
 
-  func showSetup(_ error: String = "") {
+  func showSetup(_ error: String = "", typed: String = "") {
     // Phase 68: with a Sara already here, this page adds another one; Back returns to her.
     let here = Servers.active
-    let last = here == nil ? htmlEscape(prefs.string(forKey: "lastServer") ?? "") : ""
-    let back = here.map { "<p>Your other Saras stay signed in.</p><button class=g id=k>Back to \(htmlEscape($0.name))</button>" } ?? ""
+    let value = htmlEscape(!typed.isEmpty ? typed : here == nil ? prefs.string(forKey: "lastServer") ?? "" : "")
+    let back = here.map { "<button class=g id=k>Back to \(htmlEscape($0.name))</button>" } ?? ""
     let html = """
-    <!doctype html><html><head>\(pageStyle)</head><body><div class=c><h1>\(here == nil ? "Connect to your Sara" : "Add a Sara")</h1><p>Type the address of \(here == nil ? "your" : "another") Sara (the one you open in a web browser,
-    for example <b>sara.example.com</b>).</p><input id=u autofocus placeholder='sara.example.com' value='\(last)'><p id=e>\(htmlEscape(error))</p><button id=b>Continue</button>
-    <p>Next you sign in with a code from Settings → Devices and sign-in on a device where you're already signed in.</p>\(local.hasBundledServer ? "<p><a href='#' id=l style='color:#e3a3c3'>Or run Sara on this Mac instead</a></p>" : "")\(back)</div><script>
-    const k=document.getElementById('k');if(k)k.onclick=()=>webkit.messageHandlers.sara.postMessage({m:'retry'});
-    const l=document.getElementById('l');if(l)l.onclick=(e)=>{e.preventDefault();webkit.messageHandlers.sara.postMessage({m:'setupLocal'})};
-    const go=()=>webkit.messageHandlers.sara.postMessage({m:'setServer',url:document.getElementById('u').value});
-    document.getElementById('b').onclick=go;document.getElementById('u').onkeydown=e=>e.key==='Enter'&&go();</script></body></html>
+    <!doctype html><html><head>\(pageStyle)</head><body><div class=c>\(pageLogo)<h1>\(here == nil ? "Connect to your Sara" : "Add a Sara")</h1>
+    <p>\(here == nil ? "Type the address you open Sara at in a web browser." : "Type the address of another Sara. Your other Saras stay signed in.")</p>
+    <label for=u>Address</label><input id=u autofocus spellcheck=false placeholder='sara.example.com' value='\(value)'><p class=e id=e role=alert>\(htmlEscape(error))</p>
+    <div class=row><button id=b>Continue</button>\(back)</div>
+    <div class=sep><p class=small>Next you sign in with a code: on a device where you're signed in, open Settings → Data &amp; health → Devices and sign-in → <b>Add a phone or computer</b>.</p>\(local.hasBundledServer ? "<button class=g id=l>Run Sara on this Mac instead</button>" : "")</div></div><script>
+    const $=(i)=>document.getElementById(i);
+    const k=$('k');if(k)k.onclick=()=>webkit.messageHandlers.sara.postMessage({m:'retry'});
+    const l=$('l');if(l)l.onclick=()=>webkit.messageHandlers.sara.postMessage({m:'setupLocal'});
+    const go=()=>webkit.messageHandlers.sara.postMessage({m:'setServer',url:$('u').value});
+    $('b').onclick=go;$('u').onkeydown=e=>e.key==='Enter'&&go();</script></body></html>
     """
     web.loadHTMLString(html, baseURL: nil)
   }
 
   func showOffline() {
     let why = isLocalServer
-      ? (local.stopped ? "She is stopped on this Mac. Start her from the menu bar: Sara server → Start." : "She runs on this Mac and may still be starting; if not, her log says why (Sara server → Open data folder → logs).")
-      : "Check your internet connection, that the address is right, and that Sara is running there."
+      ? (local.stopped ? "She is stopped on this Mac. Start her from the menu bar: Sara on this Mac → Start." : "She runs on this Mac and may still be starting. If not, her log says why: Sara on this Mac → Open data folder → logs.")
+      : "Check your internet connection, that the address is right, and that Sara is running there. This page tries again by itself."
     // Phase 68: the other saved Saras are one click away.
     let others = Servers.list().filter { $0.id != Servers.activeId }.map { "<button class=g data-id='\(htmlEscape($0.id))'>\(htmlEscape($0.name))</button>" }.joined()
+    let othersBlock = others.isEmpty ? "" : "<div class=sep><p class=small>Your other Saras</p><div class=row style='margin-top:0'>" + others + "</div></div>"
     let html = """
-    <!doctype html><html><head>\(pageStyle)</head><body><div class=c><h1>Can't reach your Sara</h1><p>Sara at <b>\(htmlEscape(server ?? ""))</b> isn't answering.</p><p>\(htmlEscape(why))</p><button id=r>Try again</button><button class=g id=s>Add a Sara</button>\(others)</div><script>
+    <!doctype html><html><head>\(pageStyle)</head><body><div class=c>\(pageLogo)<h1>Can't reach your Sara</h1><p><b>\(htmlEscape(server ?? ""))</b> isn't answering.</p><p>\(htmlEscape(why))</p>
+    <div class=row><button id=r>Try again</button><button class=g id=s>Add a Sara</button></div>\(othersBlock)</div><script>
     document.getElementById('r').onclick=()=>webkit.messageHandlers.sara.postMessage({m:'retry'});
     for(const b of document.querySelectorAll('[data-id]'))b.onclick=()=>webkit.messageHandlers.sara.postMessage({m:'useServer',id:b.dataset.id});
     document.getElementById('s').onclick=()=>webkit.messageHandlers.sara.postMessage({m:'changeServer'});
@@ -330,13 +418,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
     // The local setup/offline pages may only set the server, retry or change server.
     case "setServer":
       guard let o = originOf(body["url"] as? String ?? "") else {
-        showSetup("That doesn't look like a web address. Try something like sara.example.com.")
+        showSetup("That doesn't look like a web address. Try something like sara.example.com.", typed: body["url"] as? String ?? "")
         return replyHandler(nil, nil)
       }
       prefs.set(o, forKey: "lastServer")
       // Phase 68: a saved server again, or a new one next to the others (nobody is signed out).
       if !Servers.list().contains(where: { $0.url == o }) && Servers.list().contains(where: { $0.url != o }) && !Servers.canHoldSeveral {
-        alert("Several Saras need macOS 14", "This Mac can keep one Sara server signed in. Remove the other one first (Sara server → Remove…), or update macOS.")
+        alert("Several Saras need macOS 14", "This Mac can keep one Sara signed in. Remove the other one first (Your Saras → Remove…), or update macOS.")
         return replyHandler(nil, nil)
       }
       useServer(Servers.idFor(o), path: "/pair")
@@ -554,10 +642,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
   }
 }
 
+/// Settings… and Help need a Sara to show them.
+extension AppDelegate: NSMenuItemValidation {
+  func validateMenuItem(_ item: NSMenuItem) -> Bool {
+    if item.action == #selector(openSettings) || item.action == #selector(openHelp) { return server != nil }
+    return true
+  }
+}
+
 extension AppDelegate: NSMenuDelegate {
   func menuNeedsUpdate(_ menu: NSMenu) {
-    menu.item(withTitle: "Open at Login")?.state = startAtLogin ? .on : .off
-    for i in serverItems where i.menu === menu { i.submenu = serverMenu() }
+    menu.item(withTitle: "Open at login")?.state = startAtLogin ? .on : .off
+    for s in liveSubmenus where s.item.menu === menu { s.item.submenu = s.make() }
   }
 }
 

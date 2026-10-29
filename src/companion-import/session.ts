@@ -9,7 +9,7 @@ import { mkdirSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs'
 import { join } from 'node:path';
 import { resolveChain, type AppContext } from '../chat.ts';
 import { SOURCE_CHANNEL, SOURCE_NAME, type HistorySource, isHistorySource } from '../history-import/types.ts';
-import { isCloudModel } from '../modelpicks.ts';
+import { isCloudModelName } from '../model-names.ts';
 import { validatePersona } from '../persona.ts';
 import { appLanguage, en } from '../i18n.ts';
 import { detectMinorSexualContent } from '../safety.ts';
@@ -260,7 +260,7 @@ export class CompanionImporter {
     try {
       const chain = resolveChain(app, routeConv(localOnly), 'background');
       const first = chain[0];
-      if (localOnly && (!first.provider.config.local || isCloudModel(first.model))) return { problem: en('No model on your own hardware is set up for this.') };
+      if (localOnly && (!first.provider.config.local || isCloudModelName(first.model))) return { problem: en('No model on your own hardware is set up for this.') };
       return { chain };
     } catch (err) {
       return { problem: localOnly ? en('No model on your own hardware is set up for this.') : en('No model is set up for this yet.') };

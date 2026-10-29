@@ -18,10 +18,12 @@ import { initPresence, loadPresence } from './home-presence.js';
 import { initCards } from './cards.js';
 import { initImport, loadImport } from './import.js';
 import { initLocalModels, loadLocalModels, setPrivateBadge } from './local-models.js';
-import { groupTag, initGroups, isGroup, openGroupDialog, showGroupButton, speakerHeader } from './group.js';
+import { faceUrl, groupTag, initGroups, isGroup, openGroupDialog, showGroupButton, speakerHeader } from './group.js';
 import { appLink, inPhoneApp, phoneKind } from './pair-link.js';
 import { addToMomentsButton, initMoments, loadMoments, openMoments, renderTodayMoments } from './moments.js';
 import { initHousehold, joinFromLink, loadAccount, loadHousehold, showPaused } from './household.js';
+import { initNav, relabelNav, revealNav, setMore } from './nav.js';
+import { emptyState, initTidy, overflowMenu } from './tidy.js';
 /** Phase 71: a household member (their own space; owner-only pages and loaders are left out). */
 const isMember = () => document.body.classList.contains('member');
 const $ = (sel) => document.querySelector(sel);
@@ -612,7 +614,7 @@ async function openDeleteDialog(c) {
   $('#delete-conv').showModal();
   try {
     const { count } = await api(`/conversations/${c.id}/memories`);
-    $('#dc-count').textContent = count ? `(${count} memor${count === 1 ? 'y' : 'ies'} from it)` : '(nothing saved from it yet)';
+    $('#dc-count').textContent = count ? t('(memories from it: {n})', { n: count }) : t('(nothing saved from it yet)');
   } catch {
     /* ignore */
   }
@@ -802,7 +804,7 @@ function setActivity(status, detail = '', startedAt) {
   bar.dataset.status = status;
   renderActivity();
   if (!activity.timer) activity.timer = setInterval(renderActivity, 1000);
-  document.title = t(status === 'waiting' ? '(!) Sara needs your OK' : 'Sara is working…');
+  document.title = (status === 'waiting' ? t('(!) Sara needs your OK') : t('Sara is working…'));
 }
 
 function renderActivity() {
@@ -825,6 +827,9 @@ $('#offrecord-end').addEventListener('click', async () => {
 });
 
 $('#toggle-sidebar').addEventListener('click', () => $('#main').classList.toggle('show-sidebar'));
+// The sidebar's places: pinned ones, the rest under More (web/nav.js).
+initNav();
+initTidy();
 // On a phone the list slides over the chat: ✕, a tap beside it, or Escape closes it.
 const closeSidebar = () => $('#main').classList.remove('show-sidebar');
 $('#close-sidebar').addEventListener('click', closeSidebar);
@@ -855,7 +860,7 @@ function setReply(div, raw, { partial = false } = {}) {
     body = el('div', 'md');
     div.prepend(body);
   }
-  body.replaceChildren(toDom(parseMd(raw.trimEnd()), document, { onCopy: copyText }));
+  body.replaceChildren(toDom(parseMd(raw.trimEnd()), document, { onCopy: copyText, copyLabel: t('Copy') }));
 }
 
 // While streaming, re-render at most once per frame.
@@ -1243,7 +1248,7 @@ async function addPhotos(files) {
     try {
       state.photos.push(await shrinkPhoto(f));
     } catch {
-      append(bubble('error', `Couldn't read ${f.name || 'that photo'}.`));
+      append(bubble('error', f.name ? t("Couldn't read {name}.", { name: f.name }) : t("Couldn't read that photo.")));
     }
   }
   renderAttachments();
@@ -1480,7 +1485,7 @@ async function runStream(path, body, userBubble) {
             });
             pendingTyped = r;
           }
-          if (ev.correcting) setActivity('thinking', 'checking her claims');
+          if (ev.correcting) setActivity('thinking', t('checking her claims'));
         } else if (ev.type === 'replace') {
           // Phase 28: her reply failed a safety check; show the replacement instead.
           if (voiceOn()) speaker.stop();
@@ -1580,7 +1585,7 @@ function previewCard(output) {
   const card = el('div', 'preview-card');
   card.dataset.url = m[0];
   const port = /port (\d+)/.exec(String(output))?.[1];
-  card.append(el('span', '', '🖥️'), el('span', 'muted', t(port ? `Her app (port ${port})` : t('Her app'))));
+  card.append(el('span', '', '🖥️'), el('span', 'muted', port ? t('Her app (port {port})', { port }) : t('Her app')));
   const open = el('button', 'small', t('Preview'));
   open.type = 'button';
   open.addEventListener('click', () => openPreview(m[0]));
@@ -1618,7 +1623,7 @@ $('#preview-width').addEventListener('click', () => {
 /** A small strip of screenshots she took while testing (proof for her claims). */
 function proofStrip(ids, live = false) {
   const strip = el('div', live ? 'proof-strip msg notice' : 'proof-strip');
-  strip.append(el('span', 'proof-label', t(live ? '📸 Screenshot from her testing browser' : '📸 What she saw while testing')));
+  strip.append(el('span', 'proof-label', live ? t('📸 Screenshot from her testing browser') : t('📸 What she saw while testing')));
   for (const id of ids) {
     const img = document.createElement('img');
     img.src = `/api/uploads/${id}`;
@@ -1635,7 +1640,7 @@ function flagClaims(el, claims) {
   el.classList.add('unverified');
   const note = document.createElement('div');
   note.className = 'claim-flag';
-  note.textContent = `Unverified: ${claims.map((c) => (c.problem === 'contradicted' ? `"${c.sentence}" (tool output says otherwise)` : `"${c.sentence}" (no tool did this)`)).join('; ')}`;
+  note.textContent = `${t('Not checked:')} ${claims.map((c) => (c.problem === 'contradicted' ? t('"{sentence}" (what really happened says otherwise)', { sentence: c.sentence }) : t('"{sentence}" (nothing she did shows this)', { sentence: c.sentence }))).join('; ')}`;
   el.append(note);
 }
 
@@ -1715,7 +1720,7 @@ function addUndo(d, snapshotId) {
 function fillToolBlock(d, { status, output, ms, snapshotId }) {
   addUndo(d, snapshotId);
   d.className = `tool ${status}`;
-  d.querySelector('.tool-status').textContent = `${STATUS_LABEL[status] ?? status}${ms !== undefined && status !== 'running' ? ` · ${(ms / 1000).toFixed(1)}s` : ''}`;
+  d.querySelector('.tool-status').textContent = `${STATUS_LABEL[status] ? t(STATUS_LABEL[status]) : status}${ms !== undefined && status !== 'running' ? ` · ${(ms / 1000).toFixed(1)}s` : ''}`;
   d.querySelector('pre').textContent = output ?? '';
 }
 
@@ -1752,6 +1757,17 @@ function approvalCard(ev, block) {
     title.textContent = fromApp;
     title.dataset.raw = '';
     what.hidden = true;
+  } else if (TOOL_NAME[ev.name]) {
+    // UI cleanup (wave 2): a built-in tool reads as its plain name with an icon and one sentence
+    // on what it does; the exact command or details stay below, the raw name in small print.
+    card.classList.add('approval-tidy');
+    title.className = 'approval-title';
+    title.append(
+      el('span', 'approval-icon', TOOL_ICON[ev.name] ?? (CODE_TOOL.test(ev.name) ? '⌨️' : '⚙️')),
+      el('span', 'approval-what', t('{app} wants to: {what}', { app: currentIdentity().name || t('Sara'), what: t(TOOL_NAME[ev.name]) })),
+    );
+    title.dataset.raw = '';
+    what.textContent = ev.name === 'shell' ? String(ev.args.command ?? '') : JSON.stringify(ev.args, null, 2);
   } else {
     title.textContent = t('{name} wants to use {tool}:', { name: currentIdentity().name || t('Sara'), tool: ev.name });
     title.dataset.raw = '';
@@ -1779,6 +1795,10 @@ function approvalCard(ev, block) {
   no.addEventListener('click', () => decide(false));
   row.append(yes, no);
   card.append(title, what, row);
+  if (card.classList.contains('approval-tidy')) {
+    if (TOOL_WORDS[ev.name]) title.after(el('p', 'approval-about muted small', t(TOOL_WORDS[ev.name])));
+    row.append(el('span', 'tool-raw approval-raw', ev.name));
+  }
   if (block) block.open = false;
   return card;
 }
@@ -1858,7 +1878,126 @@ const TOOL_WORDS = {
   work_on_issue: 'Have her team work a GitHub issue through to a pull request.',
   shared_list: 'Your shared lists: music, books and shows.',
   change_outfit: 'Change into another of her saved looks.',
+  moments: 'Find and show photos from your album of moments.',
 };
+// UI cleanup: each tool with a plain name, an icon, a sentence on what it lets her do and its raw
+// name in small print; grouped by topic, each group with a summary and "Set all to".
+const TOOL_NAME = {
+  list_dir: 'See her files', read_file: 'Read files', write_file: 'Write files', edit_file: 'Edit files', search: 'Search her files',
+  code_map: 'Code overview', code_find: 'Find code', code_refs: 'Where code is used', code_deps: 'How files connect',
+  starter_create: 'Start a project from a template', project_note: 'Project notes', review_code: 'Review code',
+  shell: 'Run commands', start_job: 'Start a background task', job_status: 'Check a background task', stop_job: 'Stop a background task', delegate_task: 'Hand a job to a coding agent',
+  git: 'Look at project history', git_commit: 'Save a checkpoint (commit)', git_branch: 'Make or switch a branch', git_push: 'Send work to GitHub (push)',
+  github_list: 'List GitHub issues and pull requests', github_read: 'Read a GitHub issue or pull request', github_create_issue: 'Open a GitHub issue', github_comment: 'Comment on GitHub', github_open_pr: 'Open a pull request', github_post_review: 'Post a code review on GitHub',
+  team_task: 'Lead a team on a big job', team_status: 'Check on the team', work_on_issue: 'Work a GitHub issue with the team',
+  web_search: 'Search the web', web_fetch: 'Open web pages',
+  preview_start: 'Show you an app she runs', preview_stop: 'Close a preview', browser_open: 'Open a page in her test browser', browser_screenshot: 'Screenshot her test browser', browser_click: 'Click in her test browser', browser_type: 'Type in her test browser', browser_read: 'Read her test browser', browser_check: 'Check a page works',
+  todo: 'To-dos', note: 'Notes', remind: 'Reminders', shared_list: 'Shared lists',
+  recall: 'Look back at past chats', library: 'Read your documents', recipe_save: 'Save a recipe', recipe_find: 'Find a recipe', recipe_use: 'Follow a recipe',
+  scrapbook: 'Scrapbook', moments: 'Our moments', share_photo: 'Send her pictures', take_photo: 'Make a new picture', change_outfit: 'Change her outfit',
+  gmail_search: 'Search Gmail', gmail_read: 'Read an email', gmail_thread: 'Read an email conversation', gmail_needs_answer: 'Find emails to answer', gmail_draft: 'Draft an email', gmail_send: 'Send an email',
+  calendar_events: 'See your calendar', calendar_add: 'Add a calendar event', calendar_remove: 'Delete a calendar event',
+  home_status: 'See your smart home', home_control: 'Switch things at home',
+  ssh_servers: 'List your servers', ssh_connect: 'Add a server', ssh_run: 'Run commands on a server', ssh_forget_password: 'Forget a server password', ssh_revoke_key: 'Remove her key from a server', ssh_remove_server: 'Remove a server',
+  tune_personality: 'Adjust her personality', settings_guide: 'Look up how the app works',
+};
+const TOOL_GROUP_OF = {
+  todo: 'plan', note: 'plan', remind: 'plan', shared_list: 'plan',
+  recall: 'memory', library: 'memory', recipe_save: 'memory', recipe_find: 'memory', recipe_use: 'memory',
+  scrapbook: 'pictures', moments: 'pictures', share_photo: 'pictures', take_photo: 'pictures', change_outfit: 'pictures',
+  web_search: 'web', web_fetch: 'web',
+  gmail_search: 'mail', gmail_read: 'mail', gmail_thread: 'mail', gmail_needs_answer: 'mail', gmail_draft: 'mail', gmail_send: 'mail', calendar_events: 'mail', calendar_add: 'mail', calendar_remove: 'mail',
+  home_status: 'home', home_control: 'home',
+  list_dir: 'files', read_file: 'files', write_file: 'files', edit_file: 'files', search: 'files', code_map: 'files', code_find: 'files', code_refs: 'files', code_deps: 'files', starter_create: 'files', project_note: 'files', review_code: 'files',
+  shell: 'run', start_job: 'run', job_status: 'run', stop_job: 'run', delegate_task: 'run',
+  git: 'git', git_commit: 'git', git_branch: 'git', git_push: 'git', github_list: 'git', github_read: 'git', github_create_issue: 'git', github_comment: 'git', github_open_pr: 'git', github_post_review: 'git',
+  team_task: 'team', team_status: 'team', work_on_issue: 'team',
+  preview_start: 'browser', preview_stop: 'browser', browser_open: 'browser', browser_screenshot: 'browser', browser_click: 'browser', browser_type: 'browser', browser_read: 'browser', browser_check: 'browser',
+  ssh_servers: 'ssh', ssh_connect: 'ssh', ssh_run: 'ssh', ssh_forget_password: 'ssh', ssh_revoke_key: 'ssh', ssh_remove_server: 'ssh',
+  tune_personality: 'her', settings_guide: 'her',
+};
+const TOOL_GROUP_ORDER = ['plan', 'memory', 'pictures', 'web', 'mail', 'home', 'her', 'files', 'run', 'git', 'team', 'browser', 'ssh', 'mcp', 'other'];
+const TOOL_GROUP_ICON = { plan: '✅', memory: '🧠', pictures: '📷', web: '🌐', mail: '✉️', home: '🏠', her: '🎛️', files: '📁', run: '⌨️', git: '🌿', team: '👥', browser: '🧭', ssh: '🖧', mcp: '🧩', other: '⚙️' };
+const TOOL_GROUP_TEXT = {
+  plan: 'Planner and notes', memory: 'Memory and know-how', pictures: 'Pictures and keepsakes', web: 'The web', mail: 'Email and calendar', home: 'Smart home',
+  her: 'Her and this app', files: 'Files and code', run: 'Running commands', git: 'Git and GitHub', team: 'Her team', browser: 'Test browser and previews',
+  ssh: 'Servers over SSH', mcp: 'Other programs (MCP)', other: 'Other tools',
+};
+const TOOL_GROUP_ABOUT = {
+  plan: 'Your to-dos, notes, reminders and shared lists.', memory: 'Looking back at your chats, your documents and how she did tricky jobs.', pictures: 'Her pictures, outfits, the scrapbook and your album.',
+  web: 'Searching the web and reading public pages.', mail: 'Your Gmail and Google Calendar. Sending and adding events ask first.', home: 'Lights, sensors and switches through Home Assistant.',
+  her: 'Changing her personality dials and looking up how the app works.', files: 'Reading and changing files in her workspace.', run: 'Commands and long tasks on this server.',
+  git: 'Project history and GitHub: commits, branches, issues and pull requests.', team: 'Helpers she leads on bigger jobs.', browser: 'A browser without a window she tests her web apps in.',
+  ssh: 'Your other servers over SSH. Commands ask first.', mcp: 'Tools from other programs you added.', other: 'Tools that fit no other group.',
+};
+// Why a tool can't be used yet, and the page that sets it up.
+const TOOL_NEEDS = {
+  web_search: 'search', github_list: 'github', github_read: 'github', github_create_issue: 'github', github_comment: 'github', github_open_pr: 'github', github_post_review: 'github', work_on_issue: 'github',
+  gmail_search: 'google', gmail_read: 'google', gmail_thread: 'google', gmail_needs_answer: 'google', gmail_draft: 'google', gmail_send: 'google', calendar_events: 'google', calendar_add: 'google', calendar_remove: 'google',
+  home_status: 'home', home_control: 'home', take_photo: 'pictures', change_outfit: 'looks', delegate_task: 'agents', moments: 'moments',
+};
+const TOOL_NEED_TEXT = {
+  search: 'Needs a web search service first.', github: 'Needs your GitHub token first.', google: 'Needs Gmail and Calendar connected first.', home: 'Needs Home Assistant connected first.',
+  pictures: 'Needs pictures from her set up first.', looks: 'Needs saved looks in her closet first.', agents: 'Needs Claude Code or Grok Build signed in first.', moments: 'Our moments is off.', none: 'Not set up yet',
+};
+const TOOL_NEED_PAGE = { search: 'ab-search', github: 'ab-github', google: 'ab-google', home: 'ab-home', pictures: 'her-pictures', looks: 'her-look', agents: 'models-subs' };
+const PERM_LABEL = { auto: 'Allowed', ask: 'Ask me first', never: 'Off' };
+const toolGroupsOpen = () => {
+  try {
+    return new Set(JSON.parse(localStorage.getItem('sara.toolGroups') ?? '[]'));
+  } catch {
+    return new Set();
+  }
+};
+function toolGroupSummary(box) {
+  const sels = [...box.querySelectorAll('select[data-tool]')];
+  const n = (p) => sels.filter((s) => s.value === p).length;
+  const parts = [sels.length === 1 ? t('1 tool') : t('{n} tools', { n: sels.length })];
+  if (n('auto')) parts.push(t('{n} allowed', { n: n('auto') }));
+  if (n('ask')) parts.push(t('{n} ask first', { n: n('ask') }));
+  if (n('never')) parts.push(t('{n} off', { n: n('never') }));
+  box.querySelector('.tool-group-sum').textContent = parts.join(' · ');
+}
+function toolRow(tool) {
+  const row = el('div', 'tool-perm');
+  row.dataset.toolRow = tool.name;
+  const builtIn = tool.source === 'built-in';
+  const icon = el('span', 'tool-icon', builtIn ? (TOOL_ICON[tool.name] ?? (CODE_TOOL.test(tool.name) ? '⌨️' : '⚙️')) : '🧩');
+  icon.setAttribute('aria-hidden', 'true');
+  const text = el('div', 'tool-text');
+  const title = el('span', 'tool-name', builtIn ? t(TOOL_NAME[tool.name] ?? tool.name) : tool.name);
+  const words = builtIn ? t(TOOL_WORDS[tool.name] ?? '') : tool.description;
+  // L11: the plain description is also the hover tip (her own instructions stay out of it).
+  title.title = words;
+  const what = el('span', 'tool-what', words);
+  const raw = el('code', 'tool-raw', tool.name);
+  if (!builtIn) raw.append(el('small', '', ` · ${tool.source}`));
+  text.append(title, what);
+  const meta = el('span', 'tool-meta');
+  meta.append(raw);
+  if (!tool.available) {
+    row.classList.add('unavailable');
+    const need = TOOL_NEEDS[tool.name] ?? 'none';
+    const note = el('span', 'tool-need', t(TOOL_NEED_TEXT[need]));
+    if (TOOL_NEED_PAGE[need]) {
+      const go = el('button', 'linkish tool-need-go', t('Set it up'));
+      go.type = 'button';
+      go.addEventListener('click', () => showSettingsTab(TOOL_NEED_PAGE[need], { focus: true }));
+      note.append(' ', go);
+    }
+    meta.append(note);
+    row.title = t(TOOL_NEED_TEXT[need]);
+  }
+  text.append(meta);
+  const sel = document.createElement('select');
+  sel.dataset.tool = tool.name;
+  sel.setAttribute('aria-label', builtIn ? t(TOOL_NAME[tool.name] ?? tool.name) : tool.name);
+  for (const p of ['auto', 'ask', 'never']) sel.append(new Option(t(PERM_LABEL[p]), p));
+  sel.value = tool.permission;
+  sel.addEventListener('change', () => toolGroupSummary(row.closest('.tool-group')));
+  row.append(icon, text, sel);
+  return row;
+}
 async function loadTools() {
   const data = await api('/tools');
   // M9: the server's sandbox words are translated here (keys in i18n/_extra.json).
@@ -1870,30 +2009,52 @@ async function loadTools() {
   // Phase 49: the browser she tests web apps with.
   const br = data.browser ?? { found: false, how: '' };
   $('#browser-status').textContent = br.found ? `${t('Found')}: ${br.name}. ${t('She can open her previews in it, click through them and take desktop and phone screenshots.')}` : `${t('Not found.')} ${br.how}`;
+  const byGroup = new Map();
+  for (const tool of data.tools) {
+    const g = tool.source !== 'built-in' ? 'mcp' : (TOOL_GROUP_OF[tool.name] ?? 'other');
+    if (!byGroup.has(g)) byGroup.set(g, []);
+    byGroup.get(g).push(tool);
+  }
+  const open = toolGroupsOpen();
   $('#tool-list').replaceChildren(
-    ...data.tools.map((tool) => {
-      const row = document.createElement('label');
-      row.className = 'tool-perm';
-      const name = document.createElement('span');
-      name.textContent = tool.name;
-      // L11: built-in tools get a plain description (the model's instructions stay out of the tooltip).
-      name.title = tool.source === 'built-in' ? t(TOOL_WORDS[tool.name] ?? '') : tool.description;
-      if (tool.source !== 'built-in') {
-        const src = document.createElement('small');
-        src.textContent = tool.source;
-        name.append(src);
-      }
-      if (!tool.available) {
-        row.classList.add('unavailable');
-        row.title = t('Not set up yet');
-      }
-      const sel = document.createElement('select');
-      sel.dataset.tool = tool.name;
-      sel.setAttribute('aria-label', tool.name);
-      for (const p of ['auto', 'ask', 'never']) sel.append(new Option(t({ auto: 'Allowed', ask: 'Ask me first', never: 'Off' }[p]), p));
-      sel.value = tool.permission;
-      row.append(name, sel);
-      return row;
+    ...TOOL_GROUP_ORDER.filter((g) => byGroup.has(g)).map((g) => {
+      const box = document.createElement('details');
+      box.className = 'tool-group';
+      box.dataset.group = g;
+      box.open = open.has(g);
+      const sum = document.createElement('summary');
+      const icon = el('span', 'tool-group-icon', TOOL_GROUP_ICON[g]);
+      icon.setAttribute('aria-hidden', 'true');
+      const head = el('span', 'tool-group-head');
+      head.append(el('strong', 'tool-group-name', t(TOOL_GROUP_TEXT[g])), el('span', 'tool-group-about', t(TOOL_GROUP_ABOUT[g])));
+      sum.append(icon, head, el('span', 'tool-group-sum'));
+      box.append(sum);
+      // "Set all to": one choice for the whole group (each tool can still be changed after).
+      const bar = el('div', 'tool-group-bar');
+      const set = document.createElement('select');
+      set.className = 'tool-group-set';
+      set.setAttribute('aria-label', t('Set every tool in {group} to', { group: t(TOOL_GROUP_TEXT[g]) }));
+      set.append(new Option(t('Set all to…'), ''));
+      for (const p of ['auto', 'ask', 'never']) set.append(new Option(t(PERM_LABEL[p]), p));
+      set.addEventListener('change', () => {
+        if (!set.value) return;
+        for (const s of box.querySelectorAll('select[data-tool]')) s.value = set.value;
+        set.value = '';
+        toolGroupSummary(box);
+        markSettingsArea('ab-tools');
+      });
+      const lab = el('label', 'tool-group-set-label');
+      lab.append(el('span', 'muted small', t('Whole group:')), set);
+      bar.append(lab);
+      box.append(bar, ...byGroup.get(g).map(toolRow));
+      box.addEventListener('toggle', () => {
+        const now = toolGroupsOpen();
+        if (box.open) now.add(g);
+        else now.delete(g);
+        localStorage.setItem('sara.toolGroups', JSON.stringify([...now]));
+      });
+      toolGroupSummary(box);
+      return box;
     }),
   );
 }
@@ -1906,7 +2067,7 @@ $('#browser-recheck').addEventListener('click', async () => {
 
 async function saveTools() {
   const permissions = {};
-  for (const sel of document.querySelectorAll('#tool-list select')) permissions[sel.dataset.tool] = sel.value;
+  for (const sel of document.querySelectorAll('#tool-list select[data-tool]')) permissions[sel.dataset.tool] = sel.value;
   await api('/tools', { method: 'PUT', body: { permissions, shellNetwork: $('#shell-network').checked } });
 }
 
@@ -1952,7 +2113,7 @@ async function csLoadModels(selected) {
   const prov = $('#cs-provider').value;
   sel.replaceChildren(new Option(t('Loading…'), ''));
   if (!prov) {
-    sel.replaceChildren(new Option(`Default (${state.providers.defaultModel ?? 'none'})`, ''));
+    sel.replaceChildren(new Option(t('Default ({model})', { model: state.providers.defaultModel ?? t('none') }), ''));
     return;
   }
   try {
@@ -1981,7 +2142,7 @@ $('#conv-settings-btn').addEventListener('click', async () => {
   $('#cs-workspaces').replaceChildren(...ws.map((w) => new Option(w, w)));
   const def = state.providers.providers.find((p) => p.id === state.providers.defaultProviderId);
   $('#cs-provider').replaceChildren(
-    new Option(`Default (${def?.label ?? 'none'} · ${state.providers.defaultModel ?? ''})`, ''),
+    new Option(t('Default ({model})', { model: `${def?.label ?? t('none')} · ${state.providers.defaultModel ?? ''}` }), ''),
     ...state.providers.providers.map((p) => new Option(p.label, p.id)),
   );
   $('#cs-provider').value = c.providerId ?? '';
@@ -2031,7 +2192,7 @@ $('#cs-remember').addEventListener('click', async () => {
   $('#cs-status').textContent = t('Writing summary…');
   try {
     const r = await api(`/conversations/${state.conv.id}/remember`, { method: 'POST', body: {} });
-    $('#cs-status').textContent = r.summaryId ? `Saved a summary and ${r.factIds.length} fact${r.factIds.length === 1 ? '' : 's'}${r.droppedFacts ? ` (${r.droppedFacts} unverifiable skipped)` : ''}.` : t('Nothing new to remember.');
+    $('#cs-status').textContent = r.summaryId ? `${t('Saved a summary. New facts: {n}.', { n: r.factIds.length })}${r.droppedFacts ? ` ${t('Skipped because she could not show where they came from: {n}.', { n: r.droppedFacts })}` : ''}` : t('Nothing new to remember.');
   } catch (err) {
     $('#cs-status').textContent = err.message;
   }
@@ -2101,8 +2262,8 @@ async function loadThreads() {
       const title = el('strong', '', th.title);
       title.dataset.raw = '';
       li.append(title);
-      if (th.status === 'done') li.append(el('span', 'muted small', ' · finished'));
-      else if (th.byOwner) li.append(el('span', 'muted small', ' · from you'));
+      if (th.status === 'done') li.append(el('span', 'muted small', ` · ${t('finished')}`));
+      else if (th.byOwner) li.append(el('span', 'muted small', ` · ${t('from you')}`));
       const last = th.notes.at(-1);
       if (last) {
         const n = el('div', 'muted small', `${last.day}: ${last.text}`);
@@ -2152,6 +2313,8 @@ async function openSara() {
   $('#sd-title').textContent = p.name;
   $('#sd-status').textContent = st?.enabled ? t('Right now: {mood}, {energy}.', { mood: t(st.mood), energy: t(st.energy) }) : t('Inner life is off.');
   $('#sd-day').textContent = st?.day ?? (st?.enabled ? t('She hasn\'t started her day yet (written after 6 am, once you\'ve talked).') : '');
+  // With inner life off there is no day to show: leave out the empty section (wave 2).
+  $('#sd-day-box').hidden = !st?.enabled && !st?.day;
   $('#sd-inner').checked = settings.innerLife;
   $('#sd-typing').value = settings.typing ?? 'instant';
   const pr = settings.proactive;
@@ -2576,7 +2739,7 @@ $('#mic').addEventListener('click', async () => {
       await voice.mic.open();
       voice.mic.start();
       btn.classList.add('recording');
-      setActivity('listening', 'click the mic again to send');
+      setActivity('listening', t('click the mic again to send'));
     } catch (err) {
       append(bubble('error', t('Microphone: {message}', { message: err.message })));
     }
@@ -2715,7 +2878,7 @@ async function startLiveCall(ringId, { video = false } = {}) {
     $('#call').classList.remove('active');
     showCallPanel(false);
     setActivity(null);
-    if (reason && reason !== 'You hung up.') append(bubble('notice', reason));
+    if (reason && reason !== 'You hung up.') append(bubble('notice', t(reason)));
     if (state.currentId === convId) void openConversation(convId);
   };
   const onEvent = (ev) => {
@@ -2885,9 +3048,9 @@ async function loadVoice() {
   $('#v-oa-voice').value = v.openai.ttsVoice;
   $('#v-el-voice').value = v.elevenlabs.voiceId;
   $('#v-el-model').value = v.elevenlabs.model;
-  $('#v-oa-key').placeholder = d.keys.openai ? 'saved (leave empty to keep)' : 'not set';
-  $('#v-el-key').placeholder = d.keys.elevenlabs ? 'saved (leave empty to keep)' : 'not set';
-  $('#v-xai-key').placeholder = d.keys.xai ? 'saved (leave empty to keep)' : d.keys.grokSubscription ? 'not needed: uses your Grok subscription' : d.keys.xaiShared ? 'using your xAI key from elsewhere in Sara' : 'sign in to Grok, or paste an xAI API key';
+  $('#v-oa-key').placeholder = d.keys.openai ? t('saved (leave empty to keep)') : t('not set');
+  $('#v-el-key').placeholder = d.keys.elevenlabs ? t('saved (leave empty to keep)') : t('not set');
+  $('#v-xai-key').placeholder = d.keys.xai ? t('saved (leave empty to keep)') : d.keys.grokSubscription ? t('not needed: uses your Grok subscription') : d.keys.xaiShared ? t('using your xAI key from elsewhere in Sara') : t('sign in to Grok, or paste an xAI API key');
   $('#v-xai-note').textContent = d.keys.xai
     ? t('Uses the xAI API key you saved here (billed per character by xAI). Clear it to use your Grok subscription instead.')
     : d.keys.grokSubscription
@@ -2911,7 +3074,7 @@ async function loadVoice() {
       .catch(() => {});
   renderVoicePicker(d);
   $('#v-local').textContent = d.local.stt || d.local.tts
-    ? `On this server: hearing ${d.local.stt ? 'installed' : 'not installed'}, ${d.voices.length} voices. Nothing leaves your server.`
+    ? `${d.local.stt ? t('On this server: hearing installed, voices: {n}.', { n: d.voices.length }) : t('On this server: hearing not installed, voices: {n}.', { n: d.voices.length })} ${t('Nothing leaves your server.')}`
     : d.localSupported === false
       ? d.localNote
       : t('Local voice is not installed on this server. Run deploy/install-voice.sh, or use a speech API key.');
@@ -2924,7 +3087,7 @@ function renderOpenAiLive(d) {
   const name = (id) => id.charAt(0).toUpperCase() + id.slice(1);
   $('#v-live').value = v.live ?? 'auto';
   const voices = d.openaiLive?.voices ?? ['marin'];
-  $('#v-oalive-voice').replaceChildren(...voices.map((id) => new Option(id === 'marin' || id === 'cedar' ? `${name(id)} (most natural)` : name(id), id)));
+  $('#v-oalive-voice').replaceChildren(...voices.map((id) => new Option(id === 'marin' || id === 'cedar' ? t('{voice} (most natural)', { voice: name(id) }) : name(id), id)));
   $('#v-oalive-voice').value = voices.includes(r.voiceId) ? r.voiceId : voices[0];
   const models = d.openaiLive?.models ?? ['gpt-realtime-1.5'];
   const label = { 'gpt-realtime-1.5': 'gpt-realtime-1.5 (voice first)', 'gpt-realtime-2.1': 'gpt-realtime-2.1 (thinks first)', 'gpt-realtime-2.1-mini': 'gpt-realtime-2.1 mini (lowest cost)' };
@@ -2934,9 +3097,9 @@ function renderOpenAiLive(d) {
   const oaSpeech = /^https:\/\/api\.openai\.com(\/|$)/.test(v.openai?.baseUrl ?? '');
   // The key box is the speech API key, so it only shows while that speech API is OpenAI's.
   $('#v-oalive-key-row').hidden = !oaSpeech;
-  $('#v-oalive-key').placeholder = k?.source === 'voice' ? 'saved (leave empty to keep)' : k?.source === 'provider' ? `not needed: uses the "${k.provider}" model provider key` : 'paste an OpenAI API key (sk-…)';
+  $('#v-oalive-key').placeholder = k?.source === 'voice' ? t('saved (leave empty to keep)') : k?.source === 'provider' ? t('not needed: uses the key of "{provider}" (Models)', { provider: k.provider }) : t('paste an OpenAI API key (sk-…)');
   $('#v-oalive-note').textContent = k
-    ? `Billed per use to your OpenAI API account (${k.source === 'voice' ? 'the key saved here' : `the key of the "${k.provider}" model provider`}). The sample is made with OpenAI's text-to-speech in the same voice, so it is close to, not exactly, how she sounds on a call.`
+    ? `${k.source === 'voice' ? t('Billed per use to your OpenAI API account (the key saved here).') : t('Billed per use to your OpenAI API account (the key of "{provider}" in Models).', { provider: k.provider })} ${t("The sample is made with OpenAI's text-to-speech in the same voice, so it is close to, not exactly, how she sounds on a call.")}`
     : oaSpeech
       ? t('Needs an OpenAI API key (billed per use by OpenAI). A ChatGPT plan sign-in can\'t be used for live calls under OpenAI\'s terms.')
       : t('Needs an OpenAI API key: add an OpenAI model provider (Models), or set the speech API below to OpenAI. A ChatGPT plan sign-in can\'t be used for live calls.');
@@ -3081,21 +3244,21 @@ $('#v-preview').addEventListener('click', async () => {
 });
 
 // ---------- Telegram ----------
-function renderTelegram(t) {
-  $('#tg-enabled').checked = t.enabled;
-  $('#tg-mirror').checked = t.mirror;
-  $('#tg-others').checked = t.allowOthers;
-  $('#tg-token').placeholder = t.hasToken ? 'saved (leave empty to keep)' : 'not set';
-  $('#tg-status').textContent = t.running ? `Connected as @${t.bot}${t.linked ? ', linked to you.' : ', not linked yet.'}` : t.error ? `Not connected: ${t.error}` : t.hasToken ? 'Not connected.' : '';
-  $('#tg-link').hidden = !t.running;
-  $('#tg-unlink').hidden = !t.linked;
+function renderTelegram(tg) {
+  $('#tg-enabled').checked = tg.enabled;
+  $('#tg-mirror').checked = tg.mirror;
+  $('#tg-others').checked = tg.allowOthers;
+  $('#tg-token').placeholder = tg.hasToken ? t('saved (leave empty to keep)') : t('not set');
+  $('#tg-status').textContent = tg.running ? (tg.linked ? t('Connected as {bot}, linked to you.', { bot: `@${tg.bot}` }) : t('Connected as {bot}, not linked yet.', { bot: `@${tg.bot}` })) : tg.error ? t('Not connected: {error}', { error: tg.error }) : tg.hasToken ? t('Not connected.') : '';
+  $('#tg-link').hidden = !tg.running;
+  $('#tg-unlink').hidden = !tg.linked;
   // Phase 43: more owners, owner work in groups, when she answers, adult groups (web only).
-  $('#tg-owners').value = (t.ownerUserIds ?? []).join(', ');
-  $('#tg-work').checked = Boolean(t.ownerWorkInGroups);
-  $('#tg-name').checked = Boolean(t.answerName);
-  $('#tg-everyone').checked = Boolean(t.answerEveryone);
-  $('#tg-nsfw').closest('label').hidden = !t.nsfwChatIds;
-  $('#tg-nsfw').value = (t.nsfwChatIds ?? []).join(', ');
+  $('#tg-owners').value = (tg.ownerUserIds ?? []).join(', ');
+  $('#tg-work').checked = Boolean(tg.ownerWorkInGroups);
+  $('#tg-name').checked = Boolean(tg.answerName);
+  $('#tg-everyone').checked = Boolean(tg.answerEveryone);
+  $('#tg-nsfw').closest('label').hidden = !tg.nsfwChatIds;
+  $('#tg-nsfw').value = (tg.nsfwChatIds ?? []).join(', ');
 }
 async function loadTelegram() {
   try {
@@ -3134,30 +3297,30 @@ $('#tg-unlink').addEventListener('click', async () => {
 });
 
 // ---------- Discord ----------
-function renderDiscord(t) {
-  $('#dc-enabled').checked = t.enabled;
-  $('#dc-mirror').checked = t.mirror;
-  $('#dc-servers').checked = t.allowServers;
-  $('#dc-token').placeholder = t.hasToken ? 'saved (leave empty to keep)' : 'not set';
-  $('#dc-status').textContent = t.running ? `Connected as ${t.bot}${t.linked ? ', linked to you.' : ', not linked yet.'}` : t.error ? `Not connected: ${t.error}` : t.hasToken ? 'Not connected.' : '';
-  $('#dc-link').hidden = !t.running;
-  $('#dc-unlink').hidden = !t.linked;
+function renderDiscord(dc) {
+  $('#dc-enabled').checked = dc.enabled;
+  $('#dc-mirror').checked = dc.mirror;
+  $('#dc-servers').checked = dc.allowServers;
+  $('#dc-token').placeholder = dc.hasToken ? t('saved (leave empty to keep)') : t('not set');
+  $('#dc-status').textContent = dc.running ? (dc.linked ? t('Connected as {bot}, linked to you.', { bot: dc.bot }) : t('Connected as {bot}, not linked yet.', { bot: dc.bot })) : dc.error ? t('Not connected: {error}', { error: dc.error }) : dc.hasToken ? t('Not connected.') : '';
+  $('#dc-link').hidden = !dc.running;
+  $('#dc-unlink').hidden = !dc.linked;
   // Phase 43: more owners, owner work in servers, when she answers, adult channels (web only).
-  $('#dc-owners').value = (t.ownerUserIds ?? []).join(', ');
-  $('#dc-work').checked = Boolean(t.ownerWorkInServers);
-  $('#dc-name').checked = Boolean(t.answerName);
-  $('#dc-everyone').checked = Boolean(t.answerEveryone);
+  $('#dc-owners').value = (dc.ownerUserIds ?? []).join(', ');
+  $('#dc-work').checked = Boolean(dc.ownerWorkInServers);
+  $('#dc-name').checked = Boolean(dc.answerName);
+  $('#dc-everyone').checked = Boolean(dc.answerEveryone);
   // Phase 47: other bots, with the loop guard.
-  $('#dc-bots').checked = Boolean(t.answerBots);
-  $('#dc-bot-list').value = (t.botAllowList ?? []).join(', ');
-  $('#dc-bot-turns').value = String(t.botTurnLimit ?? 2);
-  $('#dc-bot-turns-n').textContent = String(t.botTurnLimit ?? 2);
-  const cap = String(t.botHourlyCap ?? 20);
+  $('#dc-bots').checked = Boolean(dc.answerBots);
+  $('#dc-bot-list').value = (dc.botAllowList ?? []).join(', ');
+  $('#dc-bot-turns').value = String(dc.botTurnLimit ?? 2);
+  $('#dc-bot-turns-n').textContent = String(dc.botTurnLimit ?? 2);
+  const cap = String(dc.botHourlyCap ?? 20);
   if (![...$('#dc-bot-cap').options].some((o) => o.value === cap)) $('#dc-bot-cap').append(new Option(cap, cap));
   $('#dc-bot-cap').value = cap;
-  $('#dc-bots-more').hidden = !t.answerBots;
-  $('#dc-nsfw').closest('label').hidden = !t.nsfwChannelIds;
-  $('#dc-nsfw').value = (t.nsfwChannelIds ?? []).join(', ');
+  $('#dc-bots-more').hidden = !dc.answerBots;
+  $('#dc-nsfw').closest('label').hidden = !dc.nsfwChannelIds;
+  $('#dc-nsfw').value = (dc.nsfwChannelIds ?? []).join(', ');
 }
 async function loadDiscord() {
   try {
@@ -3281,7 +3444,7 @@ $('#push-off').addEventListener('click', async () => {
 });
 $('#push-test').addEventListener('click', async () => {
   const r = await api('/push/test', { method: 'POST', body: {} });
-  $('#push-status').textContent = `Sent to ${r.sent} device${r.sent === 1 ? '' : 's'}${r.failed ? `, ${r.failed} failed` : ''}${r.removed ? `, ${r.removed} expired and removed` : ''}. (If Sara is open in front, it shows here instead.)`;
+  $('#push-status').textContent = `${t('Devices it was sent to: {n}.', { n: r.sent })}${r.failed ? ` ${t('Failed: {n}.', { n: r.failed })}` : ''}${r.removed ? ` ${t('Expired and removed: {n}.', { n: r.removed })}` : ''} ${t('(If Sara is open in front, it shows here instead.)')}`;
 });
 
 // ---------- subscriptions ----------
@@ -3289,7 +3452,7 @@ $('#push-test').addEventListener('click', async () => {
 let adminHelp = null;
 // L11: on Windows/Mac the hint is plain words (the server's version names PATH and variables).
 const agentsHint = () => {
-  const h = adminHelp?.agents ?? 'Run deploy/install-agents.sh.';
+  const h = adminHelp?.agents ?? t('Run deploy/install-agents.sh.');
   return /PATH/.test(h) ? t('Install it on this computer, then restart Sara.') : t(h);
 };
 function applyAdminHelp(h) {
@@ -3301,17 +3464,17 @@ function applyAdminHelp(h) {
 
 function renderSubs(v) {
   const g = v.chatgpt;
-  $('#sub-chatgpt-status').textContent = g.signedIn ? `signed in${g.email ? ` as ${g.email}` : ''}${g.planUsage ? '' : ' (plan use not enabled)'}` : '';
+  $('#sub-chatgpt-status').textContent = g.signedIn ? `${g.email ? t('signed in as {email}', { email: g.email }) : t('signed in')}${g.planUsage ? '' : ` ${t('(plan use not enabled)')}`}` : '';
   $('#sub-chatgpt-go').dataset.enable = g.signedIn && !g.planUsage ? '1' : '';
   $('#sub-chatgpt-go').textContent = g.signedIn && !g.planUsage ? t('Enable ChatGPT plan use') : t('Continue with ChatGPT');
   $('#sub-chatgpt-go').hidden = g.signedIn && g.planUsage;
   $('#sub-chatgpt-out').hidden = !g.signedIn;
   const c = v.claude;
-  $('#sub-claude-status').textContent = !c.installed ? t('(Claude Code is not installed on this server. {agentsHint})', { agentsHint: agentsHint() }) : c.signedIn ? 'signed in' : '';
+  $('#sub-claude-status').textContent = !c.installed ? t('(Claude Code is not installed on this server. {agentsHint})', { agentsHint: agentsHint() }) : c.signedIn ? t('signed in') : '';
   $('#sub-claude-out').hidden = !c.signedIn;
   $('#sub-claude-go').hidden = c.signedIn || !c.installed;
   const k = v.grok;
-  $('#sub-grok-status').textContent = !k.installed ? t('(Grok is not installed on this server. {agentsHint})', { agentsHint: agentsHint() }) : k.signedIn ? 'signed in' : '';
+  $('#sub-grok-status').textContent = !k.installed ? t('(Grok is not installed on this server. {agentsHint})', { agentsHint: agentsHint() }) : k.signedIn ? t('signed in') : '';
   $('#sub-grok-go').hidden = k.signedIn;
   $('#sub-grok-out').hidden = !k.signedIn;
 }
@@ -3417,13 +3580,13 @@ $('#sub-grok-go').addEventListener('click', async () => {
     const v = await api('/subscriptions/grok/login', { method: 'POST', body: {} });
     const p = $('#sub-grok-code');
     p.hidden = false;
-    p.replaceChildren(document.createTextNode(t('Open ')), Object.assign(document.createElement('a'), { href: v.login.url, target: '_blank', rel: 'noopener', textContent: 'accounts.x.ai' }), document.createTextNode(` and confirm the code `), el('strong', '', v.login.code), document.createTextNode(t('. Waiting…')));
+    p.replaceChildren(document.createTextNode(t('Open ')), Object.assign(document.createElement('a'), { href: v.login.url, target: '_blank', rel: 'noopener', textContent: 'accounts.x.ai' }), document.createTextNode(` ${t('and confirm the code')} `), el('strong', '', v.login.code), document.createTextNode(t('. Waiting…')));
     for (let i = 0; i < 180; i++) {
       await new Promise((r) => setTimeout(r, 5000));
       const st = await api('/subscriptions/grok/check', { method: 'POST', body: {} });
       if (st.grok.signedIn || st.grok.login?.state !== 'waiting') {
         renderSubs(st);
-        p.textContent = st.grok.signedIn ? t('Signed in to Grok.') : `Sign-in did not finish: ${st.grok.login?.error ?? ''}`;
+        p.textContent = st.grok.signedIn ? t('Signed in to Grok.') : t('Sign-in did not finish: {error}', { error: st.grok.login?.error ?? '' });
         if (st.grok.signedIn) await loadProviders();
         return;
       }
@@ -3629,7 +3792,7 @@ function renderJobs() {
     ...mine.map((j) => {
       const row = el('div', 'job-row');
       const last = j.tail.trim().split('\n').at(-1) ?? '';
-      const label = el('span', 'job-label', `⏳ Job #${j.id} · ${j.label}`);
+      const label = el('span', 'job-label', `⏳ ${t('Job #{id}', { id: j.id })} · ${j.label}`);
       label.dataset.raw = '';
       const line = el('span', 'job-last muted small', last.slice(0, 160));
       line.dataset.raw = '';
@@ -3710,7 +3873,7 @@ if (window.SaraPhone?.getPref) {
       if (st === 'off') note.textContent = t('Your location stays on this phone. Sara only tells your server "arrived at Store" or "left Work".');
       else if (st === 'on') note.textContent = t('On. Your location stays on this phone.');
       else {
-        note.append(t(st === 'need-location' ? 'Sara needs location permission. ' : 'For reminders when the app is closed, choose "Allow all the time". '), btn(t('Fix'), () => window.SaraPhone.fixPlacePermissions()));
+        note.append(`${st === 'need-location' ? t('Sara needs location permission.') : t('For reminders when the app is closed, choose "Allow all the time".')} `, btn(t('Fix'), () => window.SaraPhone.fixPlacePermissions()));
       }
     };
     showPlaces();
@@ -3741,7 +3904,7 @@ async function loadApns() {
   // iPhones that signed up for notifications, each removable.
   $('#apns-devices').replaceChildren(
     ...a.devices.map((d) => {
-      const row = el('div', 'item small', `${d.label}${d.sandbox ? ' (test build)' : ''} · since ${new Date(d.createdAt).toLocaleDateString()}${d.lastOkAt ? '' : ' · nothing delivered yet'}`);
+      const row = el('div', 'item small', `${d.label}${d.sandbox ? ` ${t('(test build)')}` : ''} · ${t('since {date}', { date: new Date(d.createdAt).toLocaleDateString() })}${d.lastOkAt ? '' : ` · ${t('nothing delivered yet')}`}`);
       const x = el('button', 'ghost small', t('Remove'));
       x.type = 'button';
       x.addEventListener('click', async () => {
@@ -3789,10 +3952,10 @@ async function loadGoogle() {
   $('#g-connect').textContent = g.connected ? t('Sign in again') : t('Sign in with Google');
   $('#g-forget').hidden = !g.configured;
   $('#g-client-id').value = g.clientId ?? '';
-  $('#g-client-secret').placeholder = g.configured ? 'saved (leave empty to keep)' : 'GOCSPX-…';
-  const parts = [g.gmail && 'Gmail', g.calendar && 'Calendar'].filter(Boolean).join(' and ');
+  $('#g-client-secret').placeholder = g.configured ? t('saved (leave empty to keep)') : 'GOCSPX-…';
+  const parts = g.gmail && g.calendar ? t('Gmail and Calendar') : g.gmail ? 'Gmail' : g.calendar ? t('Calendar') : '';
   $('#g-status').textContent = g.connected
-    ? `Connected${g.email ? ` as ${g.email}` : ''}: ${parts || 'nothing allowed'}. She can read; drafting, sending and adding events ask you first.${!g.gmail || !g.calendar ? ' (Sign in again and leave all boxes ticked to allow both.)' : ''}`
+    ? `${g.email ? t('Connected as {email}: {what}.', { email: g.email, what: parts || t('nothing allowed') }) : t('Connected: {what}.', { what: parts || t('nothing allowed') })} ${t('She can read; drafting, sending and adding events ask you first.')}${!g.gmail || !g.calendar ? ` ${t('(Sign in again and leave all boxes ticked to allow both.)')}` : ''}`
     : g.configured
       ? t('Your Google app is saved. Press "Sign in with Google" (step 7).')
       : t('Not set up.');
@@ -3834,7 +3997,7 @@ $('#g-forget').addEventListener('click', async () => {
   const m = /^#google=(\w+)/.exec(location.hash);
   if (m) {
     history.replaceState(null, '', location.pathname);
-    const msg = { connected: 'Google is connected. Try: "what\'s on my calendar tomorrow?"', refused: 'Google sign-in was cancelled.', failed: "Google sign-in didn't work. Check the steps in Settings → Abilities and try again." }[m[1]];
+    const msg = { connected: t('Google is connected. Try: "what\'s on my calendar tomorrow?"'), refused: t('Google sign-in was cancelled.'), failed: t("Google sign-in didn't work. Check the steps in Settings → Abilities and try again.") }[m[1]];
     if (msg) setTimeout(() => alert(msg), 600);
   }
 }
@@ -3846,7 +4009,7 @@ async function loadHome() {
   $('#ha-token').value = '';
   $('#ha-token').placeholder = h.hasToken ? 'saved (leave empty to keep)' : 'not set';
   $('#ha-clear').hidden = !h.url && !h.hasToken;
-  $('#ha-status').textContent = !h.url || !h.hasToken ? t('Not connected.') : h.ok ? `Connected: ${h.name || 'your home'}${h.version ? ` (Home Assistant ${h.version})` : ''}.` : (h.error ?? t('Saved, but it did not answer.'));
+  $('#ha-status').textContent = !h.url || !h.hasToken ? t('Not connected.') : h.ok ? `${t('Connected: {what}.', { what: h.name || t('your home') })}${h.version ? ` (Home Assistant ${h.version})` : ''}` : (h.error ?? t('Saved, but it did not answer.'));
   // Phase 72: presence (its pickers come from Home Assistant).
   if (!isMember()) void loadPresence();
 }
@@ -3878,7 +4041,7 @@ async function loadGitHub() {
     $('#ghw-repos').value = w.repos.join('\n');
     $('#ghw-label').value = w.label ?? '';
     $('#ghw-every').value = String(w.everyMinutes ?? 0);
-    $('#ghw-status').textContent = w.error ? w.error : w.repos.length ? `${w.issues.length} open issue${w.issues.length === 1 ? '' : 's'}${w.label ? ` labeled “${w.label}”` : ''}.${w.lastCheck ? ` Last look: ${new Date(w.lastCheck).toLocaleString()}.` : ''}` : '';
+    $('#ghw-status').textContent = w.error ? w.error : w.repos.length ? `${w.label ? t('Open issues labeled “{label}”: {n}.', { label: w.label, n: w.issues.length }) : t('Open issues: {n}.', { n: w.issues.length })}${w.lastCheck ? ` ${t('Last look: {date}.', { date: new Date(w.lastCheck).toLocaleString() })}` : ''}` : '';
   }
 }
 async function saveGitHubWatch() {
@@ -3888,7 +4051,7 @@ $('#ghw-check').addEventListener('click', async () => {
   try {
     await saveGitHubWatch();
     const r = await api('/github-watch/check', { method: 'POST' });
-    $('#ghw-status').textContent = r.found ? `${r.found} new issue${r.found === 1 ? '' : 's'}: on your planner.` : t('Nothing new.');
+    $('#ghw-status').textContent = r.found ? t('New issues on your planner: {n}.', { n: r.found }) : t('Nothing new.');
   } catch (err) {
     $('#ghw-status').textContent = err.message;
   }
@@ -4099,7 +4262,7 @@ function startEvents() {
     }
     await loadConversations();
     if (ev.message.role !== 'notice' && voiceOn() && ev.conversationId === state.currentId) speaker.say(ev.message.content.replace(/^Reminder: /, t('Reminder: ')));
-    if (ev.message.role !== 'notice' && (document.hidden || ev.conversationId !== state.currentId)) notify(t(ev.reason === 'reminder' ? 'Reminder from Sara' : 'Sara'), ev.message.content.replace(/^Reminder: /, ''), ev.conversationId);
+    if (ev.message.role !== 'notice' && (document.hidden || ev.conversationId !== state.currentId)) notify(ev.reason === 'reminder' ? t('Reminder from Sara') : t('Sara'), ev.message.content.replace(/^Reminder: /, ''), ev.conversationId);
   });
   es.addEventListener('job', (e) => {
     const { job } = JSON.parse(e.data);
@@ -4147,8 +4310,8 @@ function startEvents() {
     const n = JSON.parse(e.data);
     if (n.kind === 'ring') {
       if (n.ring.state !== 'ringing') return hideOtherNote(n.companion);
-      showOtherNote(n.companion, `📞 ${n.name} is calling`, t('Answer'), true);
-      notify(`${n.name} is calling`, n.ring.reason ?? '');
+      showOtherNote(n.companion, `📞 ${t('{name} is calling', { name: n.name })}`, t('Answer'), true);
+      notify(t('{name} is calling', { name: n.name }), n.ring.reason ?? '');
       window.SaraDesktop?.attention?.('ring');
     } else {
       showOtherNote(n.companion, `💬 ${n.name}: ${n.preview || 'a new message'}`, t('Open'), false, n.conversationId);
@@ -4240,12 +4403,20 @@ async function loadCompanions() {
   const menu = $('#companion-menu');
   menu.replaceChildren(
     ...d.companions.map((c) => {
-      const b = el('button', c.current ? 'current' : '', c.current ? `✓ ${c.name}` : c.name);
+      // UI cleanup (wave 2): each companion with her face; a tick marks the one you're talking to.
+      const b = el('button', c.current ? 'current cm-item' : 'cm-item');
+      const face = el('img', 'cm-face');
+      face.src = faceUrl(c.id);
+      face.alt = '';
+      const who = el('span', 'cm-name', c.name);
+      b.append(face, who);
       // Phase 67: her model isn't on this computer while nothing may leave it.
-      if (c.pausedLocal) b.append(el('span', 'muted small', ` · ${t('paused in private local mode')}`));
+      if (c.pausedLocal) who.append(el('span', 'muted small', ` · ${t('paused in private local mode')}`));
+      if (c.current) b.append(el('span', 'cm-tick', '✓'));
+      b.setAttribute('aria-current', String(Boolean(c.current)));
       b.type = 'button';
       b.setAttribute('role', 'menuitem');
-            if (!c.current) b.addEventListener('click', () => switchCompanion(c.id));
+      if (!c.current) b.addEventListener('click', () => switchCompanion(c.id));
       return b;
     }),
     (() => {
@@ -4334,7 +4505,7 @@ $('#cmp-add').addEventListener('click', async () => {
 });
 $('#cmp-planner').addEventListener('change', async () => {
   const r = await api('/companions/planner', { method: 'PUT', body: { planner: $('#cmp-planner').value } }).catch((err) => ({ error: err.message }));
-  $('#cmp-planner-note').textContent = r.error ?? t(r.restart ? 'Saved. This applies after the next restart or update.' : 'Saved.');
+  $('#cmp-planner-note').textContent = r.error ?? (r.restart ? t('Saved. This applies after the next restart or update.') : t('Saved.'));
 });
 
 function notify(title, body, conversationId = '') {
@@ -4465,27 +4636,27 @@ $('#place-lookup').addEventListener('click', async () => {
 
 function renderTasks(tasks) {
   const showDone = $('#task-show-done').checked;
-  const list = tasks.filter((t) => showDone || t.status === 'open');
-  if (!list.length) return $('#task-list').replaceChildren(el('p', 'muted small', showDone ? 'No tasks yet.' : 'Nothing open. Nice.'));
+  const list = tasks.filter((tk) => showDone || tk.status === 'open');
+  if (!list.length) return $('#task-list').replaceChildren(emptyState('✅', showDone ? t('No tasks yet.') : t('Nothing open. Nice.')));
   const groups = new Map();
-  for (const t of list) groups.set(t.project ?? '', [...(groups.get(t.project ?? '') ?? []), t]);
+  for (const tk of list) groups.set(tk.project ?? '', [...(groups.get(tk.project ?? '') ?? []), tk]);
   const out = [];
   for (const [name, ts] of [...groups].sort((a, b) => (a[0] === '' ? 1 : b[0] === '' ? -1 : a[0].localeCompare(b[0])))) {
     // A heading only when there's more than one group (a single list needs none).
-    if (groups.size > 1) out.push(el('div', 'proj-name', name || 'No project'));
-    for (const t of ts) {
-      const row = el('div', `item${t.status === 'done' ? ' done' : ''}`);
+    if (groups.size > 1) out.push(el('div', 'proj-name', name || t('No project')));
+    for (const tk of ts) {
+      const row = el('div', `item${tk.status === 'done' ? ' done' : ''}`);
       const box = document.createElement('input');
       box.type = 'checkbox';
-      box.checked = t.status === 'done';
-      box.title = t.status === 'done' ? 'Mark as not done' : 'Mark done';
-      box.addEventListener('change', () => plannerCall(() => api(`/tasks/${t.id}`, { method: 'PATCH', body: { status: box.checked ? 'done' : 'open' } })));
+      box.checked = tk.status === 'done';
+      box.title = tk.status === 'done' ? t('Mark as not done') : t('Mark done');
+      box.addEventListener('change', () => plannerCall(() => api(`/tasks/${tk.id}`, { method: 'PATCH', body: { status: box.checked ? 'done' : 'open' } })));
       const mid = el('div', 'grow');
-      mid.append(el('div', `title${t.priority === 'high' ? ' high' : ''}`, t.title));
+      mid.append(el('div', `title${tk.priority === 'high' ? ' high' : ''}`, tk.title));
       const sub = [];
-      if (t.dueAt) sub.push([`due ${fmtDue(t.dueAt)}`, t.status === 'open' && Date.parse(t.dueAt) < Date.now() ? 'overdue' : '']);
-      if (t.priority !== 'normal') sub.push([t.priority, '']);
-      if (t.notes) sub.push([t.notes, '']);
+      if (tk.dueAt) sub.push([t('due {date}', { date: fmtDue(tk.dueAt) }), tk.status === 'open' && Date.parse(tk.dueAt) < Date.now() ? 'overdue' : '']);
+      if (tk.priority !== 'normal') sub.push([tk.priority === 'high' ? t('high priority') : t('low priority'), '']);
+      if (tk.notes) sub.push([tk.notes, '']);
       if (sub.length) {
         const s = el('div', 'sub');
         sub.forEach(([txt, cls], i) => {
@@ -4494,7 +4665,7 @@ function renderTasks(tasks) {
         });
         mid.append(s);
       }
-      row.append(box, mid, btn('Delete', () => confirm(`Delete "${t.title}"?`) && plannerCall(() => api(`/tasks/${t.id}`, { method: 'DELETE' }))));
+      row.append(box, mid, btn(t('Delete'), () => confirm(`${t('Delete')} "${tk.title}"?`) && plannerCall(() => api(`/tasks/${tk.id}`, { method: 'DELETE' }))));
       out.push(row);
     }
   }
@@ -4529,10 +4700,10 @@ function renderReminders(pending, recent) {
           row.append(mid, btn(t('Cancel'), () => plannerCall(() => api(`/reminders/${r.id}`, { method: 'DELETE' }))));
           return row;
         })
-      : [el('p', 'muted small', t('No upcoming reminders. Ask Sara ("remind me tomorrow at 9 to…") or add one above.'))]),
+      : [emptyState('⏰', t('No upcoming reminders. Ask Sara ("remind me tomorrow at 9 to…") or add one above.'))]),
   );
   $('#rem-recent').replaceChildren(
-    ...(recent.length ? recent.slice(0, 8).map((r) => { const row = el('div', 'item'); const mid = el('div', 'grow'); mid.append(el('div', 'title', r.text), el('div', 'sub', `delivered ${fmtDue(r.sentAt)}`)); row.append(mid); return row; }) : [el('p', 'muted small', t('None yet.'))]),
+    ...(recent.length ? recent.slice(0, 8).map((r) => { const row = el('div', 'item'); const mid = el('div', 'grow'); mid.append(el('div', 'title', r.text), el('div', 'sub', t('delivered {date}', { date: fmtDue(r.sentAt) }))); row.append(mid); return row; }) : [el('p', 'muted small', t('None yet.'))]),
   );
 }
 $('#rem-add').addEventListener('click', () => {
@@ -4566,7 +4737,9 @@ function renderNotes(notes) {
       ? notes.map((n) => {
           const row = el('div', 'item');
           const mid = el('div', 'grow');
-          mid.append(el('div', 'title', n.title), el('div', 'sub', `${n.project ? `${n.project} · ` : ''}updated ${fmtDue(n.updatedAt, false)}`), el('div', 'note-body', n.body));
+          // A note without its own title is titled by its first line: don't show that line twice.
+          const rest = n.body.startsWith(n.title) ? n.body.slice(n.title.length).trim() : n.body;
+          mid.append(el('div', 'title', n.title), el('div', 'sub', `${n.project ? `${n.project} · ` : ''}${t('updated {date}', { date: fmtDue(n.updatedAt, false) })}`), ...(rest ? [el('div', 'note-body', rest)] : []));
           row.append(
             mid,
             btn(t('Edit'), () => openNoteEditor(n)),
@@ -4574,7 +4747,7 @@ function renderNotes(notes) {
           );
           return row;
         })
-      : [el('p', 'muted small', $('#note-q').value.trim() ? t('No matching notes.') : t('No notes yet.'))]),
+      : [emptyState('📝', $('#note-q').value.trim() ? t('No matching notes.') : t('No notes yet.'))]),
   );
 }
 function openNoteEditor(n) {
@@ -4611,7 +4784,7 @@ $('#import-file').addEventListener('change', async (e) => {
     const res = await fetch('/api/import', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(data) });
     const r = await res.json();
     if (!res.ok) throw new Error(r.error ?? `HTTP ${res.status}`);
-    out.textContent = `Imported ${r.conversations} chats (${r.messages} messages), ${r.memories} memories, ${r.tasks} tasks, ${r.reminders} reminders, ${r.notes} notes.${r.skippedConversations ? ` ${r.skippedConversations} chats were already here and were skipped.` : ''}`;
+    out.textContent = `${t('Imported. Chats: {chats} (messages: {messages}) · memories: {memories} · to-dos: {tasks} · reminders: {reminders} · notes: {notes}.', { chats: r.conversations, messages: r.messages, memories: r.memories, tasks: r.tasks, reminders: r.reminders, notes: r.notes })}${r.skippedConversations ? ` ${t('Chats already here and skipped: {n}.', { n: r.skippedConversations })}` : ''}`;
     await loadConversations();
   } catch (err) {
     out.textContent = t('Import failed: {message}', { message: err.message });
@@ -4644,8 +4817,11 @@ const MEM_KIND_LABEL = { fact: 'about you', self: 'about Sara', date: 'date', re
 const fmtOnDate = (d) => {
   const [y, m, day] = d.length === 5 ? [null, ...d.split('-')] : d.split('-');
   const s = new Date(Date.UTC(2000, Number(m) - 1, Number(day), 12)).toLocaleDateString(undefined, { month: 'long', day: 'numeric', timeZone: 'UTC' });
-  return y ? `${s}, ${y}` : `every year on ${s}`;
+  return y ? `${s}, ${y}` : t('every year on {date}', { date: s });
 };
+
+/** A memory's day (YYYY-MM-DD) in the app language: "29 Oct 2026". */
+const memDay = (d) => (/^\d{4}-\d{2}-\d{2}$/.test(d ?? '') ? new Date(`${d}T12:00:00`).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : d ?? '');
 
 async function loadUpcoming() {
   const box = $('#mem-upcoming');
@@ -4679,7 +4855,7 @@ $('#mem-reflect').addEventListener('click', async () => {
   try {
     const { result } = await api('/memories/reflect', { method: 'POST', body: {} });
     const m = /noticed (\d+), replaced (\d+)/.exec(result);
-    $('#mem-reflect-status').textContent = m ? `Done: ${m[1]} new thing${m[1] === '1' ? '' : 's'} noticed, ${m[2]} note${m[2] === '1' ? '' : 's'} replaced.` : result;
+    $('#mem-reflect-status').textContent = m ? t('Done. New things noticed: {noticed} · notes replaced: {replaced}.', { noticed: m[1], replaced: m[2] }) : result;
     await loadMemories();
   } catch (err) {
     $('#mem-reflect-status').textContent = err.message;
@@ -4694,10 +4870,7 @@ async function loadMemories() {
   const list = await api(`/memories?${params}`);
   const box = $('#mem-list');
   if (!list.length) {
-    const p = document.createElement('p');
-    p.className = 'muted small';
-    p.textContent = $('#mem-q').value.trim() ? t('Nothing matches.') : t('Nothing yet. Sara writes notes as you talk.');
-    box.replaceChildren(p);
+    box.replaceChildren(emptyState('🧠', $('#mem-q').value.trim() ? t('Nothing matches.') : t('Nothing yet. Sara writes notes as you talk.')));
     return;
   }
   box.replaceChildren(...list.map(memoryCard));
@@ -4717,14 +4890,14 @@ function memoryCard(m) {
   kind.className = 'kind';
   kind.textContent = t(MEM_KIND_LABEL[m.kind] ?? m.kind);
   const date = document.createElement('span');
-  date.textContent = (m.kind === 'date' && m.onDate ? fmtOnDate(m.onDate) : m.happenedOn) + (m.kind === 'promise' && m.onDate ? ` · due ${m.onDate}` : '') + (m.kind === 'promise' && m.resolvedAt ? ' · kept ✓' : '') + (m.edited ? ' · edited' : '');
+  date.textContent = (m.kind === 'date' && m.onDate ? fmtOnDate(m.onDate) : memDay(m.happenedOn)) + (m.kind === 'promise' && m.onDate ? ` · ${t('due {date}', { date: fmtOnDate(m.onDate) })}` : '') + (m.kind === 'promise' && m.resolvedAt ? ` · ${t('kept ✓')}` : '') + (m.edited ? ` · ${t('edited')}` : '');
   if (m.supersededBy || (m.kind === 'promise' && m.resolvedAt)) card.classList.add('replaced');
   head.append(kind, date);
   if (m.source) {
     const link = document.createElement('a');
     link.href = '#';
     // Phase 51: learned from imported history: says where ("from your ChatGPT history (date)").
-    link.textContent = m.importedFrom ? `${t('from your')} ${m.importedFrom} ${t('history')} (${m.happenedOn}): “${m.source.title}”` : `from “${m.source.title}”`;
+    link.textContent = m.importedFrom ? `${t('from your')} ${m.importedFrom} ${t('history')} (${memDay(m.happenedOn)}): “${m.source.title}”` : t('from “{title}”', { title: m.source.title });
     link.addEventListener('click', async (e) => {
       e.preventDefault();
       $('#memory').close();
@@ -4739,7 +4912,7 @@ function memoryCard(m) {
     head.append(link);
   } else if (m.conversationId) {
     const gone = document.createElement('span');
-    gone.textContent = 'source conversation deleted';
+    gone.textContent = t('source conversation deleted');
     head.append(gone);
   }
   const body = document.createElement('div');
@@ -4749,7 +4922,7 @@ function memoryCard(m) {
   if (m.evidence) {
     const ev = document.createElement('div');
     ev.className = 'mem-evidence';
-    ev.textContent = m.sourceDocId ? `📄 ${t('From a document in her library')}: “${m.evidence}”` : m.evidence === 'You added this.' || m.kind === 'reflection' ? m.evidence : ['decision', 'promise', 'milestone'].includes(m.kind) ? `“${m.evidence}”` : `${m.kind === 'self' ? t('She said') : 'You said'}: “${m.evidence}”`;
+    ev.textContent = m.sourceDocId ? `📄 ${t('From a document in her library')}: “${m.evidence}”` : m.evidence === 'You added this.' ? t('You added this.') : m.kind === 'reflection' ? m.evidence : ['decision', 'promise', 'milestone'].includes(m.kind) ? `“${m.evidence}”` : `${m.kind === 'self' ? t('She said') : t('You said')}: “${m.evidence}”`;
     if (m.sourceDocId) {
       ev.classList.add('linkish');
       ev.addEventListener('click', () => {
@@ -4827,8 +5000,10 @@ function memoryCard(m) {
       await loadMemories();
     }),
     mk(t('Forget'), async () => {
-      const what = m.kind === 'summary' ? 'the messages this summary covers' : 'the message it came from, and later messages that mention it,';
-      if (!confirm(t(`Forget this? The note is deleted and ${what} will be hidden from Sara for good (you can still see them). Summaries and notes that mention it are removed and rewritten.`))) return;
+      const ask = m.kind === 'summary'
+        ? t('Forget this? The note is deleted and the messages this summary covers will be hidden from Sara for good (you can still see them). Summaries and notes that mention it are removed and rewritten.')
+        : t('Forget this? The note is deleted and the message it came from, and later messages that mention it, will be hidden from Sara for good (you can still see them). Summaries and notes that mention it are removed and rewritten.');
+      if (!confirm(ask)) return;
       const r = await api(`/memories/${m.id}/forget`, { method: 'POST', body: {} });
       $('#mem-reflect-status').textContent = r?.hiddenMessages ? t('Forgotten: {hiddenMessages} message(s) hidden from her.', { hiddenMessages: r.hiddenMessages.length }) : '';
       await loadMemories();
@@ -4901,7 +5076,7 @@ function renderMcp(list) {
       name.textContent = m.name;
       const st = document.createElement('small');
       st.className = `st-${m.status}`;
-      st.textContent = m.status === 'ready' ? `connected · ${m.tools.length} tools` : m.status;
+      st.textContent = m.status === 'ready' ? t('connected · tools: {n}', { n: m.tools.length }) : m.status;
       const edit = document.createElement('button');
       edit.type = 'button';
       edit.className = 'ghost';
@@ -4923,7 +5098,7 @@ function renderMcp(list) {
       restart.className = 'ghost';
       restart.textContent = t('Reconnect');
       restart.addEventListener('click', async () => {
-        st.textContent = 'connecting…';
+        st.textContent = t('connecting…');
         renderMcp(await api(`/mcp/${m.name}/restart`, { method: 'POST', body: {} }));
         await loadTools();
       });
@@ -5222,7 +5397,7 @@ function modelChooser() {
   const wrap = el('span', 'model-chooser');
   const sel = document.createElement('select');
   const input = document.createElement('input');
-  input.placeholder = 'model name';
+  input.placeholder = t('model name');
   input.hidden = true;
   const note = el('small', 'muted', '');
   // Phase 56: check this provider's list for new models now.
@@ -5330,34 +5505,121 @@ const settingsPages = () =>
       !(p.dataset.page === 'household' && document.body.classList.contains('demo')),
   );
 
+// Settings groups (UI cleanup): real headers with an icon, opened and closed by a click; only the
+// group of the page on screen is open at first, and the choice is remembered on this device.
+const SETTINGS_GROUPS = [
+  { name: 'Her', icon: 'M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z' },
+  { name: 'You', icon: 'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4 21c0-4.4 3.6-7 8-7s8 2.6 8 7' },
+  { name: 'Models', icon: 'M7 7h10v10H7zM10 3v4M14 3v4M10 17v4M14 17v4M3 10h4M3 14h4M17 10h4M17 14h4' },
+  { name: 'Abilities', icon: 'M12 3l2.5 5.5L20 9l-4 4 1 6-5-3-5 3 1-6-4-4 5.5-.5z' },
+  { name: 'Connections', icon: 'M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1' },
+  { name: 'Data & health', icon: 'M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6zM8 12h2l1.5-3 2 6 1.5-3h1' },
+  { name: 'Household', icon: 'M3 11l9-7 9 7M5 10v10h14V10M10 20v-6h4v6' },
+];
+// The order of the pages inside each group. Page ids and group names stay the same: links, tips,
+// tours and the guide's "Settings → Abilities → …" paths use them.
+const SETTINGS_ORDER = [
+  'her-character', 'her-relationship', 'her-look', 'her-pictures', 'her-voice', 'her-calls', 'her-companions', 'her-import',
+  'you-about', 'you-briefing', 'you-leave-by', 'you-adult',
+  'models-default', 'models-routes', 'models-providers', 'models-subs', 'models-local',
+  'ab-tools', 'ab-search', 'ab-library', 'ab-google', 'ab-home', 'ab-mcp',
+  'ab-projects', 'ab-github', 'ab-ssh', 'ab-recipes',
+  'co-phone', 'desktop-app', 'co-telegram', 'co-discord', 'co-apps',
+  'dh-health', 'dh-devices', 'dh-backups', 'dh-data', 'dh-updates', 'dh-usage', 'dh-reports',
+  'household', 'account',
+];
+// A small heading inside a group, before the first of these pages.
+const SETTINGS_SUB = { 'ab-projects': 'For coding' };
+const NS_SVG = 'http://www.w3.org/2000/svg';
+function lineIcon(d, cls = '') {
+  const s = document.createElementNS(NS_SVG, 'svg');
+  for (const [k, v] of Object.entries({ viewBox: '0 0 24 24', 'aria-hidden': 'true', fill: 'none', stroke: 'currentColor', 'stroke-width': '1.8', 'stroke-linecap': 'round', 'stroke-linejoin': 'round' })) s.setAttribute(k, v);
+  if (cls) s.setAttribute('class', cls);
+  const path = document.createElementNS(NS_SVG, 'path');
+  path.setAttribute('d', d);
+  s.append(path);
+  return s;
+}
+const openGroups = () => {
+  try {
+    const v = JSON.parse(localStorage.getItem('sara.settingsGroups') ?? 'null');
+    return Array.isArray(v) ? new Set(v) : null;
+  } catch {
+    return null;
+  }
+};
+function setGroupOpen(box, open, remember = true) {
+  box.classList.toggle('open', open);
+  box.querySelector('.settings-nav-head').setAttribute('aria-expanded', String(open));
+  box.querySelector('.settings-nav-items').hidden = !open;
+  if (!remember) return;
+  const set = new Set([...document.querySelectorAll('#settings-nav-list .settings-nav-group.open')].map((g) => g.dataset.group));
+  localStorage.setItem('sara.settingsGroups', JSON.stringify([...set]));
+}
+
 function buildSettingsNav() {
   const nav = $('#settings-nav-list');
   const groups = new Map();
-  for (const sec of settingsPages()) {
+  const seen = new Set();
+  const order = (p) => {
+    const i = SETTINGS_ORDER.indexOf(p.dataset.page);
+    return i < 0 ? SETTINGS_ORDER.length : i;
+  };
+  // One entry per page (a page listed twice once showed up twice at the end of the list).
+  for (const sec of settingsPages().sort((x, y) => order(x) - order(y))) {
+    if (seen.has(sec.dataset.page)) continue;
+    seen.add(sec.dataset.page);
     if (!groups.has(sec.dataset.group)) groups.set(sec.dataset.group, []);
     groups.get(sec.dataset.group).push(sec);
   }
+  const rank = (g) => {
+    const i = SETTINGS_GROUPS.findIndex((x) => x.name === g);
+    return i < 0 ? SETTINGS_GROUPS.length : i;
+  };
+  const remembered = openGroups();
   nav.replaceChildren(
-    ...[...groups].map(([g, secs]) => {
+    ...[...groups].sort(([x], [y]) => rank(x) - rank(y)).map(([g, secs], gi) => {
       const box = el('div', 'settings-nav-group');
-      box.append(el('div', 'settings-nav-head', t(g)));
+      box.dataset.group = g;
+      const head = el('button', 'settings-nav-head');
+      head.type = 'button';
+      const listId = `settings-group-${gi}`;
+      head.setAttribute('aria-controls', listId);
+      const info = SETTINGS_GROUPS.find((x) => x.name === g);
+      head.append(lineIcon(info?.icon ?? 'M4 6h16M4 12h16M4 18h16', 'sng-icon'), el('span', 'sng-name', t(g)), el('span', 'sng-count', String(secs.length)), lineIcon('M9 6l6 6-6 6', 'sng-chev'));
+      const items = el('div', 'settings-nav-items');
+      items.id = listId;
+      head.addEventListener('click', () => setGroupOpen(box, !box.classList.contains('open')));
       for (const sec of secs) {
+        if (SETTINGS_SUB[sec.dataset.page]) items.append(el('div', 'settings-nav-sub', t(SETTINGS_SUB[sec.dataset.page])));
         const b = el('button', 'settings-nav-item', t(sec.dataset.title));
         b.type = 'button';
         b.dataset.page = sec.dataset.page;
         b.addEventListener('click', () => {
           if ($('#settings-search').value) {
             $('#settings-search').value = '';
-            $('.settings-pages').classList.remove('searching');
-            for (const x of document.querySelectorAll('#settings-nav-list .dim')) x.classList.remove('dim');
+            clearSettingsSearch();
           }
           showSettingsTab(sec.dataset.page, { focus: true });
         });
-        box.append(b);
+        items.append(b);
       }
+      box.append(head, items);
+      setGroupOpen(box, remembered ? remembered.has(g) : false, false);
       return box;
     }),
   );
+}
+/** Opens the group of the page on screen (the others keep their state). */
+function openGroupOf(page) {
+  const box = document.querySelector(`#settings-nav-list [data-page="${page}"]`)?.closest('.settings-nav-group');
+  if (box && !box.classList.contains('open')) setGroupOpen(box, true);
+}
+function clearSettingsSearch() {
+  $('.settings-pages').classList.remove('searching');
+  for (const x of document.querySelectorAll('#settings-nav-list .dim, #settings-nav-list .no-match')) x.classList.remove('dim', 'no-match');
+  for (const g of document.querySelectorAll('#settings-nav-list .settings-nav-group')) setGroupOpen(g, (openGroups() ?? new Set()).has(g.dataset.group), false);
+  $('#settings-nav-list').classList.remove('searching');
 }
 
 // Phase 23: a "?" on every Settings page: what it's for, in plain words, and the guide.
@@ -5371,21 +5633,13 @@ fetch('/tips.json')
     addTips(d.tips ?? {});
   })
   .catch(() => {});
+// Every page opens with a line on what it is for (from tips.json) and a link to its guide section.
 function showSettingsHelp(page) {
   const [text, guide] = HELP[page] ?? ['', 'start'];
-  $('#settings-help').hidden = !text;
+  $('#settings-page-desc').hidden = !text;
   $('#settings-help-text').textContent = t(text);
   $('#settings-help-link').href = `/help#${guide}`;
-  const open = localStorage.getItem('sara.helpOpen') === '1' && Boolean(text);
-  $('#settings-help-box').hidden = !open;
-  $('#settings-help').setAttribute('aria-expanded', String(open));
 }
-$('#settings-help').addEventListener('click', () => {
-  const open = $('#settings-help-box').hidden;
-  localStorage.setItem('sara.helpOpen', open ? '1' : '0');
-  $('#settings-help-box').hidden = !open;
-  $('#settings-help').setAttribute('aria-expanded', String(open));
-});
 
 function showSettingsTab(page, opts = {}) {
   page = OLD_TABS[page] ?? page;
@@ -5396,6 +5650,7 @@ function showSettingsTab(page, opts = {}) {
   const sec = pages.find((p) => p.dataset.page === pick);
   $('#settings-page-title').textContent = t(sec.dataset.title);
   showSettingsHelp(pick);
+  openGroupOf(pick);
   if (pick === 'dh-updates') void loadUpdates();
   if (pick === 'ab-recipes') void loadRecipes();
   if (pick === 'ab-ssh') void loadSsh();
@@ -5412,27 +5667,63 @@ function showSettingsTab(page, opts = {}) {
   if (opts.focus) $('.settings-pages').focus({ preventScroll: true });
 }
 
-// Search: shows every page with a match (headings, labels, help text), the list keeps up.
+// Search: every word may match a page's title, group, description, labels, tips or text. Pages with
+// all the words come first; when no page has them all, pages with any of them show. The list keeps
+// up (only matching pages, their groups opened).
+const foldText = (s) => String(s ?? '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+/** A page's headline words: title, group, description, headings, labels and tips. */
+function settingsHeadText(p) {
+  const bits = [t(p.dataset.title), p.dataset.title, t(p.dataset.group), t(HELP[p.dataset.page]?.[0] ?? '')];
+  for (const n of p.querySelectorAll('h3, h4, label, legend, summary, [data-tip], [aria-label], [placeholder]')) bits.push(n.matches('h3, h4, label, legend, summary') ? n.textContent : '', n.dataset.tip ?? '', n.getAttribute('aria-label') ?? '', n.getAttribute('placeholder') ?? '');
+  return foldText(bits.join(' '));
+}
+/**
+ * The pages that match a search. Each word is looked for on its own. Best first: pages whose
+ * headline words have every word; else pages with any of the words in their headline words; else
+ * pages with every word anywhere in their text; else any word anywhere.
+ */
+function matchSettings(q, pages, headOf = settingsHeadText, bodyOf = (p) => foldText(p.textContent)) {
+  const words = foldText(q).split(/\s+/).filter((w) => w.length > 1 || /\d/.test(w));
+  if (!words.length) return [];
+  // "backups" also finds "backup", "emails" finds "email".
+  const stems = words.map((w) => (w.length > 4 && w.endsWith('s') ? w.slice(0, -1) : w));
+  const texts = pages.map((p) => ({ p, head: headOf(p), body: bodyOf(p) }));
+  const tiers = [
+    (x) => stems.every((w) => x.head.includes(w)),
+    (x) => stems.some((w) => x.head.includes(w)),
+    (x) => stems.every((w) => x.body.includes(w)),
+    (x) => stems.some((w) => x.body.includes(w)),
+  ];
+  for (const ok of tiers) {
+    const hits = texts.filter(ok).map((x) => x.p);
+    if (hits.length) return hits;
+  }
+  return [];
+}
 $('#settings-search').addEventListener('input', () => {
-  const q = $('#settings-search').value.trim().toLowerCase();
+  const raw = $('#settings-search').value.trim();
   const pages = settingsPages();
-  $('.settings-pages').classList.toggle('searching', Boolean(q));
-  if (!q) {
-    for (const b of document.querySelectorAll('#settings-nav-list .dim')) b.classList.remove('dim');
+  $('.settings-pages').classList.toggle('searching', Boolean(raw));
+  if (!raw) {
+    clearSettingsSearch();
     return showSettingsTab(localStorage.getItem('sara.settingsPage') ?? 'her-character');
   }
-  let found = 0;
-  for (const p of pages) {
-    const hit = `${p.dataset.title} ${p.dataset.group} ${p.textContent}`.toLowerCase().includes(q);
-    p.hidden = !hit;
-    if (hit) found++;
-  }
+  const hits = new Set(matchSettings(raw, pages));
+  for (const p of pages) p.hidden = !hits.has(p);
+  $('#settings-nav-list').classList.add('searching');
   for (const b of document.querySelectorAll('#settings-nav-list [data-page]')) {
     const sec = pages.find((x) => x.dataset.page === b.dataset.page);
-    b.classList.toggle('dim', sec.hidden);
+    b.classList.toggle('no-match', !sec || sec.hidden);
     b.setAttribute('aria-current', 'false');
   }
-  $('#settings-page-title').textContent = found ? `${found} page${found === 1 ? '' : 's'} with “${$('#settings-search').value.trim()}”` : '';
+  for (const g of document.querySelectorAll('#settings-nav-list .settings-nav-group')) {
+    const any = Boolean(g.querySelector('.settings-nav-item:not(.no-match)'));
+    g.classList.toggle('no-match', !any);
+    setGroupOpen(g, any, false);
+  }
+  const found = hits.size;
+  $('#settings-page-title').textContent = found ? (found === 1 ? t('1 page with “{q}”', { q: raw }) : t('{n} pages with “{q}”', { n: found, q: raw })) : '';
+  $('#settings-page-desc').hidden = true;
   $('#settings-empty').hidden = found > 0;
   $('#settings').classList.add('page-open');
 });
@@ -5441,8 +5732,7 @@ buildSettingsNav();
 
 async function openSettings(tab) {
   $('#settings-search').value = '';
-  $('.settings-pages').classList.remove('searching');
-  for (const b of document.querySelectorAll('#settings-nav-list .dim')) b.classList.remove('dim');
+  clearSettingsSearch();
   showSettingsTab(typeof tab === 'string' ? tab : (localStorage.getItem('sara.settingsPage') ?? 'her-character'));
   // On a phone, opening Settings from the menu starts at the list of pages.
   if (typeof tab !== 'string') $('#settings').classList.remove('page-open');
@@ -5488,6 +5778,7 @@ async function rerenderAfterLanguage() {
     await loadModels().catch(() => {}); // UX 21: the Default model status line
   }
   renderConvSummary(); // UX 21: the chat header chip ("main folder")
+  relabelNav();
   if ($('#today').open) await Promise.all([loadToday(), loadChecklist()]).catch(() => {});
   await loadConversations().catch(() => {}); // the list's group headings
   await initVoice().catch(() => {}); // call buttons and the live-call notes
@@ -5695,7 +5986,7 @@ async function loadReports() {
     if (x.note) div.append(el('div', 'muted small', t('Note: {note}', { note: x.note })));
     return div;
   };
-  $('#reports-list').replaceChildren(...(r.reports.length ? r.reports.map((x) => row(x, x.sentAt ? 'sent to the developer' : x.sendError ? `not sent (${x.sendError})` : 'kept here only')) : [el('p', 'muted small', t('Nothing reported.'))]));
+  $('#reports-list').replaceChildren(...(r.reports.length ? r.reports.map((x) => row(x, x.sentAt ? t('sent to the developer') : x.sendError ? t('not sent ({error})', { error: x.sendError }) : t('kept here only'))) : [el('p', 'muted small', t('Nothing reported.'))]));
   $('#reports-inbox-box').hidden = !r.inbox;
   if (r.inbox) $('#reports-inbox').replaceChildren(...(r.inbox.length ? r.inbox.map((x) => row(x, [x.platform, x.appVersion, x.model].filter(Boolean).join(' · '))) : [el('p', 'muted small', t('No reports received.'))]));
 }
@@ -5718,14 +6009,14 @@ $('#pair-new').addEventListener('click', async () => {
   clearInterval(pairTimer);
   pairTimer = setInterval(async () => {
     const left = Math.max(0, Math.round((ends - Date.now()) / 1000));
-    $('#pair-exp').textContent = left ? `Works once, for ${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')} more.` : t('This code expired.');
+    $('#pair-exp').textContent = left ? t('Works once, for {time} more.', { time: `${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}` }) : t('This code expired.');
     if (!left || !$('#settings').open) return stopPairing();
     if (left % 3 === 0) {
       const now = (await api('/devices').catch(() => null))?.devices;
       if (now && now.length > before) {
         stopPairing();
         const newest = [...now].sort((x, y) => y.createdAt.localeCompare(x.createdAt))[0];
-        $('#pair-done').textContent = `✓ Signed in: ${newest?.label ?? 'a new device'}.`;
+        $('#pair-done').textContent = `✓ ${t('Signed in: {device}.', { device: newest?.label ?? t('a new device') })}`;
         loadDevices();
       }
     }
@@ -5943,20 +6234,26 @@ const settingsAt = (page) => async () => {
 const sidebar = (open) => () => {
   closeOpenDialogs();
   $('#main').classList.toggle('show-sidebar', open);
+  if (!open) setMore(false);
+};
+// A step on a sidebar place: the list is open, and More too when the place lives there.
+const navStep = (sel) => () => {
+  sidebar(true)();
+  revealNav(sel);
 };
 const TOURS = {
   first: [
     { sel: '#new-chat', title: t('New conversation'), text: t('Start a fresh chat any time. Old ones stay in the list below, with search.'), before: sidebar(true) },
     { before: sidebar(false), sel: '#input', title: t('Talk to her'), text: t('Type here, or use the microphone. Attach a photo or a file with 📎. 🎲 starts something to do together.') },
     { before: sidebar(false), sel: '#conv-settings-btn', title: t('This conversation'), text: t('The model, workspace and mode (chat or coding) for this conversation only. Private keeps everything on your server.') },
-    { before: sidebar(true), sel: '#open-today', title: t('Today'), text: t('Your day at a glance: reminders, to-dos, the weather and what she has been up to.') },
-    { sel: '#open-planner', title: t('Planner'), text: t('To-dos, reminders and notes. You can also just ask her: "remind me to call Mom at 5".') },
-    { sel: '#open-memory', title: t('Memory'), text: t('What she remembers about you. Look through it, correct it or make her forget something.') },
-    { sel: '#open-library', title: t('Library'), text: t('Give her documents to keep (PDFs, Word, spreadsheets, slides, e-books). She remembers the key points and looks things up in them when you ask.') },
-    { sel: '#open-sara', title: t('Her page'), text: t('Her day, her mood and her character. Shape her personality from here.') },
-    { sel: '#open-team', title: t('Team'), text: t('For bigger jobs she leads helpers that plan, build, test and review.') },
-    { sel: '#open-settings', title: t('Settings'), text: t('Everything is in pages: Her, Models, You, Abilities, Connections. Every setting has a ? that explains it.') },
-    { sel: '#open-help', title: t('Help'), text: t('Come back here for these tours and the guide. Or just ask her how something works.') },
+    { before: navStep('#open-today'), sel: '#open-today', title: t('Today'), text: t('Your day at a glance: reminders, to-dos, the weather and what she has been up to.') },
+    { before: navStep('#open-planner'), sel: '#open-planner', title: t('Planner'), text: t('To-dos, reminders and notes. You can also just ask her: "remind me to call Mom at 5".') },
+    { before: navStep('#open-memory'), sel: '#open-memory', title: t('Memory'), text: t('What she remembers about you. Look through it, correct it or make her forget something.') },
+    { before: navStep('#open-library'), sel: '#open-library', title: t('Library'), text: t('Give her documents to keep (PDFs, Word, spreadsheets, slides, e-books). She remembers the key points and looks things up in them when you ask.') },
+    { before: navStep('#open-sara'), sel: '#open-sara', title: t('Her page'), text: t('Her day, her mood and her character. Shape her personality from here.') },
+    { before: navStep('#open-team'), sel: '#open-team', title: t('Team'), text: t('For bigger jobs she leads helpers that plan, build, test and review.') },
+    { before: navStep('#open-settings'), sel: '#open-settings', title: t('Settings'), text: t('Everything is in pages: Her, Models, You, Abilities, Connections. Every setting has a ? that explains it.') },
+    { before: navStep('#open-help'), sel: '#open-help', title: t('Help'), text: t('Come back here for these tours and the guide. Or just ask her how something works.') },
   ],
   studio: [
     { sel: '#st-wizard', title: t('Create your companion'), text: t('The easiest way: a guided setup with cards, about 5 minutes. Every step can be skipped.'), before: settingsAt('her-character') },
@@ -5988,7 +6285,10 @@ function runTour(name) {
   if (!steps) return;
   $('#help-menu').close();
   localStorage.setItem('sara.tour.first', 'seen');
-  void startTour(steps, t, () => $('#main').classList.remove('show-sidebar'));
+  void startTour(steps, t, () => {
+    $('#main').classList.remove('show-sidebar');
+    setMore(false);
+  });
 }
 $('#open-help').addEventListener('click', () => $('#help-menu').showModal());
 for (const b of document.querySelectorAll('#help-menu [data-tour]')) b.addEventListener('click', () => runTour(b.dataset.tour));
@@ -6102,12 +6402,12 @@ function openPlannerTab(tab) {
 async function openFileView(ws, path, q) {
   const d = $('#file-view');
   $('#file-view-title').textContent = path.split('/').pop();
-  $('#file-view-where').textContent = `${ws === 'main' ? 'Workspace' : `Workspace “${ws}”`} · ${path}`;
+  $('#file-view-where').textContent = `${ws === 'main' ? t('Workspace') : t('Workspace “{name}”', { name: ws })} · ${path}`;
   $('#file-view-text').textContent = t('Loading…');
   d.showModal();
   try {
     const f = await api(`/workspaces/${encodeURIComponent(ws)}/file?path=${encodeURIComponent(path)}`);
-    if (f.binary) return void ($('#file-view-text').textContent = '(not a text file)');
+    if (f.binary) return void ($('#file-view-text').textContent = t('(not a text file)'));
     const pre = $('#file-view-text');
     pre.textContent = f.text + (f.truncated ? '\n…' : '');
     // Show the first match.
@@ -6207,7 +6507,7 @@ $('#pp-git-refresh').addEventListener('click', () => loadProjectGit(pageProject?
 async function loadProjectPreviews(ws) {
   const box = $('#pp-previews');
   const r = ws ? await api(`/previews?workspace=${encodeURIComponent(ws)}`).catch(() => ({ previews: [] })) : { previews: [] };
-  if (!r.previews.length) return box.replaceChildren(el('p', 'muted small', t(ws ? 'No app is being previewed here right now.' : 'This project has no workspace.')));
+  if (!r.previews.length) return box.replaceChildren(el('p', 'muted small', ws ? t('No app is being previewed here right now.') : t('This project has no workspace.')));
   box.replaceChildren(
     ...r.previews.map((p) => {
       const row = el('div', 'pp-item pp-preview');
@@ -6239,13 +6539,13 @@ async function openProjectPage(id) {
   // Phase 50: Overview first; the Map tab shows her code map of the workspace.
   resetProjectMap(d.project.workspace);
   $('#pp-title').textContent = d.project.name;
-  $('#pp-ws').textContent = d.project.workspace ? `workspace: ${d.project.workspace}` : 'no workspace';
+  $('#pp-ws').textContent = d.project.workspace ? t('workspace: {name}', { name: d.project.workspace }) : t('no workspace');
   $('#pp-convs').replaceChildren(
     ...(d.conversations.length
       ? d.conversations.map((c) => {
           const a = el('a', 'pp-item', c.title);
           a.href = '#';
-          if (c.archivedAt) a.append(el('small', 'muted', ' (archived)'));
+          if (c.archivedAt) a.append(el('small', 'muted', ` ${t('(archived)')}`));
           a.addEventListener('click', async (e) => {
             e.preventDefault();
             $('#project-page').close();
@@ -6260,7 +6560,7 @@ async function openProjectPage(id) {
   $('#pp-tasks').replaceChildren(
     ...open.map((t) => taskRow(t)),
     ...(done.length ? [el('p', 'muted small', `${done.length} done`)] : []),
-    ...(!d.tasks.length ? [el('p', 'muted small', 'No to-dos.')] : []),
+    ...(!d.tasks.length ? [el('p', 'muted small', t('No to-dos.'))] : []),
   );
   $('#pp-notes').replaceChildren(
     ...(d.notes.length
@@ -6270,14 +6570,14 @@ async function openProjectPage(id) {
           det.append(el('summary', '', n.title), el('div', 'pp-note-body', n.body));
           return det;
         })
-      : [el('p', 'muted small', 'No notes.')]),
+      : [el('p', 'muted small', t('No notes.'))]),
   );
   $('#pp-file-view').hidden = true;
   if (!d.project.workspace) {
     $('#pp-files-count').textContent = '';
-    $('#pp-files').replaceChildren(el('p', 'muted small', 'Give this project a workspace (Edit) to keep its files together.'));
+    $('#pp-files').replaceChildren(el('p', 'muted small', t('Give this project a workspace (Edit) to keep its files together.')));
   } else {
-    $('#pp-files-count').textContent = d.files.length ? `${d.files.length}${d.filesTruncated ? '+' : ''}, newest first` : '';
+    $('#pp-files-count').textContent = d.files.length ? t('{n}, newest first', { n: `${d.files.length}${d.filesTruncated ? '+' : ''}` }) : '';
     $('#pp-files').replaceChildren(
       ...(d.files.length
         ? d.files.map((f) => {
@@ -6289,7 +6589,7 @@ async function openProjectPage(id) {
               const v = $('#pp-file-view');
               try {
                 const r = await api(`/workspaces/${encodeURIComponent(d.project.workspace)}/file?path=${encodeURIComponent(f.path)}`);
-                v.textContent = r.binary ? `${f.path} is not a text file (${fmtSize(r.size)}).` : r.text + (r.truncated ? '\n… (first 200 KB shown)' : '');
+                v.textContent = r.binary ? t('{path} is not a text file ({size}).', { path: f.path, size: fmtSize(r.size) }) : r.text + (r.truncated ? `\n… ${t('(first 200 KB shown)')}` : '');
               } catch (err) {
                 v.textContent = err.message;
               }
@@ -6298,21 +6598,21 @@ async function openProjectPage(id) {
             });
             return a;
           })
-        : [el('p', 'muted small', 'The workspace is empty.')]),
+        : [el('p', 'muted small', t('The workspace is empty.'))]),
     );
   }
   if (!$('#project-page').open) $('#project-page').showModal();
 }
-function taskRow(t) {
+function taskRow(tk) {
   const row = el('label', 'pp-task');
   const cb = document.createElement('input');
   cb.type = 'checkbox';
   cb.addEventListener('change', async () => {
-    await api(`/tasks/${t.id}`, { method: 'PATCH', body: { status: 'done' } });
+    await api(`/tasks/${tk.id}`, { method: 'PATCH', body: { status: 'done' } });
     await openProjectPage(pageProject.id);
   });
-  row.append(cb, el('span', '', t.title));
-  if (t.dueAt) row.append(el('small', 'muted', ` due ${new Date(t.dueAt).toLocaleDateString()}`));
+  row.append(cb, el('span', '', tk.title));
+  if (tk.dueAt) row.append(el('small', 'muted', ` ${t('due {date}', { date: new Date(tk.dueAt).toLocaleDateString() })}`));
   return row;
 }
 initProjectMap(() => pageProject?.workspace ?? null);
@@ -6535,7 +6835,7 @@ $('#ts-confirm').addEventListener('click', async () => {
   try {
     const r = await api('/two-step/confirm', { method: 'POST', body: { code: $('#ts-code').value.trim() } });
     $('#ts-code').value = '';
-    $('#ts-status').textContent = `Two-step sign-in is on. Keep the authenticator app: you need it to sign in with the token.${r.signedOut ? ` ${r.signedOut} other device${r.signedOut === 1 ? ' was' : 's were'} signed out; sign in there again.` : ''}`;
+    $('#ts-status').textContent = `${t('Two-step sign-in is on. Keep the authenticator app: you need it to sign in with the token.')}${r.signedOut ? ` ${t('Other devices signed out: {n}. Sign in there again.', { n: r.signedOut })}` : ''}`;
     loadSecurity();
   } catch (err) {
     $('#ts-status').textContent = err.message;
@@ -6572,7 +6872,7 @@ async function loadUpdates() {
   $('#up-check').disabled = busy;
   $('#up-go').hidden = !u.available || st.state !== 'available';
   $('#up-go').disabled = busy;
-  const msg = st.pending === 'update' ? 'Starting the update…' : st.pending === 'check' ? 'Checking for updates…' : st.message;
+  const msg = st.pending === 'update' ? t('Starting the update…') : st.pending === 'check' ? t('Checking for updates…') : st.message;
   $('#up-message').textContent = msg ? `${msg}${st.at && !busy ? ` (${new Date(st.at).toLocaleString()})` : ''}` : u.available ? t('Press Check for updates to see if there is a new version.') : '';
   // Phase 46: Windows and macOS update with the installer from the download page.
   const release = u.how === 'release';
@@ -6730,8 +7030,8 @@ function renderOffsite(o) {
   $('#os-region').value = o.region ?? '';
   $('#os-key').value = o.accessKeyId ?? '';
   $('#os-keep').value = o.keep ?? 14;
-  $('#os-secret').placeholder = o.hasS3Secret ? 'saved (leave blank to keep)' : 'secret key';
-  $('#os-pass').placeholder = o.hasPassphrase ? 'saved (leave blank to keep)' : 'at least 10 characters';
+  $('#os-secret').placeholder = o.hasS3Secret ? t('saved (leave empty to keep)') : t('secret key');
+  $('#os-pass').placeholder = o.hasPassphrase ? t('saved (leave empty to keep)') : t('at least 10 characters');
   const last = o.last;
   $('#os-status').textContent = last ? (last.ok ? t('Last copy {date}: {name}', { date: new Date(last.at).toLocaleString(), name: last.name }) : t('Last copy failed {date}: {error}', { date: new Date(last.at).toLocaleString(), error: last.error })) : o.kind === 'off' ? '' : t('No copy yet.');
   const tst = o.lastTest;
@@ -6805,8 +7105,8 @@ function renderPhotos(p) {
   $('#ph-mode').value = p.mode;
   $('#ph-model').value = p.model ?? '';
   $('#ph-new').hidden = p.mode !== 'new';
-  $('#ph-key').placeholder = p.hasKey ? 'saved (leave blank to keep)' : p.providerKey ? "leave blank to use your xAI provider's key" : 'xai-…';
-  $('#ph-key').placeholder = p.hasKey ? 'saved (leave blank to keep)' : p.grokSubscription ? 'not needed: uses your Grok subscription' : p.providerKey ? "leave blank to use your xAI provider's key" : 'xai-…';
+  $('#ph-key').placeholder = p.hasKey ? t('saved (leave empty to keep)') : p.providerKey ? t('leave empty to use the xAI key from Models') : 'xai-…';
+  $('#ph-key').placeholder = p.hasKey ? t('saved (leave empty to keep)') : p.grokSubscription ? t('not needed: uses your Grok subscription') : p.providerKey ? t('leave empty to use the xAI key from Models') : 'xai-…';
   $('#ph-status').textContent = p.mode !== 'new' ? '' : p.hasKey ? t('Uses the xAI API key saved here (billed per picture).') : p.grokSubscription ? t('Uses your Grok subscription: counts toward your weekly Grok usage (Imagine).') : p.providerKey ? t("Uses your xAI model provider's API key (billed per picture).") : t('Sign in to Grok (Models → Subscriptions) or add an xAI API key to let her take new pictures.');
   $('#ph-taken').replaceChildren(
     ...p.taken.map((t) => {
@@ -6837,7 +7137,8 @@ $('#ph-mode').addEventListener('change', () => ($('#ph-new').hidden = $('#ph-mod
 function sbTab(which) {
   for (const b of document.querySelectorAll('#scrapbook [data-sb]')) b.classList.toggle('active', b.dataset.sb === which);
   $('#sb-moments').hidden = which !== 'moments';
-  $('#sb-photos').hidden = which !== 'photos';
+  $('#sb-photos-tab').hidden = which !== 'photos';
+  for (const b of document.querySelectorAll('#scrapbook [data-sb]')) b.setAttribute('aria-selected', String(b.dataset.sb === which));
 }
 for (const b of document.querySelectorAll('#scrapbook [data-sb]')) b.addEventListener('click', () => sbTab(b.dataset.sb));
 async function loadScrapbook() {
@@ -6847,50 +7148,126 @@ async function loadScrapbook() {
     ...(entries.length
       ? entries.map((e) => {
           const card = el('div', `sb-card ${e.kind}`);
-          const head = el('div', 'sb-head', `${e.kind === 'joke' ? '😄 Inside joke' : '✨ Moment'} · ${new Date(e.createdAt).toLocaleDateString()}${e.addedBy === 'sara' ? t(' · added by Sara') : ''}`);
+          const head = el('div', 'sb-head', `${e.kind === 'joke' ? `😄 ${t('Inside joke')}` : `✨ ${t('Moment')}`} · ${new Date(e.createdAt).toLocaleDateString(locale())}${e.addedBy === 'sara' ? t(' · added by Sara') : ''}`);
           const body = el('div', 'sb-text', e.text.length > 600 ? `${e.text.slice(0, 600)}…` : e.text);
           card.append(head, body);
+          const foot = el('div', 'sb-foot');
           if (e.conversationId) {
-            const go = el('a', 'small', e.conversation ? `from “${e.conversation}”` : 'open conversation');
+            const go = el('a', 'small', e.conversation ? t('from “{title}”', { title: e.conversation }) : t('open conversation'));
             go.href = '#';
             go.addEventListener('click', async (ev) => {
               ev.preventDefault();
-              $('#scrapbook').close();
-              await openConversation(e.conversationId);
-              const t = e.messageId && document.querySelector(`#messages [data-id="${e.messageId}"]`);
-              if (t) {
-                t.scrollIntoView({ block: 'center' });
-                t.classList.add('highlight');
-                setTimeout(() => t.classList.remove('highlight'), 2500);
-              }
+              await openAtMessage(e.conversationId, e.messageId);
             });
-            card.append(go);
+            foot.append(go);
           }
-          const del = el('button', 'ghost small sb-del', '×');
+          // Removing a moment or joke takes it out of the scrapbook only; the message stays.
+          const del = el('button', 'ghost small sb-del', t('Remove'));
           del.type = 'button';
-          del.title = 'Remove from the scrapbook';
+          del.title = e.kind === 'joke' ? t('Remove this inside joke from the scrapbook') : t('Remove this moment from the scrapbook (the message stays in your conversation)');
+          del.setAttribute('aria-label', del.title);
           del.addEventListener('click', async () => {
             await api(`/scrapbook/${e.id}`, { method: 'DELETE' });
             card.remove();
+            if (!$('#sb-moments .sb-card')) await loadScrapbook();
           });
-          card.append(del);
+          foot.append(del);
+          card.append(foot);
           return card;
         })
-      : [el('p', 'muted small', 'Nothing yet. Press 📌 under a message to keep a moment.')]),
+      : [emptyState('📌', t('Nothing yet. Press 📌 under a message to keep a moment.'))]),
   );
+  const photos = d.photos ?? [];
+  const hidden = d.hiddenPhotos ?? [];
+  const items = photos.map((p) => ({ src: `/api/uploads/${p.image}`, label: `${p.from === 'sara' ? t('From Sara') : t('From you')} · ${new Date(p.createdAt).toLocaleDateString(locale())}`, caption: p.text || '' }));
   $('#sb-photos').replaceChildren(
-    ...(d.photos.length
-      ? d.photos.map((p) => {
-          const fig = el('figure', `sb-photo ${p.from}`);
-          const img = document.createElement('img');
-          img.src = `/api/uploads/${p.image}`;
-          img.alt = p.text || 'photo';
-          img.addEventListener('click', () => window.open(img.src, '_blank', 'noopener'));
-          fig.append(img, el('figcaption', 'muted small', `${p.from === 'sara' ? t('From Sara') : 'From you'} · ${new Date(p.createdAt).toLocaleDateString()}`));
-          return fig;
-        })
-      : [el('p', 'muted small', 'No photos shared yet.')]),
+    ...(photos.length ? photos.map((p, i) => sbPhoto(p, () => openLightbox(items, i))) : [emptyState('📷', t('No photos shared yet.'))]),
   );
+  // Photos taken out of the scrapbook can come back.
+  $('#sb-hidden').hidden = !hidden.length;
+  $('#sb-hidden-count').textContent = String(hidden.length);
+  $('#sb-hidden-list').replaceChildren(
+    ...hidden.map((p) => {
+      const fig = el('figure', 'sb-photo sb-photo-hidden');
+      const img = document.createElement('img');
+      img.src = `/api/uploads/${p.image}`;
+      img.alt = p.text || t('Photo');
+      img.loading = 'lazy';
+      const back = el('button', 'ghost small', t('Put back'));
+      back.type = 'button';
+      back.addEventListener('click', async () => {
+        await api('/scrapbook/photos/unhide', { method: 'POST', body: { image: p.image } });
+        await loadScrapbook();
+      });
+      fig.append(img, back);
+      return fig;
+    }),
+  );
+}
+
+/** One photo in the scrapbook: opens large; remove from the scrapbook, or delete it everywhere (asks first). */
+function sbPhoto(p, open) {
+  const fig = el('figure', `sb-photo ${p.from}`);
+  const img = document.createElement('img');
+  img.src = `/api/uploads/${p.image}`;
+  img.alt = p.text || t('Photo');
+  img.loading = 'lazy';
+  const view = el('button', 'sb-photo-open');
+  view.type = 'button';
+  view.setAttribute('aria-label', t('Open this photo large'));
+  view.append(img);
+  view.addEventListener('click', open);
+  const cap = el('figcaption', 'muted small', `${p.from === 'sara' ? t('From Sara') : t('From you')} · ${new Date(p.createdAt).toLocaleDateString(locale())}`);
+  const acts = el('div', 'sb-photo-acts');
+  const hide = el('button', 'linkish small', t('Remove from scrapbook'));
+  hide.type = 'button';
+  hide.title = t('Takes it out of the scrapbook only. The photo stays in its message.');
+  hide.addEventListener('click', async () => {
+    hide.disabled = true;
+    await api('/scrapbook/photos/hide', { method: 'POST', body: { image: p.image } }).catch((err) => alert(err.message));
+    await loadScrapbook();
+  });
+  const del = el('button', 'linkish small danger-text', t('Delete photo everywhere…'));
+  del.type = 'button';
+  del.title = t('Deletes the photo from every message, the scrapbook and your album. Asks first.');
+  del.addEventListener('click', () => {
+    acts.hidden = true;
+    const ask = el('div', 'sb-confirm');
+    ask.setAttribute('role', 'alertdialog');
+    ask.setAttribute('aria-label', t('Delete photo everywhere?'));
+    const msg = el('p', 'small', t('Delete this photo everywhere? It is taken out of every message (the words stay), the scrapbook and your album, and the file is deleted. This can’t be undone.'));
+    const yes = el('button', 'small danger', t('Delete it'));
+    yes.type = 'button';
+    const no = el('button', 'ghost small', t('Keep it'));
+    no.type = 'button';
+    const err = el('p', 'error small');
+    no.addEventListener('click', () => {
+      ask.remove();
+      fig.classList.remove('confirming');
+      acts.hidden = false;
+      del.focus();
+    });
+    yes.addEventListener('click', async () => {
+      yes.disabled = no.disabled = true;
+      try {
+        await api('/scrapbook/photos/delete', { method: 'POST', body: { image: p.image, confirm: true } });
+        await loadScrapbook();
+      } catch (e) {
+        err.textContent = e.message;
+        yes.disabled = no.disabled = false;
+      }
+    });
+    const row = el('div', 'sb-confirm-row');
+    row.append(no, yes);
+    ask.append(msg, row, err);
+    fig.classList.add('confirming');
+    fig.append(ask);
+    fig.scrollIntoView({ block: 'nearest' });
+    no.focus();
+  });
+  acts.append(hide, del);
+  fig.append(view, cap, acts);
+  return fig;
 }
 // ---------- Phase 53: your story together ----------
 const STORY_LABEL = {
@@ -7004,7 +7381,7 @@ async function loadStory() {
     out.push(storyCard(it));
   }
   const empty = storyState.filter === 'all' ? t('Your story fills in as you talk: milestones, promises and projects show up here by themselves, and moments you pin.') : t('Nothing of this kind yet.');
-  $('#story-list').replaceChildren(...(out.length ? out : [el('p', 'muted small', empty)]));
+  $('#story-list').replaceChildren(...(out.length ? out : [emptyState('🕰️', empty)]));
 }
 
 async function openStory() {
@@ -7458,9 +7835,9 @@ function buildBond() {
   const d = studio.defs;
   pickCards($('#bd-types'), d.relationshipTypes, studio.draft.relationship ?? 'friend', (id) => bondApply({ relationship: id }));
   dialRows($('#bd-dials'), d.traits.filter((t) => t.group === 'Together').map((t) => t.id), () => studio.draft, bondChanged);
-  $('#bd-away').replaceChildren(new Option('Her own way', ''), ...d.away.map((x) => new Option(x.label, x.id)));
-  $('#bd-conflict').replaceChildren(new Option('Her own way', ''), ...d.conflict.map((x) => new Option(x.label, x.id)));
-  $('#bd-others').replaceChildren(new Option('Not mentioned', ''), ...d.others.map((x) => new Option(x.label, x.id)));
+  $('#bd-away').replaceChildren(new Option(t('Her own way'), ''), ...d.away.map((x) => new Option(x.label, x.id)));
+  $('#bd-conflict').replaceChildren(new Option(t('Her own way'), ''), ...d.conflict.map((x) => new Option(x.label, x.id)));
+  $('#bd-others').replaceChildren(new Option(t('Not mentioned'), ''), ...d.others.map((x) => new Option(x.label, x.id)));
   // Her initiative in intimate moments: one slider like the dials.
   const row = el('div', 'dial');
   const head = el('div', 'dial-head');
@@ -7773,7 +8150,7 @@ async function refreshLook() {
   $('#look-reset').hidden = !l.custom;
   // Looks made before newer animation frames existed: offer to add just those.
   $('#look-complete').hidden = !l.custom || !l.missing || l.status.state === 'building';
-  $('#look-complete').title = `${l.missing} new pictures for smoother talking`;
+  $('#look-complete').title = t('New pictures for smoother talking: {n}', { n: l.missing });
   $('#look-upload-row').hidden = !l.uploaded || l.status.state === 'building';
   const st = l.status;
   const busy = st.state === 'drafting' || st.state === 'building';
@@ -8176,7 +8553,7 @@ $('#char-import-go').addEventListener('click', async () => {
   $('#char-status').textContent = t('Loading…');
   try {
     const r = await api('/character/import', { method: 'POST', body: { file: charFile, look: $('#char-look').checked, voice: $('#char-voice').checked } });
-    $('#char-status').textContent = `Loaded ${r.persona.name}.${r.look ? ' New look in place.' : ''}${r.voice ? ' Voice set.' : ''}`;
+    $('#char-status').textContent = `${t('Loaded {name}.', { name: r.persona.name })}${r.look ? ` ${t('New look in place.')}` : ''}${r.voice ? ` ${t('Voice set.')}` : ''}`;
     $('#char-import-box').hidden = true;
     charFile = null;
     if (r.look) lookChanged();
@@ -8445,7 +8822,7 @@ $('#su-next').addEventListener('click', async () => {
     }
     if (su.step === 3) {
       if (su.provider && $('#su-model').value) await api('/settings', { method: 'PUT', body: { defaultProviderId: su.provider, defaultModel: $('#su-model').value } });
-      $('#su-done-title').textContent = t(su.provider ? 'All set. Say hi to Sara!' : 'Almost there');
+      $('#su-done-title').textContent = (su.provider ? t('All set. Say hi to Sara!') : t('Almost there'));
       return suShow(4);
     }
     await suFinish();
@@ -8678,7 +9055,7 @@ async function loadDesktop() {
   $('#dk-login').checked = Boolean(p.startAtLogin);
   $('#dk-keep').checked = p.keepRunning !== false;
   $('#dk-notify').checked = p.notifications !== false;
-  $('#dk-version').textContent = `Sara for ${p.platform === 'mac' ? 'Mac' : 'Windows'} ${p.version ?? ''} · connected to ${location.host}`;
+  $('#dk-version').textContent = `${t('Sara for {platform}', { platform: p.platform === 'mac' ? 'Mac' : 'Windows' })} ${p.version ?? ''} · ${t('connected to {host}', { host: location.host })}`;
 }
 if (window.SaraDesktop) {
   document.documentElement.classList.add('in-desktop');
@@ -8748,13 +9125,16 @@ async function renderServers() {
       const li = el('li');
       const who = el('span', '', `${x.emoji ? `${x.emoji} ` : ''}${x.name}`);
       const where = el('span', 'muted small', x.host ?? '');
+      if (x.host) where.title = x.host; // the whole address when a phone shortens it
       li.append(who, where);
       if (x.active) li.append(el('span', 'badge', t('In use')));
       else li.append(btn(t('Switch'), async () => {
         $('#servers-status').textContent = t('Switching…');
         await nativeServersApi().use(x.id);
       }, false));
-      li.append(btn(t('Rename'), () => {
+      // UI cleanup (wave 2): Rename and Remove wait behind ⋯, so each row has one clear button.
+      const box = el('span', 'tidy-overflow');
+      box.append(btn(t('Rename'), () => {
         serversRenaming = x.id;
         $('#servers-name').value = x.name;
         $('#servers-rename-row').hidden = false;
@@ -8765,8 +9145,15 @@ async function renderServers() {
         await nativeServersApi().remove(x.id);
         await renderServers();
       });
-      rm.classList.add('danger');
-      li.append(rm);
+      rm.classList.add('danger-text');
+      box.append(rm);
+      const more = el('button', 'ghost small tidy-more-btn', '⋯');
+      more.type = 'button';
+      more.title = t('More actions');
+      more.setAttribute('aria-label', t('More actions'));
+      more.dataset.moreId = `srv-${x.id}`;
+      overflowMenu(more, box);
+      li.append(more, box);
       return li;
     }),
   );
@@ -8851,7 +9238,7 @@ function renderTogetherLists() {
     }),
   );
   const cur = d.lists.find((l) => l.id === together.list);
-  $('#tog-new').placeholder = { music: 'e.g. Clair de Lune – Debussy', reading: 'e.g. The Hobbit – Tolkien', watch: 'e.g. The Bear' }[together.list] ?? '';
+  $('#tog-new').placeholder = ({ music: t('e.g. Clair de Lune – Debussy'), reading: t('e.g. The Hobbit – Tolkien'), watch: t('e.g. The Bear') })[together.list] ?? '';
   const items = d.items.filter((x) => x.list === together.list);
   $('#tog-items').replaceChildren(
     ...(items.length
@@ -8983,13 +9370,15 @@ async function loadTeam() {
           li.append(b);
           return li;
         })
-      : [el('li', 'muted small', t('No team tasks yet.'))]),
+      : [emptyState('👥', t('No team tasks yet.'), 'li')]),
   );
+  // With no tasks the list and the detail column are one empty card (UI cleanup, wave 2).
+  $('#team-tasks').closest('.team-cols')?.classList.toggle('is-empty', !d.tasks.length);
   // Helpers, the add form and limits.
   $('#team-helpers').replaceChildren(
     ...d.helpers.map((h) => {
       const c = el('div', 'card');
-      c.append(el('strong', '', `${h.emoji} ${h.name}`), el('span', 'muted', t(h.blurb)), el('small', 'muted', `${t('Model')}: ${h.modelLabel ?? t('default')} · ${t('Tools')}: ${h.tools.join(', ')}`));
+      c.append(el('strong', '', `${h.emoji} ${h.custom ? h.name : t(h.name)}`), el('span', 'muted', t(h.blurb)), el('small', 'muted', `${t('Model')}: ${h.modelLabel ?? t('default')} · ${t('Tools')}: ${h.tools.join(', ')}`));
       if (h.custom) {
         const del = el('button', 'ghost small del', '✕');
         del.type = 'button';
@@ -9026,12 +9415,16 @@ async function loadTeam() {
   }
   $('#team-l-min').value = String([15, 30, 60, 120].reduce((b, v) => (Math.abs(v - d.limits.minutes) < Math.abs(b - d.limits.minutes) ? v : b), 30));
   $('#team-l-tok').value = String([100000, 400000, 1000000, 3000000].reduce((b, v) => (Math.abs(v - d.limits.tokens) < Math.abs(b - d.limits.tokens) ? v : b), 400000));
-  $('#team-l-usd').value = d.limits.usd ? String(d.limits.usd) : '';
+  // Team budgets (wave 3): pick-lists; a limit saved earlier that isn't in the list is added to it.
+  const usdSel = $('#team-l-usd');
+  const usd = d.limits.usd ? String(d.limits.usd) : '';
+  if (usd && ![...usdSel.options].some((o) => o.value === usd)) usdSel.append(new Option(`$${usd}`, usd));
+  usdSel.value = usd;
   $('#team-dot').hidden = !d.tasks.some((tk) => tk.status === 'running' || tk.status === 'planning');
 }
 async function renderTeamDetail() {
   const box = $('#team-detail');
-  if (!team.current) return box.replaceChildren(el('p', 'muted small', t('Pick a task from the list, or start one above.')));
+  if (!team.current) return box.replaceChildren(...(team.data?.tasks.length ? [el('p', 'muted small', t('Pick a task from the list, or start one above.'))] : []));
   let v;
   try {
     v = await api(`/team/${team.current}`);
@@ -9043,7 +9436,7 @@ async function renderTeamDetail() {
   const names = new Map((team.data?.helpers ?? []).map((h) => [h.id, h]));
   names.set('lead', { name: state.persona?.name || $('.side-her')?.textContent || 'Sara', emoji: '⭐' });
   const head = el('div', 'head');
-  head.append(el('strong', '', `#${tk.id}`), chip(tk.status), el('small', 'muted', `${t('about')} ${tk.tokens.toLocaleString()} / ${tk.limits.tokens.toLocaleString()} ${t('tokens')}${tk.limits.usd ? ` · $${tk.limits.usd.toFixed(2)} ${t('budget')}` : ''} · ${tk.limits.minutes} ${t('min limit')}`));
+  head.append(el('strong', '', `#${tk.id}`), chip(tk.status), el('small', 'muted', `${t('Reading and writing used: about {pct}% of its limit', { pct: Math.min(100, Math.round((100 * tk.tokens) / Math.max(1, tk.limits.tokens))) })}${tk.limits.usd ? ` · ${t('spending limit {usd}', { usd: `$${tk.limits.usd.toFixed(2)}` })}` : ''} · ${t('time limit {n} min', { n: tk.limits.minutes })}`));
   // Phase 52: what it used (real counts where the models report them), and carrying on past a limit.
   if (tk.usage?.tokens) head.append(el('small', 'muted team-usage', usageWords(tk.usage)));
   if (tk.status === 'limit') head.append(continueButton(`/team/${tk.id}/continue`, () => void renderTeamDetail()));
@@ -9182,7 +9575,7 @@ $('#team-start').addEventListener('click', async () => {
   if (goal.length < 8) return ($('#team-msg').textContent = t('Describe the task in a sentence or two.'));
   $('#team-start').disabled = true;
   try {
-    // Phase 52: an optional budget for this task (tokens and/or dollars).
+    // Phase 52: an optional budget for this task (tokens and/or dollars), picked from two lists (empty = the usual limits).
     const limits = { ...($('#team-budget-tok').value ? { tokens: Number($('#team-budget-tok').value) } : {}), ...($('#team-budget-usd').value ? { usd: Number($('#team-budget-usd').value) } : {}) };
     const tk = await api('/team', { method: 'POST', body: { goal, ...(Object.keys(limits).length ? { limits } : {}), ...(state.currentId && state.conv?.mode === 'coding' ? { conversationId: state.currentId } : {}) } });
     $('#team-goal').value = '';

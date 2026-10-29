@@ -11,7 +11,8 @@
 // never as the owner's. The room's settings (members, turn style, banter) are in
 // <data>/groups.json, shared by every companion.
 import { randomUUID } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync } from 'node:fs';
+import { writeFileAtomic } from './fs-util.ts';
 import { join } from 'node:path';
 
 export const GROUP_CHANNEL = 'group';
@@ -78,9 +79,7 @@ export class GroupRooms {
   }
 
   #save(): void {
-    const tmp = `${this.#file}.tmp`;
-    writeFileSync(tmp, `${JSON.stringify({ rooms: this.#rooms }, null, 2)}\n`, { mode: 0o600 });
-    renameSync(tmp, this.#file);
+    writeFileAtomic(this.#file, `${JSON.stringify({ rooms: this.#rooms }, null, 2)}\n`, 0o600);
   }
 
   list(): GroupRoom[] {

@@ -7,6 +7,7 @@ import { type AppContext, resolveProvider } from './chat.ts';
 import { cosine, embedTexts } from './embeddings.ts';
 import type { ChatMessage, ProviderConfig } from './providers/types.ts';
 import type { RoutePurpose } from './settings.ts';
+import { isCloudModelName } from './model-names.ts';
 
 export interface JobInfo {
   id: RoutePurpose;
@@ -30,8 +31,9 @@ export const JOBS: JobInfo[] = [
   { id: 'adult', label: 'Adult', tip: 'Used when a conversation turns explicit (only with Adult mode on). Cloud models often refuse; pick one that allows it.', advanced: true },
 ];
 
-/** Ollama cloud models run on Ollama's servers, even through a local Ollama. */
-export const isCloudModel = (model: string): boolean => /(:|-)cloud\b/i.test(model);
+
+/** The one Ollama Cloud name rule (model-names.ts), under the name server.ts imports. */
+export const isCloudModel = isCloudModelName;
 
 const EMBED = /embed|bge-|\be5-|gte-|minilm|arctic-embed/i;
 const NOT_CHAT = /embed|bge-|\be5-|gte-|minilm|caption|whisper|tts|rerank|guard|image|imagine/i;
@@ -65,7 +67,7 @@ export async function connectedModels(app: AppContext): Promise<Candidate[]> {
         models = [];
       }
       if (p.defaultModel && !models.includes(p.defaultModel)) models.unshift(p.defaultModel);
-      for (const m of models) out.push({ providerId: p.id, provider: p.label, model: m, local: Boolean(p.local) && !isCloudModel(m) });
+      for (const m of models) out.push({ providerId: p.id, provider: p.label, model: m, local: Boolean(p.local) && !isCloudModelName(m) });
     }),
   );
   return out;
@@ -105,7 +107,7 @@ export function recommend(cands: Candidate[], current: { providerId?: string; mo
 
 /** Plain cost hint for a provider + model. */
 export function costHint(config: ProviderConfig, model: string): string {
-  if (isCloudModel(model)) return 'Ollama cloud: part of your Ollama plan';
+  if (isCloudModelName(model)) return 'Ollama cloud: part of your Ollama plan';
   if (config.local) return 'Free: runs on your own hardware';
   if (config.kind === 'chatgpt' || config.kind === 'claude-code' || config.kind === 'grok-cli') return 'Uses your subscription';
   return 'Paid per use (your API key)';

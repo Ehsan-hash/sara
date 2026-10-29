@@ -192,11 +192,6 @@ export async function portListeners(port: number, platform: NodeJS.Platform = pr
   return parseLsof(await run('/usr/sbin/lsof', ['-nP', `-iTCP:${port}`, '-sTCP:LISTEN', '-Fptn']));
 }
 
-/** Processes whose listener on `port` is reached by a connection to 127.0.0.1:port. */
-export async function listenerPids(port: number, platform: NodeJS.Platform = process.platform): Promise<Set<number>> {
-  return new Set((await portListeners(port, platform)).filter((l) => l.reaches).map((l) => l.pid));
-}
-
 /**
  * The decision, given the listeners and `root`'s process tree: a process in the tree must listen
  * where the proxy connects (127.0.0.1), and no process outside the tree may listen there too.

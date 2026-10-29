@@ -1,7 +1,8 @@
 // "Run Sara on this Mac" (Phase 46d, Phase 55): the first-launch choice (this Mac, or a Sara somewhere
-// else), the setup sheet, the Login Items approval step, the owner key, and the "Sara server" menu
-// (status, back up, data folder, how you reach her, stop / start, command line tool, uninstall, and
-// switching between this Mac and a Sara somewhere else). The work itself is in Server.swift.
+// else), the setup sheet, the Login Items approval step, the owner key, the "Your Saras" menu (the
+// saved servers) and the "Sara on this Mac" menu (status, back up, data folder, how you reach her,
+// stop / start, owner key, command line tool, uninstall, and switching between this Mac and a Sara
+// somewhere else). The work itself is in Server.swift.
 import AppKit
 import ServiceManagement
 import WebKit
@@ -181,7 +182,7 @@ final class SetupSheet: NSObject, NSTextFieldDelegate {
       accessNote.stringValue = ts.httpsReady || ts.dnsName == nil
         ? "Open her on any device signed in to your Tailscale with https://\(ts.dnsName ?? "this-mac")."
         : "One more thing after setup: turn on HTTPS for your tailnet (Sara tells you where)."
-    case .local: accessNote.stringValue = "Only this Mac can open her. You can change this later from the menu bar: Sara server → Change how you reach her…"
+    case .local: accessNote.stringValue = "Only this Mac can open her. You can change this later from the menu bar: Sara on this Mac → Change how you reach her…"
     case .lan: accessNote.stringValue = "Phones and computers on your home network can open her. No HTTPS: anyone on that network could read what you send. Fine at home on a network you trust."
     case .domain: accessNote.stringValue = "Your own web address needs a domain name, HTTPS and port forwarding on your router. The guide explains it; for now Sara is set up for this Mac only."
     }
@@ -271,11 +272,10 @@ extension AppDelegate {
 
   /// The two choices, worded as in the Windows installer.
   func showChoice() {
-    let card = "display:block;width:100%;text-align:left;margin:12px 0 0;padding:16px 18px;border-radius:12px;border:1px solid #3a3442;background:#24202b;color:#eee;font-size:16px;font-weight:600;cursor:pointer"
     let html = """
-    <!doctype html><html><head>\(pageStyle)</head><body><div class=c><h1>How do you want to use Sara?</h1><p>You can change this later from the menu bar.</p>
-    <button id=l style='\(card)'>Run Sara on this Mac<br><span style='font-weight:400;font-size:13px;color:#aaa'>Her server (where her memories and settings live) runs on this Mac while you're signed in. Your phone and other devices connect to it.</span></button>
-    <button id=r style='\(card)'>Connect to a Sara somewhere else<br><span style='font-weight:400;font-size:13px;color:#aaa'>For a Sara that already runs on another computer or server. You sign in with a code.</span></button>
+    <!doctype html><html><head>\(pageStyle)</head><body><div class=c>\(pageLogo)<h1>How do you want to use Sara?</h1><p>You can change this later from the menu bar.</p>
+    <button class=choice id=l>Run Sara on this Mac<span>Her server (where her memories and settings live) runs on this Mac while you're signed in. Your phone and other devices connect to it.</span></button>
+    <button class=choice id=r>Connect to a Sara somewhere else<span>For a Sara that already runs on another computer or server. You sign in with a code.</span></button>
     </div><script>
     document.getElementById('l').onclick=()=>webkit.messageHandlers.sara.postMessage({m:'chooseLocal'});
     document.getElementById('r').onclick=()=>webkit.messageHandlers.sara.postMessage({m:'chooseRemote'});</script></body></html>
@@ -363,19 +363,19 @@ extension AppDelegate {
   }
 
   func waitForServer(notes: [String], changing: Bool) {
-    web.loadHTMLString("<!doctype html><html><head>\(pageStyle)</head><body><div class=c><h1>Starting Sara…</h1><p>The first start takes a few seconds.</p></div></body></html>", baseURL: nil)
+    web.loadHTMLString(statusPage("Starting Sara…", "The first start takes a few seconds."), baseURL: nil)
     DispatchQueue.global().async { [weak self] in
       guard let self else { return }
       let up = self.local.waitHealthy(seconds: 60)
       let token = up && !changing ? self.local.waitToken(seconds: 15) : nil
       DispatchQueue.main.async {
         if !up {
-          self.alert("Sara didn't start", "She isn't answering on \(self.local.localURL). The reason is in her log: Sara server → Open data folder → logs (service.log and sara.log).")
+          self.alert("Sara didn't start", "She isn't answering on \(self.local.localURL). The reason is in her log: Sara on this Mac → Open data folder → logs (service.log and sara.log).")
           return
         }
         if !notes.isEmpty { self.alert(changing ? "Saved" : "Sara is set up", notes.joined(separator: "\n\n")) }
         if let token { self.showToken(token) { self.useLocalServer() } } else {
-          if !changing { self.alert("Sign in with your owner key", "Sara was set up on this Mac before, so she already has an owner key. Lost it? Sara server → New owner key…") }
+          if !changing { self.alert("Sign in with your owner key", "Sara was set up on this Mac before, so she already has an owner key. Lost it? Sara on this Mac → New owner key…") }
           self.useLocalServer()
         }
       }
@@ -429,7 +429,7 @@ extension AppDelegate {
 
   /// After an upgrade: "Updating Sara…" until the new server answers, then carry on.
   func waitForUpgrade(then: @escaping () -> Void) {
-    web.loadHTMLString("<!doctype html><html><head>\(pageStyle)</head><body><div class=c><h1>Updating Sara…</h1><p>She makes a backup first, then starts the new version. This takes a few seconds.</p></div></body></html>", baseURL: nil)
+    web.loadHTMLString(statusPage("Updating Sara…", "She makes a backup first, then starts the new version. This takes a few seconds."), baseURL: nil)
     DispatchQueue.global().async { [weak self] in
       guard let self else { return }
       let end = Date().addingTimeInterval(90)
@@ -442,10 +442,10 @@ extension AppDelegate {
     }
   }
 
-  // MARK: the "Sara server" menu
+  // MARK: the "Your Saras" and "Sara on this Mac" menus
 
   func refreshServerState() {
-    guard local.active else { serverState = server.map { "Connected to \($0)" } ?? "Not set up on this Mac"; return }
+    guard local.active else { serverState = local.switchedOff ? "Switched off on this Mac" : "Not set up on this Mac"; return }
     DispatchQueue.global().async { [weak self] in
       guard let self else { return }
       let st = self.local.agent.status
@@ -459,15 +459,21 @@ extension AppDelegate {
     }
   }
 
-  func serverMenu() -> NSMenu {
+  /// Your Saras ▸ the saved servers (✓ the one in use), Add a Sara…, Remove ….
+  func sarasMenu() -> NSMenu {
+    let m = NSMenu()
+    m.autoenablesItems = false
+    addServerItems(to: m)
+    return m
+  }
+
+  /// Sara on this Mac ▸ her server here: how she's doing, and everything you can do with it.
+  func thisMacMenu() -> NSMenu {
     let m = NSMenu()
     m.autoenablesItems = false
     let status = NSMenuItem(title: serverState, action: nil, keyEquivalent: "")
     status.isEnabled = false
     m.addItem(status)
-    m.addItem(.separator())
-    // Phase 68: the saved servers (✓ the one in use), Add a Sara…, Remove.
-    addServerItems(to: m)
     m.addItem(.separator())
     if !local.active {
       // Connected to a Sara somewhere else (or nothing chosen yet).
@@ -481,14 +487,15 @@ extension AppDelegate {
       return m
     }
     if !isLocalServer { m.addItem(withTitle: "Open this Mac's Sara", action: #selector(openLocalFromMenu), keyEquivalent: "") }
+    m.addItem(withTitle: local.stopped ? "Start" : "Stop", action: #selector(toggleServer), keyEquivalent: "")
     m.addItem(withTitle: "Back up now", action: #selector(backupNow), keyEquivalent: "")
     m.addItem(withTitle: "Open data folder", action: #selector(openDataFolder), keyEquivalent: "")
+    m.addItem(.separator())
     m.addItem(withTitle: "Change how you reach her…", action: #selector(changeAccess), keyEquivalent: "")
-    m.addItem(withTitle: local.stopped ? "Start" : "Stop", action: #selector(toggleServer), keyEquivalent: "")
     m.addItem(withTitle: "New owner key…", action: #selector(newOwnerKey), keyEquivalent: "")
+    m.addItem(withTitle: FileManager.default.fileExists(atPath: local.cliPath) ? "Command line tool installed (sara)" : "Install command line tool…", action: #selector(installCLI), keyEquivalent: "")
     m.addItem(.separator())
     m.addItem(withTitle: "Connect to a Sara somewhere else instead…", action: #selector(switchToElsewhere), keyEquivalent: "")
-    m.addItem(withTitle: FileManager.default.fileExists(atPath: local.cliPath) ? "Command line tool installed (sara)" : "Install command line tool", action: #selector(installCLI), keyEquivalent: "")
     m.addItem(withTitle: "Uninstall…", action: #selector(uninstallServer), keyEquivalent: "")
     for i in m.items where i.action != nil { i.target = self }
     return m
@@ -512,12 +519,12 @@ extension AppDelegate {
     showWindow()
     let a = NSAlert()
     a.messageText = "Connect to a Sara somewhere else instead?"
-    a.informativeText = "Sara on this Mac stops and won't start when you sign in\(local.readEnv()["SARA_MAC_TS_SERVE"] == "1" ? ", and her Tailscale address is removed" : ""). Then you type the address of the other Sara and sign in there with a code.\n\nHer data stays in ~/Library/Application Support/Sara until you uninstall with sara uninstall --delete-data (or Sara server → Uninstall… → Also delete her data). Sara server → Set up Sara on this Mac… brings her back as she was."
+    a.informativeText = "Sara on this Mac stops and won't start when you sign in\(local.readEnv()["SARA_MAC_TS_SERVE"] == "1" ? ", and her Tailscale address is removed" : ""). Then you type the address of the other Sara and sign in there with a code.\n\nHer data stays in ~/Library/Application Support/Sara until you uninstall with sara uninstall --delete-data (or Sara on this Mac → Uninstall… → Also delete her data). Sara on this Mac → Set up Sara on this Mac… brings her back as she was."
     a.addButton(withTitle: "Stop her here and connect elsewhere")
     a.addButton(withTitle: "Cancel")
     a.alertStyle = .warning
     guard a.runModal() == .alertFirstButtonReturn else { return }
-    web.loadHTMLString("<!doctype html><html><head>\(pageStyle)</head><body><div class=c><h1>Stopping Sara on this Mac…</h1></div></body></html>", baseURL: nil)
+    web.loadHTMLString(statusPage("Stopping Sara on this Mac…"), baseURL: nil)
     DispatchQueue.global().async { [weak self] in
       guard let self else { return }
       self.local.switchOff()
@@ -589,7 +596,7 @@ extension AppDelegate {
     a.beginSheetModal(for: window) { [weak self] r in
       guard let self, r == .alertFirstButtonReturn else { return }
       let delete = box.state == .on
-      self.web.loadHTMLString("<!doctype html><html><head>\(pageStyle)</head><body><div class=c><h1>Uninstalling…</h1><p>Making a last backup first.</p></div></body></html>", baseURL: nil)
+      self.web.loadHTMLString(statusPage("Uninstalling…", "Making a last backup first."), baseURL: nil)
       DispatchQueue.global().async {
         let notes = self.local.uninstall(deleteData: delete, backupDir: NSHomeDirectory() + "/Desktop")
         DispatchQueue.main.async {

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The web app's colours (web/style.css), for the app's own screens. -->
+<resources>
+    <color name="sara_bg">#121016</color>
+    <color name="sara_panel">#1B1820</color>
+    <color name="sara_panel_2">#241F2B</color>
+    <color name="sara_text">#EEE9F3</color>
+    <color name="sara_muted">#A49CAE</color>
+    <color name="sara_accent">#E0789A</color>
+    <color name="sara_border">#322B3A</color>
+    <color name="sara_error">#FF8080</color>
+    <color name="sara_on_accent">#1A0F14</color>
+</resources>

@@ -57,14 +57,14 @@ public class LiveInbox extends Service {
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
         NotificationManager nm = getSystemService(NotificationManager.class);
-        NotificationChannel ch = new NotificationChannel(CHANNEL, "Connection", NotificationManager.IMPORTANCE_MIN);
+        NotificationChannel ch = new NotificationChannel(CHANNEL, getString(R.string.channel_live), NotificationManager.IMPORTANCE_MIN);
         ch.setShowBadge(false);
         if (nm != null) nm.createNotificationChannel(ch);
         Notification n = new Notification.Builder(this, CHANNEL)
                 .setSmallIcon(R.drawable.ic_notify)
                 .setColor(Notify.COLOR)
-                .setContentTitle("Instant notifications are on")
-                .setContentText("Tap to open. Turn off in Settings → Phone and notifications.")
+                .setContentTitle(getString(R.string.live_title))
+                .setContentText(getString(R.string.live_text))
                 .setOngoing(true)
                 .setGroup("connection")
                 .setContentIntent(PendingIntent.getActivity(this, 0, new Intent(this, MainActivity.class), PendingIntent.FLAG_IMMUTABLE))

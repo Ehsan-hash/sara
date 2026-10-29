@@ -210,7 +210,8 @@ export function plain(nodes) {
 }
 
 /**
- * Builds DOM nodes. `opts.onCopy(text, button)` is called by a code block's Copy button.
+ * Builds DOM nodes. `opts.onCopy(text, button)` is called by a code block's Copy button
+ * (`opts.copyLabel`: its label in the app language).
  * @returns {DocumentFragment}
  */
 export function toDom(nodes, doc = document, opts = {}) {
@@ -281,7 +282,7 @@ function node(n, doc, opts) {
         const btn = doc.createElement('button');
         btn.type = 'button';
         btn.className = 'ghost small copy-code';
-        btn.textContent = 'Copy';
+        btn.textContent = opts.copyLabel ?? 'Copy';
         btn.addEventListener?.('click', () => opts.onCopy?.(n.text, btn));
         head.append(btn);
       }

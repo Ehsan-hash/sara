@@ -24,11 +24,19 @@
 #include <ctime>
 #include "WebView2.h"
 #include "resource.h"
+#include "page-logo.h"
 
 using Microsoft::WRL::Callback;
 using Microsoft::WRL::ComPtr;
 
-static const wchar_t* kVersion = L"0.68.0";
+// The version is package.json's (CMakeLists.txt passes it in), so Settings → This computer shows
+// the release it came with.
+#ifndef SARA_APP_VERSION
+#define SARA_APP_VERSION "0.0.0-dev"
+#endif
+#define SARA_WIDEN2(x) L##x
+#define SARA_WIDEN(x) SARA_WIDEN2(x)
+static const wchar_t* kVersion = SARA_WIDEN(SARA_APP_VERSION);
 static const wchar_t* kWindowClass = L"SaraDesktopWindow";
 static const UINT WM_APP_TRAY = WM_APP + 1;
 static const UINT WM_APP_SHOW = WM_APP + 2;
@@ -37,7 +45,7 @@ static const UINT WM_APP_SWITCH = WM_APP + 4;   // switch to g_switchTo (from th
 static const UINT WM_APP_REMOVED = WM_APP + 5;  // finish removing a server (sign-in cleared)
 static const UINT kTrayId = 1;
 static const UINT_PTR kRemoveTimer = 7;
-enum MenuId { ID_OPEN = 100, ID_LOGIN, ID_QUIT, ID_CHANGE, ID_SERVER0 = 200 };
+enum MenuId { ID_OPEN = 100, ID_LOGIN, ID_QUIT, ID_CHANGE, ID_SETTINGS, ID_HELP, ID_SERVER0 = 200 };
 
 static HINSTANCE g_inst;
 static HWND g_wnd;
@@ -555,32 +563,67 @@ static void addTray() {
   if (!Shell_NotifyIconW(NIM_ADD, &g_tray)) logLine(L"tray icon failed (" + std::to_wstring(GetLastError()) + L")");
 }
 
+/** A saved server as the tray menu and pages show it: "🌸 Sara (host)", or just the host. */
+static std::wstring serverLabel(const Profile& p) {
+  std::wstring host = hostOfUrl(p.url);
+  std::wstring label = (p.emoji.empty() ? L"" : p.emoji + L" ") + p.name;
+  return lower(p.name) == lower(host) ? label : label + L"  (" + host + L")";
+}
+
+/** The tray menu, the same order as the Mac's menu bar menu:
+ *    Open Sara · Settings… | Your Saras ▸ | Start with Windows · Help | Quit Sara */
 static void trayMenu() {
   HMENU m = CreatePopupMenu();
+  UINT needsServer = g_server.empty() ? MF_GRAYED : 0;
   AppendMenuW(m, MF_STRING, ID_OPEN, L"Open Sara");
-  AppendMenuW(m, MF_STRING | (startAtLogin() ? MF_CHECKED : 0), ID_LOGIN, L"Start with Windows");
-  // Phase 68: the saved servers (✓ the one in use); switching keeps every sign-in.
+  AppendMenuW(m, MF_STRING | needsServer, ID_SETTINGS, L"Settings…");
   AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
+  // Phase 68: the saved servers (✓ the one in use); switching keeps every sign-in.
+  HMENU saras = CreatePopupMenu();
   auto list = profiles();
   for (size_t i = 0; i < list.size() && i < 50; i++)
-    AppendMenuW(m, MF_STRING | (list[i].id == g_profile ? MF_CHECKED : 0), ID_SERVER0 + i, ((list[i].emoji.empty() ? L"" : list[i].emoji + L" ") + list[i].name + L"  (" + hostOfUrl(list[i].url) + L")").c_str());
-  AppendMenuW(m, MF_STRING, ID_CHANGE, L"Add a Sara…");
+    AppendMenuW(saras, MF_STRING | (list[i].id == g_profile ? MF_CHECKED : 0), ID_SERVER0 + i, serverLabel(list[i]).c_str());
+  if (!list.empty()) AppendMenuW(saras, MF_SEPARATOR, 0, nullptr);
+  AppendMenuW(saras, MF_STRING, ID_CHANGE, L"Add a Sara…");
+  AppendMenuW(m, MF_POPUP, (UINT_PTR)saras, L"Your Saras");
+  AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
+  AppendMenuW(m, MF_STRING | (startAtLogin() ? MF_CHECKED : 0), ID_LOGIN, L"Start with Windows");
+  AppendMenuW(m, MF_STRING | needsServer, ID_HELP, L"Help");
   AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
   AppendMenuW(m, MF_STRING, ID_QUIT, L"Quit Sara");
+  SetMenuDefaultItem(m, ID_OPEN, FALSE);  // bold: what a click on the icon does
   POINT pt;
   GetCursorPos(&pt);
   SetForegroundWindow(g_wnd);
   TrackPopupMenu(m, TPM_RIGHTBUTTON, pt.x, pt.y, 0, g_wnd, nullptr);
-  DestroyMenu(m);
+  PostMessageW(g_wnd, WM_NULL, 0, 0);  // so the menu closes when you click elsewhere
+  DestroyMenu(m);  // also destroys the "Your Saras" submenu
 }
 
 // ---------- pages shown before the server is known or when it can't be reached ----------
-static const wchar_t* kPageStyle =
-    L"<meta name=viewport content='width=device-width'><style>body{margin:0;font-family:'Segoe UI',system-ui,sans-serif;background:#121016;color:#eee;"
-    L"display:flex;align-items:center;justify-content:center;height:100vh}.c{max-width:420px;padding:28px;background:#1c1922;border-radius:16px;box-shadow:0 10px 40px #0006}"
-    L"h1{font-size:22px;margin:0 0 8px}p{color:#aaa;line-height:1.45;font-size:14px}input{width:100%;box-sizing:border-box;padding:10px 12px;border-radius:9px;"
-    L"border:1px solid #444;background:#0f0d12;color:#eee;font-size:15px}button{margin-top:14px;padding:10px 18px;border:0;border-radius:9px;background:#c76b98;color:#fff;"
-    L"font-size:15px;cursor:pointer}button.g{background:none;border:1px solid #555;color:#ccc;margin-left:8px}#e{color:#f88;font-size:13px;min-height:1em}</style>";
+// The app's own pages (welcome, add a Sara, can't reach): the web app's colours (web/style.css),
+// light or dark like Windows. The same look as the Mac app's pages (desktop/mac/Sources/main.swift).
+static const wchar_t* kPageStyle = LR"CSS(<meta name=viewport content='width=device-width'><style>
+:root{--bg:#121016;--panel:#1b1820;--panel-2:#241f2b;--text:#eee9f3;--muted:#a49cae;--accent:#e0789a;--accent-2:#f3a6bf;--border:#322b3a;--error:#ff8080;--on-accent:#1a0f14;color-scheme:dark}
+@media (prefers-color-scheme:light){:root{--bg:#faf7fb;--panel:#f1ecf4;--panel-2:#e8e1ed;--text:#241c2b;--muted:#6b6274;--accent:#c94f78;--accent-2:#a83d61;--border:#d9d0e0;--error:#c0303a;--on-accent:#fff;color-scheme:light}}
+*{box-sizing:border-box}html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--text);font:15px/1.5 'Segoe UI Variable Text','Segoe UI',system-ui,sans-serif;display:grid;place-items:center;padding:24px;-webkit-user-select:none;user-select:none}
+.c{width:100%;max-width:440px;background:var(--panel);border:1px solid var(--border);border-radius:16px;padding:30px 30px 26px;box-shadow:0 12px 40px #0003}
+.logo{display:block;width:64px;height:64px;border-radius:50%;margin:0 0 18px;background:var(--panel-2)}
+h1{font-size:22px;line-height:1.25;margin:0 0 8px;font-weight:650}
+p{color:var(--muted);margin:0 0 12px}b{color:var(--text);font-weight:600}
+label{display:block;font-weight:600;font-size:14px;margin:18px 0 6px}
+input{width:100%;font:inherit;padding:10px 12px;border-radius:10px;border:1px solid var(--border);background:var(--panel-2);color:var(--text);-webkit-user-select:text;user-select:text}
+input:focus{outline:2px solid var(--accent);outline-offset:-1px}
+.row{display:flex;flex-wrap:wrap;gap:8px;margin-top:18px}
+button{font:inherit;font-weight:600;padding:9px 18px;border:0;border-radius:10px;background:var(--accent);color:var(--on-accent);cursor:pointer}
+button:hover{background:var(--accent-2)}button:focus-visible{outline:2px solid var(--text);outline-offset:2px}
+button.g{background:transparent;color:var(--text);border:1px solid var(--border);font-weight:500}button.g:hover{border-color:var(--muted)}
+.e{color:var(--error);font-size:14px;margin:8px 0 0}.e:empty{display:none}
+.small{font-size:13px}.sep{border-top:1px solid var(--border);margin:22px 0 0;padding-top:14px}.sep p{margin:0 0 8px}
+</style>)CSS";
+/** Her picture at the top of these pages (page-logo.h is made by scripts/make-app-icons.py). */
+static std::wstring logoHtml() { return std::wstring(L"<img class=logo alt='' src='") + kLogoDataUrl + L"'>"; }
 
 static std::wstring htmlEscape(const std::wstring& s) {
   std::wstring o;
@@ -595,23 +638,26 @@ static std::wstring htmlEscape(const std::wstring& s) {
   return o;
 }
 
-static void showSetup(const std::wstring& error = L"") {
+static void showSetup(const std::wstring& error = L"", const std::wstring& typed = L"") {
   std::wstring port = localPort();
   // Phase 68: with a Sara already here, this page adds another one; Back returns to her.
   Profile here = g_profile.empty() ? Profile{} : loadProfile(g_profile);
   bool adding = !here.url.empty();
-  std::wstring html = std::wstring(L"<!doctype html><html><head>") + kPageStyle +
-                      L"</head><body><div class=c><h1>" + (adding ? L"Add a Sara" : L"Welcome to Sara") + L"</h1><p>Type the address of " + (adding ? L"another" : L"your") + L" Sara (the one you open in a web browser, "
-                      L"for example <b>sara.example.com</b>).</p><input id=u autofocus placeholder='sara.example.com' value='" +
-                      htmlEscape(adding ? L"" : getPref(L"lastServer")) +
-                      L"'><p id=e>" + htmlEscape(error) +
-                      L"</p><button id=b>Continue</button><p>Next you sign in with a code from Settings → Devices and sign-in on a device where "
-                      L"you're already signed in.</p>" +
-                      (port.empty() ? L"" : L"<p><a href='#' id=l style='color:#e3a3c3'>Or use Sara on this computer</a></p>") +
-                      (adding ? L"<p>Your other Saras stay signed in.</p><button class=g id=k>Back to " + htmlEscape(here.name) + L"</button>" : L"") +
-                      L"</div><script>const k=document.getElementById('k');if(k)k.onclick=()=>chrome.webview.postMessage({m:'retry'});const go=()=>chrome.webview.postMessage({m:'setServer',url:document.getElementById('u').value});"
-                      L"const l=document.getElementById('l');if(l)l.onclick=(e)=>{e.preventDefault();chrome.webview.postMessage({m:'useLocal'})};"
-                      L"document.getElementById('b').onclick=go;document.getElementById('u').onkeydown=e=>e.key==='Enter'&&go();</script></body></html>";
+  std::wstring html = std::wstring(L"<!doctype html><html><head>") + kPageStyle + L"</head><body><div class=c>" + logoHtml() + L"<h1>" +
+                      (adding ? L"Add a Sara" : L"Connect to your Sara") + L"</h1><p>" +
+                      (adding ? L"Type the address of another Sara. Your other Saras stay signed in."
+                              : L"Type the address you open Sara at in a web browser.") +
+                      L"</p><label for=u>Address</label><input id=u autofocus spellcheck=false placeholder='sara.example.com' value='" +
+                      htmlEscape(!typed.empty() ? typed : adding ? L"" : getPref(L"lastServer")) + L"'><p class=e id=e role=alert>" + htmlEscape(error) +
+                      L"</p><div class=row><button id=b>Continue</button>" +
+                      (adding ? L"<button class=g id=k>Back to " + htmlEscape(here.name) + L"</button>" : L"") +
+                      L"</div><div class=sep><p class=small>Next you sign in with a code: on a device where you're signed in, open "
+                      L"Settings → Data &amp; health → Devices and sign-in → <b>Add a phone or computer</b>.</p>" +
+                      (port.empty() ? L"" : L"<button class=g id=l>Use the Sara on this computer</button>") +
+                      L"</div></div><script>const $=(i)=>document.getElementById(i);const k=$('k');if(k)k.onclick=()=>chrome.webview.postMessage({m:'retry'});"
+                      L"const go=()=>chrome.webview.postMessage({m:'setServer',url:$('u').value});"
+                      L"const l=$('l');if(l)l.onclick=()=>chrome.webview.postMessage({m:'useLocal'});"
+                      L"$('b').onclick=go;$('u').onkeydown=e=>e.key==='Enter'&&go();</script></body></html>";
   if (g_web) g_web->NavigateToString(html.c_str());
 }
 
@@ -624,14 +670,15 @@ static bool serverIsLocal() {
 static void showOffline() {
   std::wstring why = serverIsLocal()
       ? L"She runs on this computer and may still be starting. If she doesn't answer in a minute, open a terminal and run <b>sara status</b> (and <b>sara logs</b>)."
-      : L"Check your internet connection, that the address is right, and that Sara is running there.";
+      : L"Check your internet connection, that the address is right, and that Sara is running there. This page tries again by itself.";
   // Phase 68: the other saved Saras are one click away.
   std::wstring others;
   for (auto& p : profiles())
     if (p.id != g_profile) others += L"<button class=g data-id='" + htmlEscape(p.id) + L"'>" + htmlEscape(p.name) + L"</button>";
-  std::wstring html = std::wstring(L"<!doctype html><html><head>") + kPageStyle + L"</head><body><div class=c><h1>Can't reach your Sara</h1><p>Sara at <b>" +
-                      htmlEscape(g_server) + L"</b> isn't answering.</p><p>" + why +
-                      L"</p><button id=r>Try again</button><button class=g id=s>Add a Sara</button>" + others +
+  std::wstring html = std::wstring(L"<!doctype html><html><head>") + kPageStyle + L"</head><body><div class=c>" + logoHtml() +
+                      L"<h1>Can't reach your Sara</h1><p><b>" + htmlEscape(g_server) + L"</b> isn't answering.</p><p>" + why +
+                      L"</p><div class=row><button id=r>Try again</button><button class=g id=s>Add a Sara</button></div>" +
+                      (others.empty() ? L"" : L"<div class=sep><p class=small>Your other Saras</p><div class=row style='margin-top:0'>" + others + L"</div></div>") +
                       L"</div><script>document.getElementById('r').onclick=()=>chrome.webview.postMessage({m:'retry'});"
                       L"for(const b of document.querySelectorAll('[data-id]'))b.onclick=()=>chrome.webview.postMessage({m:'useServer',id:b.dataset.id});"
                       L"document.getElementById('s').onclick=()=>chrome.webview.postMessage({m:'changeServer'});setTimeout(()=>chrome.webview.postMessage({m:'retry'}),30000);</script></body></html>";
@@ -648,6 +695,19 @@ static void changeServerFromMenu() {
 static void openServer(const std::wstring& path = L"/") {
   if (g_server.empty()) return showSetup();
   if (g_web) g_web->Navigate((g_server + path).c_str());
+}
+
+/** Tray menu → Settings… / Help: opens that view of the web app (its #view= links). */
+static void openView(const wchar_t* view) {
+  showWindow();
+  if (g_server.empty() || !g_web) return;
+  LPWSTR src = nullptr;
+  g_web->get_Source(&src);
+  bool onServer = src && sameOrigin(src);
+  CoTaskMemFree(src);
+  // replaceState first: setting the hash it already has wouldn't open the view again.
+  if (onServer) g_web->ExecuteScript((std::wstring(L"history.replaceState(null,'',location.pathname);location.hash='view=") + view + L"'").c_str(), nullptr);
+  else openServer(std::wstring(L"/#view=") + view);
 }
 
 static void createController();
@@ -765,7 +825,7 @@ static void onMessage(const std::wstring& json, const std::wstring& source) {
   // The local setup/offline pages may only set the server, retry or change server.
   if (kind == L"setServer") {
     std::wstring o = originOf(m[L"url"]);
-    if (o.empty()) return showSetup(L"That doesn't look like a web address. Try something like sara.example.com.");
+    if (o.empty()) return showSetup(L"That doesn't look like a web address. Try something like sara.example.com.", m[L"url"]);
     setPref(L"lastServer", o);
     // Phase 68: a saved server again, or a new one next to the others (nobody is signed out).
     return postSwitch(profileFor(o), L"/pair");
@@ -1062,6 +1122,8 @@ static LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
       switch (LOWORD(wp)) {
         case ID_OPEN: showWindow(); break;
         case ID_LOGIN: setStartAtLogin(!startAtLogin()); break;
+        case ID_SETTINGS: openView(L"settings"); break;
+        case ID_HELP: openView(L"help"); break;
         case ID_CHANGE: changeServerFromMenu(); break;
         default:
           if (LOWORD(wp) >= ID_SERVER0 && LOWORD(wp) < ID_SERVER0 + 50) {

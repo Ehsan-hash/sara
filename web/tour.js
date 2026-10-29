@@ -81,7 +81,7 @@ export async function startTour(steps, t = (s) => s, onEnd = () => {}) {
     text.textContent = t(step.text);
     count.textContent = `${state.i + 1} / ${steps.length}`;
     back.hidden = state.i === 0;
-    next.textContent = t(state.i === steps.length - 1 ? 'Done' : 'Next');
+    next.textContent = state.i === steps.length - 1 ? t('Done') : t('Next');
     place();
     next.focus({ preventScroll: true });
   };

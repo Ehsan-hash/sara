@@ -29,11 +29,11 @@ public class ReplyReceiver extends BroadcastReceiver {
             try {
                 JSONObject body = new JSONObject().put("content", text.toString()).put("background", true);
                 Net.Response r = Net.postJson(c, server + "/api/conversations/" + Uri.encode(conv) + "/messages", body.toString());
-                if (r.status == 409) problem = "She's still answering. Open the app to see.";
-                else if (r.status == 401) problem = "Open the app and sign in again.";
-                else if (r.status != 202) problem = "Couldn't send. Open the app to try again.";
+                if (r.status == 409) problem = c.getString(R.string.reply_busy);
+                else if (r.status == 401) problem = c.getString(R.string.reply_sign_in);
+                else if (r.status != 202) problem = c.getString(R.string.reply_failed);
             } catch (Exception e) {
-                problem = "Couldn't reach your server.";
+                problem = c.getString(R.string.reply_unreachable);
             }
             Notify.replied(c, id, name == null ? "Sara" : name, text, problem);
             pending.finish();

@@ -7,7 +7,8 @@
 // policy (models, limits), the route allowlist for member spaces, and the small registries that
 // sign-in needs before anyone is known (pairing codes, passkey challenges).
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
-import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from 'node:fs';
+import { writeFileAtomic } from './fs-util.ts';
 import type { IncomingMessage } from 'node:http';
 import { join } from 'node:path';
 import type { AppContext } from './chat.ts';
@@ -145,9 +146,7 @@ export class HouseholdStore {
   }
 
   #save(): void {
-    const tmp = `${this.#path}.tmp`;
-    writeFileSync(tmp, `${JSON.stringify(this.#file, null, 2)}\n`, { mode: 0o600 });
-    renameSync(tmp, this.#path);
+    writeFileAtomic(this.#path, `${JSON.stringify(this.#file, null, 2)}\n`, 0o600);
   }
 
   /** Members' folder (validated id; never joined from a request without this check). */
@@ -500,7 +499,7 @@ export const MEMBER_ROUTES: ReadonlySet<string> = new Set([
   // talking
   'conversations', 'live', 'events', 'approvals', 'uploads', 'video', 'calls', 'voice', 'tags', 'find', 'reports',
   // her
-  'persona', 'look', 'sara', 'character', 'gallery', 'companions', 'groups', 'adult', 'identity', 'photos',
+  'persona', 'look', 'sara', 'character', 'gallery', 'companions', 'groups', 'adult', 'photos',
   // memory and life
   'memories', 'memory', 'scrapbook', 'moments', 'story', 'together',
   // planner and days

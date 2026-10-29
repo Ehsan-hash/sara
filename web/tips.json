@@ -806,7 +806,7 @@
       "memory"
     ],
     "cs-provider": [
-      "Use a different provider just for this conversation. Empty: the usual one.",
+      "Use a different model service (one you added in Settings → Models) just for this conversation. Empty: the usual one.",
       "brain"
     ],
     "cs-model": [
@@ -938,15 +938,15 @@
       "history"
     ],
     "team-budget-tok": [
-      "Optional token budget for this one task. It stops cleanly when the helpers have used this many tokens and offers Continue with more budget. Empty = the default limit below.",
+      "How much the helpers may read and write for this one task. When it's used up, the task stops cleanly, keeps its work and offers Continue with more budget. The usual amount is set under Helpers and limits.",
       "usage"
     ],
     "team-budget-usd": [
-      "Optional dollar budget for this one task, estimated from the prices in Settings → Data & health → Usage and costs. Local and subscription models count as $0. Empty = none.",
+      "The most this one task may cost on paid models, estimated from the prices in Settings → Data & health → Usage and costs. Models on your own computer and subscriptions count as $0. The usual limit is set under Helpers and limits.",
       "usage"
     ],
     "team-l-usd": [
-      "A default dollar budget for every team task, estimated from your price table. Empty = no dollar budget (the token limit still applies).",
+      "The most each team task may cost on paid models, estimated from your price table. No spending limit = only the reading-and-writing and time limits apply.",
       "usage"
     ],
     "usage-range": [

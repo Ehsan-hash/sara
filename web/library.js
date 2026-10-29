@@ -4,6 +4,7 @@
 // a long document shows its reading progress (Pause / Resume / Cancel), its contents with section
 // summaries, and opens at a page (the links in her answers: /#view=library:<id>:<page>).
 import { serverText, t } from './naming.js';
+import { emptyState } from './tidy.js';
 
 const $ = (sel) => document.querySelector(sel);
 function el(tag, cls, text) {
@@ -171,8 +172,16 @@ async function loadList() {
     return;
   }
   const c = r.counts;
-  const meaning = r.meaning ? (r.meaning.error ? ` ${t('Meaning search: not answering')} (${r.meaning.error.slice(0, 80)}).` : r.meaning.total ? ` ${t('Meaning search on')} (${Math.min(r.meaning.indexed, r.meaning.total)} ${t('of')} ${r.meaning.total} ${t('passages ready')}).` : ` ${t('Meaning search on.')}`) : ` ${t('Finds things by their words (turn on Meaning search in Settings → Which model does what to also find them by meaning).')}`;
-  $('#lib-summary').textContent = c.docs ? `${c.docs} ${c.docs === 1 ? t('document') : t('documents')}, ${sizeText(c.bytes)}.${meaning}` : t('Nothing here yet. Add a document to get started.');
+  // Wave 3: plain words (what it does for you, then where to turn it on), no "meaning search" jargon up front.
+  const meaning = r.meaning
+    ? r.meaning.error
+      ? ` ${t('Finding things by what they mean is not working right now ({error}).', { error: r.meaning.error.slice(0, 80) })}`
+      : r.meaning.total
+        ? ` ${t('She also finds things by what they mean, even in other words (ready: {ready} of {total} parts).', { ready: Math.min(r.meaning.indexed, r.meaning.total), total: r.meaning.total })}`
+        : ` ${t('She also finds things by what they mean, even in other words.')}`
+    : ` ${t('She finds things by the words in them. To also find them when you put it in other words, turn on Meaning search in Settings → Which model does what → More jobs.')}`;
+  // UI cleanup (wave 2): an empty library shows the shared empty card instead of a line of text.
+  $('#lib-summary').textContent = c.docs ? `${t('Documents: {n} ({size}).', { n: c.docs, size: sizeText(c.bytes) })}${meaning}` : '';
   $('#lib-shared-row').hidden = !(window.saraCompanionCount?.() > 1);
   $('#lib-shared').checked = Boolean(r.shared);
   $('#lib-list').replaceChildren(
@@ -189,6 +198,7 @@ async function loadList() {
       return card;
     }),
   );
+  if (!c.docs) $('#lib-list').replaceChildren(emptyState('📚', t('Nothing here yet. Add a document to get started.')));
   // Still reading or learning: look again shortly.
   if (r.docs.some((d) => ['waiting', 'reading'].includes(d.status) || ['waiting', 'learning'].includes(d.learn) || (jobRunning(d.job) && !d.job.paused && !d.job.needs))) scheduleRefresh();
 }

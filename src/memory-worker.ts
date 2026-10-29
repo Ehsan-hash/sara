@@ -54,11 +54,17 @@ export function memorySettings(app: AppContext): MemorySettings {
   return s;
 }
 
-export function localDate(iso: string, timeZone?: string): string {
+/**
+ * The local day (YYYY-MM-DD) of a time in the owner's time zone. The one local-day formatter
+ * (calls, daysKnown, notes, briefings): a zone this Node doesn't know (a hand-edited or restored
+ * settings.json, a zone dropped by a newer ICU) falls back to the UTC day instead of throwing.
+ */
+export function localDate(when: string | Date, timeZone?: string): string {
   try {
-    return new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(iso));
+    return new Intl.DateTimeFormat('en-CA', { timeZone: timeZone || undefined, year: 'numeric', month: '2-digit', day: '2-digit' }).format(typeof when === 'string' ? new Date(when) : when);
   } catch {
-    return iso.slice(0, 10);
+    if (typeof when === 'string') return when.slice(0, 10);
+    return Number.isNaN(when.getTime()) ? '' : when.toISOString().slice(0, 10);
   }
 }
 

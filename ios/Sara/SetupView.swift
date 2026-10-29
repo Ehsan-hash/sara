@@ -17,9 +17,9 @@ struct SetupView: View {
                     .frame(width: 84, height: 84)
                     .clipShape(Circle())
                     .padding(.top, 36)
-                Text("Connect to your companion")
+                Text(model.server == nil || model.server == AppModel.demoServer ? "Connect to your Sara" : "Add a Sara")
                     .font(.title.bold())
-                Text("Type your server's address, like sara.example.com or 192.168.1.20:7860.")
+                Text(model.server == nil || model.server == AppModel.demoServer ? "Type the address you open Sara at in a web browser, for example sara.example.com or 192.168.1.20:7860." : "Type the address of another Sara. Your other Saras stay signed in.")
                     .foregroundStyle(.secondary)
                 TextField("Server address", text: $address)
                     .textContentType(.URL)
@@ -42,7 +42,7 @@ struct SetupView: View {
                     .padding(12)
                     .background(RoundedRectangle(cornerRadius: 12).fill(Color.white.opacity(0.07)))
                     .accessibilityIdentifier("code")
-                Text("Get a code in Sara on your computer: Settings → Devices and sign-in → Add a phone or computer. Without one, you sign in with your owner token.")
+                Text("Get a code on a device where you're signed in: Settings → Data & health → Devices and sign-in → Add a phone or computer. Without one, you sign in with your owner token.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                 if let e = model.setupError {
@@ -62,14 +62,15 @@ struct SetupView: View {
                 .accessibilityIdentifier("connect")
 
                 Divider().padding(.vertical, 10)
-                Text("No server yet? The demo shows what it's like (conversations there aren't saved).")
+                Text("No server yet? The demo shows what Sara is like (conversations there aren't saved).")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                 Button("Try the demo") { model.tryDemo() }
                     .buttonStyle(.bordered)
                     .accessibilityIdentifier("demo")
                 if model.server != nil {
-                    Button("Back") { model.open(path: "/") }
+                    Button("Back to \(Servers.list().first { $0.url == model.server }?.name ?? "Sara")") { model.open(path: "/") }
+                        .buttonStyle(.bordered)
                         .padding(.top, 6)
                 }
             }

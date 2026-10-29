@@ -71,7 +71,7 @@ export class LiveCall {
       if (ev.type === 'ended') this.#cleanup();
     };
     ws.onclose = () => {
-      if (this.active) this.onEvent({ type: 'ended', reason: 'The call was disconnected.' });
+      if (this.active) this.onEvent({ type: 'ended', reason: t('The call was disconnected.') });
       this.#cleanup();
     };
     await new Promise((resolve, reject) => {

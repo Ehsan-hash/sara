@@ -151,7 +151,7 @@ if (process.argv.includes('--status')) {
 
 if (existsSync(dataDir) && !statSync(dataDir).isDirectory()) throw new StartupError(`Her data folder ${dataDir} (SARA_DATA) is a file, not a folder.`);
 mkdirSync(dataDir, { recursive: true, mode: 0o700 });
-const auth = new OwnerAuth(dataDir);
+const auth = new OwnerAuth(dataDir, undefined, { resetIfDamaged: process.argv.includes('--reset-token') });
 
 /** The newest owner token, kept only until it's used once (the installer shows it from here). */
 export const FIRST_TOKEN_FILE = 'first-token.txt';
@@ -335,7 +335,6 @@ const browsers = new BrowserManager({ sandbox: () => sandbox, previews, sweep: t
 // Phase 50: the code maps of the workspaces (one per workspace, shared like the workspaces; a
 // rebuildable cache, so backups leave it out). Meaning search uses the first companion's job.
 const codemaps = new CodeMaps({ cacheDir: join(dataDir, 'cache', 'codemap'), target: () => embedTarget(companions.main.app) });
-let push: PushService | undefined;
 let healthHistory: HealthHistory | undefined;
 let bridges: AppContext['bridges'];
 // Phase 59: a new server nobody has signed in to can be set up in the browser for a while after
@@ -517,7 +516,6 @@ function buildCompanion(space: Space, id: string, dir: string): Companion {
   if (!space.push) {
     space.push = new PushService(store.db, vault, space.settings);
     space.push.apns = new ApnsSender(store.db, vault);
-    if (!isMember) push = space.push;
   }
   app.push = space.push;
   app.privateLocal = privateLocal;

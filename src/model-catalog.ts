@@ -14,13 +14,15 @@
 // to the best replacement on the same provider and says so in Health and on Today (owner setting
 // "Switch to the replacement automatically", on by default); with it off Sara only warns.
 import { netFetch, outboundAllowed, privateLocalOn } from './net-guard.ts';
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync } from 'node:fs';
+import { writeFileAtomic } from './fs-util.ts';
 import { dirname, join } from 'node:path';
 import { isOllama } from './providers/openai-compatible.ts';
 import { instanceName } from './updates.ts';
 import { ProviderError, SUBSCRIPTION_KINDS, type Provider, type ProviderConfig } from './providers/types.ts';
 import { JOBS, recommend, type Candidate } from './modelpicks.ts';
 import type { ModelRoute, RoutePurpose, SettingsStore } from './settings.ts';
+import { isCloudModelName } from './model-names.ts';
 
 export const CATALOG_FILE = 'model-lists.json';
 /** Ollama's public cloud catalog (no key needed). */
@@ -153,8 +155,6 @@ export interface ModelListView {
 
 // ---------- names ----------
 
-/** Ollama cloud models run on Ollama's servers (also through a local daemon). */
-export const isCloudName = (model: string): boolean => /(:|-)cloud$/i.test(model.trim());
 
 /** Ollama Cloud catalog id → the name a daemon uses: "gemma4:31b" → "gemma4:31b-cloud", "beam" → "beam:cloud". */
 export function cloudDaemonName(id: string): string {
@@ -254,22 +254,22 @@ const NOT_CHAT = /embed|bge-|\be5-|gte-|minilm|caption|whisper|tts|rerank|guard|
 export function pickReplacement(retired: string, available: string[], job: RoutePurpose | 'default' = 'chat', opts: { local?: boolean } = {}): string | undefined {
   const embed = EMBED.test(retired);
   let pool = available.filter((m) => m !== retired && (embed ? EMBED.test(m) : !NOT_CHAT.test(m)));
-  if (job === 'private') pool = pool.filter((m) => !isCloudName(m));
+  if (job === 'private') pool = pool.filter((m) => !isCloudModelName(m));
   if (!pool.length) return undefined;
   const p = parseModel(retired);
-  const cloud = isCloudName(retired);
+  const cloud = isCloudModelName(retired);
   const same = pool
     .map((m) => ({ m, q: parseModel(m) }))
     .filter((x) => x.q.family === p.family && p.family)
     .sort((a, b) => {
-      const where = Number(isCloudName(b.m) === cloud) - Number(isCloudName(a.m) === cloud);
+      const where = Number(isCloudModelName(b.m) === cloud) - Number(isCloudModelName(a.m) === cloud);
       if (where) return where;
       const size = Number(b.q.size === p.size) - Number(a.q.size === p.size);
       if (size) return size;
       return cmpVersion(b.q.version, a.q.version);
     });
   if (same.length) return same[0].m;
-  const cands: Candidate[] = pool.map((m) => ({ providerId: 'p', provider: 'p', model: m, local: Boolean(opts.local) && !isCloudName(m) }));
+  const cands: Candidate[] = pool.map((m) => ({ providerId: 'p', provider: 'p', model: m, local: Boolean(opts.local) && !isCloudModelName(m) }));
   const recs = recommend(cands, {});
   const want: RoutePurpose = job === 'default' ? 'chat' : job;
   return (recs[want] ?? recs.planning ?? recs.research)?.model;
@@ -380,9 +380,7 @@ export interface ModelCatalogOptions {
 
 const atomicWrite = (file: string, text: string) => {
   mkdirSync(dirname(file), { recursive: true });
-  const tmp = `${file}.tmp`;
-  writeFileSync(tmp, text);
-  renameSync(tmp, file);
+  writeFileAtomic(file, text, 0o666);
 };
 
 const ago = (ms: number) => (ms < 90_000 ? 'just now' : ms < 90 * 60_000 ? `${Math.round(ms / 60_000)} min ago` : ms < 36 * 3600_000 ? `${Math.round(ms / 3600_000)} h ago` : `${Math.round(ms / 86_400_000)} days ago`);
@@ -444,7 +442,7 @@ export class ModelCatalog {
   /** May this Sara use Ollama Cloud models through this provider's daemon? (the owner's choice, else the default) */
   cloudAllowed(id: string): boolean {
     const o = this.#o.settings.get().modelLists?.[id]?.ollamaCloud;
-    return o ?? ollamaCloudDefault((this.#data.providers[id]?.present ?? []).some(isCloudName));
+    return o ?? ollamaCloudDefault((this.#data.providers[id]?.present ?? []).some(isCloudModelName));
   }
 
   /** The owner's options for a provider, with the defaults filled in. */
@@ -452,7 +450,7 @@ export class ModelCatalog {
     const config = this.#config(id);
     const o = this.#o.settings.get().modelLists?.[id] ?? {};
     const daemon = Boolean(config && this.#isDaemon(config));
-    const hasCloud = (this.#data.providers[id]?.present ?? []).some(isCloudName);
+    const hasCloud = (this.#data.providers[id]?.present ?? []).some(isCloudModelName);
     return { keepCurrent: o.keepCurrent !== false, ollamaCloud: daemon && (o.ollamaCloud ?? ollamaCloudDefault(hasCloud)), removeRetired: daemon && o.removeRetired === true, daemon };
   }
 
@@ -537,10 +535,10 @@ export class ModelCatalog {
     const daemon = probed.daemon;
     if (daemon) {
       remote = await this.#daemonRemote(config);
-      const isRemote = (m: string) => isCloudName(m) && (!remote || remote.includes(m));
-      const wantCloud = this.#o.settings.get().modelLists?.[id]?.ollamaCloud ?? ollamaCloudDefault(models.some(isCloudName));
+      const isRemote = (m: string) => isCloudModelName(m) && (!remote || remote.includes(m));
+      const wantCloud = this.#o.settings.get().modelLists?.[id]?.ollamaCloud ?? ollamaCloudDefault(models.some(isCloudModelName));
       // Off: the daemon's cloud models (billed to the account it is signed in to) aren't offered at all.
-      if (!wantCloud) listed = models.filter((m) => !isCloudName(m));
+      if (!wantCloud) listed = models.filter((m) => !isCloudModelName(m));
       if (wantCloud) {
         const cloud = await this.#cloudCatalog();
         if (cloud) {
@@ -621,7 +619,7 @@ export class ModelCatalog {
     const present = this.#data.providers[config.id]?.present ?? [];
     for (const name of names) {
       // Hardening L1: only when the daemon's own /api/tags says it runs on Ollama's servers.
-      if (!isCloudName(name) || !present.includes(name) || !remote?.includes(name)) continue;
+      if (!isCloudModelName(name) || !present.includes(name) || !remote?.includes(name)) continue;
       try {
         const r = await this.#fetch(`${daemonRoot(config)}/api/delete`, { method: 'DELETE', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ model: name }), signal: AbortSignal.timeout(20_000) });
         if (r.ok) {
@@ -639,7 +637,7 @@ export class ModelCatalog {
 
   /** A cloud model from the catalog that isn't on this daemon yet. */
   needsPull(config: ProviderConfig, model: string): boolean {
-    if (!this.#isDaemon(config) || !isCloudName(model)) return false;
+    if (!this.#isDaemon(config) || !isCloudModelName(model)) return false;
     const p = this.#data.providers[config.id];
     // Hardening L2: only names in the current Ollama Cloud catalog that aren't pulled yet; a typo, a
     // stale setting or another registry's "x-cloud" name is never downloaded.
@@ -692,7 +690,7 @@ export class ModelCatalog {
 
   #byWhom(config: ProviderConfig | undefined, model: string, daemon?: boolean): string {
     if (!config) return 'its provider';
-    return (daemon ?? this.#isDaemon(config)) && isCloudName(model) ? 'Ollama Cloud' : config.label;
+    return (daemon ?? this.#isDaemon(config)) && isCloudModelName(model) ? 'Ollama Cloud' : config.label;
   }
 
   /**
@@ -819,7 +817,7 @@ export function withCloudPull(provider: Provider, catalog: ModelCatalog): Provid
   const config = provider.config;
   // Refused before any request when Ollama Cloud models are off for this Sara (decided per request:
   // the owner may change it, and the daemon probe may come later than the provider).
-  const cloudOff = (model: string) => isCloudName(model) && (catalog.isDaemon(config) || isOllama(config.baseUrl)) && !catalog.cloudAllowed(config.id);
+  const cloudOff = (model: string) => isCloudModelName(model) && (catalog.isDaemon(config) || isOllama(config.baseUrl)) && !catalog.cloudAllowed(config.id);
   return {
     config,
     listModels: async (signal) => {
@@ -832,7 +830,7 @@ export function withCloudPull(provider: Provider, catalog: ModelCatalog): Provid
       try {
         yield* provider.stream(req);
       } catch (err) {
-        if (err instanceof ProviderError && (err.status === 401 || err.status === 403) && isCloudName(req.model) && catalog.isDaemon(config)) throw new ProviderError(pullError(config, req.model, err.status, err.message), err.status);
+        if (err instanceof ProviderError && (err.status === 401 || err.status === 403) && isCloudModelName(req.model) && catalog.isDaemon(config)) throw new ProviderError(pullError(config, req.model, err.status, err.message), err.status);
         throw err;
       }
     },

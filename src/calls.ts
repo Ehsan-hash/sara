@@ -7,6 +7,7 @@
 // finishing, the morning briefing; quiet hours and a daily limit apply to all of them except a call
 // the owner asked for at a set time. One ring at a time, and never during a call.
 import type { AppContext } from './chat.ts';
+import { localDate } from './memory-worker.ts';
 
 export type CallEventRule = 'call' | 'message';
 
@@ -68,13 +69,14 @@ function minutes(hhmm: string): number | undefined {
 
 /** Minutes after midnight, now, in the owner's time zone. */
 function localMinutes(now: Date, timeZone?: string): number {
-  const parts = new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit', hourCycle: 'h23', ...(timeZone ? { timeZone } : {}) }).formatToParts(now);
+  let parts: Intl.DateTimeFormatPart[];
+  try {
+    parts = new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit', hourCycle: 'h23', ...(timeZone ? { timeZone } : {}) }).formatToParts(now);
+  } catch {
+    return now.getUTCHours() * 60 + now.getUTCMinutes(); // a zone this Node doesn't know: UTC, like localDate
+  }
   const get = (t: string) => Number(parts.find((p) => p.type === t)?.value ?? 0);
   return get('hour') * 60 + get('minute');
-}
-
-function localDay(now: Date, timeZone?: string): string {
-  return new Intl.DateTimeFormat('en-CA', { year: 'numeric', month: '2-digit', day: '2-digit', ...(timeZone ? { timeZone } : {}) }).format(now);
 }
 
 export function inQuietHours(rules: CallRules, now: Date, timeZone?: string): boolean {
@@ -186,7 +188,7 @@ export class CallBroker {
     if (this.#ring?.state === 'ringing') return { skipped: 'She is already ringing.' };
     if (this.#inCall()) return { skipped: 'You are on a call.' };
     if (input.kind !== 'test' && input.kind !== 'scheduled' && inQuietHours(rules, now, tz)) return { skipped: 'Quiet hours.' };
-    const day = localDay(now, tz);
+    const day = localDate(now, tz);
     if (this.#today.day !== day) this.#today = { day, count: 0 };
     if (input.kind !== 'test' && this.#today.count >= rules.maxPerDay) return { skipped: `She already called ${rules.maxPerDay} times today.` };
     if (input.kind !== 'test') this.#today.count++;

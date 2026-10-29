@@ -15,6 +15,7 @@
   <div class="brand"><img src="/sara-avatar.jpg" alt="">Sara help</div>
   <a href="#start">Getting started</a>
   <a href="#gethelp">Getting help</a>
+  <a href="#around">Finding your way around</a>
   <a href="#brain">Choosing a brain</a>
   <a href="#private-local">Nothing leaves this computer</a>
   <a href="#phone">Phone and notifications</a>
@@ -70,6 +71,14 @@
   <li><strong>Ask her:</strong> "what does jealousy do?", "which model should I use for pictures?", "how do I connect Telegram?". She looks it up in her own settings guide and gives you a link that opens the right page.</li>
 </ul>
 
+<h2 id="around">Finding your way around</h2>
+<ul>
+  <li><strong>The sidebar</strong> lists the places you use most: Today, Planner, Library and Moments at first. <em>More</em> below them has the rest (Memory, Scrapbook, Your story, Team and anything new). Press the pin next to a place to keep it in the list; press it again to move it back under <em>More</em>. Pins are saved on each device.</li>
+  <li><strong>Her face and name</strong> at the bottom of the sidebar open her page; <em>?</em> opens Help and the gear opens Settings.</li>
+  <li><strong>Settings</strong> are in groups: Her, You, Models, Abilities, Connections, Data &amp; health and Household. Press a group to open or close it. Each page starts with a line on what it is for. Search finds any word in page names, settings and their ? tips.</li>
+  <li><strong>Tools and approvals</strong> (<em>Settings → Abilities</em>) lists what she can do in plain words, grouped by topic. Each one is <em>Allowed</em> (she does it by herself), <em>Ask me first</em> (she asks in the chat each time) or <em>Off</em>. <em>Whole group</em> sets a whole group at once; the small grey name is the tool's own name.</li>
+</ul>
+
 <h2 id="languages">Languages</h2>
 <ul>
   <li>The app speaks English, Spanish, French, German, Portuguese (Brazil) and Italian. <em>Settings → You → About you → Language</em>: <em>Automatic</em> follows the browser's language, or pick one. Dates and numbers follow it too.</li>
@@ -123,7 +132,7 @@
 <ul>
   <li><strong>Give her documents:</strong> open <em>Library</em> in the sidebar and press <em>Add documents</em> (or drop files there). She reads PDF, Word (.docx), Excel (.xlsx), PowerPoint (.pptx), e-books (EPUB), web pages, Markdown, text and CSV files. Scanned pages and photos of pages are read by her picture model (<em>Settings → Models → Which model does what → Looking at pictures</em>).</li>
   <li><strong>In a chat:</strong> press 📎 and pick a file. Next to it choose <em>Keep in her library</em> (she remembers it from then on) or <em>Just read this once</em> (only for that chat; it goes when the chat is deleted). On Telegram and Discord, send her the file; add "just read this once" to the message if she shouldn't keep it.</li>
-  <li><strong>What she remembers:</strong> after reading, she writes the key points into her memory, each with the words it came from. Open a document in the Library to see them and delete any you don't want. Removing a document asks whether she should forget those too.</li>
+  <li><strong>What she remembers:</strong> after reading, she writes the key points into her memory, each with the words it came from. Open a document in the Library to see them and delete any you don't want. <em>Read it again</em>, <em>Learn again</em> and <em>Remove…</em> are under ⋯ on its page; removing a document asks whether she should forget those too.</li>
   <li><strong>Asking about them:</strong> just ask ("when does my lease end?", "what does the manual say about the filter?"). She looks it up and says where it came from, like "your lease, page 4". If the document doesn't say, she tells you.</li>
   <li><strong>Finding things said in other words:</strong> with <em>Meaning search</em> set (<em>Settings → Models → Which model does what</em>, an embedding model such as nomic-embed-text on Ollama), she also finds passages that use different words.</li>
   <li><strong>Big documents (Phase 74):</strong> manuals and books of 500 to 1,000 pages or more, PDFs up to 1 GB (the size is set in <em>Settings → Abilities → Library</em>). Big files go up in pieces, so a dropped connection carries on where it stopped. She reads them in the background, page by page: the Library shows <em>Reading page 412 of 980 · about 6 minutes left</em>, with <em>Pause</em>, <em>Resume</em> and <em>Cancel reading</em>. A restart of the server carries on from the same page. Files over 100 MB need to be PDFs. How it works and what it was measured at: <a href="https://github.com/farena-ai/sara/blob/main/docs/LIBRARY.md">docs/LIBRARY.md</a>.</li>
@@ -209,6 +218,7 @@
   <li><strong>Albums:</strong> <em>Us</em> (moments you kept and photos of you two), <em>Places</em> (photos where she could tell the place) and <em>Her looks</em> (pictures she sent, by outfit) fill in by themselves. Make your own with <em>+ New album</em>, then tick it in a photo's ⋯ window. Pick any photo as an album's cover there too.</li>
   <li><strong>On this day:</strong> when there is a photo from this day a year ago (or a month ago), the album and the Today page show it. She may bring one up herself (“remember this?”) when it fits, at most once a day unless you ask, and never in group chats or shared Discord or Telegram channels.</li>
   <li><strong>Private by design:</strong> photos from private conversations, group chats, other people's chats and shared channels never come in by themselves; add one from a private conversation or a group chat with 🖼 under it. Nothing from the album is shared with other apps (MCP or the OpenAI-compatible API). Adults-only photos are hidden while Adult mode is off and in the phone apps.</li>
+  <li><strong>The scrapbook</strong> (under <em>More</em> in the sidebar) keeps the moments you pin with 📌, your inside jokes and the photos you two shared. On a photo, <em>Remove from scrapbook</em> only takes it out of the scrapbook (it waits under <em>Removed from the scrapbook</em> if you want it back); <em>Delete photo everywhere</em> asks first, then deletes it like here.</li>
   <li><strong>Remove from moments</strong> only takes it out of the album: the message and the photo stay in the conversation. <strong>Delete photo everywhere</strong> (it asks first) takes the photo out of every message too (their words stay) and deletes the file. Backups include the album; the JSON export doesn't (like the scrapbook).</li>
 </ul>
 

@@ -3,6 +3,8 @@
 // simple and conservative: sentence-level patterns, scoped to work artifacts so ordinary
 // conversation ("I wrote you a poem", "I fixed my bike") is not flagged.
 
+import { BROWSER_TOOLS } from './tools/browser.ts';
+
 export interface Receipt {
   name: string;
   status: 'ok' | 'error' | 'denied';
@@ -38,7 +40,6 @@ const PLANNER = /\b(?:I(?:'ve| have)?|I just)\s+(?:also\s+)?(?:added|put|saved|w
  */
 const BROWSER = /\b(?:I(?:'ve| have)?|I just)\s+(?:also\s+)?(?:(?:tested|checked|tried|opened|viewed|looked at|clicked (?:through|around)|went through|previewed)\b[^.!?]{0,80}\b(?:in (?:the |a |my )?(?:testing )?browser|in the preview|(?:at|on) (?:a |the )?(?:phone|mobile|desktop)(?: width| size| screen)?|phone width|mobile width|on (?:a )?(?:small|narrow) screens?)|(?:took|taken|grabbed) (?:a |some )?screenshots?|clicked (?:through|around)(?: (?:it|the app|the page))?)\b/i;
 const SCREENSHOT = /\b(?:I(?:'ve| have)?|I just)\s+(?:also\s+)?(?:took|taken|grabbed) (?:a |some |two |both )?screenshots?\b|\b(?:the |my )?screenshots? (?:show|shows|showed|confirm|confirms)\b/i;
-const BROWSER_TOOLS = new Set(['browser_open', 'browser_screenshot', 'browser_click', 'browser_type', 'browser_read', 'browser_check']);
 
 /** Past-turn references are allowed: those receipts live in earlier turns. */
 const EARLIER = /\b(earlier|before|previously|last time|yesterday|already|this morning|the other day|in our last)\b/i;

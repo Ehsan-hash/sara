@@ -6,7 +6,7 @@
 import assert from 'node:assert/strict';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { createServer as netServer } from 'node:net';
@@ -62,7 +62,9 @@ interface Res {
   json: Record<string, unknown> & { error?: string };
   cookie?: string;
 }
-async function call(who: Person | null, method: string, path: string, body?: unknown, headers: Record<string, string> = {}, timeoutMs = 30_000): Promise<Res> {
+async function call(who: Person | null, method: string, path: string, body?: unknown, headers: Record<string, string> = {}, timeoutMs = 120_000): Promise<Res> {
+  // 120 s: this file runs a real server beside the rest of the suite; on a loaded 8-core server single
+  // requests took over 30 s while all test files ran at once (alone the whole file takes ~100 s).
   const h: Record<string, string> = { ...headers };
   if (who?.cookie) h.cookie = `sara_session=${who.cookie}`;
   let payload: string | Uint8Array | undefined;
@@ -243,9 +245,10 @@ test('members get their own space: own companion, conversations, notes, uploads,
   assert.deepEqual((pv.json.providers as { id: string; defaultModel: string }[]).map((p) => `${p.id}/${p.defaultModel}`), ['fake/fake-1']);
 });
 
-/** Every route family in src/server.ts, with the second path parts it knows. */
+/** Every route family in src/server.ts and its route modules (src/routes/), with the second path parts it knows. */
 function routeFamilies(): Map<string, Set<string>> {
-  const src = readFileSync(join(ROOT, 'src', 'server.ts'), 'utf8');
+  const routes = join(ROOT, 'src', 'routes');
+  const src = [join(ROOT, 'src', 'server.ts'), ...readdirSync(routes).filter((f) => f.endsWith('.ts')).sort().map((f) => join(routes, f))].map((f) => readFileSync(f, 'utf8')).join('\n');
   const fam = new Map<string, Set<string>>();
   for (const m of src.matchAll(/a === '([\w-]+)'/g)) if (!fam.has(m[1])) fam.set(m[1], new Set());
   for (const m of src.matchAll(/a === '([\w-]+)' && b === '([\w-]+)'/g)) fam.get(m[1])!.add(m[2]);

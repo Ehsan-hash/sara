@@ -7,6 +7,7 @@
 import { netFetch } from './net-guard.ts';
 import { createHash, randomBytes } from 'node:crypto';
 import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { writeFileAtomic } from './fs-util.ts';
 import { dirname, join } from 'node:path';
 
 export const EXPRESSIONS = ['default', 'happy', 'caring', 'sleepy', 'hurt', 'playful'] as const;
@@ -198,7 +199,7 @@ export class LookBuilder {
     return join(this.#d.dataDir, 'look-draft', 'meta.json');
   }
   #writeDraftMeta(m: LookMeta & { newFace?: boolean }): void {
-    writeFileSync(this.#draftMetaFile, JSON.stringify(m), { mode: 0o600 });
+    writeFileAtomic(this.#draftMetaFile, JSON.stringify(m), 0o600);
   }
   draftMeta(): LookMeta & { newFace?: boolean } {
     try {
@@ -491,7 +492,7 @@ export class LookBuilder {
       cpSync(this.dir, dir, { recursive: true });
     }
     const meta: SavedLook = { id, name: n, savedAt: existing ? (this.saved().find((s) => s.id === id)?.savedAt ?? now.toISOString()) : now.toISOString() };
-    writeFileSync(join(dir, 'look.json'), JSON.stringify(meta), { mode: 0o600 });
+    writeFileAtomic(join(dir, 'look.json'), JSON.stringify(meta), 0o600);
     return meta;
   }
 
@@ -514,8 +515,8 @@ export class LookBuilder {
     const { id: _i, name: _n, savedAt: _s, ...old } = cur;
     const next = cleanMeta({ ...old, ...patch });
     if (next.wear && isAdultOutfit(next.wear)) next.adult = true;
-    writeFileSync(join(dir, 'meta.json'), JSON.stringify(next), { mode: 0o600 });
-    if (this.currentSavedId() === id) writeFileSync(join(this.dir, 'meta.json'), JSON.stringify(next), { mode: 0o600 });
+    writeFileAtomic(join(dir, 'meta.json'), JSON.stringify(next), 0o600);
+    if (this.currentSavedId() === id) writeFileAtomic(join(this.dir, 'meta.json'), JSON.stringify(next), 0o600);
     return { ...next, id, name: cur.name, savedAt: cur.savedAt };
   }
 

@@ -354,9 +354,9 @@
 				INFOPLIST_KEY_UIStatusBarStyle = UIStatusBarStyleLightContent;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationPortrait;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				INFOPLIST_KEY_NSMicrophoneUsageDescription = "For voice notes and live calls with your companion.";
-				INFOPLIST_KEY_NSCameraUsageDescription = "To take photos to share with your companion, and to show her your camera on video calls when you turn it on.";
-				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "To choose photos to share with your companion.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Sara uses the microphone for calls and voice messages with her.";
+				INFOPLIST_KEY_NSCameraUsageDescription = "Sara uses the camera for photos you share with her, and on video calls only when you turn your camera on.";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "To choose photos to share with her.";
 				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "To save her pictures to your photos.";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
@@ -365,7 +365,7 @@
 				CODE_SIGN_ENTITLEMENTS = "Config/Sara.entitlements";
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
 				ENABLE_PREVIEWS = NO;
-				INFOPLIST_KEY_NSFaceIDUsageDescription = "To unlock the app when the app lock is on.";
+				INFOPLIST_KEY_NSFaceIDUsageDescription = "To unlock Sara when the app lock is on.";
 			};
 			name = Debug;
 		};
@@ -383,9 +383,9 @@
 				INFOPLIST_KEY_UIStatusBarStyle = UIStatusBarStyleLightContent;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationPortrait;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				INFOPLIST_KEY_NSMicrophoneUsageDescription = "For voice notes and live calls with your companion.";
-				INFOPLIST_KEY_NSCameraUsageDescription = "To take photos to share with your companion, and to show her your camera on video calls when you turn it on.";
-				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "To choose photos to share with your companion.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Sara uses the microphone for calls and voice messages with her.";
+				INFOPLIST_KEY_NSCameraUsageDescription = "Sara uses the camera for photos you share with her, and on video calls only when you turn your camera on.";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "To choose photos to share with her.";
 				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "To save her pictures to your photos.";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
@@ -394,7 +394,7 @@
 				CODE_SIGN_ENTITLEMENTS = "Config/Sara.entitlements";
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
 				ENABLE_PREVIEWS = NO;
-				INFOPLIST_KEY_NSFaceIDUsageDescription = "To unlock the app when the app lock is on.";
+				INFOPLIST_KEY_NSFaceIDUsageDescription = "To unlock Sara when the app lock is on.";
 			};
 			name = Release;
 		};

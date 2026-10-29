@@ -41,11 +41,11 @@ public class WidgetProvider extends AppWidgetProvider {
         String server = Net.server(c);
         try {
             if (server == null) {
-                v.setTextViewText(R.id.last, "Open the app to connect.");
+                v.setTextViewText(R.id.last, c.getString(R.string.widget_connect));
             } else {
                 Net.Response r = Net.get(c, server + "/api/phone/widget");
                 if (r.status == 401) {
-                    v.setTextViewText(R.id.last, "Open the app to sign in.");
+                    v.setTextViewText(R.id.last, c.getString(R.string.widget_sign_in));
                 } else if (r.status == 200) {
                     JSONObject j = new JSONObject(r.text());
                     v.setTextViewText(R.id.name, j.optString("name", "Sara"));

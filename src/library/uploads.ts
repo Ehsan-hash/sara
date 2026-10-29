@@ -7,6 +7,7 @@
 //    reports. Unfinished uploads are removed after a day.
 import { randomBytes } from 'node:crypto';
 import { closeSync, createWriteStream, existsSync, ftruncateSync, mkdirSync, openSync, readdirSync, readFileSync, rmSync, statfsSync, statSync, writeFileSync } from 'node:fs';
+import { writeFileAtomic } from '../fs-util.ts';
 import type { IncomingMessage } from 'node:http';
 import { join } from 'node:path';
 
@@ -16,7 +17,7 @@ export const CHUNK_BYTES = 8 * 1024 * 1024;
 export const MAX_CHUNK_BYTES = 16 * 1024 * 1024;
 const STALE_MS = 24 * 3600_000;
 
-export class UploadError extends Error {
+export class LibraryUploadError extends Error {
   readonly status: number;
   readonly extra: Record<string, unknown> | undefined;
   constructor(status: number, message: string, extra?: Record<string, unknown>) {
@@ -50,13 +51,13 @@ export function diskHasRoom(dir: string, bytes: number): boolean {
 
 /** Streams a request body into a file, stopping (and removing the file) past `max` bytes. */
 export async function bodyToFile(req: IncomingMessage, path: string, max: number, flags: 'w' | 'a' = 'w'): Promise<number> {
-  if (Number(req.headers['content-length'] ?? 0) > max) throw new UploadError(413, 'Request body too large');
+  if (Number(req.headers['content-length'] ?? 0) > max) throw new LibraryUploadError(413, 'Request body too large');
   const out = createWriteStream(path, { flags, mode: 0o600 });
   let size = 0;
   try {
     for await (const chunk of req as AsyncIterable<Buffer>) {
       size += chunk.length;
-      if (size > max) throw new UploadError(413, 'Request body too large');
+      if (size > max) throw new LibraryUploadError(413, 'Request body too large');
       if (!out.write(chunk)) await new Promise<void>((r) => out.once('drain', r));
     }
   } catch (err) {
@@ -109,13 +110,13 @@ export class LibraryUploads {
   }
 
   start(m: Omit<UploadMeta, 'id' | 'createdAt'>, max: number): UploadMeta & { received: number; chunkBytes: number } {
-    if (!Number.isSafeInteger(m.size) || m.size <= 0) throw new UploadError(400, 'Say how big the file is.');
-    if (m.size > max) throw new UploadError(413, 'Documents can be up to {mb} MB here.', { params: { mb: Math.round(max / 1048576) } });
+    if (!Number.isSafeInteger(m.size) || m.size <= 0) throw new LibraryUploadError(400, 'Say how big the file is.');
+    if (m.size > max) throw new LibraryUploadError(413, 'Documents can be up to {mb} MB here.', { params: { mb: Math.round(max / 1048576) } });
     this.sweep();
     this.#ensure();
-    if (!diskHasRoom(this.dir, m.size * 2)) throw new UploadError(507, 'There is not enough free disk space on the server for this file.');
+    if (!diskHasRoom(this.dir, m.size * 2)) throw new LibraryUploadError(507, 'There is not enough free disk space on the server for this file.');
     const meta: UploadMeta = { ...m, id: randomBytes(12).toString('hex'), createdAt: this.#now().toISOString() };
-    writeFileSync(this.#metaPath(meta.id), JSON.stringify(meta), { mode: 0o600 });
+    writeFileAtomic(this.#metaPath(meta.id), JSON.stringify(meta), 0o600);
     writeFileSync(this.#part(meta.id), Buffer.alloc(0), { mode: 0o600 });
     return { ...meta, received: 0, chunkBytes: CHUNK_BYTES };
   }
@@ -136,8 +137,8 @@ export class LibraryUploads {
    */
   async append(id: string, offset: number, req: IncomingMessage): Promise<number> {
     const u = this.get(id);
-    if (!u) throw new UploadError(404, 'That upload is not here any more. Add the file again.');
-    if (offset !== u.received) throw new UploadError(409, 'That piece is for another place in the file.', { received: u.received });
+    if (!u) throw new LibraryUploadError(404, 'That upload is not here any more. Add the file again.');
+    if (offset !== u.received) throw new LibraryUploadError(409, 'That piece is for another place in the file.', { received: u.received });
     const room = Math.min(MAX_CHUNK_BYTES, u.size - u.received);
     try {
       await bodyToFile(req, this.#part(id), room, 'a');
@@ -149,7 +150,7 @@ export class LibraryUploads {
       } finally {
         closeSync(fd);
       }
-      throw err instanceof UploadError ? err : new UploadError(400, 'That piece did not arrive whole. Send it again.', { received: offset });
+      throw err instanceof LibraryUploadError ? err : new LibraryUploadError(400, 'That piece did not arrive whole. Send it again.', { received: offset });
     }
     return statSync(this.#part(id)).size;
   }
@@ -157,8 +158,8 @@ export class LibraryUploads {
   /** The whole file arrived: hands its path over (the caller moves it into the library). */
   finish(id: string): { meta: UploadMeta; path: string } {
     const u = this.get(id);
-    if (!u) throw new UploadError(404, 'That upload is not here any more. Add the file again.');
-    if (u.received !== u.size) throw new UploadError(409, 'Not all of the file has arrived yet.', { received: u.received });
+    if (!u) throw new LibraryUploadError(404, 'That upload is not here any more. Add the file again.');
+    if (u.received !== u.size) throw new LibraryUploadError(409, 'Not all of the file has arrived yet.', { received: u.received });
     rmSync(this.#metaPath(id), { force: true });
     const { received: _r, ...meta } = u;
     return { meta, path: this.#part(id) };

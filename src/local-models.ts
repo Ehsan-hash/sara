@@ -8,6 +8,7 @@ import { execFile, spawn } from 'node:child_process';
 import { arch, platform, totalmem } from 'node:os';
 import { assertOnline, netFetch } from './net-guard.ts';
 import type { ProviderConfig } from './providers/types.ts';
+import { isCloudModelName } from './model-names.ts';
 
 export const DEFAULT_OLLAMA = 'http://127.0.0.1:11434';
 export const OLLAMA_DOWNLOAD = 'https://ollama.com/download';
@@ -142,7 +143,7 @@ export async function detectOllama(root = DEFAULT_OLLAMA, fetchImpl: typeof fetc
     const j = (await t.json().catch(() => ({}))) as { models?: { name?: string; model?: string; size?: number; remote_host?: string }[] };
     const models = (j.models ?? []).map((m) => {
       const name = String(m.name ?? m.model ?? '');
-      return { name, sizeGb: Math.round(((m.size ?? 0) / GB) * 10) / 10, cloud: Boolean(m.remote_host) || /(:|-)cloud\b/i.test(name) };
+      return { name, sizeGb: Math.round(((m.size ?? 0) / GB) * 10) / 10, cloud: Boolean(m.remote_host) || isCloudModelName(name) };
     });
     return { found: true, url: root, ...(version ? { version } : {}), models: models.filter((m) => m.name) };
   } catch {
@@ -259,7 +260,7 @@ export class ModelPuller {
   /** Starts downloading; returns at once. The progress is in status(). */
   start(root: string, model: string): PullStatus {
     if (this.running) throw new Error('A download is already running.');
-    if (!/^[\w.\-/:]{1,200}$/.test(model) || /(:|-)cloud\b/i.test(model)) throw new Error('That is not a model name Ollama can download here.');
+    if (!/^[\w.\-/:]{1,200}$/.test(model) || isCloudModelName(model)) throw new Error('That is not a model name Ollama can download here.');
     const ctl = new AbortController();
     this.#ctl = ctl;
     const st: PullStatus = { model, state: 'running', percent: null, completedBytes: 0, totalBytes: 0, stage: 'starting', startedAt: new Date().toISOString() };

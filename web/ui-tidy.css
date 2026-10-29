@@ -1,0 +1,408 @@
+/* UI cleanup (wave 1): the sidebar's places, Settings groups, Tools and approvals, the scrapbook's
+   photos, and small tidying in the chat header and composer. Wave 2 (below): every other window. Loaded right after style.css, so these
+   rules win where they overlap. Colours come from the theme variables (dark and light). */
+
+:root {
+  --ok: #49b578;
+  --wait: #e0a23a;
+  --tidy-shadow: 0 10px 32px rgb(0 0 0 / .45);
+}
+:root[data-theme="light"] {
+  --ok: #23824b;
+  --wait: #9a6510;
+  --tidy-shadow: 0 10px 32px rgb(60 30 70 / .18);
+}
+
+/* ---------- Sidebar: pinned places, More, her and Settings/Help ---------- */
+.side-nav { margin-top: auto; position: relative; display: flex; flex-direction: column; gap: 1px; padding: 6px 8px 8px; border-top: 1px solid var(--border); }
+.side-pinned, .side-more-list { display: grid; gap: 1px; }
+.side-dest { position: relative; display: flex; align-items: center; border-radius: 9px; min-width: 0; }
+.side-go, .side-more {
+  flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; min-height: 36px; padding: 6px 10px;
+  background: transparent; border: 0; border-radius: 9px; color: var(--muted); font-size: 14px; font-weight: 500; text-align: left;
+}
+.side-go:hover, .side-go:focus-visible, .side-more:hover, .side-more:focus-visible { background: var(--panel-2); color: var(--text); }
+.side-go svg, .side-more svg { width: 18px; height: 18px; flex: none; }
+.side-go span, .side-more span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* The place whose window is open. */
+.side-go.is-open { background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--text); }
+.side-go.is-open svg { color: var(--accent); }
+.side-more .side-chev { width: 14px; height: 14px; margin-left: auto; opacity: .7; transition: transform .15s; }
+.side-more[aria-expanded="true"] { background: var(--panel-2); color: var(--text); }
+.side-more[aria-expanded="true"] .side-chev { transform: rotate(-90deg); }
+.side-more .side-dot { margin-left: 4px; }
+
+/* The pin: always in More; on the pinned list when hovered, focused, or while More is open. */
+.side-pin {
+  flex: none; display: grid; place-items: center; width: 30px; height: 30px; padding: 0; margin-right: 2px;
+  background: transparent; border: 0; border-radius: 8px; color: var(--muted);
+}
+.side-pin svg { width: 16px; height: 16px; }
+.side-pin:hover, .side-pin:focus-visible { background: var(--panel); color: var(--text); }
+.side-pin[aria-pressed="true"] { color: var(--accent); }
+.side-pin[aria-pressed="true"] svg { fill: currentColor; }
+.side-pinned .side-pin { opacity: 0; position: absolute; right: 2px; }
+.side-pinned .side-dest:hover .side-pin, .side-pinned .side-pin:focus-visible, .side-nav.more-open .side-pinned .side-pin { opacity: 1; }
+.side-pinned .side-dest:hover .side-go, .side-nav.more-open .side-pinned .side-go { padding-right: 38px; }
+
+.side-more-menu {
+  position: absolute; left: 8px; right: 8px; bottom: calc(100% + 6px); z-index: 30; max-height: min(var(--more-room, 70vh), 520px); overflow-y: auto;
+  padding: 6px; background: var(--panel); border: 1px solid var(--border); border-radius: 14px; box-shadow: var(--tidy-shadow);
+}
+.side-more-head { margin: 2px 8px 4px; font-size: 13px; font-weight: 650; color: var(--text); }
+.side-more-note { margin: 6px 8px 2px; line-height: 1.35; }
+.side-more-menu .side-go { color: var(--text); }
+
+.side-foot-row { display: flex; align-items: center; gap: 2px; margin-top: 4px; padding-top: 6px; border-top: 1px solid var(--border); }
+#open-sara { flex: 1; min-width: 0; display: flex; align-items: center; gap: 9px; min-height: 40px; padding: 4px 8px; background: transparent; border: 0; border-radius: 10px; color: var(--text); font-size: 14px; font-weight: 600; text-align: left; }
+#open-sara:hover, #open-sara:focus-visible { background: var(--panel-2); }
+#open-sara .side-face { width: 28px; height: 28px; border-radius: 50%; object-fit: cover; flex: none; }
+#open-sara .side-her { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.side-icon { flex: none; display: grid; place-items: center; width: 36px; height: 36px; padding: 0; background: transparent; border: 0; border-radius: 10px; color: var(--muted); }
+.side-icon svg { width: 19px; height: 19px; }
+.side-icon:hover, .side-icon:focus-visible { background: var(--panel-2); color: var(--text); }
+
+/* Places the demo doesn't offer, and the owner-only Team for household members. */
+body.demo .side-dest:is([data-dest="planner"], [data-dest="memory"], [data-dest="scrapbook"], [data-dest="moments"]) { display: none !important; }
+
+/* ---------- Settings: group headers, the list, the page's description ---------- */
+.settings-nav { gap: 8px; }
+#settings-nav-list { display: grid; gap: 0; }
+.settings-nav .settings-nav-group { display: block; margin: 0; padding: 3px 0; border-top: 1px solid var(--border); }
+.settings-nav .settings-nav-group:first-child { border-top: 0; }
+.settings-nav .settings-nav-head {
+  display: flex; align-items: center; gap: 10px; width: 100%; min-height: 40px; padding: 8px 8px;
+  background: transparent; border: 0; border-radius: 9px; color: var(--text);
+  font-size: 15px; font-weight: 650; letter-spacing: 0; text-transform: none; text-align: left;
+}
+.settings-nav .settings-nav-head:hover, .settings-nav .settings-nav-head:focus-visible { background: var(--panel-2); }
+.sng-icon { width: 19px; height: 19px; flex: none; color: var(--accent); }
+.sng-name { flex: 1; min-width: 0; }
+.sng-count { font-size: 12px; font-weight: 500; color: var(--muted); }
+.sng-chev { width: 15px; height: 15px; flex: none; color: var(--muted); transition: transform .15s; }
+.settings-nav-group.open .sng-chev { transform: rotate(90deg); }
+.settings-nav-items { display: grid; gap: 1px; padding: 0 0 6px 18px; }
+@media (min-width: 721px) { .settings-layout { grid-template-columns: 256px minmax(0, 1fr); } }
+.settings-nav .settings-nav-item { padding: 7px 10px; font-size: 14px; border-radius: 8px; }
+.settings-nav-sub { padding: 8px 10px 2px; font-size: 12px; font-weight: 600; color: var(--muted); }
+#settings-nav-list .no-match, #settings-nav-list.searching .settings-nav-sub { display: none; }
+.settings-page-head h2 { font-size: 20px; }
+.settings-page-desc { margin: 0 56px 6px 24px; max-width: 76ch; color: var(--muted); font-size: 13.5px; line-height: 1.45; }
+.settings-page-desc a { color: var(--accent); white-space: nowrap; }
+
+@media (max-width: 720px) {
+  .settings-nav { padding: 14px 12px 24px; }
+  .settings-nav .settings-nav-head { min-height: 48px; font-size: 16px; }
+  .settings-nav .settings-nav-item { padding: 12px 10px; font-size: 15px; }
+  .settings-page-desc { margin: 0 12px 6px; }
+  #settings-back { font-weight: 600; color: var(--text); }
+}
+
+/* ---------- Tools and approvals ---------- */
+#sandbox-status { margin: 0; font-size: 14px; }
+#sandbox-note { margin: 0; color: var(--muted); }
+.perm-legend { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.perm-card { display: grid; gap: 2px; align-content: start; padding: 8px 12px; border: 1px solid var(--border); border-left-width: 4px; border-radius: 12px; background: var(--panel-2); font-size: 13px; line-height: 1.4; }
+.perm-card strong { font-size: 14px; }
+.perm-card span { color: var(--muted); }
+.perm-auto { border-left-color: var(--ok); }
+.perm-ask { border-left-color: var(--wait); }
+.perm-never { border-left-color: var(--muted); }
+#tool-list { display: grid; gap: 8px; }
+.tool-group { border: 1px solid var(--border); border-radius: 12px; background: var(--panel); overflow: hidden; }
+.tool-group > summary {
+  display: grid; grid-template-columns: 28px minmax(0, 1fr) auto 16px; align-items: center; gap: 10px;
+  padding: 10px 12px; cursor: pointer; list-style: none;
+}
+.tool-group > summary::-webkit-details-marker { display: none; }
+.tool-group > summary::after { content: '›'; font-size: 20px; line-height: 1; color: var(--muted); transition: transform .15s; justify-self: center; }
+.tool-group[open] > summary::after { transform: rotate(90deg); }
+.tool-group > summary:hover { background: var(--panel-2); }
+.tool-group-icon { font-size: 20px; text-align: center; }
+.tool-group-head { display: grid; min-width: 0; }
+.tool-group-name { font-size: 14.5px; color: var(--text); }
+.tool-group-about { font-size: 12.5px; color: var(--muted); line-height: 1.35; }
+.tool-group-sum { font-size: 12px; color: var(--muted); white-space: nowrap; }
+.tool-group-bar { display: flex; justify-content: flex-end; padding: 6px 12px; border-top: 1px solid var(--border); background: var(--panel-2); }
+#tool-list select { height: 34px; padding: 4px 10px; font-size: 14px; }
+.tool-group-set-label { display: inline-flex !important; align-items: center; gap: 8px; margin: 0; }
+.tool-group-set { width: auto; }
+#tool-list .tool-perm {
+  display: grid !important; grid-template-columns: 28px minmax(0, 1fr) auto; align-items: start; gap: 2px 10px;
+  padding: 10px 12px; border-top: 1px solid var(--border);
+}
+.tool-perm .tool-text span { font-family: inherit; opacity: 1; }
+.tool-icon { font-size: 18px; line-height: 1.5; text-align: center; }
+.tool-text { display: grid; gap: 1px; min-width: 0; }
+#tool-list .tool-perm .tool-name { font-weight: 600; color: var(--text); }
+#tool-list .tool-perm .tool-what { font-size: 13px; color: var(--muted); line-height: 1.4; }
+.tool-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin-top: 2px; font-size: 12px; }
+.tool-raw { font: 11.5px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: var(--muted); background: var(--panel-2); padding: 0 5px; border-radius: 5px; }
+.tool-raw small { font-family: inherit; }
+#tool-list .tool-perm .tool-need { color: var(--wait); }
+#tool-list .tool-perm.unavailable .tool-name, #tool-list .tool-perm.unavailable .tool-icon { opacity: .6; }
+#tool-list .tool-perm select { width: auto; min-width: 140px; align-self: center; }
+@media (max-width: 720px) {
+  .perm-legend { grid-template-columns: minmax(0, 1fr); }
+  .tool-group > summary { grid-template-columns: 26px minmax(0, 1fr) 16px; }
+  .tool-group-icon { align-self: start; }
+  .perm-card { padding: 6px 10px; }
+  .tool-group-sum { grid-column: 2; grid-row: 2; white-space: normal; }
+  .tool-group > summary::after { grid-column: 3; grid-row: 1; }
+  .tool-group-bar { justify-content: stretch; }
+  .tool-group-set-label { width: 100%; justify-content: space-between; }
+  #tool-list .tool-perm { grid-template-columns: 24px minmax(0, 1fr); }
+  #tool-list .tool-perm select { grid-column: 2; width: 100%; margin-top: 6px; }
+}
+
+/* ---------- Scrapbook ---------- */
+.sb-photos-tab { display: grid; gap: 8px; }
+.sb-photos-tab > p { margin: 0; }
+.sb-photo { display: grid; gap: 2px; align-content: start; }
+.sb-photo-open { display: block; width: 100%; padding: 0; background: none; border: 0; border-radius: 10px; cursor: zoom-in; }
+.sb-photo-open:hover { background: none; }
+.sb-photo-open:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.sb-photo-acts { display: grid; justify-items: start; gap: 2px; margin-top: 2px; }
+.sb-photo-acts .linkish { font-size: 12.5px; text-decoration: none; text-align: left; }
+.sb-photo-acts .linkish:not(.danger-text) { color: var(--muted); }
+.sb-photo-acts .linkish:hover, .sb-photo-acts .linkish:focus-visible { text-decoration: underline; color: var(--text); }
+.sb-confirm { display: grid; gap: 6px; margin-top: 4px; padding: 8px 10px; border: 1px solid #b3383d; border-radius: 10px; background: var(--panel-2); }
+.sb-confirm p { margin: 0; line-height: 1.4; }
+/* While asking, the photo takes the whole row: the photo on the left, the warning beside it. */
+.sb-photo.confirming { grid-column: 1 / -1; grid-template-columns: minmax(110px, 170px) minmax(0, 1fr); column-gap: 14px; }
+.sb-photo.confirming > :not(.sb-confirm) { grid-column: 1; }
+.sb-photo.confirming > .sb-confirm { grid-column: 2; grid-row: 1 / span 3; align-self: start; margin-top: 0; }
+.sb-confirm-row { display: flex; gap: 6px; justify-content: flex-end; flex-wrap: wrap; }
+.sb-confirm .error:empty { display: none; }
+.sb-photo-hidden img { opacity: .75; }
+.sb-hidden { margin-top: 4px; }
+.sb-hidden > summary { cursor: pointer; color: var(--muted); font-size: 13px; padding: 4px 0; }
+.sb-hidden-count { display: inline-block; min-width: 20px; padding: 0 6px; margin-left: 4px; border-radius: 999px; background: var(--panel-2); text-align: center; font-size: 12px; }
+.sb-hidden .sb-photos { margin-top: 6px; max-height: none; }
+.sb-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.sb-card .sb-del { position: static; margin-left: auto; padding: 2px 10px; }
+.sb-card .sb-head { padding-right: 0; }
+
+/* ---------- Chat header and composer: one height, lined up ---------- */
+#chat-head .title-wrap { flex: 1 1 auto; }
+#chat-head .title-wrap h2 { flex: none; }
+#conv-settings-btn, #chat-head .ai-badge, #speak-toggle, .pl-badge, .server-btn { height: 28px; display: inline-flex; align-items: center; gap: 6px; flex: none; }
+#conv-settings-btn { padding: 0 10px; }
+#conv-settings-btn::before { content: '⚙'; font-size: 14px; line-height: 1; }
+#chat-head .ai-badge { padding: 0 10px; }
+#composer { align-items: flex-end; }
+#composer > button.icon { flex: none; display: grid; place-items: center; width: 40px; height: 40px; padding: 0; font-size: 18px; border-radius: 10px; }
+#composer #send, #composer #stop { flex: none; height: 40px; }
+#composer #input { min-height: 40px; }
+@media (max-width: 520px) {
+  #conv-settings-btn { padding: 0; width: 32px; justify-content: center; }
+  #conv-settings-btn::before { font-size: 16px; }
+  #composer { gap: 6px; padding: 10px; }
+}
+
+/* ---------- Touch: 44 px targets ---------- */
+@media (pointer: coarse) {
+  .side-go, .side-more, #open-sara { min-height: 44px; }
+  .side-icon, .side-pin { width: 44px; height: 44px; }
+  .side-pinned .side-dest:hover .side-pin { opacity: 0; }
+  .side-nav.more-open .side-pinned .side-pin { opacity: 1; }
+  .side-pinned .side-dest:hover .side-go { padding-right: 10px; }
+  .side-nav.more-open .side-pinned .side-go { padding-right: 48px; }
+  .settings-nav .settings-nav-head { min-height: 48px; }
+  .settings-nav .settings-nav-item { min-height: 44px; }
+  .tool-group > summary { min-height: 52px; }
+  #composer > button.icon { width: 44px; height: 44px; }
+  #composer #send, #composer #stop { height: 44px; }
+  .sb-photo-acts .linkish { min-height: 36px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .side-more .side-chev, .sng-chev, .tool-group > summary::after { transition: none; }
+}
+
+/* ======================================================================================
+   Wave 2: every other window (Today, Planner, Memory, Library, Moments, Your story, Team,
+   her page, conversation settings, approvals, menus, toasts, empty states).
+   A few shared pieces, used the same way everywhere:
+     .tidy-card     a soft box that groups related fields (conversation settings, forms)
+     .tidy-stack    a column with the window's usual gap
+     .tidy-section-head  a heading with its actions on the right
+     .tidy-toolbar  search and filters in one row that wraps on phones
+     .tidy-pill     a small label (what kind of memory, a status)
+     .empty-state   an icon and one line where a list is empty (emptyState() in app.js)
+     .tidy-foot     the last row of a window (Archive, Delete…), with a line above
+     button.danger  the final "delete everywhere"; .ghost.danger-text is the first, softer step
+   ====================================================================================== */
+:root {
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --radius-card: 12px;
+  --radius-pill: 999px;
+  --card-bg: color-mix(in srgb, var(--panel-2) 55%, var(--panel));
+  --danger: #b3383d;
+}
+
+/* ---------- Shared pieces ---------- */
+.tidy-card { display: grid; gap: var(--space-2); align-content: start; min-width: 0; padding: var(--space-3) var(--space-4); background: var(--card-bg); border: 1px solid var(--border); border-radius: var(--radius-card); }
+.tidy-stack { display: grid; gap: 10px; align-content: start; min-width: 0; }
+.tidy-stack > p, .tidy-card > p { margin: 0; }
+.tidy-section-head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin: var(--space-2) 0 0; }
+.tidy-section-head > h3 { margin: 0; }
+.tidy-section-head > :last-child:not(:first-child) { margin-left: auto; }
+.tidy-toolbar, .mem-tools { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+.mem-tools > input { flex: 1 1 200px; width: auto; min-width: 0; }
+.mem-tools > select { flex: 0 1 auto; width: auto; min-width: 0; }
+.mem-tools > button { flex: none; white-space: nowrap; }
+.tidy-pill, .mem-head .kind, .story-head .kind {
+  display: inline-flex; align-items: center; padding: 1px 8px; border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--accent) 15%, transparent); color: var(--accent-2);
+  font-size: 11px; font-weight: 650; letter-spacing: .03em; line-height: 1.6; text-transform: uppercase; white-space: nowrap;
+}
+button.danger { background: var(--danger); color: #fff; border: 1px solid var(--danger); }
+button.danger:hover { background: color-mix(in srgb, var(--danger) 82%, #000); }
+button.ghost.danger-text:hover { border-color: currentColor; }
+.empty-state {
+  display: grid; justify-items: center; gap: var(--space-1); margin: 0; padding: 22px 16px; list-style: none;
+  border: 1px dashed var(--border); border-radius: var(--radius-card); color: var(--muted); text-align: center;
+}
+.empty-icon { font-size: 26px; line-height: 1.1; }
+.empty-text { max-width: 48ch; color: var(--text); font-size: 14px; line-height: 1.4; }
+.empty-hint { max-width: 48ch; font-size: 12.5px; line-height: 1.4; }
+.tidy-foot { margin-top: var(--space-1); padding-top: var(--space-3); border-top: 1px solid var(--border); }
+
+/* ---------- Windows: spacing, widths, one scrollbar ---------- */
+/* Paragraphs in a window use the window's gap, not the browser's 1em margins on top of it. */
+dialog:not(.settings-dialog) .settings-body > p { margin: 0; }
+dialog:not(.settings-dialog) .settings-body > h2 { margin: 0; }
+/* The opening paragraph: two lines with "Show more" (web/tidy.js). */
+.dlg-intro { line-height: 1.45; }
+.dlg-intro:not(.open) { display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.dlg-more { justify-self: start; margin-top: -6px; font-size: 12.5px; text-decoration: none; }
+.dlg-more:hover, .dlg-more:focus-visible { text-decoration: underline; }
+/* Medium windows: room for a list with its buttons. */
+#planner, #memory, #story, #sara-dialog { width: min(720px, 96vw); }
+/* The Planner keeps one size while you switch between To-do, Reminders and Notes. */
+@media (min-width: 721px) { #planner > .settings-body { min-height: min(660px, 82vh); align-content: start; } }
+/* Lists scroll with their window (no second scrollbar inside it). */
+#task-list, #rem-list, #rem-recent, #note-list, #mem-list, .sb-list, .sb-photos { max-height: none; overflow: visible; }
+#task-list, #rem-list, #note-list, #mem-list { gap: var(--space-2); }
+
+/* ---------- Planner ---------- */
+#planner .item, #places-list .item { gap: 10px; padding: 9px 12px; border: 1px solid var(--border); border-radius: var(--radius-card); }
+#planner .item .title { font-weight: 500; overflow-wrap: anywhere; }
+#planner .item > button { flex: none; }
+#planner .item input[type=checkbox] { width: 18px; height: 18px; flex: none; }
+#planner .proj-name { margin: 10px 0 0; font-weight: 650; }
+#planner .tab-panel { display: grid; gap: 10px; align-content: start; }
+#planner .tab-panel[hidden] { display: none; }
+#planner .tab-panel > label.row { margin: 0; }
+#planner .tab-panel > h3 { margin: 6px 0 0; }
+.note-body { margin-top: 2px; }
+
+/* ---------- Memory ---------- */
+.mem { gap: 6px; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius-card); }
+#mem-list, .lib-facts, #task-list, #rem-list, #note-list { grid-template-columns: minmax(0, 1fr); }
+.mem { min-width: 0; grid-template-columns: minmax(0, 1fr); }
+.mem-head { flex-wrap: wrap; gap: 4px 8px; }
+.mem-head > span:not(.kind) { white-space: nowrap; }
+.mem-head a { flex: 1 1 10em; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-decoration: none; }
+.mem-head a:hover, .mem-head a:focus-visible { color: var(--text); text-decoration: underline; }
+.mem .row { flex-wrap: wrap; }
+.mem-add { padding: var(--space-3); background: var(--card-bg); border: 1px solid var(--border); border-radius: var(--radius-card); }
+#mem-timeline { display: inline-flex; align-items: center; gap: 6px; }
+.mem-upcoming { margin: 0; border: 1px solid var(--border); }
+
+/* ---------- Your story ---------- */
+.story-lookback { display: grid; gap: 8px; padding: var(--space-3) var(--space-4); background: var(--card-bg); border: 1px solid var(--border); border-radius: var(--radius-card); }
+.story-lookback > h3 { margin: 0; }
+.story-lookback > p { margin: 0; }
+.story-lookback #story-status:empty, .story-lookbacks:empty { display: none; }
+.story-item { background: var(--panel-2); border-radius: var(--radius-card); padding: 9px 12px; }
+/* The dot sits on the window's own colour, not the page's. */
+.story-item::before { box-shadow: 0 0 0 3px var(--panel); }
+.story-month { margin-top: 14px; }
+
+/* ---------- Our moments ---------- */
+.mo-top .mo-mode select { width: auto; }
+.mo-top { align-items: center; }
+#mo-status:empty, #lib-summary:empty, #lib-upload-status:empty { display: none; }
+
+/* ---------- Team ---------- */
+.team-cols.is-empty { grid-template-columns: minmax(0, 1fr); }
+.team-cols.is-empty .team-detail { display: none; }
+.team-tasks li.empty-state { display: grid; }
+
+/* ---------- Today ---------- */
+.today-card { border: 1px solid var(--border); }
+.start-item { align-content: start; }
+#td-date { margin-top: -4px; }
+
+/* ---------- Approval cards in the chat ---------- */
+.approval { border-radius: var(--radius-card); }
+.approval-tidy { gap: 6px; padding: 12px 14px; }
+.approval .approval-title { display: flex; align-items: center; gap: 8px; font-weight: 600; }
+.approval-icon { flex: none; width: 22px; font-size: 18px; line-height: 1; text-align: center; }
+.approval .approval-about { margin: -2px 0 2px 30px; }
+.approval .row { flex-wrap: wrap; align-items: center; }
+.approval .approval-raw { margin-left: auto; }
+
+/* ---------- The companion switcher ---------- */
+.companion-menu { min-width: 220px; border-radius: 14px; box-shadow: var(--tidy-shadow); }
+.companion-menu .cm-item { display: flex; align-items: center; gap: 10px; min-height: 40px; }
+.cm-face { flex: none; width: 26px; height: 26px; border-radius: 50%; object-fit: cover; background: var(--panel-2); }
+.cm-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cm-tick { flex: none; color: var(--accent); font-weight: 700; }
+
+/* ---------- Toasts, banners and pop-ups: one card style ---------- */
+.tour-offer, .other-note, .tip-card, .tour-card { border-color: var(--border); border-radius: 14px; background: var(--panel); box-shadow: var(--tidy-shadow); }
+.pop-menu { border-radius: 12px; box-shadow: var(--tidy-shadow); }
+.tour-offer p { line-height: 1.4; }
+/* A turn that failed: a soft red banner, not loose red text. */
+.msg.error { max-width: min(640px, 92%); padding: 8px 14px; border: 1px solid color-mix(in srgb, var(--error) 45%, transparent); border-radius: var(--radius-card); background: color-mix(in srgb, var(--error) 9%, transparent); text-align: center; }
+
+/* ---------- The conversation list: a quieter "empty project" line ---------- */
+.group-empty { padding: 0 10px 6px; font-size: 12px; line-height: 1.35; }
+
+/* Add rows: one tidy line on a computer (title first and widest), wrapping on phones. */
+@media (min-width: 600px) {
+  #planner [data-panel="tasks"] > .add-row { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1.2fr) minmax(0, 1.15fr) minmax(0, .9fr) auto; }
+  #planner [data-panel="reminders"] > .add-row:first-child { display: grid; grid-template-columns: minmax(0, 1.8fr) minmax(0, 1.1fr) minmax(0, 1.5fr) minmax(0, 1fr) auto; }
+  #planner .tab-panel > .add-row > :is(input, select) { width: 100%; min-width: 0; }
+  .mem-add { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 14em) auto auto; align-items: end; }
+  .mem-add label.row { align-self: end; margin-bottom: 9px; }
+}
+/* Status and error lines take no room until they say something. */
+dialog:not(.settings-dialog) .settings-body > :is(.error, p[role="status"]):empty, #cs-status:empty, #review-status:empty { display: none; }
+.today-list > p { margin: 0; }
+.today-card { gap: 8px; }
+
+/* ⋯ More actions (web/tidy.js): the extra buttons wait in a menu; the real ones stay hidden. */
+.tidy-overflow { display: none; }
+.tidy-more-btn { min-width: 34px; padding-left: 8px; padding-right: 8px; font-weight: 700; line-height: 1; letter-spacing: .05em; }
+.servers-list li { gap: 8px; }
+.servers-list li > .tidy-more-btn { flex: none; }
+
+/* ---------- Phones ---------- */
+@media (max-width: 520px) {
+  .mem-tools > select { flex: 1 1 140px; }
+  .mem-tools > input { flex-basis: 100%; }
+  .approval { max-width: 100%; }
+  /* Your Saras: name, address, badge or Switch and ⋯ share a line when they fit. */
+  .servers-list li > span.muted { flex: 1 1 auto; }
+  /* Wave 3: name over address on the left, the badge or Switch and ⋯ on the right, so a long name
+     never pushes ⋯ onto a line of its own. A long address shortens (…; the whole one is its title). */
+  .servers-list li { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; column-gap: 8px; row-gap: 2px; align-items: center; }
+  .servers-list li > span:first-child { grid-column: 1; grid-row: 1; overflow-wrap: anywhere; }
+  .servers-list li > span.muted { grid-column: 1; grid-row: 2; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .servers-list li > :nth-child(3) { grid-column: 2; grid-row: 1 / span 2; margin-left: 0; }
+  .servers-list li > .tidy-more-btn { grid-column: 3; grid-row: 1 / span 2; }
+  .approval .approval-about { margin-left: 0; }
+  .approval .approval-raw { flex-basis: 100%; margin-left: 0; }
+  .tidy-card, .story-lookback { padding: var(--space-3); }
+}
+@media (pointer: coarse) {
+  .companion-menu .cm-item { min-height: 44px; }
+  .dlg-more { min-height: 32px; }
+}

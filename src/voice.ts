@@ -12,6 +12,7 @@ import { randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { availableParallelism } from 'node:os';
 import { join } from 'node:path';
+import { FOR_APP, spokenText } from './spoken.ts';
 
 export type SttEngine = 'off' | 'local' | 'openai';
 export type TtsEngine = 'off' | 'local' | 'openai' | 'elevenlabs' | 'xai';
@@ -97,22 +98,9 @@ export class VoiceError extends Error {}
 
 // ---------------- text cleanup ----------------
 
-/** Turns a chat reply into something that sounds right spoken aloud. */
+/** Turns a chat reply into something that sounds right spoken aloud (the app's voice; spoken.ts). */
 export function speechText(text: string): string {
-  return text
-    .replace(/```[\s\S]*?```/g, ' (I put the code in the chat.) ')
-    .replace(/`([^`]+)`/g, '$1')
-    .replace(/!\[[^\]]*\]\([^)]*\)/g, '')
-    .replace(/\[([^\]]+)\]\((?:https?:)?[^)]*\)/g, '$1')
-    .replace(/https?:\/\/\S+/g, 'a link')
-    .replace(/^\s{0,3}#{1,6}\s+/gm, '')
-    .replace(/^\s*[-*+]\s+/gm, '')
-    .replace(/^\s*\d+\.\s+/gm, '')
-    .replace(/(\*\*|__|\*|_|~~)(?=\S)([\s\S]*?\S)\1/g, '$2')
-    .replace(/[|>#*_~]/g, ' ')
-    .replace(/\p{Extended_Pictographic}(\uFE0F)?/gu, '')
-    .replace(/\s+/g, ' ')
-    .trim();
+  return spokenText(text, FOR_APP);
 }
 
 /** Splits text into speakable chunks (sentences, merged up to ~240 characters). */

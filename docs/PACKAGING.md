@@ -147,7 +147,7 @@ Publish (owner):
 1. Create the public repository `farena-ai/sara-home-assistant` (description, topics such as
    (Repository names must not contain "HACS": hacs-bot rejects them. Renamed 2026-10-28.)
    `home-assistant`, `hacs`, `integration`, `ai`; issues on), push `outputs/sara-home-assistant/` to `main`.
-2. Make a GitHub Release (tag `v<manifest version>`, now `v0.2.0`). Users can then add it in HACS as a
+2. Make a GitHub Release (tag `v<manifest version>`, now `v0.3.0`). Users can then add it in HACS as a
    custom repository right away.
 3. For the HACS default list: add the [HACS action](https://github.com/hacs/action) and
    [hassfest action](https://github.com/home-assistant/actions#hassfest) workflows to *that*

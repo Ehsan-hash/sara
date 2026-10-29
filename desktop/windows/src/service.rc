@@ -1,9 +1,14 @@
 #include <winres.h>
 #include "resource.h"
+// The version comes from package.json (CMakeLists.txt).
+#ifndef SARA_APP_VERSION
+#define SARA_APP_VERSION "0.0.0"
+#define SARA_VERSION_COMMAS 0,0,0,0
+#endif
 IDI_SARA ICON "sara.ico"
 VS_VERSION_INFO VERSIONINFO
-FILEVERSION 0,46,0,0
-PRODUCTVERSION 0,46,0,0
+FILEVERSION SARA_VERSION_COMMAS
+PRODUCTVERSION SARA_VERSION_COMMAS
 FILEOS VOS_NT_WINDOWS32
 FILETYPE VFT_APP
 BEGIN
@@ -13,9 +18,9 @@ BEGIN
     BEGIN
       VALUE "CompanyName", "Backstage Coding"
       VALUE "FileDescription", "Sara server (Windows service host)"
-      VALUE "FileVersion", "0.46.0"
+      VALUE "FileVersion", SARA_APP_VERSION
       VALUE "ProductName", "Sara"
-      VALUE "ProductVersion", "0.46.0"
+      VALUE "ProductVersion", SARA_APP_VERSION
       VALUE "OriginalFilename", "SaraService.exe"
     END
   END

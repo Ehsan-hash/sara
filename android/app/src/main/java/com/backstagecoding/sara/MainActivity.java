@@ -156,9 +156,9 @@ public class MainActivity extends Activity {
         if (url == null) {
             // A user name before the host, a path, a query or a fragment: not a plain server address.
             new android.app.AlertDialog.Builder(this)
-                    .setTitle("This link can't be used")
-                    .setMessage("The pairing link doesn't hold a plain server address, so the app won't open it. Make a new code in Sara on your computer: Settings → Data & health → Devices and sign-in → Add a phone.")
-                    .setPositiveButton("OK", (d, w) -> back.run())
+                    .setTitle(R.string.pair_refused_title)
+                    .setMessage(R.string.pair_refused_message)
+                    .setPositiveButton(android.R.string.ok, (d, w) -> back.run())
                     .setOnCancelListener(d -> back.run())
                     .show();
             return true;
@@ -173,19 +173,18 @@ public class MainActivity extends Activity {
             start = m.indexOf(url);
             msg.setSpan(new android.text.style.StyleSpan(Typeface.BOLD), start, start + url.length(), android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
         } else {
-            msg.append("Sign in to ");
-            start = msg.length();
-            msg.append(url);
-            msg.setSpan(new android.text.style.StyleSpan(Typeface.BOLD), start, msg.length(), android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-            msg.append("?");
+            String m = getString(R.string.pair_sign_in_message, url);
+            msg.append(m);
+            start = m.indexOf(url);
+            if (start >= 0) msg.setSpan(new android.text.style.StyleSpan(Typeface.BOLD), start, start + url.length(), android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
         }
         if (url.startsWith("http://") && !Net.isPrivateHost(url)) {
-            msg.append("\n\n⚠ This address uses plain http on the open internet: anyone on the way could read your messages. Only continue if you set it up that way.");
+            msg.append("\n\n").append(getString(R.string.pair_plain_http));
         }
         if (adding) msg.append("\n\n").append(getString(R.string.servers_add_only_yours));
         boolean switching = adding;
         android.app.AlertDialog.Builder b = new android.app.AlertDialog.Builder(this)
-                .setTitle(adding ? getString(R.string.servers_add_title) : code != null ? "Sign in with a code" : "Open your Sara")
+                .setTitle(adding ? getString(R.string.servers_add_title) : getString(code != null ? R.string.pair_code_title : R.string.pair_open_title))
                 .setMessage(msg)
                 .setOnCancelListener(d -> back.run());
         if (adding) {
@@ -193,8 +192,8 @@ public class MainActivity extends Activity {
             b.setPositiveButton(getString(R.string.servers_cancel), (d, w) -> back.run());
             b.setNegativeButton(getString(R.string.servers_add), (d, w) -> connect(url, code));
         } else {
-            b.setPositiveButton("Sign in", (d, w) -> connect(url, code));
-            b.setNegativeButton("Cancel", (d, w) -> back.run());
+            b.setPositiveButton(getString(R.string.pair_sign_in), (d, w) -> connect(url, code));
+            b.setNegativeButton(getString(R.string.servers_cancel), (d, w) -> back.run());
         }
         android.app.AlertDialog dlg = b.create();
         if (switching) {
@@ -223,57 +222,147 @@ public class MainActivity extends Activity {
 
     // ---------- setup ----------
 
+    // The web app's colours (web/style.css; res/values/colors.xml), for the app's own screens.
+    private static final int BG = Color.parseColor("#121016");
+    private static final int PANEL = Color.parseColor("#1B1820");
+    private static final int PANEL_2 = Color.parseColor("#241F2B");
+    private static final int TEXT = Color.parseColor("#EEE9F3");
+    private static final int MUTED = Color.parseColor("#A49CAE");
+    private static final int ACCENT = Color.parseColor("#E0789A");
+    private static final int BORDER = Color.parseColor("#322B3A");
+    private static final int ERROR = Color.parseColor("#FF8080");
+    private static final int ON_ACCENT = Color.parseColor("#1A0F14");
+
+    private android.graphics.drawable.GradientDrawable rounded(int fill, int stroke, int radiusDp) {
+        android.graphics.drawable.GradientDrawable g = new android.graphics.drawable.GradientDrawable();
+        g.setColor(fill);
+        g.setCornerRadius(dp(radiusDp));
+        if (stroke != 0) g.setStroke(dp(1), stroke);
+        return g;
+    }
+
+    /** A main (pink) or quiet (outlined) button, like the web app's. */
+    private void styleButton(Button b, String label, boolean primary) {
+        b.setText(label);
+        b.setAllCaps(false);
+        b.setTextSize(16);
+        b.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
+        b.setTextColor(primary ? ON_ACCENT : TEXT);
+        b.setStateListAnimator(null);
+        b.setMinHeight(dp(48));
+        b.setPadding(dp(18), 0, dp(18), 0);
+        android.graphics.drawable.GradientDrawable g = rounded(primary ? ACCENT : Color.TRANSPARENT, primary ? 0 : BORDER, 12);
+        b.setBackground(new android.graphics.drawable.RippleDrawable(android.content.res.ColorStateList.valueOf(primary ? 0x33000000 : 0x22FFFFFF), g, null));
+    }
+
+    private Button button(String label, boolean primary) {
+        Button b = new Button(this);
+        styleButton(b, label, primary);
+        return b;
+    }
+
+    private EditText field(String hint) {
+        EditText e = new EditText(this);
+        e.setHint(hint);
+        e.setSingleLine(true);
+        e.setTextSize(16);
+        e.setTextColor(TEXT);
+        e.setHintTextColor(Color.parseColor("#7A7484"));
+        e.setBackground(rounded(PANEL_2, BORDER, 12));
+        e.setPadding(dp(14), dp(12), dp(14), dp(12));
+        return e;
+    }
+
+    private TextView label(String s) {
+        TextView t = text(s, 14, TEXT);
+        t.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
+        t.setPadding(0, dp(16), 0, dp(6));
+        return t;
+    }
+
+    private static LinearLayout.LayoutParams fullWidth(int topMarginPx) {
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        lp.topMargin = topMarginPx;
+        return lp;
+    }
+
+    /** Her picture in a circle, at the top of the app's own screens. */
+    private View logo() {
+        android.widget.ImageView img = new android.widget.ImageView(this);
+        img.setImageResource(R.drawable.icon);
+        img.setScaleType(android.widget.ImageView.ScaleType.CENTER_CROP);
+        android.graphics.drawable.GradientDrawable circle = new android.graphics.drawable.GradientDrawable();
+        circle.setShape(android.graphics.drawable.GradientDrawable.OVAL);
+        circle.setColor(PANEL_2);
+        img.setBackground(circle);
+        img.setClipToOutline(true);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(dp(64), dp(64));
+        lp.bottomMargin = dp(18);
+        img.setLayoutParams(lp);
+        return img;
+    }
+
+    /** The app's own screens: a card in the middle (scrolls on small phones and with big text). */
+    private LinearLayout screen() {
+        LinearLayout card = new LinearLayout(this);
+        card.setOrientation(LinearLayout.VERTICAL);
+        card.setBackground(rounded(PANEL, BORDER, 20));
+        card.setPadding(dp(24), dp(26), dp(24), dp(22));
+        android.widget.ScrollView scroll = new android.widget.ScrollView(this);
+        scroll.setFillViewport(true);
+        scroll.setBackgroundColor(BG);
+        FrameLayout center = new FrameLayout(this);
+        FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(Math.min(dp(480), getResources().getDisplayMetrics().widthPixels - dp(32)), FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.CENTER);
+        center.addView(card, lp);
+        scroll.addView(center, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
+        keepClearOfBars(scroll, dp(16));
+        setContentView(scroll);
+        card.addView(logo());
+        return card;
+    }
+
     private void showSetup(String prefill, String error) {
         dropWeb();
         // Phase 68: with a Sara already here, this screen adds another one (Back returns).
         final Servers.Profile here = Servers.active(this);
-        int pad = dp(24);
-        LinearLayout box = new LinearLayout(this);
-        box.setOrientation(LinearLayout.VERTICAL);
-        box.setGravity(Gravity.CENTER_VERTICAL);
-        box.setPadding(pad, pad, pad, pad);
-        box.setBackgroundColor(Color.parseColor("#141318"));
+        LinearLayout box = screen();
 
-        TextView title = text(here != null ? getString(R.string.servers_add_a_sara) : "Connect to your companion", 24, Color.WHITE);
+        TextView title = text(getString(here != null ? R.string.servers_add_a_sara : R.string.setup_title), 24, TEXT);
         title.setTypeface(Typeface.DEFAULT_BOLD);
-        TextView help = text("Type the address of your Sara server: the same one you open in your browser, for example sara.example.com or 192.168.1.20:7860.", 15, Color.parseColor("#D0CCD8"));
-        help.setPadding(0, dp(12), 0, dp(16));
+        TextView help = text(getString(here != null ? R.string.setup_add_help : R.string.setup_help), 15, MUTED);
+        help.setPadding(0, dp(8), 0, 0);
+        help.setLineSpacing(0, 1.15f);
 
-        EditText address = new EditText(this);
-        address.setHint("sara.example.com");
-        address.setSingleLine(true);
+        EditText address = field("sara.example.com");
         address.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_URI);
-        address.setImeOptions(EditorInfo.IME_ACTION_GO);
-        address.setTextColor(Color.WHITE);
-        address.setHintTextColor(Color.parseColor("#7A7484"));
+        address.setImeOptions(EditorInfo.IME_ACTION_NEXT);
         if (prefill != null) address.setText(prefill);
 
-        EditText pairCode = new EditText(this);
-        pairCode.setHint("Pairing code (optional)");
-        pairCode.setSingleLine(true);
+        EditText pairCode = field("XXXX-XXXX-XXXX");
         pairCode.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_CHARACTERS | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
-        pairCode.setTextColor(Color.WHITE);
-        pairCode.setHintTextColor(Color.parseColor("#7A7484"));
-        TextView codeHelp = text("Get a code in Sara on your computer: Settings → Devices and sign-in → Add a phone. Without one, you sign in with your owner token.", 13, Color.parseColor("#9A94A4"));
-        codeHelp.setPadding(0, dp(4), 0, 0);
+        pairCode.setImeOptions(EditorInfo.IME_ACTION_GO);
+        pairCode.setTypeface(Typeface.MONOSPACE);
+        TextView codeHelp = text(getString(R.string.setup_code_help), 13, MUTED);
+        codeHelp.setPadding(0, dp(6), 0, 0);
 
-        TextView status = text(error == null ? "" : error, 14, Color.parseColor("#FF8A8A"));
-        status.setPadding(0, dp(10), 0, dp(10));
+        TextView status = text(error == null ? "" : error, 14, ERROR);
+        status.setPadding(0, dp(12), 0, 0);
+        status.setVisibility(error == null ? View.GONE : View.VISIBLE);
 
-        Button go = new Button(this);
-        go.setText("Connect");
+        Button go = button(getString(R.string.setup_connect), true);
         Runnable connect = () -> {
             String url = Net.normalize(address.getText().toString());
             if (url.isEmpty()) return;
             go.setEnabled(false);
-            status.setTextColor(Color.parseColor("#D0CCD8"));
-            status.setText("Checking…");
+            status.setVisibility(View.VISIBLE);
+            status.setTextColor(MUTED);
+            status.setText(R.string.setup_checking);
             // Typed without http:// or https://: try https first, then plain http (a server at home).
             String typed = address.getText().toString().trim();
             boolean schemeGiven = typed.startsWith("http://") || typed.startsWith("https://");
             String[] tries = schemeGiven ? new String[] {url} : new String[] {url, "http://" + url.substring("https://".length())};
             new Thread(() -> {
-                String err = "Couldn't reach it. Check the address, and that the server is running.";
+                String err = getString(R.string.setup_unreachable);
                 String found = null;
                 for (String t : tries) {
                     try {
@@ -282,7 +371,7 @@ public class MainActivity extends Activity {
                             found = t;
                             break;
                         }
-                        err = "That address answered, but it isn't a Sara server.";
+                        err = getString(R.string.setup_not_sara);
                     } catch (Exception e) {
                         // try the next one
                     }
@@ -292,7 +381,7 @@ public class MainActivity extends Activity {
                 runOnUiThread(() -> {
                     go.setEnabled(true);
                     if (finalErr != null) {
-                        status.setTextColor(Color.parseColor("#FF8A8A"));
+                        status.setTextColor(ERROR);
                         status.setText(finalErr);
                         return;
                     }
@@ -301,41 +390,76 @@ public class MainActivity extends Activity {
             }).start();
         };
         go.setOnClickListener(v -> connect.run());
-        address.setOnEditorActionListener((v, id, ev) -> {
+        pairCode.setOnEditorActionListener((v, id, ev) -> {
             connect.run();
             return true;
         });
 
-        Button demo = new Button(this);
-        demo.setText("Try the demo");
-        demo.setAllCaps(false);
-        demo.setOnClickListener(v -> {
-            Servers.use(this, DEMO_SERVER);
-            Intent i = new Intent();
-            i.putExtra("demo", true);
-            showWeb(DEMO_SERVER, i);
-        });
-        TextView demoHelp = text("No server yet? The demo shows what Sara is like (conversations there aren't saved).", 13, Color.parseColor("#9A94A4"));
-        demoHelp.setPadding(0, dp(18), 0, dp(4));
-
         box.addView(title);
         box.addView(help);
-        box.addView(address);
-        box.addView(pairCode);
+        box.addView(label(getString(R.string.setup_address)));
+        box.addView(address, fullWidth(0));
+        box.addView(label(getString(R.string.setup_code)));
+        box.addView(pairCode, fullWidth(0));
         box.addView(codeHelp);
         box.addView(status);
-        box.addView(go);
-        box.addView(demoHelp);
-        box.addView(demo);
+        box.addView(go, fullWidth(dp(18)));
         if (here != null) {
-            Button back = new Button(this);
-            back.setText(getString(R.string.servers_back, here.name));
-            back.setAllCaps(false);
+            Button back = button(getString(R.string.servers_back, here.name), false);
             back.setOnClickListener(v -> showWeb(here.url, null));
-            box.addView(back);
+            box.addView(back, fullWidth(dp(10)));
+        } else {
+            View line = new View(this);
+            line.setBackgroundColor(BORDER);
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(1));
+            lp.topMargin = dp(22);
+            box.addView(line, lp);
+            TextView demoHelp = text(getString(R.string.setup_demo_help), 13, MUTED);
+            demoHelp.setPadding(0, dp(14), 0, 0);
+            box.addView(demoHelp);
+            Button demo = button(getString(R.string.setup_demo), false);
+            demo.setOnClickListener(v -> {
+                Servers.use(this, DEMO_SERVER);
+                Intent i = new Intent();
+                i.putExtra("demo", true);
+                showWeb(DEMO_SERVER, i);
+            });
+            box.addView(demo, fullWidth(dp(10)));
         }
-        keepClearOfBars(box, pad);
-        setContentView(box);
+    }
+
+    /** A saved Sara isn't answering: Try again, add a Sara, or open one of the others. */
+    private void showOffline(String server) {
+        dropWeb();
+        LinearLayout box = screen();
+        TextView title = text(getString(R.string.offline_title), 24, TEXT);
+        title.setTypeface(Typeface.DEFAULT_BOLD);
+        box.addView(title);
+        TextView msg = text(getString(R.string.offline_message, Servers.host(server)), 15, MUTED);
+        msg.setPadding(0, dp(8), 0, 0);
+        msg.setLineSpacing(0, 1.15f);
+        box.addView(msg);
+        Button retry = button(getString(R.string.offline_retry), true);
+        retry.setOnClickListener(v -> showWeb(server, null));
+        box.addView(retry, fullWidth(dp(20)));
+        Button add = button(getString(R.string.servers_add_a_sara), false);
+        add.setOnClickListener(v -> showSetup(null, null));
+        box.addView(add, fullWidth(dp(10)));
+        // Phase 68: the other saved Saras are one tap away.
+        Servers.Profile cur = Servers.active(this);
+        boolean first = true;
+        for (Servers.Profile p : Servers.list(this)) {
+            if (cur != null && p.id.equals(cur.id)) continue;
+            if (first) {
+                TextView others = text(getString(R.string.offline_others), 13, MUTED);
+                others.setPadding(0, dp(18), 0, 0);
+                box.addView(others);
+                first = false;
+            }
+            Button b = button((p.emoji == null || p.emoji.isEmpty() ? "" : p.emoji + " ") + p.name, false);
+            b.setOnClickListener(v -> switchTo(p.id, null));
+            box.addView(b, fullWidth(dp(8)));
+        }
     }
 
     // ---------- the app ----------
@@ -378,7 +502,7 @@ public class MainActivity extends Activity {
 
             @Override
             public void onReceivedError(WebView view, WebResourceRequest req, WebResourceError err) {
-                if (req.isForMainFrame()) showSetup(server, "Couldn't open " + server + " (" + err.getDescription() + "). Check your connection, or change the address.");
+                if (req.isForMainFrame()) showOffline(server);
             }
 
             @Override
@@ -422,7 +546,7 @@ public class MainActivity extends Activity {
         web.addJavascriptInterface(new Bridge(), "SaraPhone");
         CallService.listener = this::callEvent;
         root = new FrameLayout(this);
-        root.setBackgroundColor(Color.parseColor("#121016"));
+        root.setBackgroundColor(BG);
         root.addView(web, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
         // Android 15+ draws apps edge to edge: keep the page clear of the status bar, the
         // navigation/gesture bar and the keyboard.
@@ -595,16 +719,15 @@ public class MainActivity extends Activity {
             LinearLayout box = new LinearLayout(this);
             box.setOrientation(LinearLayout.VERTICAL);
             box.setGravity(Gravity.CENTER);
-            box.setBackgroundColor(Color.parseColor("#121016"));
+            box.setBackgroundColor(BG);
             box.setClickable(true);
-            TextView t = text("🔒", 44, Color.WHITE);
+            TextView t = text("🔒", 44, TEXT);
             t.setGravity(Gravity.CENTER);
-            TextView m = text("Locked", 20, Color.WHITE);
+            TextView m = text(getString(R.string.lock_locked), 20, TEXT);
             m.setGravity(Gravity.CENTER);
             m.setPadding(0, dp(8), 0, dp(20));
             Button b = new Button(this);
-            b.setText("Unlock");
-            b.setAllCaps(false);
+            styleButton(b, getString(R.string.lock_unlock), true);
             b.setOnClickListener(v -> askToUnlock());
             box.addView(t);
             box.addView(m);
@@ -628,7 +751,7 @@ public class MainActivity extends Activity {
             return;
         }
         if (Build.VERSION.SDK_INT >= 28) {
-            BiometricPrompt.Builder b = new BiometricPrompt.Builder(this).setTitle("Unlock Sara");
+            BiometricPrompt.Builder b = new BiometricPrompt.Builder(this).setTitle(getString(R.string.lock_prompt));
             if (Build.VERSION.SDK_INT >= 30) b.setAllowedAuthenticators(BiometricManager.Authenticators.BIOMETRIC_STRONG | BiometricManager.Authenticators.DEVICE_CREDENTIAL);
             else b.setDeviceCredentialAllowed(true);
             b.build().authenticate(new CancellationSignal(), getMainExecutor(), new BiometricPrompt.AuthenticationCallback() {
@@ -638,7 +761,7 @@ public class MainActivity extends Activity {
                 }
             });
         } else {
-            Intent i = km.createConfirmDeviceCredentialIntent("Unlock Sara", null);
+            Intent i = km.createConfirmDeviceCredentialIntent(getString(R.string.lock_prompt), null);
             if (i != null) startActivityForResult(i, REQ_UNLOCK);
             else unlock();
         }
@@ -672,10 +795,10 @@ public class MainActivity extends Activity {
         }
         if (Build.VERSION.SDK_INT >= 29 && !has(Manifest.permission.ACCESS_BACKGROUND_LOCATION)) {
             new android.app.AlertDialog.Builder(this)
-                    .setTitle("Allow location all the time?")
-                    .setMessage("To remind you when you get somewhere, Sara has to notice you arriving while the app is closed. On the next screen choose \"Allow all the time\". Your location stays on this phone: Sara only tells your server \"arrived at Store\".")
-                    .setPositiveButton("Continue", (d, w) -> requestPermissions(new String[] {Manifest.permission.ACCESS_BACKGROUND_LOCATION}, REQ_PLACES_BG))
-                    .setNegativeButton("Not now", null)
+                    .setTitle(R.string.places_title)
+                    .setMessage(R.string.places_message)
+                    .setPositiveButton(R.string.places_continue, (d, w) -> requestPermissions(new String[] {Manifest.permission.ACCESS_BACKGROUND_LOCATION}, REQ_PLACES_BG))
+                    .setNegativeButton(R.string.places_not_now, null)
                     .show();
         }
     }
@@ -688,18 +811,18 @@ public class MainActivity extends Activity {
     private void locateAndSave(String name) {
         android.location.LocationManager lm = getSystemService(android.location.LocationManager.class);
         if (lm == null) {
-            placeResult(false, "This phone has no location service.");
+            placeResult(false, getString(R.string.places_no_service));
             return;
         }
         String provider = lm.isProviderEnabled(android.location.LocationManager.GPS_PROVIDER) ? android.location.LocationManager.GPS_PROVIDER
                 : lm.isProviderEnabled(android.location.LocationManager.NETWORK_PROVIDER) ? android.location.LocationManager.NETWORK_PROVIDER : null;
         if (provider == null) {
-            placeResult(false, "Location is switched off on this phone. Turn it on in the quick settings and try again.");
+            placeResult(false, getString(R.string.places_location_off));
             return;
         }
         java.util.function.Consumer<android.location.Location> got = (loc) -> {
             if (loc == null) {
-                placeResult(false, "Couldn't find where you are. Try again outside or near a window.");
+                placeResult(false, getString(R.string.places_not_found));
                 return;
             }
             String server = Net.server(this);
@@ -707,12 +830,12 @@ public class MainActivity extends Activity {
                 try {
                     org.json.JSONObject body = new org.json.JSONObject().put("name", name).put("lat", loc.getLatitude()).put("lon", loc.getLongitude());
                     Net.Response r = Net.postJson(this, server + "/api/places", body.toString());
-                    String msg = r.status == 201 ? "Saved: " + name : new org.json.JSONObject(new String(r.body, java.nio.charset.StandardCharsets.UTF_8)).optString("error", "Couldn't save it.");
+                    String msg = r.status == 201 ? getString(R.string.places_saved, name) : new org.json.JSONObject(new String(r.body, java.nio.charset.StandardCharsets.UTF_8)).optString("error", getString(R.string.places_save_failed));
                     runOnUiThread(() -> placeResult(r.status == 201, msg));
                     Places.sync(this);
                 } catch (Exception e) {
                     android.util.Log.w("Sara", "Saving a place failed", e);
-                    runOnUiThread(() -> placeResult(false, "Couldn't reach your server."));
+                    runOnUiThread(() -> placeResult(false, getString(R.string.reply_unreachable)));
                 }
             }).start();
         };
@@ -725,7 +848,7 @@ public class MainActivity extends Activity {
                 }
             }, android.os.Looper.getMainLooper());
         } catch (SecurityException e) {
-            placeResult(false, "Sara needs location permission to save a place.");
+            placeResult(false, getString(R.string.places_need_permission));
         }
     }
 
@@ -847,7 +970,7 @@ public class MainActivity extends Activity {
                 case "appLock":
                     KeyguardManager km = getSystemService(KeyguardManager.class);
                     if (on && (km == null || !km.isDeviceSecure())) {
-                        runOnUiThread(() -> Toast.makeText(c, "Set a screen lock in your phone's settings first.", Toast.LENGTH_LONG).show());
+                        runOnUiThread(() -> Toast.makeText(c, R.string.lock_needs_screen_lock, Toast.LENGTH_LONG).show());
                         return false;
                     }
                     Net.prefs(c).edit().putBoolean(name, on).apply();
@@ -918,7 +1041,7 @@ public class MainActivity extends Activity {
             String server = Net.server(c);
             if (server == null || !Net.sameOrigin(server, url)) return;
             if (Build.VERSION.SDK_INT < 29) {
-                runOnUiThread(() -> Toast.makeText(c, "Saving pictures needs Android 10 or newer.", Toast.LENGTH_LONG).show());
+                runOnUiThread(() -> Toast.makeText(c, R.string.picture_needs_android10, Toast.LENGTH_LONG).show());
                 return;
             }
             String file = (name == null || name.isEmpty() ? "Sara" : name.replaceAll("[^\\w .-]", "")) + ".jpg";
@@ -936,9 +1059,9 @@ public class MainActivity extends Activity {
                     try (java.io.OutputStream os = getContentResolver().openOutputStream(out)) {
                         os.write(r.body);
                     }
-                    msg = "Saved to Pictures/Sara.";
+                    msg = getString(R.string.picture_saved);
                 } catch (Exception e) {
-                    msg = "Couldn't save the picture.";
+                    msg = getString(R.string.picture_failed);
                 }
                 String m = msg;
                 runOnUiThread(() -> Toast.makeText(c, m, Toast.LENGTH_SHORT).show());
@@ -976,7 +1099,7 @@ public class MainActivity extends Activity {
             String name = pendingPlaceName;
             pendingPlaceName = null;
             if (!has(Manifest.permission.ACCESS_FINE_LOCATION)) {
-                placeResult(false, "Sara needs location permission to save a place or watch for it.");
+                placeResult(false, getString(R.string.places_need_permission_watch));
                 return;
             }
             if (name != null) locateAndSave(name);

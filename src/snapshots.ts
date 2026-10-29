@@ -3,8 +3,9 @@
 // outside the workspace (Sara can't see or touch it): unchanged files are not copied again, and
 // nested git repositories are captured as plain files (git-based snapshots can't do that).
 import { createHash, randomUUID } from 'node:crypto';
-import { chmodSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
-import { dirname, join, relative, sep } from 'node:path';
+import { chmodSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
+import { writeFileAtomic } from './fs-util.ts';
+import { join, relative, sep } from 'node:path';
 
 /** Regenerable folders that are not snapshotted (and left alone on restore). */
 export const SNAPSHOT_SKIP = new Set(['node_modules', '.venv', 'venv', '__pycache__', '.next', '.cache', 'target', '.gradle']);
@@ -126,9 +127,7 @@ export class SnapshotStore {
     const stamp = Math.max(Date.now(), lastStamp + 1);
     const id = `${String(stamp).padStart(15, '0')}-${randomUUID().slice(0, 8)}`;
     const manifest: Manifest = { id, workspace, createdAt, label: label.slice(0, 300), conversationId, files: Object.keys(entries).length, skipped, entries };
-    const tmp = join(manifests, `${id}.json.tmp`);
-    writeFileSync(tmp, JSON.stringify(manifest));
-    renameSync(tmp, join(manifests, `${id}.json`));
+    writeFileAtomic(join(manifests, `${id}.json`), JSON.stringify(manifest), 0o666);
     this.#prune(workspace);
     const { entries: _e, ...meta } = manifest;
     return meta;

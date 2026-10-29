@@ -20,6 +20,20 @@ The original sketch from the first phase:
           Providers  Tools  Memory  Persona + safety
 ```
 
+## Three words that look alike
+
+- **Instance:** a second Sara process on the same host (`--instance NAME`, own user, port and data;
+  `sudo sara instances`). See docs/INSTALL.md.
+- **Server:** an address the apps keep in their list and switch between ("Your Saras"). See docs/SERVERS.md.
+- **Space:** one person's data folder inside one instance (household mode). See docs/HOUSEHOLD.md.
+
+## Error shapes (on purpose)
+
+- `/api/*`: `{ error, errorKey?, params?, ownerOnly? }`; `error` is English and also the translation key.
+- `/v1/*`: the OpenAI shape `{ error: { message, type, param, code } }`, so OpenAI clients understand it.
+- `/mcp`: JSON-RPC errors, as the MCP protocol requires.
+Don't unify them.
+
 ## Principles
 
 1. **One owner per server.** Sara belongs to one person. She can also take part in other spaces
@@ -38,8 +52,22 @@ Every module in `src/`, roughly in the order they were added (the phase is noted
 
 | Path | Role |
 |---|---|
-| `src/main.ts` | Entry point; env config; first-run owner token |
-| `src/server.ts` | HTTP API + static web UI, security headers, origin guard |
+| `src/main.ts` | Entry point; env config; first-run owner token; the front router that keeps one *space* per person (household mode) and one app context per companion in it, and routes each request to the right one |
+| `src/demo-calls.ts` | Phase 26 on the demo server: short scripted "she calls you" rings for visitors, with no model or voice service |
+| `src/jpeg.ts` | Reads a JPEG's size and checks it without decoding the picture (camera frames, uploads) |
+| `src/server.ts` | `createSaraServer()`: shared state, pre-auth routes (health, report inbox, device start/poll, login, household join, claim, passkey sign-in, pair, logout, session, Google callback, demo), the gates (`isAuthed`, `memberRouteCheck`, `DEVICE_TOKEN_DENIED`, demo `DEMO_WRITES`/`DEMO_READS`, cross-site guard), the sign-in families (pair, household, security, passkey, two-step, device(s), owner-token, setup), conversations/groups/tags with `streamChat`/`streamGroup`, static files; then calls the route modules below in order, then 404 |
+| `src/http.ts` | No server state: `HttpError`, `as400`, `send`, `readJson`, `readRaw`, `cookies`, `safeDecode`, `clientIp`, `proxyTrust`, `isSameOrigin`, `fromPhoneApp`/`fromSaraApp`, `validWorkspace`, security headers, MIME types, body limits |
+| `src/routes/context.ts` | `RouteCtx` (the shared values route modules use), `RouteHandler`, `NEXT`, `ActiveTurn` |
+| `src/routes/library.ts` | library, history-import, import, export |
+| `src/routes/coding.ts` | workspaces, approvals, jobs, starters, github, github-watch, code-projects, codemap, recipes, team, previews, ssh |
+| `src/routes/planner.ts` | planner, tasks, projects, places, reminders, notes, today, briefing, review, leave-by, story |
+| `src/routes/memory.ts` | memories, scrapbook, moments, photos, uploads, find |
+| `src/routes/connections.ts` | google, home, bridges, alexa, other-apps, reports, events (SSE); Home Assistant's own API; `HA_CHANNEL` |
+| `src/routes/admin.ts` | settings, backups, logs, doctor, status, health history, update, access, desktop-apps, safety stats, search, tools, mcp, checklist |
+| `src/routes/models.ts` | providers, model-jobs, subscriptions, local-models, private-local, usage |
+| `src/routes/her.ts` | persona, character, look, sara, together, gallery, adult, companions, phone |
+| `src/routes/voice.ts` · `src/routes/live.ts` | voice, calls, video, push, live status · the WebSocket upgrade for `/api/live/<conversation>` |
+| `src/fs-util.ts` · `src/spoken.ts` · `src/model-names.ts` | `writeFileAtomic` (every store; `owner.json` also keeps a `.bak`) · the one cleaner for spoken text (app voice, Alexa, Home Assistant) · the one rule for Ollama Cloud model names (net-guard keeps an identical, tested copy) |
 | `src/auth.ts` | Owner token (hash only stored), HMAC-signed session cookies, login rate limit; `setupPending` until the first owner sign-in (Phase 59) |
 | `src/claim.ts` | Phase 59: first sign-in in the browser on a new server (`/api/claim`): setup code from the log or, behind a login proxy (`SARA_SETUP=browser`, Umbrel), one click; time window, private addresses only, one-time; see THREAT_MODEL.md |
 | `src/chat.ts` | One turn: disclosure → safety checks → provider routing → agent loop (stream → tool calls → approvals → results → repeat) → persist |
@@ -115,6 +143,8 @@ Every module in `src/`, roughly in the order they were added (the phase is noted
 | `deploy/install-voice.sh` | Optional local voice bundle (pinned, checksummed) into `/opt/sara-voice` |
 | `test/sandbox.linux.test.ts` | Sandbox nasty fixture (Linux + bubblewrap; run on the server) |
 | `web/` | Dependency-free web client |
+| `web/nav.js`, `web/ui-tidy.css` | UI cleanup: the sidebar's places (`DESTS`): pinned ones in one list (defaults Today, Planner, Library, Moments; `sara.navPins` in localStorage per device), the rest under **More** (a popover above the list), her face with Help and Settings in a row below; the buttons keep their `#open-*` ids, so shortcuts, `/#view=` links and the tour (`revealNav` opens More for a step) still work. `ui-tidy.css` (loaded after `style.css`) styles it, plus Settings' group headers, Tools and approvals and the scrapbook's photo actions |
+| `web/app.js` (*Settings pages*, *tools settings*) | UI cleanup: Settings groups are buttons with an icon that open and close (`SETTINGS_GROUPS`, remembered in `sara.settingsGroups`; the page on screen opens its group), pages in `SETTINGS_ORDER`, each page's description from `tips.json` under its title, and a search that looks for every word in titles, descriptions, labels and tips first (`matchSettings`). Tools and approvals: each tool's plain name (`TOOL_NAME`), sentence (`TOOL_WORDS`) and raw name, grouped (`TOOL_GROUP_OF`) in collapsible groups with a summary and *Set all to*, and what a tool still needs (`TOOL_NEEDS`, with a link to the page that sets it up) |
 | `src/usage.ts` | Phase 52: token and cost meter (usage table, metered provider wrapper, AsyncLocalStorage scopes for jobs/team/workers, price table with verified defaults, budgets) |
 | `src/device-flow.ts`, `web/device.html`, `web/device.js` | Phase 52: device-code sign-in for apps (start/poll, owner approves in Settings or on /device#CODE); tokens in `src/auth.ts` |
 | `clients/cli/sara.ts` | Phase 52: `sara-chat` terminal client (login, chat, ask --dir, send, approve, logout); zero deps. Phase 68: several servers (`servers add/list/use/rename/remove`, `--server`), config v2 with migration |
@@ -149,7 +179,7 @@ Every module in `src/`, roughly in the order they were added (the phase is noted
 | `src/elsewhere.ts` | What was just said in her other conversations, so she keeps track like one person would |
 | `src/recall.ts` | Phase 32: the `recall` tool: her own past conversations by words and by time |
 | `src/embeddings.ts` | Phase 38: meaning search: vectors from the owner's embedding model (for example `nomic-embed-text`), searched in Sara's own code |
-| `src/scrapbook.ts` | Phase 9: shared moments, photos and inside jokes |
+| `src/scrapbook.ts` | Phase 9: shared moments, photos and inside jokes. UI cleanup: photos taken out of the scrapbook only (`scrapbook_hidden` table in each companion's `sara.db`; `hidePhoto`/`unhidePhoto`, `photos(store, limit, 'skip'\|'only'\|'all')`); routes `POST /api/scrapbook/photos/hide`, `…/unhide` and `…/delete` (`confirm: true`, through `deletePhotoEverywhere`); the demo refuses them |
 | `src/moments.ts`, `web/moments.js` | Phase 70: "Our moments", the photo album with her captions (per companion, tables `moments`, `moment_albums`, `moment_album_items`, `moment_meta` in her `sara.db`): `MomentsStore.sync` (photos from shareable conversations + kept moments; the first run is the paced backfill), `addByHand` (private/group by hand), automatic albums (Us, Places, Her looks) and the owner's own, covers, "On this day"; `MomentsWorker` (30 s after start, then three captions a minute; `writeCaption`: her character's prompt, the conversation around the photo, the vision model when it can see, minors block before and after the model, Adult-mode rule); `createMomentsTool` (her `moments` tool: find/show, once a day unprompted, never in group/work/partner/app conversations; also filtered out in `runTurn`); `deletePhotoEverywhere`. Routes `/api/moments…` (owner only, not on the demo) and `onThisDay` on `/api/today`. docs/MOMENTS.md |
 | `src/weekly.ts`, `src/review.ts` | Weekly look back (gentle patterns, outdated facts) and the opt-in weekly planner review |
 | `src/briefing.ts`, `src/today.ts`, `src/checklist.ts` | The morning briefing (weather from Open-Meteo), the Today page and its "Getting started" list |

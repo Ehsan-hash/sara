@@ -136,7 +136,7 @@ enum Tailscale {
     let text = String(decoding: (try? JSONSerialization.data(withJSONObject: cfg)) ?? Data(), as: UTF8.self)
     let mine = "127.0.0.1:\(port)"
     if let tcp = cfg["TCP"] as? [String: Any], tcp["443"] != nil, !text.contains(mine) {
-      return "Tailscale already serves something else on this Mac's HTTPS address, so Sara left it alone. Sara is set up for this Mac only for now; you can free the address with `tailscale serve status` and choose Tailscale again (Sara server → Change how you reach her…)."
+      return "Tailscale already serves something else on this Mac's HTTPS address, so Sara left it alone. Sara is set up for this Mac only for now; you can free the address with `tailscale serve status` and choose Tailscale again (Sara on this Mac → Change how you reach her…)."
     }
     let r = runProgram(cli, ["serve", "--bg", "--https=443", "http://127.0.0.1:\(port)"], timeout: 25)
     if r.code == 0 { return nil }
@@ -199,7 +199,7 @@ final class LocalServer {
 
   func writeEnv(_ env: [String: String]) throws {
     try ensureFolders()
-    var s = "# Sara's server on this Mac. Written by the Sara app (Sara server → Change how you reach her…).\n"
+    var s = "# Sara's server on this Mac. Written by the Sara app (Sara on this Mac → Change how you reach her…).\n"
     for k in env.keys.sorted() { s += "\(k)=\(env[k]!.replacingOccurrences(of: "\n", with: " "))\n" }
     let tmp = envFile + ".tmp"
     FileManager.default.createFile(atPath: tmp, contents: Data(s.utf8), attributes: [.posixPermissions: 0o600])
@@ -214,7 +214,7 @@ final class LocalServer {
   }
 
   /// Set up before, then switched to "a Sara somewhere else": the service is off and unregistered,
-  /// her data and settings stay (Sara server → Set up Sara on this Mac… brings her back).
+  /// her data and settings stay (Sara on this Mac → Set up Sara on this Mac… brings her back).
   var offFlag: String { serviceDir + "/off" }
   var switchedOff: Bool { FileManager.default.fileExists(atPath: offFlag) }
   /// Set up here and in use (not switched off).

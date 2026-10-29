@@ -35,11 +35,12 @@ plutil -replace CFBundleShortVersionString -string "$VERSION" "$APP/Info.plist"
 plutil -replace CFBundleVersion -string "$VERSION" "$APP/Info.plist"
 cp LaunchAgent.plist "$APP/Library/LaunchAgents/com.backstagecoding.sara.server.plist"
 plutil -lint "$APP/Info.plist" "$APP"/Library/LaunchAgents/*.plist >/dev/null
-# App icon from the web app's 512 px icon.
+# App icon: AppIcon.png, the same picture as every other app in the macOS shape (a rounded square
+# with the standard margin; made by scripts/make-app-icons.py).
 mkdir -p build/Sara.iconset
 for s in 16 32 128 256 512; do
-  sips -z $s $s "$ROOT/web/icon-512.png" --out "build/Sara.iconset/icon_${s}x${s}.png" >/dev/null
-  d=$((s * 2)); [ $d -le 512 ] && sips -z $d $d "$ROOT/web/icon-512.png" --out "build/Sara.iconset/icon_${s}x${s}@2x.png" >/dev/null
+  sips -z $s $s AppIcon.png --out "build/Sara.iconset/icon_${s}x${s}.png" >/dev/null
+  d=$((s * 2)); sips -z $d $d AppIcon.png --out "build/Sara.iconset/icon_${s}x${s}@2x.png" >/dev/null
 done
 iconutil -c icns build/Sara.iconset -o "$APP/Resources/Sara.icns"
 

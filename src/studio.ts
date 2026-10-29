@@ -2,7 +2,7 @@
 // "surprise me", "fill in the rest", try-before-saving sample replies, saving (with the dials that
 // drive app settings), and "tune by talking" (a tool she uses; the owner approves each change).
 import { randomInt } from 'node:crypto';
-import { writeFileSync } from 'node:fs';
+import { writeFileAtomic } from './fs-util.ts';
 import { join } from 'node:path';
 import { RELATIONSHIPS, TALK } from './character.ts';
 import { type AppContext, bondContext, resolveFor } from './chat.ts';
@@ -13,7 +13,7 @@ import { ADULT_OFF_NOTE } from './safety.ts';
 import { adultModeOn } from './settings.ts';
 import type { Conversation } from './store.ts';
 import { type Tool, ToolError } from './tools/types.ts';
-import { clampTrait, cleanLife, HUMOURS, initiativeToProactive, WORK_IDS, type Life, LIFE_FIELDS, LIFE_IDS, type TraitId, TRAIT_IDS, TRAIT_MID, traitDef, traitLines, type Traits, traitWord } from './traits.ts';
+import { clampTrait, cleanLife, HUMOURS, initiativeToProactive, WORK_IDS, type Life, LIFE_FIELDS, LIFE_IDS, type TraitId, TRAIT_IDS, TRAIT_MID, traitDef, type Traits, traitWord } from './traits.ts';
 
 export type Rng = () => number;
 /** A uniform random number in [0, 1) from the system's secure source. */
@@ -407,7 +407,7 @@ export async function trySamples(app: AppContext, before: Persona, after: Person
 /** Saves her sheet; renames her in memories; the "Starts conversations" dial sets how often she may text first. */
 export function savePersona(app: AppContext, p: Persona): { persona: Persona; renamedMemories: number } {
   const prev = app.persona;
-  writeFileSync(join(app.dataDir, 'persona.json'), JSON.stringify(p, null, 2) + '\n', { mode: 0o600 });
+  writeFileAtomic(join(app.dataDir, 'persona.json'), JSON.stringify(p, null, 2) + '\n', 0o600);
   const renamed = prev.name !== p.name ? (app.memory?.renameCompanion(prev.name, p.name) ?? 0) : 0;
   app.persona = p;
   const v = p.traits?.initiative;
@@ -473,6 +473,3 @@ export function createTuneTool(app: () => AppContext): Tool {
     },
   };
 }
-
-/** Prompt lines from the dials, for display ("what this does to her instructions"). */
-export const previewLines = (p: Persona) => traitLines(p.traits, p.humour);

@@ -1,7 +1,8 @@
 // Phase 8: `sara doctor`, deeper checks than the Health page: database integrity, every model
 // provider actually answers, data folder permissions, off-server copies, Node and optional installs.
 // Used by the CLI (`node src/main.ts --doctor`, `sara doctor`) and Settings → Data & health.
-import { isCloudName, isOllamaDaemon } from './model-catalog.ts';
+import { isOllamaDaemon } from './model-catalog.ts';
+import { isCloudModelName } from './model-names.ts';
 import { existsSync, statfsSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
@@ -87,7 +88,7 @@ export async function runDoctor(d: DoctorDeps): Promise<DoctorCheck[]> {
         const models = await provider.listModels(AbortSignal.timeout((d.providerTimeoutS ?? 20) * 1000));
         const usedHere = [s.defaultProviderId === p.id ? s.defaultModel : undefined, ...Object.values(s.routes ?? {}).filter((r) => r?.providerId === p.id).map((r) => r!.model)].filter(Boolean) as string[];
         // An Ollama Cloud model that isn't pulled yet is fine: Sara pulls it on first use (Phase 56).
-        const missing = usedHere.filter((m) => models.length && !models.includes(m) && !models.some((x) => x.startsWith(`${m}:`)) && !(isOllamaDaemon(p) && isCloudName(m)));
+        const missing = usedHere.filter((m) => models.length && !models.includes(m) && !models.some((x) => x.startsWith(`${m}:`)) && !(isOllamaDaemon(p) && isCloudModelName(m)));
         add(`Provider: ${p.label}`, missing.length ? 'warn' : 'ok', `${models.length} models, answered in ${Date.now() - t} ms${missing.length ? `; not in its list: ${missing.join(', ')}` : ''}`);
       } catch (err) {
         add(`Provider: ${p.label}`, p.id === s.defaultProviderId ? 'fail' : 'warn', (err as Error).message.slice(0, 200));

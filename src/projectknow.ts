@@ -5,7 +5,7 @@
 // (cheap, no model), refreshed when it is older than an hour, and shown in coding conversations
 // and to team helpers as "## This project".
 import { execFileSync } from 'node:child_process';
-import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { extname, join, relative, sep } from 'node:path';
 import type { DatabaseSync } from 'node:sqlite';
 import type { AppContext } from './chat.ts';
@@ -307,13 +307,4 @@ export function createProjectNoteTool(app: () => AppContext): Tool {
       return `Noted for ${k?.facts.name ?? path}: (${n.kind}) ${n.text}`;
     },
   };
-}
-
-/** Is the folder a file inside the workspace (for routes that take a path)? */
-export function isFolder(p: string): boolean {
-  try {
-    return statSync(p).isDirectory();
-  } catch {
-    return false;
-  }
 }

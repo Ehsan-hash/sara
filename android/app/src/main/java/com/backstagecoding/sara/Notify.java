@@ -53,11 +53,11 @@ final class Notify {
                 .setContentIntent(PendingIntent.getActivity(c, (int) id, open, PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT));
         if (from != null) b.setSubText(from);
         if (conversationId != null && !conversationId.isEmpty()) {
-            RemoteInput input = new RemoteInput.Builder(KEY_REPLY).setLabel("Reply to " + name).build();
+            RemoteInput input = new RemoteInput.Builder(KEY_REPLY).setLabel(c.getString(R.string.notify_reply_to, name)).build();
             Intent reply = new Intent(c, ReplyReceiver.class).putExtra("conv", conversationId).putExtra("id", (int) id).putExtra("name", name).putExtra("server", server);
             // Mutable: Android fills in the typed reply.
             PendingIntent pi = PendingIntent.getBroadcast(c, (int) id, reply, PendingIntent.FLAG_MUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
-            b.addAction(new Notification.Action.Builder(Icon.createWithResource(c, R.drawable.ic_notify), "Reply", pi).addRemoteInput(input).setAllowGeneratedReplies(true).build());
+            b.addAction(new Notification.Action.Builder(Icon.createWithResource(c, R.drawable.ic_notify), c.getString(R.string.notify_reply), pi).addRemoteInput(input).setAllowGeneratedReplies(true).build());
         }
         privacy(c, b, name);
         nm.notify((int) id, b.build());
@@ -71,8 +71,8 @@ final class Notify {
                 .setSmallIcon(R.drawable.ic_notify)
                 .setColor(COLOR)
                 .setContentTitle(name)
-                .setContentText(problem != null ? problem : "You: " + reply)
-                .setSubText(problem != null ? null : "Sent")
+                .setContentText(problem != null ? problem : c.getString(R.string.notify_you, reply))
+                .setSubText(problem != null ? null : c.getString(R.string.notify_sent))
                 .setOnlyAlertOnce(true)
                 .setAutoCancel(true)
                 .setTimeoutAfter(problem != null ? 0 : 8000)
@@ -92,7 +92,7 @@ final class Notify {
     static void incoming(Context c, String name, String ringId, String conversationId, String reason, long expiresAtMs) {
         NotificationManager nm = c.getSystemService(NotificationManager.class);
         if (nm == null) return;
-        NotificationChannel ch = new NotificationChannel(RING_CHANNEL, "Calls from " + name, NotificationManager.IMPORTANCE_HIGH);
+        NotificationChannel ch = new NotificationChannel(RING_CHANNEL, c.getString(R.string.channel_ringing, name), NotificationManager.IMPORTANCE_HIGH);
         ch.setSound(RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE), new AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_NOTIFICATION_RINGTONE).setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION).build());
         ch.enableVibration(true);
         ch.setVibrationPattern(new long[] {0, 800, 600, 800, 600});
@@ -106,7 +106,7 @@ final class Notify {
         Notification.Builder b = new Notification.Builder(c, RING_CHANNEL)
                 .setSmallIcon(R.drawable.ic_notify)
                 .setColor(COLOR)
-                .setContentTitle(name + " is calling")
+                .setContentTitle(c.getString(R.string.notify_calling, name))
                 .setContentText(reason)
                 .setCategory(Notification.CATEGORY_CALL)
                 .setOngoing(true)
@@ -117,8 +117,8 @@ final class Notify {
         if (Build.VERSION.SDK_INT >= 31) {
             b.setStyle(Notification.CallStyle.forIncomingCall(new android.app.Person.Builder().setName(name).setImportant(true).build(), declinePi, answerPi));
         } else {
-            b.addAction(new Notification.Action.Builder(null, "Decline", declinePi).build());
-            b.addAction(new Notification.Action.Builder(null, "Answer", answerPi).build());
+            b.addAction(new Notification.Action.Builder(null, c.getString(R.string.notify_decline), declinePi).build());
+            b.addAction(new Notification.Action.Builder(null, c.getString(R.string.notify_answer), answerPi).build());
         }
         Notification n = b.build();
         n.flags |= Notification.FLAG_INSISTENT;
@@ -134,6 +134,6 @@ final class Notify {
     private static void privacy(Context c, Notification.Builder b, String name) {
         if (!Net.prefs(c).getBoolean("lockPrivate", false)) return;
         b.setVisibility(Notification.VISIBILITY_PRIVATE);
-        b.setPublicVersion(new Notification.Builder(c, CHANNEL).setSmallIcon(R.drawable.ic_notify).setColor(COLOR).setContentTitle(name).setContentText("New message").build());
+        b.setPublicVersion(new Notification.Builder(c, CHANNEL).setSmallIcon(R.drawable.ic_notify).setColor(COLOR).setContentTitle(name).setContentText(c.getString(R.string.notify_new_message)).build());
     }
 }

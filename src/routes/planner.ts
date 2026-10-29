@@ -1,0 +1,390 @@
+// Planner: tasks, projects, places, reminders, notes, Today, briefing, review, leave-by, story.
+// Moved from src/server.ts unchanged (wave 3); shared state comes from the RouteCtx (src/routes/context.ts).
+import { existsSync, readdirSync, statSync } from 'node:fs';
+import { join } from 'node:path';
+import { briefingSettings, defaultUnits, geocode } from '../briefing.ts';
+import { as400, fromPhoneApp, HttpError, readJson, send, validWorkspace } from '../http.ts';
+import { findAddress, leaveBySettings } from '../leaveby.ts';
+import { localDate } from '../memory-worker.ts';
+import { netFetch } from '../net-guard.ts';
+import { parseWhen, PLACE_DUE, type PlannerStore, type Priority, type Repeat, REPEATS } from '../planner.ts';
+import { ReminderScheduler } from '../reminders.ts';
+import { reviewSettings } from '../review.ts';
+import { adultModeOn } from '../settings.ts';
+import { gatherStory, lookbacks, STORY_FILTERS, type StoryFilter } from '../story.ts';
+import { buildToday } from '../today.ts';
+import { workspaceDir } from '../tools/workspace.ts';
+import { NEXT, type RouteCtx, type RouteHandler } from './context.ts';
+
+const SKIP_DIRS = new Set(['.git', 'node_modules', '.venv', '__pycache__', '.cache', 'dist', 'build', '.next']);
+/** Files in a folder (newest first), skipping dependency/VCS folders. */
+function listFiles(root: string, max: number): { files: { path: string; size: number; modifiedAt: string }[]; truncated: boolean } {
+  const out: { path: string; size: number; modifiedAt: string; ms: number }[] = [];
+  let truncated = false;
+  const walk = (dir: string, rel: string, depth: number) => {
+    if (depth > 6) return;
+    for (const d of readdirSync(dir, { withFileTypes: true })) {
+      if (out.length >= max * 4) {
+        truncated = true;
+        return;
+      }
+      const r = rel ? `${rel}/${d.name}` : d.name;
+      if (d.isDirectory()) {
+        if (!SKIP_DIRS.has(d.name)) walk(join(dir, d.name), r, depth + 1);
+      } else if (d.isFile()) {
+        const st = statSync(join(dir, d.name));
+        out.push({ path: r, size: st.size, modifiedAt: st.mtime.toISOString(), ms: st.mtimeMs });
+      }
+    }
+  };
+  if (existsSync(root)) walk(root, '', 0);
+  out.sort((x, y) => y.ms - x.ms);
+  if (out.length > max) truncated = true;
+  return { files: out.slice(0, max).map(({ ms: _ms, ...f }) => f), truncated };
+}
+
+export function createPlannerRoutes(ctx: RouteCtx): RouteHandler {
+  const { app, opts, rootDir } = ctx;
+  function needPlanner(): PlannerStore {
+    if (!app.planner) throw new HttpError(404, 'Planner is not available');
+    return app.planner;
+  }
+  function whenOrNull(v: unknown, dateOnlyHour?: number): string | null {
+    if (v === undefined || v === null || v === '') return null;
+    const d = parseWhen(String(v), app.now(), app.settings.get().timeZone, { dateOnlyHour });
+    if (!d) throw new HttpError(400, 'Couldn\'t understand the time "{time}"', { params: { time: String(v) } });
+    return d.toISOString();
+  }
+  function validPriority(v: unknown): Priority | undefined {
+    if (v === undefined || v === null || v === '') return undefined;
+    if (!['low', 'normal', 'high'].includes(String(v))) throw new HttpError(400, 'priority must be low, normal or high');
+    return v as Priority;
+  }
+  return async (req, res, method, parts) => {
+    const [a, b, c] = parts;
+    // Phase 14: the phone app's home-screen widget (her face, mood, last message) and its
+    // notification check (her messages that arrived on their own, after a given id).
+    if (a === 'today' && !b && method === 'GET') {
+      const today = await buildToday(app, { fresh: new URL(req.url ?? '/', 'http://x').searchParams.has('fresh') });
+      // Phase 70: "On this day" from the album (never on the demo; adults-only photos only with Adult mode, never in the phone apps).
+      const otd = opts.demo ? undefined : app.moments?.onThisDay(app.now(), app.settings.get().timeZone, { adultOk: adultModeOn(app.settings.get()) && !fromPhoneApp(req) });
+      return send(res, 200, otd ? { ...today, onThisDay: { kind: otd.kind, ...(otd.years ? { years: otd.years } : {}), items: otd.items.map((m) => ({ id: m.id, image: m.image, caption: m.caption, text: m.text.slice(0, 200), takenAt: m.takenAt, from: m.from })) } } : today);
+    }
+
+    if (a === 'planner' && !b && method === 'GET') {
+      const pl = needPlanner();
+      return send(res, 200, { projects: pl.projects(true), tasks: pl.tasks({ status: 'all' }), reminders: pl.reminders({ status: 'pending' }), recentReminders: pl.reminders({ status: 'sent', limit: 20 }), places: pl.places(), timeZone: app.settings.get().timeZone ?? null });
+    }
+    if (a === 'tasks') {
+      const pl = needPlanner();
+      if (!b && method === 'POST') {
+        const body = await readJson(req);
+        const title = String(body.title ?? '').trim();
+        if (!title || title.length > 300) throw new HttpError(400, 'Task title must be 1-300 characters');
+        const t = pl.addTask({ title, project: body.project ? String(body.project) : null, notes: body.notes ? String(body.notes) : '', priority: validPriority(body.priority), dueAt: whenOrNull(body.due, 17) });
+        app.events?.publish({ type: 'planner', what: 'tasks' });
+        return send(res, 201, t);
+      }
+      const id = Number(b);
+      if (b && method === 'PATCH') {
+        const body = await readJson(req);
+        const t = pl.updateTask(id, {
+          ...(body.title !== undefined ? { title: String(body.title) } : {}),
+          ...(body.project !== undefined ? { project: body.project ? String(body.project) : null } : {}),
+          ...(body.notes !== undefined ? { notes: String(body.notes) } : {}),
+          ...(body.priority !== undefined ? { priority: validPriority(body.priority) } : {}),
+          ...(body.due !== undefined ? { dueAt: whenOrNull(body.due, 17) } : {}),
+          ...(body.status !== undefined ? { status: body.status === 'done' ? 'done' : 'open' } : {}),
+        });
+        if (!t) throw new HttpError(404, 'Task not found');
+        app.events?.publish({ type: 'planner', what: 'tasks' });
+        return send(res, 200, t);
+      }
+      if (b && method === 'DELETE') {
+        if (!pl.deleteTask(id)) throw new HttpError(404, 'Task not found');
+        app.events?.publish({ type: 'planner', what: 'tasks' });
+        return send(res, 200, { ok: true });
+      }
+    }
+    if (a === 'projects' && !b) {
+      const pl = needPlanner();
+      if (method === 'GET') {
+        const convs = app.store.listConversations();
+        return send(res, 200, pl.projects(true).map((p) => ({ ...p, conversations: convs.filter((c) => c.projectId === p.id).length })));
+      }
+      if (method === 'POST') {
+        const body = await readJson(req);
+        const name = String(body.name ?? '').trim();
+        if (!name) throw new HttpError(400, 'Give the project a name.');
+        let id: number;
+        try {
+          id = pl.projectId(name)!;
+        } catch (err) {
+          throw as400(err);
+        }
+        const p = pl.updateProject(id, { ...(body.workspace ? { workspace: validWorkspace(body.workspace) } : {}), status: 'active' });
+        app.events?.publish({ type: 'planner', what: 'tasks' });
+        return send(res, 201, p);
+      }
+    }
+    if (a === 'projects' && b) {
+      const pl = needPlanner();
+      const id = Number(b);
+      // Project page: everything that belongs to one project.
+      if (method === 'GET' && !c) {
+        const p = pl.projects(true).find((x) => x.id === id);
+        if (!p) throw new HttpError(404, 'Project not found');
+        const conversations = app.store.listConversations().filter((cv) => cv.projectId === id);
+        const tasks = pl.tasks({ status: 'all', projectId: id });
+        const notes = pl.notes().filter((n) => n.projectId === id);
+        let files: { path: string; size: number; modifiedAt: string }[] = [];
+        let truncated = false;
+        if (p.workspace) {
+          try {
+            ({ files, truncated } = listFiles(workspaceDir(rootDir, p.workspace), 300));
+          } catch {
+            files = [];
+          }
+        }
+        return send(res, 200, { project: p, conversations, tasks, notes, files, filesTruncated: truncated });
+      }
+      if (method === 'PATCH') {
+        const body = await readJson(req);
+        const p = pl.updateProject(id, {
+          ...(body.workspace !== undefined ? { workspace: body.workspace ? validWorkspace(body.workspace) : null } : {}),
+          ...(body.name !== undefined ? { name: String(body.name).slice(0, 80) } : {}),
+          ...(body.description !== undefined ? { description: String(body.description).slice(0, 2000) } : {}),
+          ...(body.status !== undefined ? { status: body.status === 'archived' ? 'archived' : 'active' } : {}),
+        });
+        if (!p) throw new HttpError(404, 'Project not found');
+        return send(res, 200, p);
+      }
+      if (method === 'DELETE') {
+        // Its conversations and to-dos stay; they just lose the project.
+        const moved = app.store.clearProject(id);
+        if (!pl.deleteProject(id)) throw new HttpError(404, 'Project not found');
+        app.events?.publish({ type: 'planner', what: 'tasks' });
+        return send(res, 200, { ok: true, moved });
+      }
+    }
+    // Phase 29: saved places and place reminders. The phone watches the places and reports only
+    // "arrived at / left place N", never where it is.
+    if (a === 'places') {
+      const pl = needPlanner();
+      if (!b && method === 'GET') return send(res, 200, { places: pl.places() });
+      if (b === 'watch' && method === 'GET') return send(res, 200, { places: pl.watchedPlaces().map((p) => ({ id: p.id, name: p.name, lat: p.lat, lon: p.lon, radius: p.radius, events: p.events })) });
+      if (!b && method === 'POST') {
+        const body = await readJson(req);
+        let place;
+        try {
+          place = pl.savePlace({ name: String(body.name ?? ''), lat: Number(body.lat), lon: Number(body.lon), radius: body.radius === undefined ? undefined : Number(body.radius) });
+        } catch (err) {
+          throw as400(err);
+        }
+        app.events?.publish({ type: 'planner', what: 'reminders' });
+        return send(res, 201, place);
+      }
+      if (b === 'lookup' && method === 'POST') {
+        // An address typed by the owner, looked up on OpenStreetMap (only when they ask).
+        const body = await readJson(req);
+        const q = String(body.address ?? '').trim();
+        if (!q || q.length > 200) throw new HttpError(400, 'Type an address or place name (up to 200 characters).');
+        const r = await netFetch(`https://nominatim.openstreetmap.org/search?${new URLSearchParams({ format: 'jsonv2', limit: '5', q })}`, { headers: { 'user-agent': 'Sara self-hosted companion (place reminders)', accept: 'application/json' }, signal: AbortSignal.timeout(10_000) }).catch(() => undefined);
+        if (!r?.ok) throw new HttpError(502, 'Could not reach OpenStreetMap to look that up. Try again, or save the place from the phone app.');
+        const found = ((await r.json()) as { display_name?: string; lat?: string; lon?: string }[]).map((x) => ({ label: String(x.display_name ?? '').slice(0, 160), lat: Number(x.lat), lon: Number(x.lon) })).filter((x) => Number.isFinite(x.lat) && Number.isFinite(x.lon));
+        return send(res, 200, { found });
+      }
+      const id = Number(b);
+      if (b && Number.isInteger(id) && !c && method === 'DELETE') {
+        if (!pl.deletePlace(id)) throw new HttpError(404, 'No such place.');
+        app.events?.publish({ type: 'planner', what: 'reminders' });
+        return send(res, 200, { ok: true });
+      }
+      if (b && Number.isInteger(id) && c === 'event' && method === 'POST') {
+        const body = await readJson(req);
+        const event = body.event === 'leave' ? 'leave' : 'arrive';
+        if (!pl.place(id)) throw new HttpError(404, 'No such place.');
+        const delivered = (app.reminders ?? new ReminderScheduler(app, pl)).atPlace(id, event);
+        return send(res, 200, { delivered });
+      }
+    }
+    if (a === 'reminders') {
+      const pl = needPlanner();
+      if (!b && method === 'POST') {
+        const body = await readJson(req);
+        const text = String(body.text ?? '').trim();
+        if (!text || text.length > 500) throw new HttpError(400, 'Reminder text must be 1-500 characters');
+        const byPlace = body.placeId !== undefined && body.placeId !== null && body.placeId !== '';
+        const due = byPlace ? PLACE_DUE : whenOrNull(body.when);
+        if (!due) throw new HttpError(400, 'When should the reminder go off?');
+        const repeat = String(body.repeat ?? 'none') as Repeat;
+        if (!REPEATS.includes(repeat)) throw new HttpError(400, 'repeat must be one of {list}', { params: { list: REPEATS.join(', ') } });
+        const convId = body.conversationId ? String(body.conversationId) : null;
+        const placeId = body.placeId === undefined || body.placeId === null || body.placeId === '' ? undefined : Number(body.placeId);
+        if (placeId !== undefined && !pl.place(placeId)) throw new HttpError(400, 'That place no longer exists.');
+        const r = pl.addReminder({ text, dueAt: due, repeat, conversationId: convId && app.store.getConversation(convId) ? convId : null, call: body.call === true, ...(placeId !== undefined ? { place: { id: placeId, event: body.placeEvent === 'leave' ? 'leave' : 'arrive' } } : {}) });
+        app.events?.publish({ type: 'planner', what: 'reminders' });
+        return send(res, 201, r);
+      }
+      if (b && method === 'DELETE') {
+        if (!pl.cancelReminder(Number(b))) throw new HttpError(404, 'No upcoming reminder with that id');
+        app.events?.publish({ type: 'planner', what: 'reminders' });
+        return send(res, 200, { ok: true });
+      }
+    }
+    if (a === 'notes') {
+      const pl = needPlanner();
+      if (!b && method === 'GET') return send(res, 200, pl.notes(new URL(req.url ?? '/', 'http://x').searchParams.get('q') ?? undefined));
+      if ((!b && method === 'POST') || (b && method === 'PATCH')) {
+        const body = await readJson(req);
+        const text = String(body.body ?? '');
+        if (!text.trim() || text.length > 50_000) throw new HttpError(400, 'Note must be 1-50,000 characters');
+        const title = String(body.title ?? '').trim().slice(0, 120) || text.split('\n')[0].slice(0, 120);
+        if (b && !pl.note(Number(b))) throw new HttpError(404, 'Note not found');
+        const n = pl.saveNote({ ...(b ? { id: Number(b) } : {}), title, body: text, ...(body.project !== undefined ? { project: body.project ? String(body.project) : null } : {}) });
+        app.events?.publish({ type: 'planner', what: 'notes' });
+        return send(res, b ? 200 : 201, n);
+      }
+      if (b && method === 'DELETE') {
+        if (!pl.deleteNote(Number(b))) throw new HttpError(404, 'Note not found');
+        app.events?.publish({ type: 'planner', what: 'notes' });
+        return send(res, 200, { ok: true });
+      }
+    }
+    // Phase 22: weekly review.
+    // Phase 53: your story together: the merged timeline, look backs she wrote, write a new one.
+    if (a === 'story') {
+      const dateOk = (x: unknown) => (typeof x === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(x) && !Number.isNaN(Date.parse(`${x}T00:00:00Z`)) ? x : undefined);
+      if (!b && method === 'GET') {
+        const q = new URL(req.url ?? '/', 'http://x').searchParams;
+        const filter = STORY_FILTERS.includes(q.get('filter') as StoryFilter) ? (q.get('filter') as StoryFilter) : 'all';
+        const first = app.store.firstOwnerMessageAt();
+        return send(res, 200, {
+          items: gatherStory(app, { filter, from: dateOk(q.get('from')), to: dateOk(q.get('to')) }),
+          lookbacks: lookbacks(app),
+          running: Boolean(app.story?.pending),
+          error: app.story?.lastError ?? null,
+          firstDay: first ? localDate(first.toISOString(), app.settings.get().timeZone) : null,
+          today: localDate(app.now().toISOString(), app.settings.get().timeZone),
+          yearly: app.settings.get().story?.yearly === true,
+        });
+      }
+      if (b === 'lookback' && !c && method === 'POST') {
+        const body = await readJson(req);
+        const from = dateOk(body.from);
+        const to = dateOk(body.to);
+        if (!from || !to || from > to) throw new HttpError(400, 'Pick a start and an end date (start first).');
+        if (!app.story) throw new HttpError(404, 'Look backs are not available on this server.');
+        void app.story.request({ from, to }).catch((err: Error) => console.warn(`look back failed: ${err.message}`));
+        return send(res, 202, { running: true });
+      }
+      if (b === 'lookback' && c && method === 'DELETE') {
+        const m = app.memory?.get(Number(c));
+        if (!m || m.kind !== 'reflection' || !m.evidence?.startsWith('lookback:')) throw new HttpError(404, 'Look back not found');
+        app.memory!.delete(m.id);
+        return send(res, 200, { ok: true });
+      }
+    }
+
+    if (a === 'review') {
+      const view = () => {
+        const { lastDay, ...cfg } = reviewSettings(app);
+        return { ...cfg, lastDay: lastDay ?? null };
+      };
+      if (!b && method === 'GET') return send(res, 200, await view());
+      if (!b && method === 'PUT') {
+        const body = await readJson(req);
+        const next = { ...reviewSettings(app) };
+        if (body.enabled !== undefined) next.enabled = Boolean(body.enabled);
+        if (body.day !== undefined) {
+          const d = Number(body.day);
+          if (!Number.isInteger(d) || d < 0 || d > 6) throw new HttpError(400, 'Pick a day of the week.');
+          next.day = d;
+        }
+        if (body.time !== undefined) {
+          if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(String(body.time))) throw new HttpError(400, 'Time must look like 18:00.');
+          next.time = String(body.time);
+        }
+        app.settings.update({ weeklyReview: next });
+        return send(res, 200, await view());
+      }
+      if (b === 'now' && method === 'POST') {
+        if (!app.review) throw new HttpError(404, 'Not available');
+        if (opts.demo) throw new HttpError(403, 'Not in the demo.');
+        return send(res, 200, await app.review.send());
+      }
+    }
+    // Phase 20: leave-by reminders.
+    if (a === 'leave-by') {
+      const view = () => {
+        const { sent: _sent, ...cfg } = leaveBySettings(app);
+        return { ...cfg, calendar: Boolean(app.google?.status().calendar) };
+      };
+      if (!b && method === 'GET') return send(res, 200, await view());
+      if (!b && method === 'PUT') {
+        const body = await readJson(req);
+        const next = { ...leaveBySettings(app) };
+        if (body.enabled !== undefined) next.enabled = Boolean(body.enabled);
+        if (body.mode !== undefined) next.mode = body.mode === 'bike' ? 'bike' : body.mode === 'foot' ? 'foot' : 'car';
+        if (body.bufferMin !== undefined) next.bufferMin = Math.min(60, Math.max(0, Math.round(Number(body.bufferMin) || 0)));
+        if (body.home !== undefined) {
+          const q = String(body.home ?? '').trim();
+          if (!q) delete next.home;
+          else if (q !== next.home?.label) {
+            const place = await findAddress(q).catch((err: Error) => {
+              throw new HttpError(502, 'Couldn\'t look up that address: {error}', { params: { error: err.message } });
+            });
+            if (!place) throw new HttpError(400, "Couldn't find that address. Try the street, number and town.");
+            next.home = place;
+          }
+        }
+        if (next.enabled && !next.home) throw new HttpError(400, 'Add your home address first.');
+        app.settings.update({ leaveBy: next });
+        return send(res, 200, await view());
+      }
+    }
+    if (a === 'briefing') {
+      const tz = app.settings.get().timeZone;
+      const view = () => {
+        const cfg = briefingSettings(app);
+        return { ...cfg, units: cfg.units ?? defaultUnits(tz) };
+      };
+      if (!b && method === 'GET') return send(res, 200, await view());
+      if (!b && method === 'PUT') {
+        const body = await readJson(req);
+        const cur = briefingSettings(app);
+        const next = { ...cur };
+        if (body.enabled !== undefined) next.enabled = Boolean(body.enabled);
+        if (body.time !== undefined) {
+          const t = String(body.time);
+          if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(t)) throw new HttpError(400, 'Time must look like 07:30.');
+          if (t !== cur.time) delete next.lastDay;
+          next.time = t;
+        }
+        if (body.units !== undefined) next.units = body.units === 'C' ? 'C' : 'F';
+        if (body.place !== undefined) {
+          const name = String(body.place ?? '').trim();
+          if (!name) delete next.place;
+          else if (name !== cur.place?.name) {
+            try {
+              next.place = await geocode(name);
+            } catch (err) {
+              throw as400(err);
+            }
+          }
+        }
+        app.settings.update({ briefing: next });
+        return send(res, 200, await view());
+      }
+      if (b === 'send' && method === 'POST') {
+        if (!app.briefing) throw new HttpError(400, 'Briefings are not available.');
+        try {
+          return send(res, 200, { text: await app.briefing.send() });
+        } catch (err) {
+          throw new HttpError(502, (err as Error).message);
+        }
+      }
+    }
+    return NEXT;
+  };
+}

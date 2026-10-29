@@ -67,7 +67,7 @@ async function load(refresh) {
   const ws = getWs();
   if (!ws) return;
   clearTimeout(poll);
-  $('#pm-status').textContent = t(refresh ? 'Looking at the files again…' : 'Mapping the code…');
+  $('#pm-status').textContent = refresh ? t('Looking at the files again…') : t('Mapping the code…');
   let d;
   try {
     if (refresh) await api(`/codemap/${encodeURIComponent(ws)}/refresh`, { method: 'POST' });

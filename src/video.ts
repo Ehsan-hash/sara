@@ -17,6 +17,7 @@
 import type { ProviderConfig } from './providers/types.ts';
 import { netFetch } from './net-guard.ts';
 import { onThisComputer } from './private-local.ts';
+import { isCloudModelName } from './model-names.ts';
 
 /** How often she looks (seconds); 0 = only when you ask ("Look at this"). */
 export const LOOK_EVERY = [0, 5, 10, 20, 30] as const;
@@ -184,7 +185,7 @@ export function cameraState(c: CameraContext): CameraState {
   if (t.kind === 'none') return no('Start the call first.');
   const cloud = isCloudLive(t) || (t.kind === 'classic' && Boolean(t.provider) && !onThisComputer({ kind: t.provider!.kind, baseUrl: t.provider!.baseUrl }, t.model));
   if (c.privateLocal && cloud) return no('“Nothing leaves this computer” is on, so camera pictures can only go to a model on this computer.');
-  if (c.privateConv && (isCloudLive(t) || (t.kind === 'classic' && t.provider && (!t.provider.local || /(:|-)cloud\b/i.test(t.model ?? ''))))) return no('The camera is off in private conversations with a model that isn’t on your own hardware.');
+  if (c.privateConv && (isCloudLive(t) || (t.kind === 'classic' && t.provider && (!t.provider.local || isCloudModelName(t.model ?? ''))))) return no('The camera is off in private conversations with a model that isn’t on your own hardware.');
   if (t.kind === 'live') {
     // Checked against the services' documentation: OpenAI's Realtime API takes pictures in a call
     // (input_image); Grok's realtime voice doesn't document picture input, so it's a self-view.

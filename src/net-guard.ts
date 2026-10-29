@@ -130,8 +130,12 @@ export function assertOnline(what: string): void {
   throw new PrivateLocalError(what, `Paused in private local mode: ${what} needs the internet. Turn "Nothing leaves this computer" off to use it.`);
 }
 
-/** Ollama model names that run on Ollama's servers ("gpt-oss:120b-cloud", "beam:cloud"). */
-const CLOUD_MODEL = /(:|-)cloud\b/i;
+/**
+ * Ollama model names that run on Ollama's servers ("gpt-oss:120b-cloud", "beam:cloud"). The same
+ * rule as model-names.ts (kept here so the egress gate imports nothing; test/model-names.test.ts
+ * pins both to the same answers).
+ */
+export const CLOUD_MODEL = /(:|-)cloud$/i;
 
 /**
  * Loopback requests that make a local model server reach the internet for us: downloading or
@@ -144,7 +148,7 @@ export function ollamaEgress(url: URL, body: unknown): string | undefined {
   if (/web_(search|fetch)/.test(path)) return "Ollama's web search goes to ollama.com, which private local mode blocks.";
   if (typeof body === 'string' && body.length < 2_000_000 && /"model"\s*:/.test(body)) {
     const m = /"model"\s*:\s*"([^"]{1,200})"/.exec(body);
-    if (m && CLOUD_MODEL.test(m[1])) return `${m[1]} is an Ollama Cloud model: it runs on Ollama's servers, not this computer.`;
+    if (m && CLOUD_MODEL.test(m[1].trim())) return `${m[1]} is an Ollama Cloud model: it runs on Ollama's servers, not this computer.`;
   }
   return undefined;
 }

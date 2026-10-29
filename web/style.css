@@ -74,10 +74,8 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); ou
   flex-direction: column;
   min-height: 0;
 }
-.side-head, .side-foot { display: flex; gap: 8px; padding: 14px; align-items: center; }
+.side-head { display: flex; gap: 8px; padding: 14px; align-items: center; }
 .side-head { justify-content: space-between; }
-.side-foot { margin-top: auto; border-top: 1px solid var(--border); flex-wrap: wrap; gap: 6px; }
-.side-foot button { padding: 6px 10px; font-size: 13px; }
 .brand { font-size: 20px; font-weight: 700; color: var(--accent-2); }
 #conversations { overflow-y: auto; padding: 0 8px; flex: 1; }
 #conversations a {
@@ -229,12 +227,9 @@ summary { cursor: pointer; color: var(--accent-2); }
 button.danger { background: #b3383d; color: #fff; }
 
 /* Settings tabs */
-section.settings-tab { display: grid; gap: 10px; }
-section.settings-tab[hidden] { display: none; }
 .route-row { display: grid; grid-template-columns: 7.5em minmax(0, 1fr) minmax(0, 1.4fr); gap: 6px; align-items: center; }
 .model-chooser { display: flex; gap: 6px; align-items: center; min-width: 0; }
 .model-chooser select, .model-chooser input { min-width: 0; flex: 1; }
-.route-help { margin: 0; padding-left: 18px; display: grid; gap: 2px; }
 @media (max-width: 560px) { .route-row { grid-template-columns: 1fr; } }
 
 /* Subscriptions */
@@ -630,14 +625,6 @@ dialog.settings-dialog { width: min(1040px, 96vw); height: min(820px, 90vh); max
   dialog:not(.settings-dialog) { width: 100vw; max-width: 100vw; max-height: 100dvh; height: auto; margin: auto 0 0; border-radius: 16px 16px 0 0; }
 }
 
-/* ---------- Sidebar icon bar (Phase 15) ---------- */
-.side-bar { margin-top: auto; border-top: 1px solid var(--border); display: grid; grid-template-columns: repeat(2, 1fr); gap: 1px 4px; padding: 6px 8px 8px; }
-.side-bar button { display: flex; align-items: center; gap: 6px; padding: 6px 8px; background: transparent; border: 0; border-radius: 9px; color: var(--muted); font-size: 13px; font-weight: 500; min-width: 0; text-align: left; }
-.side-bar button:hover, .side-bar button:focus-visible { background: var(--panel-2); color: var(--text); }
-.side-bar svg { width: 18px; height: 18px; flex: none; }
-.side-bar .side-face { width: 20px; height: 20px; border-radius: 50%; object-fit: cover; flex: none; }
-.side-bar span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-
 /* ---------- Today ---------- */
 dialog.today-dialog { width: min(860px, 96vw); }
 .today-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; align-items: start; }
@@ -681,7 +668,7 @@ a.pair-app.ghost:hover { border-color: var(--muted); filter: none; }
 .or-divider::before, .or-divider::after { content: ""; flex: 1; border-top: 1px solid var(--border); }
 .login-app-block { display: grid; gap: 8px; }
 .login-app-block[hidden] { display: none; }
-#login-paircode a, #pair-card a.text-link { color: var(--accent); text-decoration: none; font-weight: 500; }
+#login-paircode a { color: var(--accent); text-decoration: none; font-weight: 500; }
 #login-paircode a:hover { text-decoration: underline; }
 #login-paircode { text-align: center; margin: 4px 0 0; }
 #pair-store-row { margin: 0; }
@@ -692,7 +679,6 @@ body.demo #open-planner, body.demo #open-memory, body.demo #open-scrapbook, body
 body.demo #new-project, body.demo #new-offrecord, body.demo #conv-settings-btn, body.demo #attach,
 body.demo #sd-save, body.demo #sd-reroll, body.demo #pe-reset, body.demo .conv-more,
 body.demo #mic, body.demo:not(.demo-calls) #call, body.demo #speak-toggle { display: none !important; }
-body.demo .side-bar { grid-template-columns: repeat(2, 1fr); }
 
 /* ---------- iPhone app notifications (Phase 17) ---------- */
 .apns-box { margin-top: 14px; border: 1px solid var(--border); border-radius: 12px; padding: 10px 12px; }
@@ -782,10 +768,6 @@ dialog.small-dialog { width: min(560px, 94vw); }
 
 /* ---------- Phase 23: help, updates, getting started ---------- */
 .settings-page-head { display: flex; align-items: center; gap: 10px; }
-.help-btn { width: 28px; height: 28px; padding: 0; border-radius: 50%; font-weight: 700; margin-left: auto; }
-.help-btn[aria-expanded="true"] { color: var(--accent); border-color: var(--accent); }
-.help-box { margin: 0 0 6px; padding: 10px 14px; border: 1px solid var(--border); border-radius: 12px; background: var(--panel-2); font-size: 14px; }
-.help-box p { margin: 0 0 4px; }
 .today-start { border: 1px solid var(--border); border-radius: var(--radius); background: var(--panel); padding: 12px 14px; margin: 10px 0 14px; }
 .today-start-head { display: flex; align-items: center; gap: 10px; }
 .today-start-head h3 { margin: 0; font-size: 15px; }

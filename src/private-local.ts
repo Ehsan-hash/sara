@@ -6,11 +6,13 @@
 // The guarantee itself is in src/net-guard.ts (one choke point for every outgoing request); this
 // module keeps the state, says which providers count as "on this computer", and lists what is
 // paused while the mode is on.
-import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
+import { writeFileAtomic } from './fs-util.ts';
 import { join } from 'node:path';
 import { isLoopbackHost, setPrivateLocal } from './net-guard.ts';
 import { SUBSCRIPTION_KINDS, type ProviderConfig } from './providers/types.ts';
 import type { Settings } from './settings.ts';
+import { isCloudModelName } from './model-names.ts';
 
 const FILE = 'private-local.json';
 
@@ -67,14 +69,10 @@ export class PrivateLocalStore {
   }
 
   #save(): void {
-    const tmp = `${this.#path}.tmp`;
-    writeFileSync(tmp, JSON.stringify(this.#state, null, 2) + '\n');
-    renameSync(tmp, this.#path);
+    writeFileAtomic(this.#path, JSON.stringify(this.#state, null, 2) + '\n', 0o666);
   }
 }
 
-/** Ollama Cloud and similar model names that run on someone else's servers. */
-export const isCloudModelName = (model: string): boolean => /(:|-)cloud\b/i.test(model);
 
 /**
  * May this provider (and model) be used in private local mode? Only API providers whose address is

@@ -2,8 +2,8 @@
 
 A small native app (Swift, no libraries) around Sara's web app, like the Android app. It adds:
 
-- **Sign in with a code**: scan the QR code from Settings → Devices and sign-in → *Add a phone or
-  computer* with the Camera and choose *Open in the Sara app*, or type your server's address and
+- **Sign in with a code**: scan the QR code from Settings → Data & health → Devices and sign-in →
+  *Add a phone or computer* with the Camera and choose *Open in the Sara app*, or type your server's address and
   the short code. (Without a code you sign in with the owner token.)
 - **Instant notifications** through Apple's push service, sent by your own server (set up once in
   Settings → Connections → Phone and notifications → *iPhone app notifications*).
@@ -66,6 +66,12 @@ and `-SaraTestNoMic YES` (no audio, for simulators on a Mac without audio device
 is written to the app's `tmp/call.log`). `-SaraTestCallKit call|ring` exercises CallKit without
 a signed-in page (an outgoing call to a made-up conversation, or a 20-second incoming ring); watch
 `xcrun simctl spawn booted log stream --predicate 'process == "Sara"'` for `Sara CallKit:` lines.
+
+The app's own screens: **Connect to your Sara** (or **Add a Sara** with one already saved; the
+address, an optional pairing code, *Try the demo*) and **Can't reach your Sara** (*Try again*, *Add
+a Sara*), in the web app's colours. Permission prompts: microphone (calls and voice messages),
+camera (photos you share, and video calls only when you turn your camera on), photos (choose /
+save her pictures), location (place reminders; it stays on the iPhone), Face ID (the app lock).
 
 Layout: `Sara/` (app), `SaraWidget/` (widget extension), `SaraShare/` (share extension), `Shared/` (used by both: server, sign-in
 cookie and last widget data in the app group), `Config/` (Info.plist additions, entitlements).

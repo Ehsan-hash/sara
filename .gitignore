@@ -21,3 +21,7 @@ keystore.properties
 desktop/windows/build/
 desktop/windows/third_party/
 desktop/mac/build/
+
+# Python caches (scripts/make-app-icons.py, integrations tests)
+__pycache__/
+*.pyc

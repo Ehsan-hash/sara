@@ -19,8 +19,8 @@ The whole app is about 100 KB.
 1. Get the APK file: build it (below), or download it from wherever your server's owner shares it.
 2. Open it on the phone. Android asks to allow installs from that app (your browser or Files):
    allow it once.
-3. Open **Sara**. Easiest: on your computer open Settings → Devices and sign-in → **Add a phone
-   or computer**, then scan the code with the phone's camera and choose **Open in the Sara app**.
+3. Open **Sara**. Easiest: on your computer open Settings → Data & health → Devices and sign-in →
+   **Add a phone or computer**, then scan the code with the phone's camera and choose **Open in the Sara app**.
    Or type your server's address and the short code, and press **Connect**. (Without a code you
    sign in with the owner token.) No server yet? Press **Try the demo**.
 4. In Settings → Connections → **Phone app**, press **Add her to your home screen**.
@@ -54,7 +54,8 @@ then run `./gradlew assembleRelease`.
   notification and a Hang Up button), not in the web page.
 - **Instant notifications** (Settings → Phone and notifications, optional): the app keeps one quiet
   connection to your server and shows her messages the moment they arrive. Android shows a small
-  "Instant notifications are on" note for this (in the Silent section). Off: she's checked about
+  "Instant notifications are on" note for this (in the Silent section, category *Instant
+  notifications*). Off: she's checked about
   every 15 minutes. No Google Firebase or other outside service is involved either way.
 - **Several Saras** (Phase 68): add another server by scanning its QR code (**Add this Sara?**) or
   from **⇄** at the top; each keeps its sign-in (the ones not in use are kept encrypted with a key in
@@ -63,6 +64,27 @@ then run `./gradlew assembleRelease`.
 - **App lock**: fingerprint, face or your screen lock after 30 seconds away; the app is hidden in
   the recent-apps view while the lock is on. **Hide the message text on the lock screen** is
   there too.
+
+## The app's own screens and text
+
+Almost everything you see is the web app. The app itself only draws:
+
+- **Connect to your Sara** (first start) / **Add a Sara** (from ⇄ or a pairing link): the address,
+  an optional pairing code (`XXXX-XXXX-XXXX`), *Connect*, and *Try the demo*. Same colours as the
+  web app (`res/values/colors.xml`).
+- **Can't reach your Sara**: when a saved server doesn't answer: *Try again*, *Add a Sara*, and
+  your other Saras one tap away.
+- Dialogs (*Add this Sara?*, *Sign in with a code*, place reminders), the app lock, toasts and
+  notifications.
+- **Notification categories** (phone Settings → Apps → Sara → Notifications): *Messages from
+  her*, *Calls from <her name>* (ringing), *Call in progress*, *Instant notifications* (the quiet
+  note while they're on).
+
+That text is in `res/values/strings.xml` and translated in `values-de`, `-es`, `-fr`, `-it` and
+`-pt-rBR` (the app follows the phone's language); `test/android-strings.test.ts` checks all six
+have the same strings and placeholders and that each one is used. The launcher icon is an adaptive
+icon (`res/mipmap-anydpi-v26/ic_launcher.xml`, picture from `scripts/make-app-icons.py`), so it takes
+the launcher's shape.
 
 ## Notes
 

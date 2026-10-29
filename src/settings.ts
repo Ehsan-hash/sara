@@ -2,7 +2,8 @@
 import type { BriefingSettings } from './briefing.ts';
 import type { OffsiteSettings } from './offsite.ts';
 import type { PhotoSettings } from './photos.ts';
-import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
+import { writeFileAtomic } from './fs-util.ts';
 import { join } from 'node:path';
 import type { ProviderConfig } from './providers/types.ts';
 import type { MemorySettings } from './memory-worker.ts';
@@ -204,9 +205,7 @@ export class SettingsStore {
   update(patch: Partial<Settings>): Settings {
     // Saved first: if the disk refuses, the running server keeps what is really on disk.
     const next = { ...this.#settings, ...patch };
-    const tmp = `${this.#path}.tmp`;
-    writeFileSync(tmp, JSON.stringify(next, null, 2) + '\n');
-    renameSync(tmp, this.#path);
+    writeFileAtomic(this.#path, JSON.stringify(next, null, 2) + '\n', 0o666);
     this.#settings = next;
     return this.get();
   }

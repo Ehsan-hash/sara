@@ -687,11 +687,12 @@ its `logs` folder (`sara.log`; `service.log` for starts and stops), this Mac's s
 signed in; Sara never runs as root. (Versions before 0.55 could also start her "from startup" as a
 LaunchDaemon; that option was removed, and updating moves such a Mac to the agent by itself.)
 
-**Menu bar → Sara server:** status and address, *Back up now*, *Open data folder*, *Change how you
-reach her…*, *Stop / Start*, *New owner key…*, *Connect to a Sara somewhere else instead…* (she
-stops here; her data stays in `~/Library/Application Support/Sara` until `sara uninstall
---delete-data`), *Install command line tool* and *Uninstall…*. Connected to a Sara somewhere else,
-the menu has *Connect to a different Sara…* and *Set up Sara on this Mac…* instead. The command line tool is `~/.local/bin/sara` (no sudo): `sara status`,
+**Menu bar → Sara on this Mac:** status and address, *Stop / Start*, *Back up now*, *Open data
+folder*, *Change how you reach her…*, *New owner key…*, *Install command line tool…*, *Connect to a
+Sara somewhere else instead…* (she stops here; her data stays in `~/Library/Application
+Support/Sara` until `sara uninstall --delete-data`) and *Uninstall…*. Connected to a Sara somewhere
+else, it has *Set up Sara on this Mac…* instead. The saved servers and *Add a Sara…* are in *Your
+Saras* next to it (docs/desktop.md → The menus). The command line tool is `~/.local/bin/sara` (no sudo): `sara status`,
 `version`, `doctor`, `logs [N]`, `backup [file]`, `restore <file>`, `reset-token`, `token` (shows the
 one-time owner key if it hasn't been used yet), `access tailscale|local|lan`, `stop`, `start`,
 `setup [--access …] [--port N]`, `uninstall [--delete-data]`. On a Mac,
@@ -702,7 +703,7 @@ one-time owner key if it hasn't been used yet), `access tailscale|local|lan`, `s
 in her `backups` folder (`before-<version>-….tar.gz`), then runs the new version with the same data
 and settings.
 
-**Uninstalling:** *Sara server → Uninstall…* stops her, removes her from Login Items and removes her
+**Uninstalling:** *Sara on this Mac → Uninstall…* stops her, removes her from Login Items and removes her
 Tailscale address if she set one. A last backup goes to your Desktop first. Her data stays (set her
 up again and she remembers everything) unless you tick *Also delete her data*. Then drag Sara to the
 Trash.
@@ -802,15 +803,15 @@ Open a terminal (for a service install, *Run as administrator*) and start with `
 
 ### Troubleshooting on macOS
 
-Install the command line tool from the menu bar (*Sara server → Install command line tool*), open
+Install the command line tool from the menu bar (*Sara on this Mac → Install command line tool…*), open
 Terminal and start with `sara status`.
 
 - **She doesn't start, or the address doesn't open**: `sara logs` shows the last lines of
-  `~/Library/Application Support/Sara/logs/sara.log` and `service.log`. *Sara server → Stop /
+  `~/Library/Application Support/Sara/logs/sara.log` and `service.log`. *Sara on this Mac → Stop /
   Start* in the menu bar (or `sara stop` then `sara start`) tries again.
 - **She doesn't start after setup ("waiting for your OK")**: turn on **Sara** in System Settings →
   General → **Login Items** → *Allow in the Background*.
-- **The port is in use**: pick another port in *Sara server → Change how you reach her…* (the
+- **The port is in use**: pick another port in *Sara on this Mac → Change how you reach her…* (the
   sheet checks that it's free).
 - **Lost the owner key** (the owner token): `sara token` shows it if it was never used; otherwise
   `sara reset-token` (or *New owner key…* in the menu bar) makes a new one and signs every browser

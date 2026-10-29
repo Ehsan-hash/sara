@@ -1,12 +1,17 @@
 // Single-owner authentication. A random owner token is generated on first start and shown once
 // in the server log; only its hash is stored. Browser sessions use an HMAC-signed cookie.
 import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { existsSync, readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { adminHint } from './platform.ts';
+import { writeFileAtomic } from './fs-util.ts';
+import { StartupError } from './settings.ts';
 import { newTotpSecret, otpauthUrl, verifyTotp } from './totp.ts';
 import type { StoredPasskey } from './webauthn.ts';
 
 const FILE = 'owner.json';
+/** The last owner file that was saved whole: used if owner.json is ever found damaged. */
+const BACKUP = 'owner.json.bak';
 export const SESSION_COOKIE = 'sara_session';
 const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 /** A device token (terminal, VS Code) ends 90 days after approval even when used every day. */
@@ -94,12 +99,24 @@ export class OwnerAuth {
   /** Phase 71: a member's tokens start with `sara_m.<member id>.` (the owner's have no prefix). */
   readonly #prefix: string;
 
-  constructor(dataDir: string, now: () => Date = () => new Date(), opts: { tokenPrefix?: string } = {}) {
+  /**
+   * `resetIfDamaged`: only for the server-side token reset (`--reset-token`), which replaces the
+   * sign-in anyway: a damaged owner file with no good copy then gets a new one instead of refusing.
+   */
+  constructor(dataDir: string, now: () => Date = () => new Date(), opts: { tokenPrefix?: string; resetIfDamaged?: boolean } = {}) {
     this.#path = join(dataDir, FILE);
     this.#now = now;
     this.#prefix = opts.tokenPrefix ?? '';
-    if (existsSync(this.#path)) {
-      this.#owner = JSON.parse(readFileSync(this.#path, 'utf8')) as OwnerFile;
+    const loaded = existsSync(this.#path) ? OwnerAuth.#load(this.#path, opts.resetIfDamaged === true) : undefined;
+    if (loaded === null) {
+      // Damaged with no good copy, during a token reset: a new owner file that is NOT a new server
+      // (no browser setup opens); the reset that follows prints the new token.
+      const { owner, token } = OwnerAuth.#generate(this.#prefix);
+      this.#owner = owner;
+      this.newToken = token;
+      this.#save();
+    } else if (loaded) {
+      this.#owner = loaded;
       if (!this.#owner.sessions) {
         this.#owner.sessions = [];
         this.#owner.legacy = true;
@@ -111,6 +128,34 @@ export class OwnerAuth {
       this.newToken = token;
       this.#fresh = true;
       this.#save();
+    }
+  }
+
+  /**
+   * Reads owner.json. A damaged file (cut short by a crash or power loss, or edited by hand) must
+   * never reset the sign-in silently: that would either lock the owner out or open the server to
+   * whoever claims it first. So it falls back to owner.json.bak (the last copy saved whole) and
+   * puts that back; with no good copy it refuses to start and names the file.
+   */
+  static #load(path: string, resetIfDamaged: boolean): OwnerFile | null {
+    const read = (file: string): OwnerFile => {
+      const o = JSON.parse(readFileSync(file, 'utf8')) as OwnerFile;
+      if (!o || typeof o !== 'object' || typeof o.tokenHash !== 'string' || typeof o.sessionSecret !== 'string') throw new Error('the token or session secret is missing');
+      return o;
+    };
+    try {
+      return read(path);
+    } catch (err) {
+      const bak = join(dirname(path), BACKUP);
+      let good: OwnerFile | undefined;
+      try { if (existsSync(bak)) good = read(bak); } catch { /* the backup is damaged too */ }
+      if (!good) {
+        if (resetIfDamaged) return null;
+        throw new StartupError(`The owner sign-in file ${path} is damaged (${(err as Error).message}) and there is no good copy in ${bak}. Restore a backup, or make a new owner token with: ${adminHint('reset-token')} (this also turns off passkeys and two-step sign-in).`);
+      }
+      console.warn(`[sara] ${path} was damaged (${(err as Error).message}); restored it from ${bak}.`);
+      writeFileAtomic(path, JSON.stringify(good, null, 2) + '\n', 0o600);
+      return good;
     }
   }
 
@@ -137,7 +182,10 @@ export class OwnerAuth {
       this.#owner.setupPending = true;
       this.#fresh = false;
     }
-    writeFileSync(this.#path, JSON.stringify(this.#owner, null, 2) + '\n', { mode: 0o600 });
+    const text = JSON.stringify(this.#owner, null, 2) + '\n';
+    writeFileAtomic(this.#path, text, 0o600);
+    // The last good copy, read only if owner.json is ever found damaged (#load).
+    writeFileAtomic(join(dirname(this.#path), BACKUP), text, 0o600);
   }
 
   /**

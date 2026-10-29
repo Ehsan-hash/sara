@@ -1,10 +1,21 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <!-- The web app's dark colours (web/style.css, values/colors.xml), so the app's own screens,
+         dialogs and the moment before the page loads match it. -->
     <style name="Sara" parent="@android:style/Theme.Material.NoActionBar">
-        <item name="android:colorPrimary">#1c1b22</item>
-        <item name="android:colorAccent">#c58cff</item>
-        <item name="android:statusBarColor">#141318</item>
-        <item name="android:navigationBarColor">#141318</item>
-        <item name="android:windowBackground">#141318</item>
+        <item name="android:colorPrimary">@color/sara_panel</item>
+        <item name="android:colorAccent">@color/sara_accent</item>
+        <item name="android:colorControlActivated">@color/sara_accent</item>
+        <item name="android:textColorHighlight">#66E0789A</item>
+        <item name="android:statusBarColor">@color/sara_bg</item>
+        <item name="android:navigationBarColor">@color/sara_bg</item>
+        <item name="android:windowBackground">@color/sara_bg</item>
+        <item name="android:alertDialogTheme">@style/Sara.Dialog</item>
+    </style>
+    <style name="Sara.Dialog" parent="@android:style/Theme.Material.Dialog.Alert">
+        <item name="android:colorAccent">@color/sara_accent</item>
+        <item name="android:windowBackground">@drawable/dialog_bg</item>
+        <item name="android:textColorPrimary">@color/sara_text</item>
+        <item name="android:textColorSecondary">@color/sara_muted</item>
     </style>
 </resources>

@@ -1,6 +1,74 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Phase 68: the server switcher's own strings (the rest of the app is the web app, translated there). -->
+<!-- The app's own text (the rest is the web app, translated there). Same names as values/strings.xml. -->
 <resources>
+    <!-- The app in the system: launcher, share sheet, widget picker, assistant -->
+    <string name="widget_name">Ihr Gesicht und ihre Stimmung</string>
+    <string name="share_label">An Sara senden</string>
+    <string name="shortcut_call">Sara anrufen</string>
+    <string name="shortcut_call_long">Sara anrufen</string>
+    <string name="assist_label">Mit Sara sprechen</string>
+    <!-- Notification categories (phone Settings → Apps → Sara → Notifications) -->
+    <string name="channel_name">Nachrichten von ihr</string>
+    <string name="channel_ringing">Anrufe von %1$s</string>
+    <string name="channel_call">Laufender Anruf</string>
+    <string name="channel_live">Sofort-Benachrichtigungen</string>
+    <!-- Notifications -->
+    <string name="notify_reply">Antworten</string>
+    <string name="notify_reply_to">%1$s antworten</string>
+    <string name="notify_you">Du: %1$s</string>
+    <string name="notify_sent">Gesendet</string>
+    <string name="notify_new_message">Neue Nachricht</string>
+    <string name="notify_calling">%1$s ruft an</string>
+    <string name="notify_answer">Annehmen</string>
+    <string name="notify_decline">Ablehnen</string>
+    <string name="reply_busy">Sie antwortet noch. Öffne die App, um es zu sehen.</string>
+    <string name="reply_sign_in">Öffne die App und melde dich erneut an.</string>
+    <string name="reply_failed">Senden hat nicht geklappt. Öffne die App, um es nochmal zu versuchen.</string>
+    <string name="reply_unreachable">Deine Sara ist nicht erreichbar.</string>
+    <!-- Calls -->
+    <string name="call_title">Im Gespräch mit %1$s</string>
+    <string name="call_hang_up">Auflegen</string>
+    <string name="call_connecting">Verbinde…</string>
+    <string name="call_listening">Hört zu…</string>
+    <string name="call_hearing">Hört dich…</string>
+    <string name="call_speaking">Spricht…</string>
+    <string name="call_you_hung_up">Du hast aufgelegt.</string>
+    <string name="call_ended">Der Anruf ist beendet.</string>
+    <string name="call_disconnected">Die Verbindung wurde getrennt.</string>
+    <string name="call_failed">Der Anruf konnte nicht verbunden werden.</string>
+    <string name="call_failed_detail">Der Anruf konnte nicht verbunden werden: %1$s</string>
+    <!-- Instant notifications (the quiet note while they're on) -->
+    <string name="live_title">Sofort-Benachrichtigungen sind an</string>
+    <string name="live_text">Tippen zum Öffnen. Ausschalten in Einstellungen → Verbindungen → Handy und Benachrichtigungen.</string>
+    <!-- Widget -->
+    <string name="widget_connect">Öffne die App, um dich zu verbinden.</string>
+    <string name="widget_sign_in">Öffne die App, um dich anzumelden.</string>
+    <!-- First screen: connect to a Sara (or add another one) -->
+    <string name="setup_title">Mit deiner Sara verbinden</string>
+    <string name="setup_help">Gib die Adresse ein, unter der du Sara im Browser öffnest, zum Beispiel sara.example.com oder 192.168.1.20:7860.</string>
+    <string name="setup_add_help">Gib die Adresse einer weiteren Sara ein. Deine anderen Saras bleiben angemeldet.</string>
+    <string name="setup_address">Adresse</string>
+    <string name="setup_code">Kopplungscode (optional)</string>
+    <string name="setup_code_help">Einen Code bekommst du auf einem Gerät, auf dem du angemeldet bist: Einstellungen → Daten und Zustand → Geräte und Anmeldung → Handy oder Computer hinzufügen. Ohne Code meldest du dich mit deinem Besitzer-Token an.</string>
+    <string name="setup_connect">Verbinden</string>
+    <string name="setup_checking">Prüfe…</string>
+    <string name="setup_unreachable">Nicht erreichbar. Prüfe die Adresse und ob Sara dort läuft.</string>
+    <string name="setup_not_sara">Diese Adresse antwortet, ist aber kein Sara-Server.</string>
+    <string name="setup_demo_help">Noch kein Server? Die Demo zeigt, wie Sara ist (Gespräche dort werden nicht gespeichert).</string>
+    <string name="setup_demo">Demo ausprobieren</string>
+    <!-- Can't reach a saved Sara -->
+    <string name="offline_title">Deine Sara ist nicht erreichbar</string>
+    <string name="offline_message">%1$s antwortet nicht. Prüfe deine Verbindung, die Adresse und ob Sara dort läuft.</string>
+    <string name="offline_retry">Nochmal versuchen</string>
+    <string name="offline_others">Deine anderen Saras</string>
+    <!-- Pairing links (sara://pair) and several Saras (Phase 68) -->
+    <string name="pair_refused_title">Dieser Link kann nicht verwendet werden</string>
+    <string name="pair_refused_message">Der Kopplungslink enthält keine einfache Serveradresse, deshalb öffnet die App ihn nicht. Erstelle in Sara auf deinem Computer einen neuen Code: Einstellungen → Daten und Zustand → Geräte und Anmeldung → Handy oder Computer hinzufügen.</string>
+    <string name="pair_code_title">Mit einem Code anmelden</string>
+    <string name="pair_open_title">Deine Sara öffnen</string>
+    <string name="pair_sign_in_message">Bei %1$s anmelden?</string>
+    <string name="pair_plain_http">⚠ Diese Adresse nutzt unverschlüsseltes http im offenen Internet: Jeder auf dem Weg könnte deine Nachrichten lesen. Mach nur weiter, wenn du es selbst so eingerichtet hast.</string>
+    <string name="pair_sign_in">Anmelden</string>
     <string name="servers_now">Jetzt: %1$s</string>
     <string name="servers_add_title">Diese Sara hinzufügen?</string>
     <string name="servers_add_message">%1$s zu dieser App hinzufügen? Deine anderen Saras bleiben angemeldet; wechsle mit der ⇄-Taste oben.</string>
@@ -9,6 +77,24 @@
     <string name="servers_cancel">Abbrechen</string>
     <string name="servers_add_a_sara">Eine Sara hinzufügen</string>
     <string name="servers_back">Zurück zu %1$s</string>
-    <!-- Phase 72: the phone's digital assistant -->
-    <string name="assist_label">Mit Sara sprechen</string>
+    <!-- App lock -->
+    <string name="lock_locked">Gesperrt</string>
+    <string name="lock_unlock">Entsperren</string>
+    <string name="lock_prompt">Sara entsperren</string>
+    <string name="lock_needs_screen_lock">Richte zuerst eine Displaysperre in den Einstellungen deines Handys ein.</string>
+    <!-- Place reminders and saved pictures -->
+    <string name="places_title">Standort immer erlauben?</string>
+    <string name="places_message">Damit Sara dich erinnern kann, wenn du irgendwo ankommst, muss sie deine Ankunft auch bei geschlossener App bemerken. Wähle auf dem nächsten Bildschirm \"Immer zulassen\". Dein Standort bleibt auf diesem Handy: Sara sagt deinem Server nur \"angekommen bei Laden\".</string>
+    <string name="places_continue">Weiter</string>
+    <string name="places_not_now">Nicht jetzt</string>
+    <string name="places_no_service">Dieses Handy hat keinen Standortdienst.</string>
+    <string name="places_need_permission">Sara braucht die Standortberechtigung, um einen Ort zu speichern.</string>
+    <string name="places_need_permission_watch">Sara braucht die Standortberechtigung, um einen Ort zu speichern oder darauf zu achten.</string>
+    <string name="places_location_off">Der Standort ist auf diesem Handy ausgeschaltet. Schalte ihn in den Schnelleinstellungen ein und versuche es nochmal.</string>
+    <string name="places_not_found">Dein Standort wurde nicht gefunden. Versuche es draußen oder in Fensternähe nochmal.</string>
+    <string name="places_saved">Gespeichert: %1$s</string>
+    <string name="places_save_failed">Speichern hat nicht geklappt.</string>
+    <string name="picture_saved">In Bilder/Sara gespeichert.</string>
+    <string name="picture_failed">Das Bild konnte nicht gespeichert werden.</string>
+    <string name="picture_needs_android10">Zum Speichern von Bildern brauchst du Android 10 oder neuer.</string>
 </resources>

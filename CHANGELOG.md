@@ -1,6 +1,38 @@
 # Changelog
 
-Format: newest first. Versions follow `0.<phase>.<patch>` until 1.0.0.
+Format: newest first. Semantic versions since 1.0.0 (before that `0.<phase>.<patch>`). New entries go under
+"Unreleased" until a release takes them.
+
+## Unreleased
+
+## 2.4.0 (2026-10-29): neat and tidy
+
+A whole-project cleanup: everything is still there, easier to find.
+
+- **Sidebar:** a few pinned places (Today, Planner, Library, Moments by default) and a **More** menu for the
+  rest, so it no longer grows with every feature. Pin or unpin any place with the pin on its row. Her
+  picture, Help and Settings sit in a small footer.
+- **Settings:** real group headers (with an icon and a count) that fold open and shut, a one-line
+  description on every page, and a search that matches any word in titles, labels and tips.
+- **Tools and approvals:** each tool has a plain name, an icon and a sentence saying what it lets her do;
+  tools are grouped (Files and code, The web, Email and calendar, Smart home, Servers over SSH…) and a
+  whole group can be set at once. Allowed / Ask me first / Off are explained at the top. Approval cards in
+  the chat use the same plain words.
+- **Scrapbook:** photos can be removed from the scrapbook (they stay in the chat) or deleted everywhere
+  (it asks first); removed ones can be put back. Photos open in the large view.
+- **Every other screen** (Today, Planner, Memory, Library, Moments, Your story, Team, Her page, chat
+  settings, Your Saras, the offline page) uses the same cards, empty states and ⋯ menus; long intros fold
+  to two lines. About 150 more texts are translated, dates follow the app language, and the Team's
+  "tokens / dollars" boxes became plain choices ("Spending limit for this task: $5").
+- **Apps:** the same menu names on Windows and Mac (*Your Saras*, *Sara on this Mac*, *Settings…*,
+  *Help*), Mac menus with ⌘, and zoom, tidy setup and "Can't reach your Sara" screens in her colours with
+  light and dark mode on every platform, Android text in all six languages, one app icon everywhere
+  (the Mac icon is now a proper rounded square). The desktop apps show the real version.
+- **Under the hood:** every settings and sign-in file is saved safely (a crash mid-save can no longer
+  leave the server unable to start; the sign-in file keeps a backup), character imports apply her
+  "starts conversations" dial, one shared cleaner for spoken text (names like `my_var_name` are now read
+  as words), one rule for Ollama Cloud model names, and the 5,900-line server file is split into route
+  modules with no change in behaviour. Docs: every guide is listed in the README and on the docs site.
 
 ## 2.3.0 (2026-10-29): big documents
 

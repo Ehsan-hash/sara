@@ -80,7 +80,7 @@ public class CallService extends Service {
     public int onStartCommand(Intent intent, int flags, int startId) {
         if (intent != null && "hangup".equals(intent.getAction())) {
             // Off the main thread: hanging up sends a last message to the server.
-            new Thread(() -> end("You hung up.", true), "sara-hangup").start();
+            new Thread(() -> end(getString(R.string.call_you_hung_up), true), "sara-hangup").start();
             return START_NOT_STICKY;
         }
         String conv = intent == null ? null : intent.getStringExtra("conv");
@@ -88,7 +88,7 @@ public class CallService extends Service {
         running = true;
         ended = false;
         name = Net.prefs(this).getString("name", "Sara");
-        Notification n = note("Connecting…");
+        Notification n = note(getString(R.string.call_connecting));
         if (Build.VERSION.SDK_INT >= 30) startForeground(NOTE_ID, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE);
         else startForeground(NOTE_ID, n);
         String ring = intent.getStringExtra("ring");
@@ -98,13 +98,13 @@ public class CallService extends Service {
 
     private Notification note(String status) {
         NotificationManager nm = getSystemService(NotificationManager.class);
-        if (nm != null) nm.createNotificationChannel(new NotificationChannel(CHANNEL, "Calls", NotificationManager.IMPORTANCE_LOW));
+        if (nm != null) nm.createNotificationChannel(new NotificationChannel(CHANNEL, getString(R.string.channel_call), NotificationManager.IMPORTANCE_LOW));
         PendingIntent hang = PendingIntent.getService(this, 1, new Intent(this, CallService.class).setAction("hangup"), PendingIntent.FLAG_IMMUTABLE);
         PendingIntent open = PendingIntent.getActivity(this, 2, new Intent(this, MainActivity.class), PendingIntent.FLAG_IMMUTABLE);
         Notification.Builder b = new Notification.Builder(this, CHANNEL)
                 .setSmallIcon(R.drawable.ic_notify)
                 .setColor(Notify.COLOR)
-                .setContentTitle("On a call with " + name)
+                .setContentTitle(getString(R.string.call_title, name))
                 .setContentText(status)
                 .setOngoing(true)
                 .setOnlyAlertOnce(true)
@@ -115,7 +115,7 @@ public class CallService extends Service {
             // The system's call layout: Hang up is always shown, even on the lock screen.
             b.setStyle(Notification.CallStyle.forOngoingCall(new android.app.Person.Builder().setName(name).setImportant(true).build(), hang));
         } else {
-            b.addAction(new Notification.Action.Builder(null, "Hang up", hang).build());
+            b.addAction(new Notification.Action.Builder(null, getString(R.string.call_hang_up), hang).build());
         }
         return b.build();
     }
@@ -152,12 +152,12 @@ public class CallService extends Service {
 
                 @Override
                 public void onClosed(String reason) {
-                    end(reason != null ? reason : "The call was disconnected.", false);
+                    end(reason != null ? reason : getString(R.string.call_disconnected), false);
                 }
             });
             startAudio();
         } catch (Exception e) {
-            end(e.getMessage() != null ? "Couldn't connect the call: " + e.getMessage() : "Couldn't connect the call.", false);
+            end(e.getMessage() != null ? getString(R.string.call_failed_detail, e.getMessage()) : getString(R.string.call_failed), false);
         }
     }
 
@@ -168,7 +168,7 @@ public class CallService extends Service {
             if ("interrupt".equals(type)) silence();
             if ("status".equals(type)) {
                 String s = ev.optString("state");
-                status("speaking".equals(s) ? "Speaking…" : "hearing".equals(s) ? "Hearing you…" : "connecting".equals(s) ? "Connecting…" : "Listening…");
+                status(getString("speaking".equals(s) ? R.string.call_speaking : "hearing".equals(s) ? R.string.call_hearing : "connecting".equals(s) ? R.string.call_connecting : R.string.call_listening));
             }
             if ("ended".equals(type)) {
                 emit(text);
@@ -258,7 +258,7 @@ public class CallService extends Service {
             try {
                 if (ws != null && ws.isOpen()) ws.sendBinary(out.clone());
             } catch (Exception e) {
-                end("The call was disconnected.", false);
+                end(getString(R.string.call_disconnected), false);
                 return;
             }
         }
@@ -343,7 +343,7 @@ public class CallService extends Service {
 
     @Override
     public void onDestroy() {
-        if (running) new Thread(() -> end("The call ended.", true), "sara-hangup").start();
+        if (running) new Thread(() -> end(getString(R.string.call_ended), true), "sara-hangup").start();
         super.onDestroy();
     }
 

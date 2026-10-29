@@ -9,12 +9,13 @@ import { after, test } from 'node:test';
 import { OwnerAuth } from '../src/auth.ts';
 import { resolveProvider } from '../src/chat.ts';
 import { healthReport } from '../src/health.ts';
-import { catalogIdOf, cloudDaemonName, isCloudName, mergeCheck, ModelCatalog, NEW_FOR_MS, ollamaCloudDefault, parseModel, pickReplacement, prettyModel } from '../src/model-catalog.ts';
+import { catalogIdOf, cloudDaemonName, mergeCheck, ModelCatalog, NEW_FOR_MS, ollamaCloudDefault, parseModel, pickReplacement, prettyModel } from '../src/model-catalog.ts';
 import { OpenAICompatibleProvider } from '../src/providers/openai-compatible.ts';
 import type { ChatRequest, Provider, ProviderConfig, StreamEvent } from '../src/providers/types.ts';
 import { createSaraServer } from '../src/server.ts';
 import { SettingsStore } from '../src/settings.ts';
 import { listen, makeApp, ROOT, tempDir } from './helpers.ts';
+import { isCloudModelName } from '../src/model-names.ts';
 
 const closers: (() => void)[] = [];
 after(() => {
@@ -61,8 +62,8 @@ test('names: Ollama Cloud catalog ids map to daemon names and back', () => {
   assert.equal(catalogIdOf('beam:cloud'), 'beam');
   assert.equal(catalogIdOf('mistral-large-3:675b-cloud'), 'mistral-large-3:675b');
   assert.equal(catalogIdOf('gemma4:12b'), undefined, 'a local model has no catalog id');
-  assert.ok(isCloudName('glm-5.2:cloud') && isCloudName('gpt-oss:20b-cloud'));
-  assert.ok(!isCloudName('qwen3.5:9b') && !isCloudName('cloudy:7b'));
+  assert.ok(isCloudModelName('glm-5.2:cloud') && isCloudModelName('gpt-oss:20b-cloud'));
+  assert.ok(!isCloudModelName('qwen3.5:9b') && !isCloudModelName('cloudy:7b'));
   assert.equal(prettyModel('gemma4:31b-cloud'), 'Gemma 4 31B');
   assert.equal(prettyModel('gemma5:31b'), 'Gemma 5 31B');
 });
@@ -218,7 +219,7 @@ async function fakeDaemon(models: string[], opts: { signedIn?: boolean; noTags?:
     if (req.url === '/v1/models') return json(res, 200, { data: [...have].map((id) => ({ id })) });
     if (req.url === '/api/version') return json(res, 200, { version: '0.30.1' });
     if (req.url === '/api/tags' && opts.noTags) return json(res, 500, { error: 'busy' });
-    if (req.url === '/api/tags') return json(res, 200, { models: [...have].map((name) => ({ name, ...(isCloudName(name) ? { remote_host: 'https://ollama.com' } : {}) })) });
+    if (req.url === '/api/tags') return json(res, 200, { models: [...have].map((name) => ({ name, ...(isCloudModelName(name) ? { remote_host: 'https://ollama.com' } : {}) })) });
     if (req.url === '/api/pull') {
       const m = JSON.parse(b).model as string;
       if (opts.signedIn === false) return json(res, 401, { error: 'unauthorized', signin_url: 'https://ollama.com/connect?x' });
@@ -326,7 +327,7 @@ test('several Saras on one server: Ollama Cloud through the shared daemon is off
     const v = await cat.refresh('ollama-local');
     assert.equal(v.options.ollamaCloud, false, 'off by default for another instance');
     assert.ok(v.models.includes('gemma4:12b'));
-    assert.ok(!v.models.some(isCloudName), `the daemon's cloud models are not offered: ${v.models.join(', ')}`);
+    assert.ok(!v.models.some(isCloudModelName), `the daemon's cloud models are not offered: ${v.models.join(', ')}`);
     const { provider, model } = resolveProvider(app, 'ollama-local', 'glm-5.2:cloud');
     assert.deepEqual(await provider.listModels(), ['gemma4:12b', 'nomic-embed-text:latest']);
     const before = d.log.length;

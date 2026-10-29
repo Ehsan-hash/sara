@@ -14,7 +14,7 @@ them (for example from a Windows PC to a Linux server).
 | Linux | `sudo sara backup /root/sara-move.tar.gz` |
 | Docker | `sudo docker compose exec sara node src/main.ts --backup /data/backups/sara-move.tar.gz`, then `sudo docker compose cp sara:/data/backups/sara-move.tar.gz .` |
 | Windows | `sara backup C:\Users\<you>\Desktop\sara-move.tar.gz` (terminal as administrator for a service install) |
-| Mac | `sara backup ~/Desktop/sara-move.tar.gz`, or menu bar → *Sara server → Back up now* |
+| Mac | `sara backup ~/Desktop/sara-move.tar.gz`, or menu bar → *Sara on this Mac → Back up now* |
 
 You can also press *Back up now* in Settings → Data & health → Backups. A backup made a moment ago
 is best: anything said after it won't move.

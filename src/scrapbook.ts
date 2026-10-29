@@ -8,6 +8,9 @@ import { str, ToolError } from './tools/types.ts';
 
 export type ScrapKind = 'moment' | 'joke' | 'photo';
 
+/** A stored photo's file name (content hash + type), as uploads name them. */
+export const PHOTO_NAME = /^[0-9a-f]{32}\.(jpg|png|webp|gif)$/;
+
 export interface ScrapEntry {
   id: number;
   kind: ScrapKind;
@@ -51,6 +54,8 @@ export class Scrapbook {
       created_at TEXT NOT NULL
     )`);
     db.exec('CREATE UNIQUE INDEX IF NOT EXISTS scrapbook_msg ON scrapbook(message_id, kind) WHERE message_id IS NOT NULL');
+    // Photos taken out of the scrapbook only ("Remove from scrapbook"): the messages keep them.
+    db.exec('CREATE TABLE IF NOT EXISTS scrapbook_hidden (image TEXT PRIMARY KEY, hidden_at TEXT NOT NULL)');
   }
 
   add(e: { kind: ScrapKind; text: string; note?: string; conversationId?: string | null; messageId?: number | null; image?: string | null; addedBy?: 'owner' | 'sara' }): ScrapEntry {
@@ -86,8 +91,39 @@ export class Scrapbook {
     return Number(this.#db.prepare('DELETE FROM scrapbook WHERE id = ?').run(id).changes) > 0;
   }
 
-  /** Photos shared in owner conversations (theirs and hers), newest first. */
-  photos(store: Store, limit = 200): { image: string; conversationId: string; messageId: number; from: 'owner' | 'sara'; text: string; createdAt: string }[] {
+  /** Whether a name looks like a stored photo (checked before any lookup). */
+  isPhotoName(image: string): boolean {
+    return PHOTO_NAME.test(image);
+  }
+
+  /** Takes a photo out of the scrapbook only (its message keeps it). False if it was already out. */
+  hidePhoto(image: string): boolean {
+    if (!PHOTO_NAME.test(image)) throw new Error('Not a photo');
+    return Number(this.#db.prepare('INSERT INTO scrapbook_hidden (image, hidden_at) VALUES (?, ?) ON CONFLICT DO NOTHING').run(image, this.#now().toISOString()).changes) > 0;
+  }
+
+  /** Brings a removed photo back into the scrapbook. */
+  unhidePhoto(image: string): boolean {
+    return Number(this.#db.prepare('DELETE FROM scrapbook_hidden WHERE image = ?').run(image).changes) > 0;
+  }
+
+  /** The photos taken out of the scrapbook. */
+  hiddenImages(): Set<string> {
+    return new Set((this.#db.prepare('SELECT image FROM scrapbook_hidden').all() as Row[]).map((r) => String(r.image)));
+  }
+
+  /**
+   * Photos shared in owner conversations (theirs and hers), newest first. Photos taken out of the
+   * scrapbook are left out unless `hidden` asks for them ('only' lists just those).
+   */
+  photos(store: Store, limit = 200, hidden: 'skip' | 'only' | 'all' = 'skip'): { image: string; conversationId: string; messageId: number; from: 'owner' | 'sara'; text: string; createdAt: string }[] {
+    const out = this.#allPhotos(store, limit + (hidden === 'all' ? 0 : this.hiddenImages().size));
+    if (hidden === 'all') return out.slice(0, limit);
+    const gone = this.hiddenImages();
+    return out.filter((p) => (hidden === 'only' ? gone.has(p.image) : !gone.has(p.image))).slice(0, limit);
+  }
+
+  #allPhotos(store: Store, limit: number): { image: string; conversationId: string; messageId: number; from: 'owner' | 'sara'; text: string; createdAt: string }[] {
     const rows = store.db
       .prepare(
         `SELECT m.id, m.conversation_id, m.role, m.content, m.meta, m.created_at FROM messages m JOIN conversations c ON c.id = m.conversation_id

@@ -28,7 +28,7 @@ export function adminHint(task: string, o: HintEnv = {}): string {
   if (platform === 'linux' && exists('/usr/local/bin/sara')) return `sudo sara ${task}`;
   if (platform !== 'linux' && env.SARA_INSTALLED === '1') {
     // The Mac app runs her as the signed-in user, so its `sara` command needs no sudo (Phase 46d).
-    if (task === 'stop') return platform === 'win32' ? 'sara stop, in a terminal opened as administrator' : 'sara stop (or the menu bar: Sara server → Stop)';
+    if (task === 'stop') return platform === 'win32' ? 'sara stop, in a terminal opened as administrator' : 'sara stop (or the menu bar: Sara on this Mac → Stop)';
     return `sara ${task}`;
   }
   if (env.SARA_DATA === '/data') return task === 'stop' ? 'docker compose stop sara' : `docker compose exec sara node src/main.ts --${task}`;

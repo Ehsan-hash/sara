@@ -1,7 +1,8 @@
 // Encrypted secret storage (API keys, future OAuth tokens). AES-256-GCM with a per-install
 // master key kept in the data directory (mode 0600) or supplied via SARA_MASTER_KEY.
 import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
-import { chmodSync, existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, readFileSync } from 'node:fs';
+import { writeFileAtomic } from './fs-util.ts';
 import { join } from 'node:path';
 
 const FILE = 'secrets.enc';
@@ -31,7 +32,7 @@ export class Vault {
       return k;
     }
     const k = randomBytes(32);
-    writeFileSync(path, k.toString('base64') + '\n', { mode: 0o600 });
+    writeFileAtomic(path, k.toString('base64') + '\n', 0o600);
     try {
       chmodSync(path, 0o600);
     } catch {
@@ -59,9 +60,7 @@ export class Vault {
     const enc = Buffer.concat([c.update(JSON.stringify(this.#data), 'utf8'), c.final()]);
     const out = Buffer.concat([iv, c.getAuthTag(), enc]);
     const path = join(this.#dir, FILE);
-    const tmp = `${path}.tmp`;
-    writeFileSync(tmp, out, { mode: 0o600 });
-    renameSync(tmp, path);
+    writeFileAtomic(path, out, 0o600);
   }
 
   get(name: string): string | undefined {

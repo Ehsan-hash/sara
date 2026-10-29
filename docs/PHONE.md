@@ -13,7 +13,7 @@ pages. You have two easy choices:
   gets an address like `https://my-server.tail1234.ts.net` that only your own devices can open,
   from anywhere, with nothing to open on your router. Install Tailscale on the server and on your
   phone, sign in to the same account on both, then on the server run `sudo sara access tailscale`
-  (Windows: `sara access tailscale`; Mac: *Sara server → Change how you reach her…*). If it says
+  (Windows: `sara access tailscale`; Mac: menu bar → *Sara on this Mac → Change how you reach her…*). If it says
   HTTPS certificates are off, press **Enable HTTPS** once at https://login.tailscale.com/admin/dns.
 - **Your own web address** (like `sara.example.com`): point it at your server, open ports 80 and
   443, and run `sudo sara access domain --domain sara.example.com --email you@example.com` on a

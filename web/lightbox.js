@@ -15,13 +15,13 @@ box.innerHTML = `
     <span class="lb-label"></span>
     <span class="lb-count muted"></span>
     <span class="lb-actions">
-      <a class="lb-save" download title="Save the picture" aria-label="Save the picture">⤓</a>
-      <button type="button" class="lb-share" title="Share" aria-label="Share" hidden>⇪</button>
-      <button type="button" class="lb-close" title="Close" aria-label="Close">✕</button>
+      <a class="lb-save" download title="${t('Save the picture')}" aria-label="${t('Save the picture')}">⤓</a>
+      <button type="button" class="lb-share" title="${t('Share')}" aria-label="${t('Share')}" hidden>⇪</button>
+      <button type="button" class="lb-close" title="${t('Close')}" aria-label="${t('Close')}">✕</button>
     </span>
   </div>
-  <button type="button" class="lb-prev" aria-label="Previous">‹</button>
-  <button type="button" class="lb-next" aria-label="Next">›</button>
+  <button type="button" class="lb-prev" aria-label="${t('Previous')}">‹</button>
+  <button type="button" class="lb-next" aria-label="${t('Next')}">›</button>
   <div class="lb-dots" role="tablist"></div>
   <p class="lb-caption" hidden></p>`;
 document.body.append(box);

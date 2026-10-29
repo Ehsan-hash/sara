@@ -85,12 +85,6 @@ export function parseTailscaleStatus(json: string, cli: string | null = null): T
   return out;
 }
 
-/** Finds Tailscale (no command run). */
-export function detectTailscale(o: FindOptions = {}): { installed: boolean; cli: string | null } {
-  const cli = findTailscale(o);
-  return { installed: Boolean(cli), cli };
-}
-
 /** Finds Tailscale and asks it how it is (a few seconds at most). */
 export function tailscaleStatus(o: FindOptions & { run?: (cli: string, args: string[]) => { status: number | null; stdout: string; stderr: string; error?: Error } } = {}): TailscaleStatus {
   const cli = findTailscale(o);

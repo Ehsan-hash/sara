@@ -13,7 +13,8 @@ export function workspaceDir(dataDir: string, name: string): string {
   return realpathSync(dir);
 }
 
-function inside(root: string, p: string): boolean {
+/** True when `p` is `root` or below it (plain path arithmetic; callers resolve links first). */
+export function inside(root: string, p: string): boolean {
   const rel = relative(root, p);
   return rel === '' || (!rel.startsWith('..') && !isAbsolute(rel));
 }

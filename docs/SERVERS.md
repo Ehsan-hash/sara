@@ -40,13 +40,13 @@ in the list, still signed in.
 
 ### Windows and Mac apps
 
-- **Add:** tray icon (Windows) or menu bar → *Sara server* (Mac) → **Add a Sara…**, or in the
+- **Add:** tray icon (Windows) or menu bar icon (Mac) → *Your Saras* → **Add a Sara…**, or in the
   app: the **⇄** button at the top (shown once you have two) → **Add a server**, or Settings →
   Connections → This computer → **Your Saras…**. Type the address, then sign in with a code from
   that server's Settings → Devices and sign-in → **Add a phone or computer**.
 - **Switch:** the tray/menu bar list (✓ = in use), or **⇄** → **Switch**. The "Can't reach your
   Sara" page also lists the other servers.
-- **Remove:** **⇄** → **Remove** (Mac: also *Sara server → Remove …*). The app signs out on that
+- **Remove:** **⇄** → **Remove** (Mac: also *Your Saras → Remove …*). The app signs out on that
   server and clears its sign-in here.
 - **Rename:** **⇄** → **Rename**.
 - On a Mac with macOS 13, the app keeps one server (several need macOS 14).

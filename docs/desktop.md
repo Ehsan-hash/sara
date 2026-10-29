@@ -20,11 +20,37 @@ What they add over a browser tab:
 | Settings → Connections → This computer | ✓ | ✓ |
 | Several Sara servers, each signed in, switched from a menu (Phase 68) | ✓ (macOS 14+) | ✓ |
 
+## The menus
+
+The tray icon's menu (Windows) and the menu bar icon's menu (Mac) list the same things in the
+same order:
+
+| Windows tray | Mac menu bar (and the Sara menu) | What it does |
+|---|---|---|
+| **Open Sara** (bold: what a click on the icon does) | Open Sara | Shows the window |
+| Settings… | Settings… (⌘,) | Opens Settings in the window |
+| Your Saras ▸ | Your Saras ▸ | The saved Sara servers (✓ the one in use), *Add a Sara…*; Mac also *Remove …* |
+| | Sara on this Mac ▸ | Only on a Mac that carries her server: how she's doing, Start/Stop, Back up now, Open data folder, Change how you reach her…, New owner key…, the `sara` command, Connect to a Sara somewhere else instead…, Uninstall… |
+| Start with Windows ✓ | Open at login ✓ | Start quietly when you sign in |
+| Help | Help (also the Help menu, ⌘?) | Opens Sara's help in the window |
+| Quit Sara | Quit Sara (⌘Q) | Quits (her server, if it runs here, keeps running) |
+
+Settings… and Help are greyed out until the app has a Sara. The Mac's View menu also has *Zoom
+In / Zoom Out / Actual Size* (⌘+ / ⌘- / ⌘0, remembered). The Windows menu has no server items
+(start, stop, logs): with her server on the same PC, `sara status` and `sara logs` do that.
+
+The app's own pages (*Connect to your Sara*, *Add a Sara*, *Can't reach your Sara*, and on a Mac
+the first-launch choice and *Starting Sara…*) use the web app's colours and follow the system's
+light or dark mode, with her picture at the top, like the phone apps' setup screens. The app
+icons on every platform are made from one picture by `scripts/make-app-icons.py` (Windows `.ico`
+with a closer crop of her face at tray sizes, the macOS rounded-square `AppIcon.png`, Android's
+adaptive icon).
+
 ## Several servers (Phase 68)
 
 Both apps keep a list of Sara servers, each with its own sign-in (Windows: its own WebView2
 profile; Mac: its own WebKit data store), and switch without signing out: the tray icon's list
-(Windows) or the menu bar's *Sara server* menu (Mac), and the **⇄** button in the app's top bar
+(Windows: *Your Saras ▸*) or the menu bar's *Your Saras ▸* menu (Mac), and the **⇄** button in the app's top bar
 once there are two. *Add a Sara…* replaces *Connect to a different Sara…* (which used to sign out
 of the old server); *Remove* signs out of one server only. The server used before 1.8 becomes the
 first in the list, still signed in. Notifications, the microphone and files you pick go to the
@@ -53,14 +79,16 @@ HTTP (the Windows installer, the Windows app and the Mac app use the same rule).
   data stays). Uninstalling an app-only install removes the app, its settings and its sign-in here;
   no server's data is touched. Silent: `Sara-Setup.exe /VERYSILENT /MODE=remote
   /SERVER=sara.example.com`.
-- **The Windows app** (any install): tray menu → *Add a Sara…* and the list of saved servers
+- **The Windows app** (any install): tray menu → *Your Saras ▸* → *Add a Sara…* and the list of saved servers
   (Phase 68: each in its own web view profile, so no server receives another's sign-in; before 1.8
   this was *Connect to a different Sara…*, which signed out of the old one), and a *Can't reach your
-  Sara* page with the address, *Try again*, *Add a Sara* and the other saved servers. There are no server items (start, stop, logs) in its
+  Sara* page with the address, *Try again*, *Add a Sara* and the other saved servers (it tries
+  again by itself every 30 seconds). There are no server items (start, stop, logs) in its
   menu; with her server on the same PC, `sara status` and `sara logs` do that.
-- **Mac:** the first launch shows the two choices. The menu bar's *Sara server* menu switches later
-  without reinstalling: the saved servers (Phase 68), *Add a Sara…*, and when connected elsewhere
-  *Set up Sara on this Mac…*; when she runs on the Mac, *Connect to a Sara somewhere else instead…* (after a confirm:
+- **Mac:** the first launch shows the two choices. The menu bar switches later without
+  reinstalling: *Your Saras ▸* has the saved servers (Phase 68) and *Add a Sara…*; *Sara on this
+  Mac ▸* has *Set up Sara on this Mac…* when connected elsewhere, and when she runs on the Mac,
+  *Connect to a Sara somewhere else instead…* (after a confirm:
   she stops and her LaunchAgent is unregistered; her data stays in
   `~/Library/Application Support/Sara` until `sara uninstall --delete-data`, and *Set up Sara on this
   Mac…* brings her back as she was).
@@ -106,7 +134,7 @@ a Sara somewhere else*. How it works:
   `backups/before-<version>-….tar.gz` before the new server starts.
 - If Sara's switch in System Settings → General → Login Items is off, the agent answers "Operation
   not permitted" with status *requires approval*; the app opens Login Items and waits.
-- `Sara --cli <command>` is the `sara` command (installed from the menu into `~/.local/bin`).
+- `Sara --cli <command>` is the `sara` command (installed from *Sara on this Mac ▸ Install command line tool…* into `~/.local/bin`).
 
 ## Signing in
 

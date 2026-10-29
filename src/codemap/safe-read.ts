@@ -6,7 +6,8 @@
 // has it; fstat of the open descriptor is the same file lstat saw (closes the lstat→open race); the
 // real path stays inside the workspace's real path. Any failure reads as "no file".
 import { closeSync, constants, fstatSync, lstatSync, openSync, readSync, realpathSync } from 'node:fs';
-import { relative, isAbsolute, resolve } from 'node:path';
+import { resolve } from 'node:path';
+import { inside } from '../tools/workspace.ts';
 
 const NOFOLLOW = (constants as { O_NOFOLLOW?: number }).O_NOFOLLOW ?? 0;
 
@@ -19,12 +20,6 @@ function realRoot(root: string): string {
     realRoots.set(root, r);
   }
   return r;
-}
-
-/** True when `p` (a real path) is `root` or below it. */
-function inside(root: string, p: string): boolean {
-  const rel = relative(root, p);
-  return rel === '' || (!rel.startsWith('..') && !isAbsolute(rel));
 }
 
 /**

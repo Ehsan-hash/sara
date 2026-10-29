@@ -16,7 +16,9 @@
 // member) and one companion. Her turn runs in that person's space, in that companion's own "Alexa"
 // conversation, as a turn from another app (private, imported and group chats stay out of it).
 import { createHash, randomBytes, randomInt, timingSafeEqual, verify as verifySignature, X509Certificate } from 'node:crypto';
-import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
+import { writeFileAtomic } from './fs-util.ts';
+import { FOR_SPEAKER, spokenText } from './spoken.ts';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { join } from 'node:path';
 import { rootCertificates } from 'node:tls';
@@ -173,28 +175,9 @@ export async function verifyAlexaRequest(headers: IncomingMessage['headers'], ra
 // Speech
 // ---------------------------------------------------------------------------------------------
 
-/** Her reply as plain spoken words: no markdown, code, emoji or long links; cut at a sentence. */
+/** Her reply as plain spoken words for a speaker (shared cleaner: spoken.ts); cut at a sentence. */
 export function speechText(input: string, max = MAX_SPEECH): string {
-  let s = String(input ?? '');
-  s = s.replace(/```[\s\S]*?(```|$)/g, ' (I left out some code: it is in the Sara app.) ');
-  s = s.replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1');
-  s = s.replace(/\[([^\]]+)\]\((?:[^)]*)\)/g, '$1');
-  s = s.replace(/https?:\/\/([^\s/)]+)(\/[^\s)]*)?/gi, (_m, host: string) => host.replace(/^www\./, ''));
-  s = s.replace(/`([^`]*)`/g, '$1');
-  s = s.replace(/^\s{0,3}#{1,6}\s+/gm, '').replace(/^\s*[-*+•]\s+/gm, '').replace(/^\s*\d+[.)]\s+/gm, '').replace(/^\s*>\s?/gm, '');
-  s = s.replace(/(\*\*|__|\*|_|~~)(\S(?:[\s\S]*?\S)?)\1/g, '$2');
-  s = s.replace(/\*([^*\n]+)\*/g, '$1');
-  // Emoji, pictographs, variation selectors, joiners, keycaps and flags.
-  s = s.replace(/[\p{Extended_Pictographic}\p{Regional_Indicator}\u{FE0F}\u{FE0E}\u{200D}\u{20E3}\u{1F3FB}-\u{1F3FF}]/gu, '');
-  // Control characters (not newlines) never reach Alexa.
-  s = s.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, '');
-  s = s.replace(/\s*\n+\s*/g, ' ').replace(/[ \t]{2,}/g, ' ').trim();
-  if (s.length > max) {
-    const cut = s.slice(0, max);
-    const end = Math.max(cut.lastIndexOf('. '), cut.lastIndexOf('! '), cut.lastIndexOf('? '));
-    s = `${end > max * 0.5 ? cut.slice(0, end + 1) : `${cut.replace(/\s+\S*$/, '')}…`} The rest is in the Sara app.`;
-  }
-  return s;
+  return spokenText(input, { ...FOR_SPEAKER, max });
 }
 
 /** Escapes text for SSML (XML): & < > " ' . */
@@ -285,9 +268,7 @@ export class AlexaLinks {
   #write(f: AlexaFile): void {
     const now = this.#now().getTime();
     f.codes = f.codes.filter((c) => Date.parse(c.expiresAt) > now);
-    const tmp = `${this.#file}.tmp`;
-    writeFileSync(tmp, JSON.stringify(f, null, 2), { mode: 0o600 });
-    renameSync(tmp, this.#file);
+    writeFileAtomic(this.#file, JSON.stringify(f, null, 2), 0o600);
   }
 
   /** A new six-digit code for this person and companion (10 minutes, once). Replaces their older code. */

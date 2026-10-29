@@ -27,7 +27,6 @@ import {
   workNote,
   detectCrisis,
   detectExplicit,
-  detectMinorSexualContent,
   minorSexualMatch,
   normalizeForSafety,
   parseClassifier,
@@ -40,7 +39,7 @@ import {
 import { elsewhereNote } from './elsewhere.ts';
 import { adultModeOn, type RoutePurpose, type SettingsStore } from './settings.ts';
 import type { MemoryVectors } from './embeddings.ts';
-import { isCloudModel } from './modelpicks.ts';
+import { isCloudModelName } from './model-names.ts';
 import { projectSection } from './projectknow.ts';
 import { librarySection } from './library/use.ts';
 import { recipesSection } from './recipes.ts';
@@ -255,10 +254,7 @@ export const innerEnabled = (app: AppContext) => app.settings.get().persona?.inn
 export function daysKnown(store: Store, now: Date, timeZone?: string): number | null {
   const first = store.firstOwnerMessageAt();
   if (!first) return null;
-  const day = (d: Date) => {
-    const p = new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(d);
-    return Date.parse(`${p}T00:00:00Z`);
-  };
+  const day = (d: Date) => Date.parse(`${localDate(d, timeZone)}T00:00:00Z`);
   const n = Math.round((day(now) - day(first)) / 86_400_000);
   return n > 0 ? n : null;
 }
@@ -330,7 +326,7 @@ function resolveChainAll(app: AppContext, conv: Conversation, job: Job, adult: b
   const tagFor = (p: string) => ({ purpose: isGroupChannel(conv.channel) ? 'group' : p, ...(conv.id ? { conversationId: conv.id } : {}) });
   if (conv.providerId) {
     const r = resolveProvider(app, conv.providerId, conv.model, tagFor(job === 'turn' ? (conv.mode === 'coding' ? 'coding' : 'chat') : job));
-    if (conv.private && (!r.provider.config.local || isCloudModel(r.model))) throw new Error(`This conversation is private, so it only uses models on your own hardware. ${r.provider.config.label} isn't marked local: pick a local model for this conversation, or set a Private route in Settings.`);
+    if (conv.private && (!r.provider.config.local || isCloudModelName(r.model))) throw new Error(`This conversation is private, so it only uses models on your own hardware. ${r.provider.config.label} isn't marked local: pick a local model for this conversation, or set a Private route in Settings.`);
     return [{ ...r, from: 'conversation' }];
   }
   let purpose: RoutePurpose = job === 'turn' ? (adult && has(routes.adult) ? 'adult' : conv.mode === 'coding' ? 'coding' : 'chat') : job;
@@ -355,7 +351,7 @@ function resolveChainAll(app: AppContext, conv: Conversation, job: Job, adult: b
   }
   const chain: ModelChoice[] = [];
   const first = primary ? resolveProvider(app, primary.providerId, primary.model, tagFor(purpose)) : resolveProvider(app, null, null, tagFor(purpose));
-  if (conv.private && isCloudModel(first.model)) throw new Error(`This conversation is private, but ${first.model} is an Ollama cloud model (it runs on Ollama's servers). Pick a model that runs on your own hardware for Private conversations in Settings → Which model does what.`);
+  if (conv.private && isCloudModelName(first.model)) throw new Error(`This conversation is private, but ${first.model} is an Ollama cloud model (it runs on Ollama's servers). Pick a model that runs on your own hardware for Private conversations in Settings → Which model does what.`);
   if (conv.private && !first.provider.config.local) {
     throw new Error(`This conversation is private, so it only uses models on your own hardware. ${first.provider.config.label} isn't marked local: pick a local model for this conversation, or set a Private route in Settings.`);
   }
@@ -365,7 +361,7 @@ function resolveChainAll(app: AppContext, conv: Conversation, job: Job, adult: b
     if (!has(f)) continue;
     try {
       const r = resolveProvider(app, f.providerId, f.model, tagFor(purpose));
-      if (conv.private && (!r.provider.config.local || isCloudModel(r.model))) continue;
+      if (conv.private && (!r.provider.config.local || isCloudModelName(r.model))) continue;
       if (chain.some((c) => c.provider.config.id === r.provider.config.id && c.model === r.model)) continue;
       chain.push({ ...r, from });
     } catch {
@@ -519,7 +515,7 @@ export async function judgeUnsure(app: AppContext, reply: string, receipts: Rece
   try {
     const { provider, model } = resolveProvider(app, cfg.providerId, cfg.model, { purpose: 'background' });
     // A private conversation never leaves the owner's hardware, not even for this check.
-    if (opts.private && (!provider.config.local || isCloudModel(model))) return [];
+    if (opts.private && (!provider.config.local || isCloudModelName(model))) return [];
     if (privateLocalOn() && !onThisComputer(provider.config, model)) return [];
     return await confirmClaims(async (system, user, signal) => {
       let out = '';

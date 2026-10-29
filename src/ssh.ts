@@ -23,7 +23,8 @@
 //   servers on this computer (loopback), like every other connection (src/net-guard.ts).
 import { spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { writeFileAtomic } from './fs-util.ts';
 import { isAbsolute, join } from 'node:path';
 import { isLoopbackHost, privateLocalOn } from './net-guard.ts';
 import { en } from './i18n.ts';
@@ -313,9 +314,7 @@ export class SshManager {
   }
   #save(): void {
     this.#mk();
-    const tmp = `${this.#file()}.tmp`;
-    writeFileSync(tmp, JSON.stringify({ servers: this.#servers }, null, 2), { mode: 0o600 });
-    renameSync(tmp, this.#file());
+    writeFileAtomic(this.#file(), JSON.stringify({ servers: this.#servers }, null, 2), 0o600);
   }
   knownHostsFile(id: string): string {
     return join(this.#dir, 'known_hosts', id);
