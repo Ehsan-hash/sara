@@ -21,12 +21,20 @@ const DOC_CUE = /\b(document|doc|file|pdf|attachment|upload(ed)?|lease|contract|
 /** Her library for this companion (a shared one lives with the first companion). */
 export const libraryOf = (app: AppContext): LibraryStore | undefined => app.library;
 
-const fmtHit = (h: PassageHit) => `[${sourceLabel(h.doc, h.passage.place)}]${h.passage.heading ? ` (${h.passage.heading})` : ''}\n${h.passage.text}`;
+/** Phase 74: the in-app link that opens a document at a page (her citations: "[p. 412](/#view=library:12:412)"). */
+export const pageLink = (docId: number, page: number) => `/#view=library:${docId}:${page}`;
+export const citation = (docId: number, page: number) => `[p. ${page}](${pageLink(docId, page)})`;
+
+const fmtHit = (h: PassageHit) => `[${sourceLabel(h.doc, h.passage.place)}]${h.passage.page ? ` cite: ${citation(h.doc.id, h.passage.page)}` : ''}${h.passage.heading ? ` (${h.passage.heading})` : ''}\n${h.passage.text}`;
+
+/** How she cites pages (one line in her instructions when a document has pages). */
+const CITE_RULE = 'When you answer from a document with pages, say which page and add the link given with the passage, e.g. "the calibration constant is 4.183 [p. 612](/#view=library:3:612)". Never make up a page.';
 
 function docLine(d: LibraryDoc): string {
   const what = d.summary ? `: ${d.summary}` : '';
+  const pages = d.pages ? ` (${d.pages} pages)` : '';
   const state = d.status === 'ready' ? '' : d.status === 'failed' ? ' (couldn\'t be read)' : ' (still being read)';
-  return `- ${d.title && d.title.length < 80 ? `${d.title} (${d.name})` : d.name}${what}${state}`;
+  return `- ${d.title && d.title.length < 80 ? `${d.title} (${d.name})` : d.name}${pages}${what}${state}`;
 }
 
 /**
@@ -59,7 +67,7 @@ export async function librarySection(app: AppContext, conv: Conversation, text: 
   }
   if (kept.length) {
     const more = kept.length > LIST_DOCS ? `\n- …and ${kept.length - LIST_DOCS} more (search them with the library tool)` : '';
-    blocks.push(`### In your library\nDocuments ${owner} gave you to keep:\n${kept.slice(0, LIST_DOCS).map(docLine).join('\n')}${more}`);
+    blocks.push(`### In your library\nDocuments ${owner} gave you to keep:\n${kept.slice(0, LIST_DOCS).map(docLine).join('\n')}${more}${kept.some((d) => d.pages > 0) ? `\n${CITE_RULE} For a long document, the library tool's 'contents' action shows its chapters with their pages and summaries.` : ''}`);
   }
   // Passages for this message: by meaning when that's set up, or when the message points at a document.
   const target = embedTarget(app);
@@ -86,11 +94,11 @@ export function createLibraryTool(app: () => AppContext): Tool {
     spec: {
       name: 'library',
       description:
-        "Your library: documents the owner gave you (PDFs, Word, spreadsheets, slides, books, web pages, notes). Use it to answer from them instead of guessing, and say where the answer came from (e.g. 'your lease, page 4'). action 'search' finds passages by words and meaning; 'read' reads a document from a place onward; 'list' shows what's there.",
+        "Your library: documents the owner gave you (PDFs, Word, spreadsheets, slides, books and manuals of up to thousands of pages, web pages, notes). Use it to answer from them instead of guessing, and say where the answer came from: for pages, the page and its link as given with the passage (e.g. '[p. 412](/#view=library:3:412)'). action 'search' finds passages by words and meaning; 'read' reads a document from a place onward (e.g. place 'page 412'); 'contents' shows a long document's chapters and sections with their pages and summaries; 'list' shows what's there.",
       parameters: {
         type: 'object',
         properties: {
-          action: { type: 'string', enum: ['search', 'read', 'list'] },
+          action: { type: 'string', enum: ['search', 'read', 'contents', 'list'] },
           query: { type: 'string', description: "For search: what to look for, e.g. 'when does the lease end' or 'filter cleaning'." },
           document: { type: 'string', description: 'Optional: the document name (or part of it) to search or read.' },
           place: { type: 'string', description: "For read: where to start, e.g. 'page 4', 'sheet Budget', 'slide 3'. Default: the start." },
@@ -99,7 +107,7 @@ export function createLibraryTool(app: () => AppContext): Tool {
       },
     },
     defaultPermission: 'auto',
-    summarize: (a) => (a.action === 'list' ? 'Looking at her library' : a.action === 'read' ? `Reading ${String(a.document ?? 'a document').slice(0, 60)}${a.place ? `, ${String(a.place).slice(0, 30)}` : ''}` : `Looking in her library for “${String(a.query ?? '').slice(0, 60)}”`),
+    summarize: (a) => (a.action === 'list' ? 'Looking at her library' : a.action === 'contents' ? `Looking at the contents of ${String(a.document ?? 'a document').slice(0, 60)}` : a.action === 'read' ? `Reading ${String(a.document ?? 'a document').slice(0, 60)}${a.place ? `, ${String(a.place).slice(0, 30)}` : ''}` : `Looking in her library for “${String(a.query ?? '').slice(0, 60)}”`),
     async run(args, ctx) {
       const a = app();
       const lib = libraryOf(a);
@@ -115,11 +123,34 @@ export function createLibraryTool(app: () => AppContext): Tool {
       const name = typeof args.document === 'string' ? args.document.trim().toLowerCase() : '';
       const docs = name ? all.filter((d) => d.name.toLowerCase().includes(name) || (d.title ?? '').toLowerCase().includes(name)) : [];
       if (name && !docs.length) throw new ToolError(`No document matching “${args.document}”. Use action 'list' to see what's there.`);
+      if (action === 'contents') {
+        const doc = docs[0] ?? (all.length === 1 ? all[0] : undefined);
+        if (!doc) throw new ToolError('Say which document (its name).');
+        const secs = lib.sections(doc.id);
+        const head = `${sourceLabel(doc, '')}${doc.pages ? `, ${doc.pages} pages` : ''}${doc.overview ? `\n\n${doc.overview}` : doc.summary ? ` (${doc.summary})` : ''}`;
+        if (!secs.length) return `${head}\n\n(No chapters or sections found; search it or read it from a page.)`;
+        const lines = secs.slice(0, 400).map((x) => `${'  '.repeat(Math.max(0, x.level - 1))}- ${x.title}: pages ${x.page}${x.pageEnd > x.page ? `-${x.pageEnd}` : ''} ${citation(doc.id, x.page)}${x.summary ? `\n${'  '.repeat(Math.max(0, x.level - 1))}  ${x.summary}` : ''}`);
+        return `${head}\n\nContents:\n${lines.join('\n')}${secs.length > 400 ? `\n(…and ${secs.length - 400} more)` : ''}`;
+      }
       if (action === 'read') {
         const doc = docs[0] ?? (all.length === 1 ? all[0] : undefined);
         if (!doc) throw new ToolError("Say which document to read (its name).");
         if (doc.status !== 'ready') return `${doc.name} is ${doc.status === 'failed' ? `not readable: ${doc.error}` : 'still being read; try again in a minute'}.`;
         const place = typeof args.place === 'string' ? args.place.trim().toLowerCase() : '';
+        // Phase 74: a page of a long document is looked up directly (not by reading every passage).
+        const pm = /^(?:page|p\.?)\s*(\d+)$/.exec(place);
+        if (pm && doc.pages) {
+          const ps = lib.passagesAt(doc.id, Number(pm[1]), 40);
+          const out: string[] = [];
+          let size = 0;
+          for (const p of ps) {
+            if (size + p.text.length > 8000 && out.length) break;
+            out.push(`[${p.place}]${p.page ? ` cite: ${citation(doc.id, p.page)}` : ''}\n${p.text}`);
+            size += p.text.length;
+          }
+          const next = ps[out.length];
+          return `${sourceLabel(doc, '')}${doc.pages ? ` (${doc.pages} pages)` : ''}\n\n${out.join('\n\n') || '(nothing on that page)'}${next ? `\n\n(read on with place "${next.place}")` : ''}`;
+        }
         const ps = lib.passages(doc.id, { limit: 100_000 });
         let from = place ? ps.findIndex((p) => p.place.toLowerCase() === place || p.place.toLowerCase().startsWith(`${place} `) || (p.heading ?? '').toLowerCase().includes(place)) : 0;
         if (from < 0) from = 0;

@@ -748,7 +748,20 @@ export function neutralizeNote(text: string): string {
     .replace(/^[ \t]*(?:\*\*|__)?[ \t]*((?:updated|new|real|actual|current|important)?[ \t]*(?:safety|system|core|owner|developer|admin)[ \t]+(?:rules?|instructions?|prompt|policy|policies|override|message|note)\b)/gim, '(the app wrote) $1');
 }
 
+/** Phase 74: chat turns running right now (a long document's background model calls wait for them). */
+export const chatTurns = { running: 0, onStart: new Set<() => void>() };
+
 export async function* runTurn(app: AppContext, conversationId: string, userText: string, signal: AbortSignal = new AbortController().signal, opts: TurnOptions = {}): AsyncGenerator<ChatEvent> {
+  chatTurns.running++;
+  for (const f of chatTurns.onStart) f();
+  try {
+    yield* runTurnInner(app, conversationId, userText, signal, opts);
+  } finally {
+    chatTurns.running--;
+  }
+}
+
+async function* runTurnInner(app: AppContext, conversationId: string, userText: string, signal: AbortSignal, opts: TurnOptions): AsyncGenerator<ChatEvent> {
   const { store } = app;
   const conv = store.getConversation(conversationId);
   if (!conv) {
@@ -917,6 +930,7 @@ export async function* runTurn(app: AppContext, conversationId: string, userText
       today: localDate(now.toISOString(), s.timeZone),
       extra: sharedOwnerFacts(app, text, opts.externalApp),
       docName: (id) => app.library?.get(id)?.name,
+      docPage: (id, evidence) => app.library?.pageOf(id, evidence),
       importedFrom: (id) => importedName(store.getConversation(id)?.channel),
       ...(appSafe ? { allow: appSafe } : {}),
     });

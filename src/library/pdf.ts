@@ -9,6 +9,7 @@
 import { createCipheriv, createDecipheriv, createHash } from 'node:crypto';
 import { constants, deflateSync, inflateSync } from 'node:zlib';
 import type { DocPart, PageImage, ReadResult } from './read.ts';
+import { BufferSource, type ByteSource, FileSource } from './source.ts';
 import { ReadError } from './read.ts';
 
 // ---------------------------------------------------------------- objects
@@ -516,109 +517,385 @@ function setupCrypt(enc: Dict, ids: PVal | undefined): Crypt {
 
 // ---------------------------------------------------------------- the document
 
+/** A stream whose bytes stay in the file until they are needed (big files are never read whole). */
+class LazyStream {
+  readonly dict: Dict;
+  readonly num: number;
+  readonly gen: number;
+  readonly start: number;
+  readonly len: number;
+  readonly #src: ByteSource;
+  constructor(src: ByteSource, dict: Dict, start: number, len: number, num: number, gen: number) {
+    this.#src = src;
+    this.dict = dict;
+    this.start = start;
+    this.len = len;
+    this.num = num;
+    this.gen = gen;
+  }
+  get raw(): Buffer {
+    return this.#src.read(this.start, this.len);
+  }
+}
+
+interface Entry {
+  /** Where "N G obj" starts in the file. */
+  off?: number;
+  gen: number;
+  val?: PVal;
+  /** Packed in an object stream: which one, and the index in it. */
+  stm?: number;
+  idx?: number;
+}
+
+/** The first look at an object: most are small; a bigger window is read only when needed. */
+const FIRST_WINDOW = 4096;
+const MAX_WINDOW = 64 * 1024 * 1024;
+const SCAN_CHUNK = 8 * 1024 * 1024;
+const SCAN_OVERLAP = 64;
+
 class Doc {
-  readonly b: Buffer;
-  readonly objs = new Map<number, { pos?: number; val?: PVal; gen: number; inStm?: { stm: number; idx: number } }>();
+  readonly src: ByteSource;
+  readonly objs = new Map<number, Entry>();
   trailer: Dict = new Map();
   crypt: Crypt | undefined;
   /** Bytes unpacked so far (a small file that unpacks to gigabytes is refused). */
   decoded = 0;
+  readonly maxDecoded: number;
+  /** How the objects were found: the file's own cross-reference table, or by scanning. */
+  mode: 'xref' | 'scan' = 'xref';
+  readonly fonts = new Map<number, Font>();
   #resolving = new Set<number>();
+  #scanned = false;
+  #objStms = new Map<number, { data: Buffer; first: number; offs: Map<number, number>; order: number[] }>();
 
-  constructor(b: Buffer) {
-    this.b = b;
-    this.#scan();
+  constructor(src: ByteSource) {
+    this.src = src;
+    // Pictures of a 1 GB scan unpack to several times the file; a bomb unpacks to far more.
+    this.maxDecoded = MAX_DOC_DECODED + src.size * 24;
+    let ok = false;
+    try {
+      ok = this.#loadXref() && this.#rootOk();
+    } catch (err) {
+      if (err instanceof ReadError && /too large/.test(err.message)) throw err;
+      ok = false;
+    }
+    if (!ok) {
+      this.objs.clear();
+      this.trailer = new Map();
+      this.#scanAll();
+    }
   }
 
-  #scan(): void {
-    const s = this.b.toString('latin1');
-    const re = /(\d+)\s+(\d+)\s+obj\b/g;
-    for (let m = re.exec(s); m; m = re.exec(s)) {
-      // A later definition (incremental update) replaces an earlier one.
-      this.objs.set(Number(m[1]), { pos: m.index + m[0].length, gen: Number(m[2]) });
-      if (this.objs.size > 2_000_000) throw new ReadError('This PDF is too large to read.');
+  /** Forgets parsed objects (after the decryption key is known, packed objects are read again). */
+  resetCaches(): void {
+    this.#objStms.clear();
+    for (const e of this.objs.values()) delete e.val;
+    this.fonts.clear();
+  }
+
+  #rootOk(): boolean {
+    const root = this.dict(this.trailer.get('Root'));
+    return Boolean(root && this.dict(root.get('Pages')));
+  }
+
+  // ---- cross-reference tables (read from the end of the file)
+
+  #loadXref(): boolean {
+    const size = this.src.size;
+    const tailLen = Math.min(size, 4096);
+    const tail = this.src.read(size - tailLen, tailLen).toString('latin1');
+    const i = tail.lastIndexOf('startxref');
+    if (i < 0) return false;
+    const m = /startxref\s+(\d+)/.exec(tail.slice(i));
+    if (!m) return false;
+    let off: number | undefined = Number(m[1]);
+    const seen = new Set<number>();
+    let any = false;
+    while (off !== undefined && off >= 0 && off < size && !seen.has(off) && seen.size < 256) {
+      seen.add(off);
+      const head = this.src.read(off, 64).toString('latin1');
+      let prev: number | undefined;
+      if (/^\s*xref/.test(head)) prev = this.#classicXref(off);
+      else if (/^\s*\d+\s+\d+\s+obj/.test(head)) prev = this.#xrefStream(off);
+      else return any;
+      any = true;
+      off = prev;
     }
-    // Trailers (the last one wins), or cross-reference streams (which carry the same keys).
-    const tre = /trailer\s*<</g;
-    for (let m = tre.exec(s); m; m = tre.exec(s)) {
-      const lx = new Lexer(this.b, m.index + m[0].length - 2);
+    return any;
+  }
+
+  #mergeTrailer(d: Dict): void {
+    for (const k of ['Root', 'Info', 'Encrypt', 'ID', 'Size']) if (d.has(k) && !this.trailer.has(k)) this.trailer.set(k, d.get(k)!);
+  }
+
+  /** A classic "xref" table and its trailer. Returns the previous table's offset, if any. */
+  #classicXref(off: number): number | undefined {
+    for (let len = 65536; ; len *= 4) {
+      const buf = this.src.read(off, len);
+      const s = buf.toString('latin1');
+      const more = off + buf.length < this.src.size && len < MAX_WINDOW;
+      const found: [number, Entry][] = [];
+      const head = /\s*xref/y;
+      if (!head.exec(s)) return undefined;
+      let pos = head.lastIndex;
+      let short = false;
+      for (;;) {
+        const sec = /\s*(\d+)\s+(\d+)[ \t]*[\r\n]/y;
+        sec.lastIndex = pos;
+        const sm = sec.exec(s);
+        if (!sm) break;
+        pos = sec.lastIndex;
+        const start = Number(sm[1]);
+        const n = Number(sm[2]);
+        const ent = /\s*(\d{1,10})\s+(\d{1,5})\s+([nf])/y;
+        let k = 0;
+        for (; k < n; k++) {
+          ent.lastIndex = pos;
+          const em = ent.exec(s);
+          if (!em) break;
+          pos = ent.lastIndex;
+          if (em[3] === 'n' && Number(em[1]) > 0) found.push([start + k, { off: Number(em[1]), gen: Number(em[2]) }]);
+        }
+        if (k < n) {
+          short = true;
+          break;
+        }
+      }
+      const tr = /\s*trailer/y;
+      tr.lastIndex = pos;
+      if ((short || !tr.exec(s)) && more) continue;
+      const lx = new Lexer(buf, tr.lastIndex);
       const d = lx.next();
-      if (isDict(d)) for (const [k, v] of d) this.trailer.set(k, v);
+      if (lx.pos >= buf.length - 1 && more) continue;
+      for (const [num, e] of found) if (!this.objs.has(num)) this.objs.set(num, e);
+      if (!isDict(d)) return undefined;
+      // A hybrid file also lists its packed objects in a cross-reference stream.
+      const xs = d.get('XRefStm');
+      if (typeof xs === 'number') {
+        try {
+          this.#xrefStream(xs);
+        } catch {
+          /* the table alone */
+        }
+      }
+      this.#mergeTrailer(d);
+      const p = d.get('Prev');
+      return typeof p === 'number' ? p : undefined;
     }
-    for (const [num] of this.objs) {
-      const v = this.#parse(num);
-      if (isStream(v)) {
-        const type = (v.dict.get('Type') as Name | undefined)?.name;
-        if (type === 'XRef') for (const k of ['Root', 'Info', 'Encrypt', 'ID']) if (v.dict.has(k) && !this.trailer.has(k)) this.trailer.set(k, v.dict.get(k)!);
+  }
+
+  /** A cross-reference stream (PDF 1.5+). Returns the previous section's offset, if any. */
+  #xrefStream(off: number): number | undefined {
+    const head = /^\s*(\d+)\s+(\d+)\s+obj/.exec(this.src.read(off, 64).toString('latin1'));
+    if (!head) return undefined;
+    const v = this.#parseAt(Number(head[1]), { off, gen: Number(head[2]) });
+    if (!isStream(v) || this.name(v.dict.get('Type')) !== 'XRef') return undefined;
+    const data = this.streamData(v);
+    const w = this.arr(v.dict.get('W')).map((x) => this.num(x));
+    if (w.length < 3 || w.some((x) => x < 0 || x > 8)) return undefined;
+    const size = this.num(v.dict.get('Size'));
+    const index = this.arr(v.dict.get('Index')).map((x) => this.num(x));
+    const ranges = index.length >= 2 ? index : [0, size];
+    const rowLen = w[0] + w[1] + w[2];
+    const field = (p: number, n: number, d: number) => {
+      if (!n) return d;
+      let x = 0;
+      for (let k = 0; k < n; k++) x = x * 256 + (data[p + k] ?? 0);
+      return x;
+    };
+    let p = 0;
+    for (let r = 0; r + 1 < ranges.length; r += 2) {
+      const start = ranges[r];
+      const count = ranges[r + 1];
+      for (let k = 0; k < count && p + rowLen <= data.length; k++, p += rowLen) {
+        const type = field(p, w[0], 1);
+        const a = field(p + w[0], w[1], 0);
+        const b = field(p + w[0] + w[1], w[2], 0);
+        const num = start + k;
+        if (this.objs.has(num)) continue;
+        if (type === 1 && a > 0) this.objs.set(num, { off: a, gen: b });
+        else if (type === 2) this.objs.set(num, { gen: 0, stm: a, idx: b });
       }
     }
-    // Objects packed inside object streams (only those not written out directly).
-    for (const [num] of [...this.objs]) {
+    this.#mergeTrailer(v.dict);
+    const prev = v.dict.get('Prev');
+    return typeof prev === 'number' ? prev : undefined;
+  }
+
+  // ---- the fallback: find every object by scanning (damaged or missing tables)
+
+  #scanAll(): void {
+    this.#scanned = true;
+    this.mode = 'scan';
+    const size = this.src.size;
+    const cands: number[] = [];
+    for (let start = 0; start < size; start += SCAN_CHUNK) {
+      const from = Math.max(0, start - SCAN_OVERLAP);
+      const buf = this.src.read(from, start - from + SCAN_CHUNK + SCAN_OVERLAP);
+      const s = buf.toString('latin1');
+      const re = /(?<!\d)(\d+)\s+(\d+)\s+obj\b/g;
+      for (let m = re.exec(s); m; m = re.exec(s)) {
+        const abs = from + m.index;
+        if (abs < start || abs >= start + SCAN_CHUNK) continue;
+        const num = Number(m[1]);
+        // A later definition (incremental update) replaces an earlier one.
+        this.objs.set(num, { off: abs, gen: Number(m[2]) });
+        if (this.objs.size > 2_000_000) throw new ReadError('This PDF is too large to read.');
+        if (/\/Type\s*\/(ObjStm|XRef)\b/.test(s.slice(m.index, m.index + 400))) cands.push(num);
+      }
+      // Trailers (the last one wins).
+      const tre = /trailer\s*<</g;
+      for (let m = tre.exec(s); m; m = tre.exec(s)) {
+        const abs = from + m.index;
+        if (abs < start || abs >= start + SCAN_CHUNK) continue;
+        const at = abs + m[0].length - 2;
+        const lx = new Lexer(this.src.read(at, 65536));
+        const d = lx.next();
+        if (isDict(d)) for (const [k, v] of d) this.trailer.set(k, v);
+      }
+    }
+    // Cross-reference streams carry the trailer keys; object streams hold packed objects.
+    for (const num of cands) {
       const v = this.#parse(num);
-      if (!isStream(v) || (v.dict.get('Type') as Name | undefined)?.name !== 'ObjStm') continue;
-      this.#unpackObjStm(num, v);
+      if (!isStream(v)) continue;
+      const type = this.name(v.dict.get('Type'));
+      if (type === 'XRef') for (const k of ['Root', 'Info', 'Encrypt', 'ID']) if (v.dict.has(k) && !this.trailer.has(k)) this.trailer.set(k, v.dict.get(k)!);
+      if (type !== 'ObjStm') continue;
+      const stm = this.#objStm(num);
+      if (!stm) continue;
+      stm.order.forEach((on, idx) => {
+        const had = this.objs.get(on);
+        if (had && had.off !== undefined) return; // written out directly: that one wins
+        this.objs.set(on, { gen: 0, stm: num, idx });
+      });
     }
   }
 
-  #unpackObjStm(num: number, v: Stream): void {
+  // ---- objects
+
+  /** An object stream's unpacked bytes and where each object starts in it (a few kept). */
+  #objStm(num: number): { data: Buffer; first: number; offs: Map<number, number>; order: number[] } | undefined {
+    const had = this.#objStms.get(num);
+    if (had) {
+      this.#objStms.delete(num);
+      this.#objStms.set(num, had);
+      return had;
+    }
+    const v = this.#parse(num);
+    if (!isStream(v)) return undefined;
     let data: Buffer;
     try {
       data = this.streamData(v);
-    } catch {
-      return;
+    } catch (err) {
+      if (err instanceof ReadError && /far more|too large/.test(err.message)) throw err;
+      return undefined;
     }
-    const n = Number(v.dict.get('N') ?? 0);
-    const first = Number(v.dict.get('First') ?? 0);
+    const n = this.num(v.dict.get('N'));
+    const first = this.num(v.dict.get('First'));
     const lx = new Lexer(data);
-    const heads: [number, number][] = [];
+    const offs = new Map<number, number>();
+    const order: number[] = [];
     for (let i = 0; i < n; i++) {
       const on = lx.next();
       const off = lx.next();
       if (typeof on !== 'number' || typeof off !== 'number') break;
-      heads.push([on, off]);
+      if (!offs.has(on)) offs.set(on, off);
+      order.push(on);
     }
-    for (const [on, off] of heads) {
-      if (this.objs.has(on) && this.objs.get(on)!.pos !== undefined) continue;
+    const out = { data, first, offs, order };
+    this.#objStms.set(num, out);
+    if (this.#objStms.size > 8) this.#objStms.delete(this.#objStms.keys().next().value!);
+    return out;
+  }
+
+  /** Reads one object at its offset (streams keep their bytes in the file until read). */
+  #parseAt(num: number, e: Entry): PVal {
+    if (e.stm !== undefined) {
+      const stm = this.#objStm(e.stm);
+      if (!stm) return null;
+      const off = stm.offs.get(num) ?? stm.offs.get(stm.order[e.idx ?? -1]);
+      if (off === undefined) return null;
       try {
-        const vlx = new Lexer(data, first + off);
-        const val = readValue(vlx);
-        this.objs.set(on, { gen: 0, val, inStm: { stm: num, idx: 0 } });
+        return readValue(new Lexer(stm.data, stm.first + off));
       } catch {
-        /* a damaged entry: skip it */
+        return null; // a damaged entry
       }
+    }
+    if (e.off === undefined) return null;
+    const size = this.src.size;
+    for (let len = FIRST_WINDOW; ; len *= 4) {
+      const buf = this.src.read(e.off, len);
+      const more = e.off + buf.length < size && len < MAX_WINDOW;
+      const lx = new Lexer(buf);
+      const a = lx.next();
+      lx.next();
+      const c = lx.next();
+      if (a !== num || !(c instanceof Op) || c.op !== 'obj') return HEADER_MISMATCH;
+      let val = readValue(lx);
+      if (lx.pos >= buf.length - 1 && more) continue;
+      lx.skipWs();
+      if (lx.pos + 8 >= buf.length && more) continue;
+      if (isDict(val) && buf.toString('latin1', lx.pos, lx.pos + 6) === 'stream') {
+        let p = lx.pos + 6;
+        if (buf[p] === 0x0d) p++;
+        if (buf[p] === 0x0a) p++;
+        const start = e.off + p;
+        const lenV = val.get('Length');
+        let slen = typeof lenV === 'number' ? lenV : -1;
+        if (lenV instanceof Ref && !this.#resolving.has(lenV.num)) {
+          this.#resolving.add(lenV.num);
+          const l = this.#parse(lenV.num);
+          this.#resolving.delete(lenV.num);
+          if (typeof l === 'number') slen = l;
+        }
+        // Check the length really ends at "endstream" (it is often wrong); else search for it.
+        if (slen < 0 || start + slen > size || !/^\s*endstream/.test(this.src.read(start + slen, 24).toString('latin1'))) slen = this.#findEndstream(start) - start;
+        val = new LazyStream(this.src, val, start, Math.max(0, slen), num, e.gen) as unknown as Stream;
+      }
+      return val;
     }
   }
 
-  /** The object itself (streams keep their raw bytes until read). */
+  /** Where a stream's data ends when its /Length is wrong (the "endstream" keyword, searched for). */
+  #findEndstream(start: number): number {
+    const size = this.src.size;
+    const CH = 1024 * 1024;
+    for (let pos = start; pos < size; pos += CH - 16) {
+      const buf = this.src.read(pos, CH);
+      const i = buf.indexOf('endstream', 0, 'latin1');
+      if (i >= 0) {
+        let end = pos + i;
+        // Drop the line break before the keyword.
+        const before = this.src.read(Math.max(start, end - 2), Math.min(2, end - start));
+        for (let k = before.length - 1; k >= 0 && (before[k] === 0x0a || before[k] === 0x0d); k--) end--;
+        return end;
+      }
+      if (buf.length < CH) break;
+    }
+    return size;
+  }
+
+  /** The object itself (cached; streams keep their raw bytes in the file until read). */
   #parse(num: number): PVal {
     const e = this.objs.get(num);
     if (!e) return null;
     if (e.val !== undefined) return e.val;
-    if (e.pos === undefined) return null;
-    const lx = new Lexer(this.b, e.pos);
-    let val = readValue(lx);
-    // A stream follows its dictionary.
-    lx.skipWs();
-    if (isDict(val) && this.b.toString('latin1', lx.pos, lx.pos + 6) === 'stream') {
-      let p = lx.pos + 6;
-      if (this.b[p] === 0x0d) p++;
-      if (this.b[p] === 0x0a) p++;
-      const lenV = val.get('Length');
-      let len = typeof lenV === 'number' ? lenV : -1;
-      if (lenV instanceof Ref && !this.#resolving.has(lenV.num)) {
-        this.#resolving.add(lenV.num);
-        const l = this.#parse(lenV.num);
-        this.#resolving.delete(lenV.num);
-        if (typeof l === 'number') len = l;
+    let val = this.#parseAt(num, e);
+    if (val === HEADER_MISMATCH) {
+      // The table pointed at the wrong place: find the objects by scanning, once.
+      if (!this.#scanned) {
+        const keep = new Map(this.trailer);
+        this.objs.clear();
+        this.#scanAll();
+        for (const [k, v] of keep) if (!this.trailer.has(k)) this.trailer.set(k, v);
+        const again = this.objs.get(num);
+        val = again ? this.#parseAt(num, again) : null;
+        if (val === HEADER_MISMATCH) val = null;
+        if (again) again.val = val;
+        return val;
       }
-      let end = len >= 0 ? p + len : -1;
-      // Check the length really ends at "endstream" (it is often wrong); else search for it.
-      if (end < 0 || end > this.b.length || !/^\s*endstream/.test(this.b.toString('latin1', end, end + 20))) {
-        const found = this.b.indexOf('endstream', p, 'latin1');
-        end = found < 0 ? this.b.length : found;
-        while (end > p && (this.b[end - 1] === 0x0a || this.b[end - 1] === 0x0d)) end--;
-      }
-      val = { dict: val, raw: this.b.subarray(p, end), num, gen: e.gen } as Stream;
+      val = null;
     }
     e.val = val;
     return val;
@@ -671,7 +948,7 @@ class Doc {
       if (data.length > MAX_STREAM) throw new ReadError('This PDF has a part too large to read.');
     }
     this.decoded += data.length;
-    if (this.decoded > MAX_DOC_DECODED) throw new ReadError('This PDF unpacks to far more than its size, so she stopped reading it.');
+    if (this.decoded > this.maxDecoded) throw new ReadError('This PDF unpacks to far more than its size, so she stopped reading it.');
     return data;
   }
 
@@ -686,6 +963,9 @@ class Doc {
     return v instanceof Ref ? { num: v.num, gen: this.objs.get(v.num)?.gen ?? v.gen } : undefined;
   }
 }
+
+/** Returned when an offset doesn't hold the object the table said (then the file is scanned). */
+const HEADER_MISMATCH = Symbol('mismatch') as unknown as PVal;
 
 /** Reads one value (dictionaries and arrays whole, "n g R" as a reference). */
 function readValue(lx: Lexer): PVal {
@@ -934,7 +1214,7 @@ interface PageOut {
 }
 
 /** Runs a page's drawing instructions, collecting the text runs (with positions) and images. */
-function runContent(doc: Doc, data: Buffer, res: Dict | undefined, out: PageOut, ctm0: M, depth: number, budget: { ops: number }): void {
+function runContent(doc: Doc, data: Buffer, res: Dict | undefined, out: PageOut, ctm0: M, depth: number, budget: { ops: number; max?: number }): void {
   const lx = new Lexer(data);
   const stack: (PVal | Op)[] = [];
   let ctm: M = ctm0;
@@ -952,7 +1232,20 @@ function runContent(doc: Doc, data: Buffer, res: Dict | undefined, out: PageOut,
   const fontRes = doc.dict(res?.get('Font'));
   const xobjs = doc.dict(res?.get('XObject'));
   const fontOf = (n: string): Font => {
-    if (!fonts.has(n)) fonts.set(n, loadFont(doc, doc.dict(fontRes?.get(n))));
+    if (!fonts.has(n)) {
+      // Fonts are shared by many pages: a document keeps the ones it has loaded (a few hundred).
+      const ref = fontRes?.get(n);
+      const key = ref instanceof Ref ? ref.num : undefined;
+      let f = key !== undefined ? doc.fonts.get(key) : undefined;
+      if (!f) {
+        f = loadFont(doc, doc.dict(ref));
+        if (key !== undefined) {
+          if (doc.fonts.size > 256) doc.fonts.clear();
+          doc.fonts.set(key, f);
+        }
+      }
+      fonts.set(n, f);
+    }
     return fonts.get(n)!;
   };
   const show = (s: Buffer) => {
@@ -970,7 +1263,7 @@ function runContent(doc: Doc, data: Buffer, res: Dict | undefined, out: PageOut,
     if (txt) out.runs.push({ text: txt, x: start[4], y: start[5], endX: end[4], size: Math.abs(fs * scale) || 1 });
   };
   for (;;) {
-    if (++budget.ops > 25_000_000) throw new ReadError('This PDF takes too long to read.');
+    if (++budget.ops > (budget.max ?? 25_000_000)) throw new ReadError('This PDF takes too long to read.');
     let t: PVal | Op | undefined;
     try {
       t = lx.next();
@@ -1094,7 +1387,7 @@ function runContent(doc: Doc, data: Buffer, res: Dict | undefined, out: PageOut,
 }
 
 /** Puts a page's text runs into lines and paragraphs, in reading order. */
-export function layout(runs: Run[], headingSize = 0): string {
+export function layout(runs: Run[], headingSize = 0, levelBase = 0): string {
   if (!runs.length) return '';
   // Lines: runs whose baselines are close, in the order they were drawn (usually reading order);
   // a run far above or below starts a new line.
@@ -1128,7 +1421,8 @@ export function layout(runs: Run[], headingSize = 0): string {
       else if (/\p{L}-$/u.test(out) && /^\p{Ll}/u.test(text)) void 0;
       else out += '\n';
     }
-    out += isHeading ? `# ${text}` : text;
+    // With levelBase (the body size), very big lines are top headings (#) and the rest second level (##).
+    out += isHeading ? `${levelBase > 0 && l.size < levelBase * 1.75 ? '##' : '#'} ${text}` : text;
     prev = l;
     prevHeading = isHeading;
   }
@@ -1202,66 +1496,259 @@ function pageImage(doc: Doc, img: { w: number; h: number; stream: Stream }): { m
   return png ? { mime: 'image/png', data: png } : 'its picture is damaged';
 }
 
-/** Reads a PDF into one part per page (and pictures of scanned pages). */
-export async function readPdf(bytes: Buffer, opts: { signal?: AbortSignal; maxChars?: number } = {}): Promise<ReadResult> {
-  const doc = new Doc(bytes);
-  const warnings: string[] = [];
-  const enc = doc.dict(doc.trailer.get('Encrypt'));
-  if (enc) doc.crypt = setupCrypt(enc, doc.get(doc.trailer.get('ID')));
-  let root = doc.dict(doc.trailer.get('Root'));
-  if (!root || !doc.dict(root.get('Pages'))) {
-    // No usable trailer: find the catalog by its type.
-    for (const [num] of doc.objs) {
-      const d = doc.dict(new Ref(num, 0));
-      if (d && doc.name(d.get('Type')) === 'Catalog' && doc.dict(d.get('Pages'))) {
-        root = d;
-        break;
+// ---------------------------------------------------------------- the book: pages one at a time
+
+/** What one page holds, for the page-by-page reader. */
+export interface PageText {
+  /** The page's text in reading order (headings marked with # / ##). */
+  text: string;
+  /** A scanned page (one big picture, little or no text): it needs the picture model. */
+  scan: boolean;
+  /** Something to tell the owner about this page. */
+  warning?: string;
+  /** The text was there but in a font without a letter table. */
+  unreadable?: boolean;
+}
+
+export interface OutlineItem {
+  title: string;
+  level: number;
+  /** 1-based page number (0 when the bookmark points nowhere she can find). */
+  page: number;
+}
+
+/** Pages a document may have (a sanity cap: far above any real book). */
+export const MAX_PAGES = 50_000;
+/** Drawing instructions one page may run (a hostile page can't spin forever). */
+const PAGE_OPS = 5_000_000;
+
+/**
+ * A PDF opened for reading page by page. Only the cross-reference table, the page list and
+ * the objects one page needs are read; a 1 GB file is never held in memory.
+ */
+export class PdfBook {
+  readonly doc: Doc;
+  readonly pages: { dict: Dict; res?: Dict; num?: number }[] = [];
+  readonly title: string | undefined;
+  readonly warnings: string[] = [];
+  readonly #root: Dict;
+
+  constructor(src: ByteSource) {
+    const doc = new Doc(src);
+    this.doc = doc;
+    const enc = doc.dict(doc.trailer.get('Encrypt'));
+    if (enc) {
+      doc.crypt = setupCrypt(enc, doc.get(doc.trailer.get('ID')));
+      doc.resetCaches();
+    }
+    let root = doc.dict(doc.trailer.get('Root'));
+    if (!root || !doc.dict(root.get('Pages'))) {
+      // No usable trailer: find the catalog by its type.
+      root = undefined;
+      for (const [num] of doc.objs) {
+        const d = doc.dict(new Ref(num, 0));
+        if (d && doc.name(d.get('Type')) === 'Catalog' && doc.dict(d.get('Pages'))) {
+          root = d;
+          break;
+        }
       }
     }
+    if (!root) throw new ReadError('This PDF is damaged (she couldn\'t find its pages).');
+    this.#root = root;
+    // Pages in order, with inherited resources.
+    const seen = new Set<Dict>();
+    const walk = (node: Dict | undefined, res: Dict | undefined, depth: number, num: number | undefined) => {
+      if (!node || seen.has(node) || depth > 64 || this.pages.length >= MAX_PAGES) return;
+      seen.add(node);
+      const r = doc.dict(node.get('Resources')) ?? res;
+      const kids = node.get('Kids');
+      if (kids !== undefined && doc.name(node.get('Type')) !== 'Page') for (const k of doc.arr(kids)) walk(doc.dict(k), r, depth + 1, k instanceof Ref ? k.num : undefined);
+      else this.pages.push({ dict: node, res: r, num });
+    };
+    const pagesRef = root.get('Pages');
+    walk(doc.dict(pagesRef), undefined, 0, pagesRef instanceof Ref ? pagesRef.num : undefined);
+    if (!this.pages.length) throw new ReadError('This PDF has no pages she can find.');
+    if (this.pages.length >= MAX_PAGES) this.warnings.push(`Only the first ${MAX_PAGES.toLocaleString('en-US')} pages were read.`);
+    const info = doc.dict(doc.trailer.get('Info'));
+    const titleBytes = info ? doc.str(info.get('Title'), doc.refOf(doc.trailer.get('Info'))) : undefined;
+    this.title = titleBytes ? textString(titleBytes).replace(/\0/g, '').trim() || undefined : undefined;
   }
-  if (!root) throw new ReadError('This PDF is damaged (she couldn\'t find its pages).');
-  // Pages in order, with inherited resources.
-  const pages: { dict: Dict; res?: Dict }[] = [];
-  const seen = new Set<Dict>();
-  const walk = (node: Dict | undefined, res: Dict | undefined, depth: number) => {
-    if (!node || seen.has(node) || depth > 64 || pages.length >= 5000) return;
-    seen.add(node);
-    const r = doc.dict(node.get('Resources')) ?? res;
-    const kids = node.get('Kids');
-    if (kids !== undefined && doc.name(node.get('Type')) !== 'Page') for (const k of doc.arr(kids)) walk(doc.dict(k), r, depth + 1);
-    else pages.push({ dict: node, res: r });
-  };
-  walk(doc.dict(root.get('Pages')), undefined, 0);
-  if (!pages.length) throw new ReadError('This PDF has no pages she can find.');
-  if (pages.length >= 5000) warnings.push('Only the first 5,000 pages were read.');
-  // First pass: text runs per page (font sizes decide what counts as a heading).
-  const outs: PageOut[] = [];
-  const budget = { ops: 0 };
-  let chars = 0;
-  for (const [i, p] of pages.entries()) {
-    if (opts.signal?.aborted) throw new ReadError('Reading was stopped before it finished.');
-    if (i % 20 === 19) await new Promise((r) => setImmediate(r));
+
+  get pageCount(): number {
+    return this.pages.length;
+  }
+
+  /** Runs one page's drawing instructions (0-based index). */
+  run(i: number): { out: PageOut; damaged: boolean } {
+    const p = this.pages[i];
     const out: PageOut = { runs: [], images: [] };
-    const contents = doc.arr(p.dict.get('Contents'));
     const datas: Buffer[] = [];
-    for (const c of contents) {
-      const s = doc.get(c);
+    for (const c of this.doc.arr(p.dict.get('Contents'))) {
+      const s = this.doc.get(c);
       if (isStream(s)) {
         try {
-          datas.push(doc.streamData(s));
+          datas.push(this.doc.streamData(s));
         } catch (err) {
           if (err instanceof ReadError) throw err;
         }
       }
     }
     try {
-      runContent(doc, Buffer.concat(datas.flatMap((d) => [d, Buffer.from('\n')])), p.res, out, ID, 0, budget);
+      runContent(this.doc, Buffer.concat(datas.flatMap((d) => [d, Buffer.from('\n')])), p.res, out, ID, 0, { ops: 0, max: PAGE_OPS });
+      return { out, damaged: false };
     } catch (err) {
-      if (err instanceof ReadError) throw err;
-      warnings.push(`Page ${i + 1} is damaged; some of its text may be missing.`);
+      if (err instanceof ReadError && !/takes too long/.test(err.message)) throw err;
+      return { out, damaged: true };
     }
-    outs.push(out);
-    chars += out.runs.reduce((n, r) => n + r.text.length, 0);
+  }
+
+  /**
+   * The body text size: the most common size (by characters) over a sample of pages spread
+   * through the document. Lines clearly bigger than it are headings.
+   */
+  bodySize(sample = 24): number {
+    const n = this.pages.length;
+    const picks = new Set<number>();
+    for (let k = 0; k < Math.min(sample, n); k++) picks.add(Math.floor((k * n) / Math.min(sample, n)));
+    const bySize = new Map<number, number>();
+    for (const i of picks) {
+      for (const r of this.run(i).out.runs) bySize.set(Math.round(r.size), (bySize.get(Math.round(r.size)) ?? 0) + r.text.length);
+    }
+    return [...bySize].sort((a, b) => b[1] - a[1])[0]?.[0] ?? 0;
+  }
+
+  /** One page's text (0-based index), or that it is a scan for the picture model. */
+  pageText(i: number, bodySize: number): PageText {
+    const { out, damaged } = this.run(i);
+    return pageTextOf(out, bodySize, damaged, i);
+  }
+
+  /** A scanned page's picture, ready for the picture model (or why it can't be passed on). */
+  pageImage(i: number): { mime: 'image/jpeg' | 'image/png'; data: Buffer } | string {
+    const { out } = this.run(i);
+    const big = out.images.filter((im) => im.w * im.h >= 250_000).sort((a, b) => b.w * b.h - a.w * a.h)[0];
+    if (!big) return 'it has no picture';
+    return pageImage(this.doc, big);
+  }
+
+  /** The document's bookmarks (outline), in order, with the page each one opens. */
+  outline(max = 5000): OutlineItem[] {
+    const doc = this.doc;
+    const first = doc.dict(doc.dict(this.#root.get('Outlines'))?.get('First'));
+    if (!first) return [];
+    const pageIndex = new Map<number, number>();
+    this.pages.forEach((p, i) => p.num !== undefined && pageIndex.set(p.num, i));
+    const named = this.#namedDests();
+    const destPage = (d: PVal | undefined): number => {
+      let v = doc.get(d);
+      if (v instanceof Name || v instanceof PStr) {
+        const key = v instanceof Name ? v.name : textString(v.bytes);
+        v = doc.get(named().get(key));
+      }
+      if (isDict(v)) v = doc.get(v.get('D'));
+      if (Array.isArray(v) && v.length) {
+        const target = v[0];
+        if (target instanceof Ref) {
+          const idx = pageIndex.get(target.num);
+          if (idx !== undefined) return idx + 1;
+          const dict = doc.dict(target);
+          const at = this.pages.findIndex((p) => p.dict === dict);
+          return at >= 0 ? at + 1 : 0;
+        }
+        if (typeof target === 'number') return target + 1; // remote-style page numbers
+      }
+      return 0;
+    };
+    const out: OutlineItem[] = [];
+    const seen = new Set<Dict>();
+    const walk = (node: Dict | undefined, level: number) => {
+      for (let n = node; n && !seen.has(n) && out.length < max; n = doc.dict(n.get('Next'))) {
+        seen.add(n);
+        const tb = doc.str(n.get('Title'));
+        const title = tb ? textString(tb).replace(/[\u0000-\u001f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 200) : '';
+        let page = destPage(n.get('Dest'));
+        if (!page) {
+          const a = doc.dict(n.get('A'));
+          if (a && doc.name(a.get('S')) === 'GoTo') page = destPage(a.get('D'));
+        }
+        if (title) out.push({ title, level, page });
+        if (level < 8) walk(doc.dict(n.get('First')), level + 1);
+      }
+    };
+    walk(first, 1);
+    return out;
+  }
+
+  /** Named destinations (the old /Dests dictionary and the /Names → /Dests tree), read once on first use. */
+  #namedDests(): () => Map<string, PVal> {
+    let map: Map<string, PVal> | undefined;
+    return () => {
+      if (map) return map;
+      map = new Map();
+      const doc = this.doc;
+      const old = doc.dict(this.#root.get('Dests'));
+      if (old) for (const [k, v] of old) map.set(k, v);
+      const seen = new Set<Dict>();
+      const walk = (node: Dict | undefined, depth: number) => {
+        if (!node || seen.has(node) || depth > 32 || map!.size > 200_000) return;
+        seen.add(node);
+        const names = doc.arr(node.get('Names'));
+        for (let i = 0; i + 1 < names.length; i += 2) {
+          const k = doc.get(names[i]);
+          if (k instanceof PStr) map!.set(textString(k.bytes), names[i + 1]);
+        }
+        for (const kid of doc.arr(node.get('Kids'))) walk(doc.dict(kid), depth + 1);
+      };
+      walk(doc.dict(doc.dict(this.#root.get('Names'))?.get('Dests')), 0);
+      return map;
+    };
+  }
+}
+
+/** Turns one page's drawn runs into its text, or says it's a scan. */
+function pageTextOf(o: PageOut, bodySize: number, damaged: boolean, i: number): PageText {
+  const text = layout(o.runs, bodySize ? bodySize * 1.3 : 0, bodySize);
+  const visible = text.replace(/\s|#/g, '');
+  const warning = damaged ? `Page ${i + 1} is damaged; some of its text may be missing.` : undefined;
+  if (visible.length >= 20) {
+    // Text that is mostly unmapped glyphs (a font with no letter table) is useless.
+    const bad = (visible.match(/[\u0000-\u0008\u000e-\u001f\ufffd\ue000-\uf8ff]/g) ?? []).length;
+    if (bad > visible.length * 0.3) return { text: '', scan: false, unreadable: true, ...(warning ? { warning } : {}) };
+    return { text: text.replace(/[\u0000-\u0008\u000e-\u001f\ufffd]/g, ''), scan: false, ...(warning ? { warning } : {}) };
+  }
+  // Little or no text: is it a scan (one big picture)?
+  const big = o.images.some((im) => im.w * im.h >= 250_000);
+  if (big) return { text: '', scan: true, ...(warning ? { warning } : {}) };
+  return { text: visible.length ? text : '', scan: false, ...(warning ? { warning } : {}) };
+}
+
+/** Opens a PDF from a file on disk, page by page (see PdfBook). */
+export function openPdfFile(path: string): { book: PdfBook; src: FileSource } {
+  const src = new FileSource(path);
+  try {
+    return { book: new PdfBook(src), src };
+  } catch (err) {
+    src.close();
+    throw err;
+  }
+}
+
+/** Reads a PDF into one part per page (and pictures of scanned pages). For small files in memory. */
+export async function readPdf(bytes: Buffer, opts: { signal?: AbortSignal; maxChars?: number } = {}): Promise<ReadResult> {
+  const book = new PdfBook(new BufferSource(bytes));
+  const doc = book.doc;
+  const warnings: string[] = [...book.warnings];
+  // First pass: text runs per page (font sizes decide what counts as a heading).
+  const outs: PageOut[] = [];
+  const damaged: boolean[] = [];
+  let chars = 0;
+  for (let i = 0; i < book.pageCount; i++) {
+    if (opts.signal?.aborted) throw new ReadError('Reading was stopped before it finished.');
+    if (i % 20 === 19) await new Promise((r) => setImmediate(r));
+    const r = book.run(i);
+    outs.push(r.out);
+    damaged.push(r.damaged);
+    chars += r.out.runs.reduce((n, x) => n + x.text.length, 0);
     if (chars > (opts.maxChars ?? 5_000_000) * 1.2) {
       warnings.push(`This document is very long, so she only read the first ${i + 1} pages.`);
       break;
@@ -1271,38 +1758,33 @@ export async function readPdf(bytes: Buffer, opts: { signal?: AbortSignal; maxCh
   const bySize = new Map<number, number>();
   for (const o of outs) for (const r of o.runs) bySize.set(Math.round(r.size), (bySize.get(Math.round(r.size)) ?? 0) + r.text.length);
   const body = [...bySize].sort((a, b) => b[1] - a[1])[0]?.[0] ?? 0;
-  const headingSize = body ? body * 1.3 : 0;
   const parts: DocPart[] = [];
   const images: PageImage[] = [];
   let unreadable = 0;
   let scansSkipped = 0;
   for (const [i, o] of outs.entries()) {
-    const text = layout(o.runs, headingSize);
     const where = `page ${i + 1}`;
-    const visible = text.replace(/\s|#/g, '');
-    if (visible.length >= 20) {
-      // Text that is mostly unmapped glyphs (a font with no letter table) is useless.
-      const bad = (visible.match(/[\u0000-\u0008\u000e-\u001f\ufffd\ue000-\uf8ff]/g) ?? []).length;
-      if (bad > visible.length * 0.3) unreadable++;
-      else parts.push({ text: text.replace(/[\u0000-\u0008\u000e-\u001f\ufffd]/g, ''), where });
+    const pt = pageTextOf(o, 0, false, i);
+    const text = layout(o.runs, body ? body * 1.3 : 0);
+    if (damaged[i]) warnings.push(`Page ${i + 1} is damaged; some of its text may be missing.`);
+    if (pt.unreadable) {
+      unreadable++;
       continue;
     }
-    // Little or no text: is it a scan (one big picture)?
-    const big = o.images.filter((im) => im.w * im.h >= 250_000).sort((a, b) => b.w * b.h - a.w * a.h)[0];
-    if (big) {
+    if (pt.scan) {
       if (images.length >= 40) {
         scansSkipped++;
         continue;
       }
+      const big = o.images.filter((im) => im.w * im.h >= 250_000).sort((a, b) => b.w * b.h - a.w * a.h)[0];
       const im = pageImage(doc, big);
       if (typeof im === 'string') warnings.push(`Page ${i + 1} is a scanned picture, but ${im}.`);
       else images.push({ where, ...im });
-    } else if (visible.length) parts.push({ text, where });
+      continue;
+    }
+    if (text.replace(/\s|#/g, '').length) parts.push({ text: text.replace(/[\u0000-\u0008\u000e-\u001f\ufffd]/g, ''), where });
   }
   if (unreadable) warnings.push(`${unreadable} page${unreadable === 1 ? '' : 's'} use a font without a letter table, so their text couldn't be read.`);
-  if (scansSkipped) warnings.push(`${scansSkipped} more scanned pages were not read (only the first 40 are).`);
-  const info = doc.dict(doc.trailer.get('Info'));
-  const titleBytes = info ? doc.str(info.get('Title'), doc.refOf(doc.trailer.get('Info'))) : undefined;
-  const title = titleBytes ? textString(titleBytes).replace(/\0/g, '').trim() || undefined : undefined;
-  return { kind: 'pdf', ...(title ? { title } : {}), parts, images, warnings };
+  if (scansSkipped) warnings.push(`${scansSkipped} more scanned pages were not read here (in her library every scanned page is read).`);
+  return { kind: 'pdf', ...(book.title ? { title: book.title } : {}), parts, images, warnings };
 }

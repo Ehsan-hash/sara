@@ -89,7 +89,9 @@ import { type AppInfo, healthReport } from './health.ts';
 import { TELEGRAM_VAULT, telegramSettings } from './bridges/telegram.ts';
 import { DISCORD_VAULT, botHourlyCapOf, botTurnLimitOf, cleanBotList, discordSettings } from './bridges/discord.ts';
 import { cleanDiscordIds, cleanTelegramIds } from './bridges/rules.ts';
-import { type LibraryDoc, MAX_DOC_BYTES } from './library/store.ts';
+import { cleanLibraryLimits, type LibraryDoc, libraryLimits, MAX_DOC_BYTES, sha256File } from './library/store.ts';
+import { bodyToFile, CHUNK_BYTES, diskHasRoom, LibraryUploads, UploadError as LibUploadError } from './library/uploads.ts';
+import { answerOcr, cancelJob, isPdfDoc, jobView, pauseJob, resumeJob } from './library/bigread.ts';
 import { embedTarget } from './embeddings.ts';
 import { detectKind, SUPPORTED } from './library/read.ts';
 import { DEFAULT_VOICE, openaiSpeak, speechText, VOICE_VAULT, VoiceError, type VoiceSettings, xaiSpeak, xaiVoices } from './voice.ts';
@@ -5186,7 +5188,54 @@ export function createSaraServer(opts: ServerOptions): Server {
     if (a === 'library') {
       const lib = app.library;
       if (!lib) throw new HttpError(404, 'The library is not available');
-      const docView = (d: LibraryDoc) => ({ ...d, sha: undefined, facts: d.facts });
+      const docView = (d: LibraryDoc) => ({ ...d, sha: undefined, facts: d.facts, job: jobView(app, lib, d) });
+      // Phase 74: the largest document here (a household member's limit is the owner's member limit).
+      const lim = libraryLimits(app.settings.get());
+      const maxBytes = (opts.member ? Math.min(lim.maxMb, lim.memberMaxMb) : lim.maxMb) * 1024 * 1024;
+      const uploads = new LibraryUploads(lib.dir);
+      const q = new URL(req.url ?? '/', 'http://x').searchParams;
+      const d = parts[3];
+      const checkConversation = (conversationId: string | null) => {
+        if (!conversationId) return;
+        if (offStore.getConversation(conversationId)) throw new HttpError(400, "Off-the-record chats don't save files, so documents can't be shared here.");
+        const conv = app.store.getConversation(conversationId);
+        if (!conv || conv.partner) throw new HttpError(404, 'Conversation not found');
+      };
+      /** A file that arrived on disk: checked, then moved into her library (never read whole unless small). */
+      const takeFile = async (path: string, m: { name: string; keep: boolean; conversationId: string | null; learn: boolean }) => {
+        try {
+          const size = statSync(path).size;
+          if (!size) throw new HttpError(400, 'That file is empty.');
+          const fd = openSync(path, 'r');
+          const head = Buffer.alloc(Math.min(size, 4096));
+          try {
+            readSync(fd, head, 0, head.length, 0);
+          } finally {
+            closeSync(fd);
+          }
+          const isPdf = head.subarray(0, 1024).toString('latin1').includes('%PDF-');
+          if (!isPdf && size > MAX_DOC_BYTES) throw new HttpError(413, 'Files over {mb} MB need to be PDFs (other kinds are read whole, in memory). Save it as a PDF and add it again.', { params: { mb: MAX_DOC_BYTES / 1048576 } });
+          if (!isPdf && !detectKind(m.name, readFileSync(path))) throw new HttpError(415, 'She can\'t read that kind of file. She reads {kinds}.', { params: { kinds: SUPPORTED.map((k) => k.label).join(', ') } });
+          const sha = await sha256File(path);
+          if (m.keep) {
+            const had = lib.findKeptSha(sha);
+            if (had) {
+              rmSync(path, { force: true });
+              return { status: 200, body: { doc: docView(had), already: true } };
+            }
+          }
+          const doc = lib.addFile({ name: m.name, path, sha, keep: m.keep, conversationId: m.keep ? null : m.conversationId, origin: m.keep && !m.conversationId ? 'library' : 'chat', learn: m.learn });
+          app.libraryNudge?.();
+          app.events?.publish({ type: 'library', id: doc.id });
+          return { status: 201, body: { doc: docView(doc) } };
+        } finally {
+          if (existsSync(path)) rmSync(path, { force: true });
+        }
+      };
+      const uploadError = (err: unknown): never => {
+        if (err instanceof LibUploadError) throw new HttpError(err.status, err.message, err.extra);
+        throw err;
+      };
       if (!b && method === 'GET') {
         const t = embedTarget(app);
         const counts = lib.counts();
@@ -5195,43 +5244,98 @@ export function createSaraServer(opts: ServerOptions): Server {
           counts,
           meaning: t ? { model: t.model, indexed: lib.vectorCount(t.model), total: counts.passages, error: lib.vectorError ?? null } : null,
           shared: app.settings.get().companionLibrary === 'shared',
-          maxBytes: MAX_DOC_BYTES,
+          maxBytes,
+          chunkBytes: CHUNK_BYTES,
           supported: SUPPORTED,
         });
       }
-      // Upload: the file's bytes as the body; name, keep and conversation in the query.
+      // Upload in one request: the file's bytes as the body (streamed to disk); name, keep and conversation in the query.
       if (!b && method === 'POST') {
-        const q = new URL(req.url ?? '/', 'http://x').searchParams;
         const name = q.get('name') ?? 'document';
         const keep = q.get('keep') !== '0';
         const conversationId = q.get('conversation') || null;
-        if (conversationId) {
-          if (offStore.getConversation(conversationId)) throw new HttpError(400, "Off-the-record chats don't save files, so documents can't be shared here.");
-          const conv = app.store.getConversation(conversationId);
-          if (!conv || conv.partner) throw new HttpError(404, 'Conversation not found');
+        checkConversation(conversationId);
+        const declared = Number(req.headers['content-length'] ?? 0);
+        if (declared > maxBytes) throw new HttpError(413, 'Documents can be up to {mb} MB here.', { params: { mb: Math.round(maxBytes / 1048576) } });
+        if (declared && !diskHasRoom(lib.dir, declared * 2)) throw new HttpError(507, 'There is not enough free disk space on the server for this file.');
+        const tmp = uploads.tempPath();
+        try {
+          await bodyToFile(req, tmp, maxBytes);
+        } catch (err) {
+          rmSync(tmp, { force: true });
+          if (err instanceof LibUploadError && err.status === 413) throw new HttpError(413, 'Documents can be up to {mb} MB here.', { params: { mb: Math.round(maxBytes / 1048576) } });
+          uploadError(err);
         }
-        const bytes = await readRaw(req, MAX_DOC_BYTES);
-        if (!bytes.length) throw new HttpError(400, 'That file is empty.');
-        if (!detectKind(name, bytes)) throw new HttpError(415, 'She can\'t read that kind of file. She reads {kinds}.', { params: { kinds: SUPPORTED.map((k) => k.label).join(', ') } });
-        if (keep) {
-          const had = lib.findKept(bytes);
-          if (had) return send(res, 200, { doc: docView(had), already: true });
+        const r = await takeFile(tmp, { name, keep, conversationId, learn: q.get('learn') !== '0' });
+        return send(res, r.status, r.body);
+      }
+      // Phase 74: resumable uploads in pieces (big files, proxies with a request-size limit).
+      if (b === 'uploads') {
+        if (!c && method === 'POST') {
+          const body = await readJson(req);
+          const conversationId = typeof body.conversation === 'string' && body.conversation ? body.conversation : null;
+          checkConversation(conversationId);
+          const keep = body.keep !== false && body.keep !== '0';
+          try {
+            const u = uploads.start({ name: String(body.name ?? 'document').slice(0, 300), size: Number(body.size), keep, conversationId: keep ? null : conversationId, learn: body.learn !== false }, maxBytes);
+            return send(res, 201, { id: u.id, received: u.received, size: u.size, chunkBytes: u.chunkBytes });
+          } catch (err) {
+            return uploadError(err);
+          }
         }
-        const doc = lib.add({ name, bytes, keep, conversationId: keep ? null : conversationId, origin: keep && !conversationId ? 'library' : 'chat', learn: q.get('learn') !== '0' });
-        app.libraryNudge?.();
-        app.events?.publish({ type: 'library', id: doc.id });
-        return send(res, 201, { doc: docView(doc) });
+        const u = c ? uploads.get(c) : undefined;
+        if (!u) {
+          if (method === 'PUT') for await (const _ of req as AsyncIterable<Buffer>) void _;
+          throw new HttpError(404, 'That upload is not here any more. Add the file again.');
+        }
+        if (!d && method === 'GET') return send(res, 200, { id: u.id, received: u.received, size: u.size });
+        if (!d && method === 'PUT') {
+          try {
+            const received = await uploads.append(u.id, Number(q.get('offset') ?? -1), req);
+            return send(res, 200, { id: u.id, received, size: u.size });
+          } catch (err) {
+            // Read what's left of the body before answering (the connection stays usable).
+            if (!req.readableEnded) for await (const _ of req as AsyncIterable<Buffer>) void _;
+            return uploadError(err);
+          }
+        }
+        if (!d && method === 'DELETE') return send(res, 200, { ok: uploads.abort(u.id) });
+        if (d === 'done' && method === 'POST') {
+          let fin;
+          try {
+            fin = uploads.finish(u.id);
+          } catch (err) {
+            return uploadError(err);
+          }
+          const r = await takeFile(fin.path, fin.meta);
+          return send(res, r.status, r.body);
+        }
+        throw new HttpError(404, 'Not found');
       }
       if (b === 'search' && method === 'GET') {
-        const q = new URL(req.url ?? '/', 'http://x').searchParams.get('q')?.trim() ?? '';
-        if (!q) return send(res, 200, { hits: [] });
-        const hits = await lib.find(q, { target: embedTarget(app), limit: 10, timeoutMs: 4000 });
-        return send(res, 200, { hits: hits.map((h) => ({ docId: h.doc.id, name: h.doc.name, place: h.passage.place, heading: h.passage.heading, text: h.passage.text, ord: h.passage.ord, by: h.by })) });
+        const text = q.get('q')?.trim() ?? '';
+        if (!text) return send(res, 200, { hits: [] });
+        const hits = await lib.find(text, { target: embedTarget(app), limit: 10, timeoutMs: 4000 });
+        return send(res, 200, { hits: hits.map((h) => ({ docId: h.doc.id, name: h.doc.name, place: h.passage.place, page: h.passage.page, heading: h.passage.heading, text: h.passage.text, ord: h.passage.ord, by: h.by })) });
       }
-      if (b === 'settings' && method === 'PUT') {
-        const body = await readJson(req);
-        if (body.shared !== undefined) app.settings.update({ companionLibrary: body.shared ? 'shared' : 'separate' });
-        return send(res, 200, { shared: app.settings.get().companionLibrary === 'shared', restart: (app.companions?.all().length ?? 1) > 1 });
+      if (b === 'settings' && !c) {
+        const view = () => ({ shared: app.settings.get().companionLibrary === 'shared', ...libraryLimits(app.settings.get()), owner: !opts.member, maxBytes });
+        if (method === 'GET') return send(res, 200, view());
+        if (method === 'PUT') {
+          const body = await readJson(req);
+          const limitKeys = ['maxMb', 'memberMaxMb', 'ocr', 'speed'].filter((k) => body[k] !== undefined);
+          if (limitKeys.length) {
+            // The size limits and background reading are the owner's (members follow them).
+            if (opts.member || opts.demo) throw new HttpError(403, 'Only the owner of this server can use this.', { ownerOnly: true });
+            try {
+              app.settings.update({ libraryLimits: cleanLibraryLimits(body, libraryLimits(app.settings.get())) });
+            } catch (err) {
+              throw new HttpError(400, (err as Error).message);
+            }
+          }
+          if (body.shared !== undefined) app.settings.update({ companionLibrary: body.shared ? 'shared' : 'separate' });
+          return send(res, 200, { ...view(), restart: body.shared !== undefined && (app.companions?.all().length ?? 1) > 1 });
+        }
       }
       const id = Number(b);
       const doc = Number.isInteger(id) ? lib.get(id) : undefined;
@@ -5239,18 +5343,34 @@ export function createSaraServer(opts: ServerOptions): Server {
       if (doc) {
         if (!c && method === 'GET') {
           const facts = app.memory?.fromDoc(doc.id).filter((m) => m.supersededBy === null) ?? [];
-          return send(res, 200, { doc: docView(doc), facts: facts.map((m) => ({ id: m.id, content: m.content, evidence: m.evidence })), passages: lib.passages(doc.id, { limit: 40 }) });
+          return send(res, 200, { doc: docView(doc), facts: facts.map((m) => ({ id: m.id, content: m.content, evidence: m.evidence })), sections: lib.sections(doc.id), passages: lib.passages(doc.id, { limit: 40 }) });
         }
         if (c === 'passages' && method === 'GET') {
-          const q = new URL(req.url ?? '/', 'http://x').searchParams;
+          if (q.get('page')) return send(res, 200, { passages: lib.passagesAt(doc.id, Math.max(1, Number(q.get('page')) || 1), Math.min(200, Number(q.get('limit') ?? 40) || 40)) });
           return send(res, 200, { passages: lib.passages(doc.id, { from: Number(q.get('from') ?? 0) || 0, limit: Math.min(200, Number(q.get('limit') ?? 40) || 40) }) });
         }
         if (c === 'file' && method === 'GET') {
-          const bytes = lib.file(doc);
-          if (!bytes) throw new HttpError(404, 'The original file is missing');
+          // Streamed from disk (a 1 GB book isn't read into memory). ?inline=1 opens a PDF in the
+          // browser's own viewer (the citations link to #page=N); byte ranges let it load pages as needed.
+          const path = lib.filePath(doc);
+          if (!path) throw new HttpError(404, 'The original file is missing');
+          const size = statSync(path).size;
+          const inline = q.get('inline') === '1' && isPdfDoc(lib, doc);
           const ascii = doc.name.replace(/[^\x20-\x7e]/g, '_').replace(/["\\]/g, '_');
-          res.writeHead(200, { 'content-type': 'application/octet-stream', 'content-disposition': `attachment; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(doc.name)}`, 'content-length': bytes.length, 'cache-control': 'no-store', ...SECURITY_HEADERS });
-          return void res.end(bytes);
+          const headers: Record<string, string | number> = { 'content-type': inline ? 'application/pdf' : 'application/octet-stream', 'content-disposition': `${inline ? 'inline' : 'attachment'}; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(doc.name)}`, 'accept-ranges': 'bytes', 'cache-control': 'no-store', ...SECURITY_HEADERS };
+          const range = /^bytes=(\d*)-(\d*)$/.exec(String(req.headers.range ?? ''));
+          if (range && (range[1] || range[2])) {
+            const start = range[1] ? Number(range[1]) : Math.max(0, size - Number(range[2]));
+            const end = range[1] && range[2] ? Math.min(size - 1, Number(range[2])) : size - 1;
+            if (start >= size || start > end) {
+              res.writeHead(416, { 'content-range': `bytes */${size}`, ...SECURITY_HEADERS });
+              return void res.end();
+            }
+            res.writeHead(206, { ...headers, 'content-range': `bytes ${start}-${end}/${size}`, 'content-length': end - start + 1 });
+            return void createReadStream(path, { start, end }).pipe(res);
+          }
+          res.writeHead(200, { ...headers, 'content-length': size });
+          return void createReadStream(path).pipe(res);
         }
         if (!c && method === 'PATCH') {
           const body = await readJson(req);
@@ -5271,18 +5391,31 @@ export function createSaraServer(opts: ServerOptions): Server {
           app.libraryNudge?.();
           return send(res, 200, { doc: docView(lib.get(doc.id)!) });
         }
+        // Phase 74: the owner's controls for a long document being read.
+        if ((c === 'pause' || c === 'resume' || c === 'cancel' || c === 'ocr') && method === 'POST') {
+          const body = await readJson(req);
+          if (!lib.job(doc.id)) throw new HttpError(409, 'This document is not being read now.');
+          if (c === 'pause') pauseJob(lib, doc.id);
+          else if (c === 'resume') resumeJob(lib, doc.id);
+          else if (c === 'cancel') cancelJob(app, lib, doc.id);
+          else answerOcr(lib, doc.id, body.approve === true);
+          app.libraryNudge?.();
+          app.events?.publish({ type: 'library', id: doc.id });
+          return send(res, 200, { doc: docView(lib.get(doc.id)!) });
+        }
         if (!c && method === 'DELETE') {
           // What she learned from it is forgotten too, if the owner asks.
           // Only the notes learned from this document go: not chat messages that mention the same
           // things (that is what forgetting something said in a conversation does).
           let forgotten = 0;
-          if (new URL(req.url ?? '/', 'http://x').searchParams.get('forget') === '1' && app.memory) {
+          if (q.get('forget') === '1' && app.memory) {
             for (const m of app.memory.fromDoc(doc.id)) {
               if (app.memory.delete(m.id)) forgotten++;
               app.vectors?.forget(m.id);
             }
             app.events?.publish({ type: 'memory', conversationId: '' });
           }
+          if (lib.job(doc.id)) cancelJob(app, lib, doc.id);
           lib.delete(doc.id);
           app.events?.publish({ type: 'library', id: doc.id });
           return send(res, 200, { ok: true, forgotten });

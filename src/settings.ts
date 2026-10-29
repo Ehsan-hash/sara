@@ -125,6 +125,8 @@ export interface Settings {
   companionPlanner?: 'shared' | 'separate';
   /** Phase 44: one library per companion (default) or one shared by all. */
   companionLibrary?: 'shared' | 'separate';
+  /** Phase 74: the library's limits and background reading (owner only; members follow them). */
+  libraryLimits?: { maxMb?: number; memberMaxMb?: number; ocr?: 'ask' | 'local' | 'off'; speed?: 1 | 2 | 3 };
   /** Phase 32: companions share facts about the owner they each learned (default: each her own). */
   memorySharing?: 'own' | 'shared';
   /** Phase 53: the app language ('auto' = the browser's language, or a code from src/i18n.ts). */

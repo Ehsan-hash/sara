@@ -8,7 +8,7 @@ import { openLightbox } from './lightbox.js';
 import { browserLang, currentIdentity, currentLang, locale, savedLang, setIdentity, setLanguage, serverText, t, toLang, translateOnly } from './naming.js';
 import { autoSave, initDialogs, markDirty, onSave, runSave, saved } from './dialogs.js';
 import { endTour, startTour, tourRunning } from './tour.js';
-import { isDocFile, openLibrary, uploadDoc, waitRead } from './library.js';
+import { isDocFile, loadLibrarySettings, openLibrary, saveLibrarySettings, uploadDoc, waitRead } from './library.js';
 import { initProjectMap, resetProjectMap } from './codemap.js';
 import { initRecipes, loadRecipes } from './recipes.js';
 import { initOtherApps, keyUse, loadOtherApps } from './other-apps.js';
@@ -5399,6 +5399,7 @@ function showSettingsTab(page, opts = {}) {
   if (pick === 'dh-updates') void loadUpdates();
   if (pick === 'ab-recipes') void loadRecipes();
   if (pick === 'ab-ssh') void loadSsh();
+  if (pick === 'ab-library') void loadLibrarySettings();
   if (pick === 'co-apps') void Promise.all([loadOtherApps(), loadAlexa()]);
   if (pick === 'her-import') void loadImport();
   if (pick === 'models-local') void loadLocalModels();
@@ -5524,6 +5525,7 @@ const SETTINGS_SAVERS = {
   'dh-backups': [saveOffsite, saveBackups],
   'her-pictures': [savePhotos],
   'ab-search': [saveSearch],
+  'ab-library': [saveLibrarySettings],
   'ab-tools': [saveTools],
   'models-routes': [saveRoutes],
   'ab-github': [() => saveGitHubWatch().catch((err) => ($('#ghw-status').textContent = err.message))],
@@ -5917,7 +5919,12 @@ function openViewFromHash() {
   if (!v || !$('#main') || $('#main').hidden) return false;
   history.replaceState(null, '', '/');
   if (v.startsWith('settings')) void openSettings(v.split(':')[1]);
-  else VIEWS[v]?.();
+  // Phase 74: her citations open a document at a page (/#view=library:<id>:<page>).
+  else if (/^library:\d+/.test(v)) {
+    const [, id, page] = v.split(':');
+    closeOpenDialogs();
+    void openLibrary(Number(id), Number(page) || 0);
+  } else VIEWS[v]?.();
   return true;
 }
 window.addEventListener('hashchange', openViewFromHash);

@@ -295,6 +295,106 @@ Latest runs: **8 of 8 in both runs** on the local model, with word search only a
 search added (`--embed nomic-embed-text`). Earlier the same day `gemma4:31b-cloud` (through
 Ollama's cloud) also scored 8 of 8 in each of its runs.
 
+## Big documents (Phase 74)
+
+What happens when she is given a 1,000-page book. Everything below was measured on 2026-10-29 on
+the development PC (AMD Ryzen 9 9950X, 64 GB, RTX 5090 32 GB, Windows 11, Node 24.20), with
+`gemma4:12b` (Ollama, on this PC) as her chat, background and picture model and
+`nomic-embed-text` for meaning search. Each run is a fresh throwaway server (ports 7880-7899)
+reading a book written by `scripts/make-big-pdf.ts`: 1,000 pages, 20 chapters with bookmarks,
+100 sections, varied maintenance text, and 32 facts on known pages ("The calibration constant for
+unit 7 is 4.183", page 16 of 1,000; a few are only on scanned pages). Raw numbers:
+`outputs/p74-bench/*.json` (not in git); rerun with `node scripts/bench-big-doc.ts --label NAME …`.
+
+### Reading the book
+
+| Run | File | Text | Scanned pages | Contents + summaries | Key points | Vectors | Total | Peak memory |
+|---|---|---|---|---|---|---|---|---|
+| Text book, everything on (`text1000b`) | 0.9 MB | 32 s | none | 40 s (120 entries, 20 chapter summaries + the whole) | 239 s, 106 key points | 27 s (1,414 passages) | **5 min 43 s** | **152 MB** |
+| 50 scanned pages (`scan1000`, key points off) | 1.5 MB | 32 s | **143 s for 50 pages** (2.9 s a page), all 50 read | 48 s | off | 37 s | 4 min 30 s | 200 MB |
+| 951 MB file (`big1gb`: the same book plus 950 MB of images it never needs) | 951 MB | 30 s | none | 3 s (stopped when searchable) | off | not run | 41 s to searchable | **162 MB** |
+| "Small server" (`small1000`: reader thread limited to 256 MB, Gentle speed) | 0.9 MB | 135 s | none | stopped when searchable | off | not run | 2 min 53 s to searchable | 156 MB |
+
+- **Memory stays flat whatever the file size**: 152 MB for a 0.9 MB book, 162 MB for a 951 MB
+  one (the whole server process, reader thread included, sampled every 2 s from Windows' task
+  list). The reader reads the cross-reference table from the end, then each object at its offset;
+  the 950 MB of images are never read. Uploading the 951 MB file in 8 MB pieces took 3.0 s
+  (318 MB/s, same machine).
+- **Every scanned page is read**: 50 of 50 (the old limit was 40), 2.9 s a page with a 12 B
+  model on this GPU, so about 50 minutes for 1,000 scanned pages. A cloud picture model asks
+  first, with this kind of estimate and a price.
+- **Key points scale**: 106 for the 1,000-page book (the old cap was 30), from windows spread over
+  the whole text; it is the slowest phase (4 minutes here) because each window is a model call.
+- **Pause, restart, resume:** tested in `test/phase74.test.ts` (a restart mid-book goes on from the
+  same page with no page stored twice; pause during key points goes on from the next window). On
+  the real model a pause in the key-points phase and a resume gave the same 53 key points as an
+  uninterrupted run of the 300-page book.
+- **"Small server" honestly:** no small server was used. This is this PC with the reader thread
+  limited to 256 MB (`SARA_LIBRARY_MEMORY_MB=256`) and the Gentle speed: the text took 4× longer
+  (short slices of work with pauses for chat) and memory did not change. A real small server
+  (2-4 cores, 2-4 GB, no GPU) is still to be measured; there, scanned pages and key points depend
+  on where the model runs.
+
+### Is chat still quick while she reads?
+
+Time to her first word for "Say hi in three words." in a new conversation, every 30-45 s during
+the reading (same model as the reading, on the same GPU):
+
+| | Idle (before) | While reading text | While reading scanned pages | While writing summaries | While learning key points | While making vectors |
+|---|---|---|---|---|---|---|
+| `text1000b` | 4.1-8.1 s | 4.8 s | | 4.0-5.5 s | 10.7-16.6 s (median 12.4, 7 samples) | 11.3 s |
+| `scan1000` | 5.1-6.2 s | 8.1 s | 4.1-5.8 s | 12.3 s | | 15.0 s |
+| `small1000` (Gentle) | 4.0-5.8 s | 2.2-6.6 s (median 4.1, 8 samples) | | | | |
+
+- Reading text and scanned pages leaves chat as quick as when idle: the reader is a separate
+  thread, and a background model call **steps aside** when a chat starts (it is stopped, and tried
+  again after the chat; measured with the model directly: a chat behind a running background call
+  waited 9.6 s, after stepping aside 0.5 s).
+- Chats during the key-points phase were slower (median 12 s). A probe that paused the reading
+  and chatted at once (`pauseprobe`) was just as slow paused (7.4-16.8 s) as running (4.2-7.6 s
+  just before), so this is not the job's queue: the first words of a new conversation include her
+  whole prompt (now with up to 100+ new memory notes from the book) and the model's own load on the
+  GPU. Not solved in this phase; noted for later.
+- The rest of the app stays responsive: the library's own API answered in a median 18 ms (max
+  120 ms) while reading, the same as idle (2-16 ms).
+
+### Search at scale
+
+`node scripts/bench-big-doc.ts --search-scale N` fills a library with N passages (180 random words
+each, 768-dimension vectors) and times a search over all of them, in-process:
+
+| Passages | Meaning search (int8, all of them, then the best 48 exactly) | Word search (FTS5) | Memory for the vectors | Index load at start |
+|---|---|---|---|---|
+| 100,000 | **44 ms** median (70 ms max) | 0.15 ms, right page | 78 MB | 1.2 s |
+| 300,000 | **131 ms** median (205 ms max) | 0.13 ms, right page | 234 MB | 3.7 s |
+
+Brute force grows in a straight line with the number of passages; at a million it would be about
+0.45 s and 780 MB, the point where a coarse partition (IVF) would be worth adding. A 1,000-page
+book is about 1,400 passages, so 100,000 passages is about 70 such books.
+
+### Answering from the book: 30 questions
+
+Each question in a new conversation ("In the Harbor wind farm manual: <question> Which page says
+so?"); right means the answer has the fact, right page means she names the page it is on:
+
+| Run | Right answer | Right page | Page link in the answer |
+|---|---|---|---|
+| `text1000b` (final code: key points cite their page) | **30 / 30** | **30 / 30** | 30 / 30 |
+| `scan1000` (50 scanned pages, no key points; 5 questions are about scanned pages) | **29 / 30** | **29 / 30** (5 / 5 on scanned pages) | 27 / 30 |
+| `text1000` (before key points carried pages) | 29 / 30 | 25 / 30 | 25 / 30 |
+
+The first full run (`text1000`) missed five pages: the answer came from a key point in her memory
+that named the document but not the page, and she guessed one. Key points now carry their page
+and link (`[p. 412](/#view=library:1:412)`), which gave 30 / 30. The one miss in `scan1000` (page 735,
+"Which company inspects the foundation for corrosion?") was answered "the manual doesn't say",
+pointing at other pages about corrosion: word and meaning search didn't bring page 735 up for
+that wording (key points were off in that run). Median time per answer:
+12 s (text), 19 s (scanned book). Small models sometimes write the link without its slash or
+inside emphasis (`(_#view=library:1:16_)`); the chat now shows those as links too.
+
+Screenshots of the reading progress, the document page with its contents and summaries, and an
+answer with page links: `outputs/p74-shots/` (desktop and phone width; not in git).
+
 ## Code map
 
 `scripts/eval-codemap.ts` copies Sara's own code into a workspace and asks 8 "where is…?"

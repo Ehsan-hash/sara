@@ -148,8 +148,10 @@ export function inline(s) {
     }
     if (c === '[') {
       // (Models sometimes write an in-app link as "/ #view=…": that space is dropped.)
+      // (Phase 74: and sometimes without the slash, "#view=library:3:412": that is the same page.)
       const m = /^\[([^\]\n]+)\]\(\s*([^\s)]+|\/ #(?:view|tour)=[\w:-]+)\s*\)/.exec(s.slice(i));
-      if (m) m[2] = m[2].replace(/^\/ #/, '/#');
+      // (Small models also wrap it in emphasis, "(_#view=library:3:412_)": the marks are dropped.)
+      if (m) m[2] = m[2].replace(/^\/ #/, '/#').replace(/^[_*]{1,2}(\/?#(?:view|tour)=[\w:-]+?)[_*]{1,2}$/, '$1').replace(/^#((?:view|tour)=[\w:-]+)$/, '/#$1');
       if (m && (SAFE_URL.test(m[2]) || APP_URL.test(m[2]))) {
         flush();
         out.push({ t: 'a', href: m[2], kids: inline(m[1]) });

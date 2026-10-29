@@ -307,6 +307,19 @@
   "She already looked {n} times on this call (the limit in Settings → Voice).",
   "Too soon: she looks at most every {seconds} seconds.",
   "Pick a model first (Settings → Models).",
-  "The camera can’t be used here."
+  "The camera can’t be used here.",
+  "Say how big the file is.",
+  "Documents can be up to {mb} MB here.",
+  "There is not enough free disk space on the server for this file.",
+  "That upload is not here any more. Add the file again.",
+  "That piece is for another place in the file.",
+  "That piece did not arrive whole. Send it again.",
+  "Not all of the file has arrived yet.",
+  "Pick one of the offered sizes.",
+  "Pick one of the offered choices.",
+  "Pick one of the offered speeds.",
+  "Gentle (chat always first)",
+  "Normal",
+  "Fast"
  ]
 }

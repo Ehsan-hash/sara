@@ -342,6 +342,10 @@ server {
 }
 ```
 
+`client_max_body_size 20m` is enough for big documents too: the app sends files over 8 MB in 8 MB
+pieces that resume after a dropped connection (Phase 74, [LIBRARY.md](LIBRARY.md#uploads-stream-to-disk)).
+Raise it only if other programs send her single files bigger than 20 MB through the proxy.
+
 **Apache** on Debian/Ubuntu (certificate with certbot: `sudo apt install certbot
 python3-certbot-apache`):
 

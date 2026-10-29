@@ -817,6 +817,22 @@
       "Also send this one reply, the reason and your note to the app's developer, to help fix it. Nothing else is sent.",
       "safety"
     ],
+    "lib-max-mb": [
+      "The biggest file she takes into her library. PDFs are read page by page from disk, so even 1 GB books work without much memory. Other kinds of file stay at 100 MB.",
+      "library"
+    ],
+    "lib-member-max-mb": [
+      "The biggest file each household member may add to their own library. Keep it lower than yours: their files use this server's disk and time too. Example: 100 MB.",
+      "library"
+    ],
+    "lib-ocr": [
+      "Scanned pages are pictures, so her picture model reads each one. Ask first: a cloud model only after you see the cost and time. On this computer only: never a cloud model. Off: skip them.",
+      "library"
+    ],
+    "lib-speed": [
+      "How hard she works on a long document in the background. Gentle keeps chats quickest on a small server; Fast reads a book sooner on a strong computer. Normal suits most.",
+      "library"
+    ],
     "lib-learn": [
       "After reading a document she writes its key points into her memory (dates, amounts, names, what to do), each with the exact words it came from. You can check and delete them by opening the document. Off: she only looks things up in it.",
       "library"
@@ -1218,6 +1234,10 @@
     "ab-projects": [
       "What she knows about each coding project: commands, layout, rules and her notes. Add a note to teach her something for next time.",
       "coding"
+    ],
+    "ab-library": [
+      "How big her documents may be and how she reads long ones: size limits, scanned pages, background speed.",
+      "library"
     ],
     "ab-search": [
       "How she searches the web for up-to-date answers.",

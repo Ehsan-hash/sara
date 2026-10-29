@@ -11,26 +11,31 @@ import { localDate } from '../memory-worker.ts';
 import type { Conversation } from '../store.ts';
 import { ReadError, type DocPart } from './read.ts';
 import { readInThread } from './read-thread.ts';
-import { type LibraryDoc, type LibraryStore, sourceLabel } from './store.ts';
+import { type LibraryDoc, type LibraryStore, libraryLimits, sourceLabel } from './store.ts';
 import { usageScope } from '../usage.ts';
+import { closeAllPagers, factsBudget, isPdfDoc, learnSteps, runJob } from './bigread.ts';
 
-/** Scanned pages the picture model reads per document (each takes a model call). */
-export const MAX_SEEN_PAGES = 40;
+/**
+ * Phase 74: every scanned page is read (the old limit of 40 is gone): PDFs go through the
+ * page-by-page job in src/library/bigread.ts. Pictures handed back by the other readers (a photo of
+ * a page) are read too, without a cap.
+ */
+export const MAX_SEEN_PAGES = Infinity;
 /** How much of a document the memory model reads for facts, in windows spread over the text. */
 const LEARN_WINDOWS = 6;
 const LEARN_WINDOW_CHARS = 9000;
-/** Facts kept per document (the most useful ones come first in each window). */
+/** Facts kept per ordinary document; long ones get more (factsBudget in bigread.ts, up to 400). */
 export const MAX_FACTS_PER_DOC = 30;
 const MODEL_TIMEOUT_MS = 180_000;
 
-const defaultConv = () => ({ id: '', providerId: null, model: null, mode: 'chat', private: false, partner: null, channel: 'web' }) as unknown as Conversation;
+export const defaultConv = () => ({ id: '', providerId: null, model: null, mode: 'chat', private: false, partner: null, channel: 'web' }) as unknown as Conversation;
 
 /** The conversation a document's model calls follow (a private chat keeps its read-once files local). */
-function convFor(app: AppContext, doc: LibraryDoc): Conversation {
+export function convFor(app: AppContext, doc: LibraryDoc): Conversation {
   return (doc.conversationId && app.store.getConversation(doc.conversationId)) || defaultConv();
 }
 
-async function complete(app: AppContext, conv: Conversation, job: 'background' | 'vision', messages: Parameters<ReturnType<typeof resolveFor>['provider']['stream']>[0]['messages'], maxTokens: number, signal?: AbortSignal): Promise<string> {
+export async function complete(app: AppContext, conv: Conversation, job: 'background' | 'vision', messages: Parameters<ReturnType<typeof resolveFor>['provider']['stream']>[0]['messages'], maxTokens: number, signal?: AbortSignal): Promise<string> {
   const { provider, model } = resolveFor(app, conv, job);
   const timeout = AbortSignal.timeout(MODEL_TIMEOUT_MS);
   let out = '';
@@ -64,6 +69,13 @@ export async function readPageImage(app: AppContext, conv: Conversation, img: { 
 
 /** Reads one waiting document into passages. Returns the updated document. */
 export async function readOne(app: AppContext, lib: LibraryStore, doc: LibraryDoc, signal?: AbortSignal): Promise<LibraryDoc | undefined> {
+  // Phase 74: PDFs are read page by page from the file (any size), as a job that can be paused
+  // and goes on after a restart. Here: until the text is in (the rest goes on in the background).
+  if (lib.filePath(doc) && isPdfDoc(lib, doc)) {
+    if (!lib.job(doc.id)) lib.startJob(doc.id);
+    await runJob(app, lib, doc.id, { signal, until: 'structure' });
+    return lib.get(doc.id);
+  }
   lib.setStatus(doc.id, 'reading');
   const bytes = lib.file(doc);
   if (!bytes) {
@@ -87,7 +99,6 @@ export async function readOne(app: AppContext, lib: LibraryStore, doc: LibraryDo
           break; // the model isn't answering: don't try every page
         }
       }
-      if (r.images.length > MAX_SEEN_PAGES) warnings.push(`Only the first ${MAX_SEEN_PAGES} scanned pages were read.`);
       // Scanned pages come back in page order with the text pages.
       parts.sort((a, b) => pageNo(a.where) - pageNo(b.where));
     }
@@ -168,7 +179,16 @@ export function learnWindows(full: string, windows = LEARN_WINDOWS, size = LEARN
 }
 
 /** Writes the key facts of a kept document into her memory. Returns how many were kept. */
-export async function learnOne(app: AppContext, lib: LibraryStore, doc: LibraryDoc, signal?: AbortSignal): Promise<number> {
+export async function learnOne(
+  app: AppContext,
+  lib: LibraryStore,
+  doc: LibraryDoc,
+  signal?: AbortSignal,
+  onWindow?: (windowsDone: number) => boolean,
+  wrap?: (fn: (signal: AbortSignal | undefined) => Promise<string>) => Promise<string>,
+  /** Phase 74: windows already learned before a pause or restart (they aren't asked again). */
+  from = 0,
+): Promise<number> {
   const mem = app.memory;
   if (!mem) {
     lib.setLearn(doc.id, 'off');
@@ -177,7 +197,9 @@ export async function learnOne(app: AppContext, lib: LibraryStore, doc: LibraryD
   lib.setLearn(doc.id, 'learning');
   const s = app.settings.get();
   const owner = s.ownerName?.trim() || 'The owner';
-  const full = lib.text(doc.id, 2_000_000);
+  const full = lib.text(doc.id, 8_000_000);
+  // Phase 74: longer documents get more key points, from more windows spread over the text.
+  const maxFacts = factsBudget(full.length);
   const haystack = loose(full);
   const day = localDate(app.now().toISOString(), s.timeZone);
   const already = new Set(mem.fromDoc(doc.id).map((m) => loose(m.content)));
@@ -185,28 +207,40 @@ export async function learnOne(app: AppContext, lib: LibraryStore, doc: LibraryD
   let about: string | undefined;
   let failures = 0;
   let lastErr = '';
-  const windows = learnWindows(full);
-  for (let i = 0; i < windows.length && kept < MAX_FACTS_PER_DOC; i++) {
+  const windows = learnWindows(full, learnSteps(full.length));
+  let stopped = false;
+  for (let i = from; i < windows.length && kept < maxFacts; i++) {
+    if (signal?.aborted) {
+      stopped = true;
+      break;
+    }
     const w = windows[i];
     let parsed: ReturnType<typeof parseLearned> = null;
     try {
-      const out = await complete(
-        app,
-        convFor(app, doc),
-        'background',
-        [
-          { role: 'system', content: 'You write concise, factual memory notes from documents. Output only valid JSON.' },
-          { role: 'user', content: learnPrompt(owner, app.persona.name, doc, w.place, w.text, i === 0) },
-        ],
-        1500,
-        signal,
-      );
+      const ask = (sig: AbortSignal | undefined) =>
+        complete(
+          app,
+          convFor(app, doc),
+          'background',
+          [
+            { role: 'system', content: 'You write concise, factual memory notes from documents. Output only valid JSON.' },
+            { role: 'user', content: learnPrompt(owner, app.persona.name, doc, w.place, w.text, i === 0) },
+          ],
+          1500,
+          sig,
+        );
+      // Phase 74: a long document's job passes a wrapper that lets chat go first.
+      const out = wrap ? await wrap(ask) : await ask(signal);
       parsed = parseLearned(out);
       if (!parsed) lastErr = `The memory model didn't answer with notes: ${out.slice(0, 120)}`;
     } catch (err) {
       lastErr = (err as Error).message;
     }
     if (!parsed) {
+      if (signal?.aborted) {
+        stopped = true;
+        break;
+      }
       if (++failures >= 2) break;
       continue;
     }
@@ -217,11 +251,20 @@ export async function learnOne(app: AppContext, lib: LibraryStore, doc: LibraryD
       if (already.has(loose(n.note))) continue;
       already.add(loose(n.note));
       mem.add({ kind: 'fact', content: n.note, conversationId: null, sourceMessageId: null, happenedOn: day, evidence: n.quote, sourceDocId: doc.id });
-      if (++kept >= MAX_FACTS_PER_DOC) break;
+      if (++kept >= maxFacts) break;
+    }
+    if (onWindow?.(i + 1)) {
+      stopped = i + 1 < windows.length && kept < maxFacts;
+      break;
     }
   }
+  // Paused or stopped part way: it stays "learning" and goes on from the next window later.
+  if (stopped) return kept;
   const ok = failures < windows.length || kept > 0;
-  lib.setLearn(doc.id, ok ? 'done' : 'failed', { facts: kept, summary: about ?? null, error: ok ? null : lastErr.slice(0, 300) || 'The memory model did not answer.' });
+  // Phase 74: a long document's one line comes from the whole-document summary (the first window
+  // of key points only saw its first pages), so it isn't replaced here.
+  const whole = lib.get(doc.id)?.overview ? lib.get(doc.id)?.summary : null;
+  lib.setLearn(doc.id, ok ? 'done' : 'failed', { facts: kept, summary: whole || (about ?? null), error: ok ? null : lastErr.slice(0, 300) || 'The memory model did not answer.' });
   return kept;
 }
 
@@ -247,6 +290,7 @@ export class LibraryWorker {
     clearInterval(this.#timer);
     this.#ctl.abort();
     this.#ctl = new AbortController();
+    void closeAllPagers(this.#lib());
   }
 
   /** Something was added: start soon instead of waiting for the next round. */
@@ -268,10 +312,23 @@ export class LibraryWorker {
       // Read-once files first (someone is waiting in a chat), then the library.
       const waiting = lib.waiting(20).sort((a, b) => Number(a.keep) - Number(b.keep));
       for (const d of waiting.slice(0, 3)) {
-        await readOne(this.#app, lib, d, signal);
+        // Phase 74: PDFs become a job (read below, a slice at a time); the rest are read at once.
+        if (lib.filePath(d) && isPdfDoc(lib, d)) lib.startJob(d.id);
+        else await readOne(this.#app, lib, d, signal);
         this.#app.events?.publish({ type: 'library', id: d.id });
       }
       if (waiting.length > 3) return this.#again();
+      // Phase 74: one long document's job for a slice of time (read-once ones first), then a breath.
+      const jobs = lib
+        .activeJobs()
+        .filter((j) => !j.paused && !j.needs)
+        .sort((a, b) => Number(lib.get(a.docId)?.keep) - Number(lib.get(b.docId)?.keep));
+      if (jobs.length) {
+        const speed = libraryLimits(this.#app.settings.get()).speed;
+        const r = await runJob(this.#app, lib, jobs[0].docId, { signal, sliceMs: speed === 1 ? 1500 : speed === 2 ? 4000 : 10_000 });
+        this.#app.events?.publish({ type: 'library', id: jobs[0].docId });
+        if (r === 'more' || jobs.length > 1 || r === 'done') return this.#again(speed === 1 ? 400 : speed === 2 ? 100 : 20);
+      }
       const learn = lib.toLearn(1);
       for (const d of learn) {
         await learnOne(this.#app, lib, d, signal).catch((err: Error) => lib.setLearn(d.id, 'failed', { error: err.message.slice(0, 300) }));
@@ -286,8 +343,8 @@ export class LibraryWorker {
     }
   }
 
-  #again(): boolean {
-    setTimeout(() => guard('library', () => this.tick()), 200).unref();
+  #again(ms = 200): boolean {
+    setTimeout(() => guard('library', () => this.tick()), ms).unref();
     return true;
   }
 }

@@ -2,6 +2,28 @@
 
 Format: newest first. Versions follow `0.<phase>.<patch>` until 1.0.0.
 
+## 2.3.0 (2026-10-29): big documents
+
+Phase 74. See [docs/LIBRARY.md](docs/LIBRARY.md); measurements in [docs/RESULTS.md](docs/RESULTS.md).
+
+- **500–1,000-page books and manuals in her library:** PDFs up to 1 GB by default (you can choose
+  100 MB to 2 GB; household members 100 MB unless you change it). The old caps are gone: every
+  scanned page is read (it was the first 40), and key points grow with the length (it was 30).
+- **Built for big files:** uploads go straight to disk in 8 MB pieces that pick up where they stopped;
+  the PDF is read page by page without loading the whole file (152 MB peak memory for 1,000 pages);
+  reading happens in the background, survives a restart, and shows "Reading page 412 of 980 · about
+  6 minutes left" with Pause, Resume and Cancel.
+- **Scanned pages:** read by a local picture model by default; before a cloud model reads hundreds of
+  pages you see the pages, time and price and decide. "Nothing leaves this computer" keeps it local.
+- **Structure:** contents from the PDF's bookmarks (or its headings), a summary per chapter and one for
+  the whole document.
+- **Answers with page numbers:** word search plus meaning search over every passage (44 ms at 100,000
+  passages); she cites pages like "p. 412" and the link opens the document at that page.
+- **Measured:** a generated 1,000-page book was searchable in under 6 minutes on a gaming PC with a
+  local model; 30 of 30 questions answered right with the right page (29 of 30 with 50 scanned pages).
+- Chat stays responsive while a book is read; it's somewhat slower (about 12 s to the first word on
+  that PC) while she learns key points, since both use the same model.
+
 ## 2.2.0 (2026-10-29): your other servers over SSH
 
 Phase 73. See [docs/SSH.md](docs/SSH.md).

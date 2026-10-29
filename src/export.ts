@@ -182,7 +182,7 @@ export function importAll(app: AppContext, data: unknown): ImportResult {
       for (const d of f.library) {
         if (!d || !Array.isArray(d.passages) || !d.passages.length) continue;
         const before = app.library.list().length;
-        docMap.set(Number(d.id), app.library.importDoc({ name: String(d.name ?? 'document'), kind: d.kind ?? null, title: d.title ?? null, summary: d.summary ?? null, addedAt: d.addedAt, passages: d.passages.map((p) => ({ place: String(p.place ?? ''), heading: p.heading ?? null, text: String(p.text ?? '') })) }));
+        docMap.set(Number(d.id), app.library.importDoc({ name: String(d.name ?? 'document'), kind: d.kind ?? null, title: d.title ?? null, summary: d.summary ?? null, overview: typeof d.overview === 'string' ? d.overview : null, addedAt: d.addedAt, passages: d.passages.map((p) => ({ place: String(p.place ?? ''), heading: p.heading ?? null, text: String(p.text ?? '') })), sections: Array.isArray(d.sections) ? d.sections : [] }));
         if (app.library.list().length > before) r.documents++;
       }
     }

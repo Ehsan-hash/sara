@@ -309,7 +309,7 @@ export function memberDirs(dataDir: string, h: HouseholdStore): { member: Member
  * Settings only the owner has (server, accounts, bridges, tools, imports). A member's settings never
  * contain them, and a member's change never writes them.
  */
-export const OWNER_SETTINGS: readonly (keyof Settings)[] = ['providers', 'prices', 'mcpServers', 'search', 'offsite', 'backup', 'discord', 'telegram', 'home', 'githubWatch', 'helpers', 'teamLimits', 'jobBudget', 'shellNetwork', 'modelLists', 'modelAutoSwitch', 'safetyClassifier', 'claimJudge', 'toolPermissions', 'alexa', 'presence'];
+export const OWNER_SETTINGS: readonly (keyof Settings)[] = ['providers', 'prices', 'mcpServers', 'search', 'offsite', 'backup', 'discord', 'telegram', 'home', 'githubWatch', 'helpers', 'teamLimits', 'jobBudget', 'shellNetwork', 'modelLists', 'modelAutoSwitch', 'safetyClassifier', 'claimJudge', 'toolPermissions', 'alexa', 'presence', 'libraryLimits'];
 
 /**
  * A member's settings: their own file, with the owner's providers (for the server code that runs
@@ -332,7 +332,7 @@ export class MemberSettings extends SettingsStore {
     const o = this.#owner.get();
     const allowed = this.#limits().models;
     const ok = (p?: { providerId: string; model: string }) => Boolean(p && allowed.some((a) => a.providerId === p.providerId && a.model === p.model));
-    const out = { ...own, providers: o.providers, ...(o.prices ? { prices: o.prices } : {}), toolPermissions: {}, otherApps: { ...((own.otherApps as Settings['otherApps']) ?? {}), tools: false, changes: false } } as Settings;
+    const out = { ...own, providers: o.providers, ...(o.prices ? { prices: o.prices } : {}), ...(o.libraryLimits ? { libraryLimits: o.libraryLimits } : {}), toolPermissions: {}, otherApps: { ...((own.otherApps as Settings['otherApps']) ?? {}), tools: false, changes: false } } as Settings;
     const first = allowed[0];
     if (!ok(out.defaultProviderId && out.defaultModel ? { providerId: out.defaultProviderId, model: out.defaultModel } : undefined)) {
       out.defaultProviderId = first?.providerId;

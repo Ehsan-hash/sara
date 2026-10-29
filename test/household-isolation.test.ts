@@ -510,8 +510,10 @@ test('suspend, remove (export only), delete now; delete my own account', async (
   // Ana deletes her own account: her token confirms it.
   assert.equal((await call(ana, 'POST', '/api/household/me/delete', { token: 'wrong' })).status, 403);
   assert.equal((await call(ana, 'POST', '/api/household/me/delete', { token: ana.token })).status, 200);
-  await new Promise((r) => setTimeout(r, 500));
-  assert.ok(!existsSync(join(dataDir, 'members', ana.memberId!)));
+  // The space is deleted right after the reply (once her open requests end): wait for it, up to 10 s
+  // (a fixed 0.5 s was too short on a busy server).
+  for (let i = 0; i < 100 && existsSync(join(dataDir, 'members', ana.memberId!)); i++) await new Promise((r) => setTimeout(r, 100));
+  assert.ok(!existsSync(join(dataDir, 'members', ana.memberId!)), "Ana's folder is gone");
   assert.equal((await call(null, 'POST', '/api/login', { token: ana.token })).status, 401);
   // The owner's data is all still there.
   assert.ok((await call(owner, 'GET', `/api/conversations/${owner.conv}`)).text.includes(M.owner));

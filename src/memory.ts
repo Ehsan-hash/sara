@@ -423,6 +423,8 @@ export function selectMemories(
     extra?: string[];
     related?: Memory[];
     docName?: (id: number) => string | undefined;
+    /** Phase 74: the page a document note's words are on (for page citations). */
+    docPage?: (id: number, evidence: string | null) => number | undefined;
     importedFrom?: (conversationId: string) => string | undefined;
     /** Hardening M3: only notes this allows (another app's turn: none from private, imported or adult-channel conversations). */
     allow?: (m: Memory) => boolean;
@@ -481,7 +483,8 @@ export function selectMemories(
     const doc = m.sourceDocId !== null ? opts.docName?.(m.sourceDocId) : undefined;
     // Phase 51: a note learned from imported history says so (another assistant was there, not her).
     const other = m.conversationId ? opts.importedFrom?.(m.conversationId) : undefined;
-    const line = `- (${m.happenedOn}${tag}${doc ? `, from the document "${doc}" in your library` : ''}${other ? `, learned from their imported ${other} history: that was ${other} talking with them, not you` : ''}) ${m.content.replace(/\s+/g, ' ').trim()}`;
+    const page = doc && m.sourceDocId !== null ? opts.docPage?.(m.sourceDocId, m.evidence ?? null) : undefined;
+    const line = `- (${m.happenedOn}${tag}${doc ? `, from the document "${doc}"${page ? `, page ${page}, cite: [p. ${page}](/#view=library:${m.sourceDocId}:${page})` : ''} in your library` : ''}${other ? `, learned from their imported ${other} history: that was ${other} talking with them, not you` : ''}) ${m.content.replace(/\s+/g, ' ').trim()}`;
     if (chars + line.length + 1 > opts.budgetChars) continue;
     lines.push(line);
     ids.push(m.id);

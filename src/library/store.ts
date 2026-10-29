@@ -4,14 +4,78 @@
 // set). A document is either kept in her library (searchable from any of the owner's chats) or
 // "read once" for a single conversation (found only there, gone with that conversation).
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { closeSync, copyFileSync, createReadStream, existsSync, mkdirSync, openSync, readFileSync, readSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { DatabaseSync } from 'node:sqlite';
-import { cosine, type EmbedTarget, embedTexts } from '../embeddings.ts';
+import { type EmbedTarget, embedTexts } from '../embeddings.ts';
 import { ftsQuery } from '../memory.ts';
+import type { Settings } from '../settings.ts';
+import { exactScores, VectorIndex } from './vectors.ts';
 
-/** Largest file she takes (the readers also cap the text). */
-export const MAX_DOC_BYTES = 60 * 1024 * 1024;
+const MB = 1024 * 1024;
+/**
+ * Largest file taken whole in memory: anything sent through a chat bridge, and every kind of
+ * document except PDF (their readers need the whole file). PDFs are read page by page from disk,
+ * so they may be as big as the owner's limit (Phase 74, default 1 GB).
+ */
+export const MAX_DOC_BYTES = 100 * MB;
+/** Phase 74: the owner's choices for the largest document (MB). */
+export const MAX_MB_CHOICES = [100, 250, 500, 1024, 2048] as const;
+export const MEMBER_MAX_MB_CHOICES = [25, 50, 100, 250, 500, 1024] as const;
+export const DEFAULT_MAX_MB = 1024;
+export const DEFAULT_MEMBER_MAX_MB = 100;
+
+/** Phase 74: the library settings the owner sets (members follow the owner's). */
+export interface LibraryLimits {
+  /** Largest document, in MB (PDFs; other kinds stay at MAX_DOC_BYTES). */
+  maxMb: number;
+  /** Largest document a household member may add, in MB. */
+  memberMaxMb: number;
+  /** Scanned pages: ask before a cloud picture model reads them, read them only on this computer, or don't read them. */
+  ocr: 'ask' | 'local' | 'off';
+  /** Background speed: 1 gentle (chat always first), 2 normal, 3 fast. */
+  speed: 1 | 2 | 3;
+}
+
+export function libraryLimits(s: Pick<Settings, 'libraryLimits'>): LibraryLimits {
+  const l = s.libraryLimits ?? {};
+  const pick = <T extends number>(v: unknown, list: readonly T[], d: T): T => (list.includes(Number(v) as T) ? (Number(v) as T) : d);
+  return {
+    maxMb: pick(l.maxMb, MAX_MB_CHOICES, DEFAULT_MAX_MB),
+    memberMaxMb: pick(l.memberMaxMb, MEMBER_MAX_MB_CHOICES, DEFAULT_MEMBER_MAX_MB),
+    ocr: l.ocr === 'local' || l.ocr === 'off' ? l.ocr : 'ask',
+    speed: l.speed === 1 || l.speed === 3 ? l.speed : 2,
+  };
+}
+
+/** Cleans a library-settings change from the owner (unknown values are refused). */
+export function cleanLibraryLimits(v: Record<string, unknown>, cur: LibraryLimits): LibraryLimits {
+  const out = { ...cur };
+  if (v.maxMb !== undefined) {
+    if (!MAX_MB_CHOICES.includes(Number(v.maxMb) as (typeof MAX_MB_CHOICES)[number])) throw new Error('Pick one of the offered sizes.');
+    out.maxMb = Number(v.maxMb);
+  }
+  if (v.memberMaxMb !== undefined) {
+    if (!MEMBER_MAX_MB_CHOICES.includes(Number(v.memberMaxMb) as (typeof MEMBER_MAX_MB_CHOICES)[number])) throw new Error('Pick one of the offered sizes.');
+    out.memberMaxMb = Number(v.memberMaxMb);
+  }
+  if (v.ocr !== undefined) {
+    if (!['ask', 'local', 'off'].includes(String(v.ocr))) throw new Error('Pick one of the offered choices.');
+    out.ocr = v.ocr as LibraryLimits['ocr'];
+  }
+  if (v.speed !== undefined) {
+    if (![1, 2, 3].includes(Number(v.speed))) throw new Error('Pick one of the offered speeds.');
+    out.speed = Number(v.speed) as LibraryLimits['speed'];
+  }
+  return out;
+}
+
+/** The SHA-256 of a file, read in pieces. */
+export async function sha256File(path: string): Promise<string> {
+  const h = createHash('sha256');
+  for await (const chunk of createReadStream(path, { highWaterMark: 1024 * 1024 })) h.update(chunk as Buffer);
+  return h.digest('hex');
+}
 /** About how long a passage is, and how much neighbouring passages overlap. */
 export const PASSAGE_CHARS = 1400;
 const OVERLAP_CHARS = 200;
@@ -46,6 +110,10 @@ export interface LibraryDoc {
   facts: number;
   /** One line on what it is ("A 12-month lease for 14 Elm St, from March 2026"), written while learning. */
   summary: string | null;
+  /** Phase 74: a summary of the whole document (long documents, from its section summaries). */
+  overview: string | null;
+  /** Phase 74: pages, for paged documents (PDFs). */
+  pages: number;
   addedAt: string;
   readAt: string | null;
 }
@@ -56,6 +124,8 @@ export interface Passage {
   ord: number;
   /** Where in the document: "page 4", "sheet Budget", "slide 3", "chapter 2", or "". */
   place: string;
+  /** Phase 74: the page number, for paged documents (else null). */
+  page: number | null;
   heading: string | null;
   text: string;
 }
@@ -122,7 +192,139 @@ CREATE TABLE IF NOT EXISTS library_vectors (
   model TEXT NOT NULL,
   vec BLOB NOT NULL
 );
+CREATE TABLE IF NOT EXISTS library_jobs (
+  doc_id INTEGER PRIMARY KEY,
+  phase TEXT NOT NULL,
+  paused INTEGER NOT NULL DEFAULT 0,
+  needs TEXT,
+  pages INTEGER NOT NULL DEFAULT 0,
+  page INTEGER NOT NULL DEFAULT 0,
+  body_size REAL NOT NULL DEFAULT 0,
+  heading TEXT,
+  ocr_total INTEGER NOT NULL DEFAULT 0,
+  ocr_done INTEGER NOT NULL DEFAULT 0,
+  ocr_ok INTEGER NOT NULL DEFAULT 0,
+  steps_total INTEGER NOT NULL DEFAULT 0,
+  steps_done INTEGER NOT NULL DEFAULT 0,
+  sec_page REAL NOT NULL DEFAULT 0,
+  sec_ocr REAL NOT NULL DEFAULT 0,
+  sec_step REAL NOT NULL DEFAULT 0,
+  learn_done INTEGER NOT NULL DEFAULT 0,
+  warnings TEXT NOT NULL DEFAULT '[]',
+  timings TEXT NOT NULL DEFAULT '{}',
+  started_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  finished_at TEXT
+);
+CREATE TABLE IF NOT EXISTS library_ocr (
+  doc_id INTEGER NOT NULL,
+  page INTEGER NOT NULL,
+  status TEXT NOT NULL DEFAULT 'waiting',
+  PRIMARY KEY (doc_id, page)
+);
+CREATE TABLE IF NOT EXISTS library_sections (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  doc_id INTEGER NOT NULL,
+  ord INTEGER NOT NULL,
+  level INTEGER NOT NULL DEFAULT 1,
+  title TEXT NOT NULL,
+  page INTEGER NOT NULL DEFAULT 0,
+  page_end INTEGER NOT NULL DEFAULT 0,
+  source TEXT NOT NULL DEFAULT 'heading',
+  summary TEXT
+);
+CREATE INDEX IF NOT EXISTS library_sections_doc ON library_sections(doc_id, ord);
 `;
+
+/** Phase 74: columns added to older libraries. */
+const MIGRATIONS: [string, string, string][] = [
+  ['library_passages', 'page', 'ALTER TABLE library_passages ADD COLUMN page INTEGER'],
+  ['library_docs', 'overview', 'ALTER TABLE library_docs ADD COLUMN overview TEXT'],
+  ['library_docs', 'pages', 'ALTER TABLE library_docs ADD COLUMN pages INTEGER NOT NULL DEFAULT 0'],
+];
+
+export type JobPhase = 'text' | 'ocr' | 'structure' | 'summaries' | 'learn' | 'vectors' | 'done' | 'cancelled';
+/** Phase 74: a long document's reading job, kept in the database so a restart goes on where it was. */
+export interface LibraryJob {
+  docId: number;
+  phase: JobPhase;
+  paused: boolean;
+  /** Waiting for the owner: 'ocr-approval' (a cloud picture model would read scanned pages) or 'local-ocr' (private mode is on and the picture model isn't local). */
+  needs: 'ocr-approval' | 'local-ocr' | null;
+  pages: number;
+  /** Pages read so far in the text phase. */
+  page: number;
+  bodySize: number;
+  heading: string | null;
+  ocrTotal: number;
+  ocrDone: number;
+  /** The owner allowed a cloud picture model for this document's scanned pages. */
+  ocrOk: boolean;
+  /** Model calls planned and done in the later phases (summaries, key points). */
+  stepsTotal: number;
+  stepsDone: number;
+  secPage: number;
+  secOcr: number;
+  secStep: number;
+  /** Windows of key points already learned (so a pause or restart goes on from the next one). */
+  learnDone: number;
+  warnings: string[];
+  /** Milliseconds spent per phase (shown in the measurements). */
+  timings: Record<string, number>;
+  startedAt: string;
+  updatedAt: string;
+  finishedAt: string | null;
+}
+
+export interface Section {
+  id: number;
+  docId: number;
+  ord: number;
+  level: number;
+  title: string;
+  page: number;
+  pageEnd: number;
+  source: 'outline' | 'heading';
+  summary: string | null;
+}
+
+const toJob = (r: Row): LibraryJob => {
+  const j = (v: unknown, d: unknown) => {
+    try {
+      return JSON.parse(String(v));
+    } catch {
+      return d;
+    }
+  };
+  return {
+    docId: Number(r.doc_id),
+    phase: r.phase as JobPhase,
+    paused: Boolean(r.paused),
+    needs: (r.needs as LibraryJob['needs']) ?? null,
+    pages: Number(r.pages),
+    page: Number(r.page),
+    bodySize: Number(r.body_size),
+    heading: (r.heading as string | null) ?? null,
+    ocrTotal: Number(r.ocr_total),
+    ocrDone: Number(r.ocr_done),
+    ocrOk: Boolean(r.ocr_ok),
+    stepsTotal: Number(r.steps_total),
+    stepsDone: Number(r.steps_done),
+    secPage: Number(r.sec_page),
+    secOcr: Number(r.sec_ocr),
+    secStep: Number(r.sec_step),
+    learnDone: Number(r.learn_done ?? 0),
+    warnings: j(r.warnings, []) as string[],
+    timings: j(r.timings, {}) as Record<string, number>,
+    startedAt: String(r.started_at),
+    updatedAt: String(r.updated_at),
+    finishedAt: (r.finished_at as string | null) ?? null,
+  };
+};
+
+const JOB_COLS: Record<string, string> = { phase: 'phase', paused: 'paused', needs: 'needs', pages: 'pages', page: 'page', bodySize: 'body_size', heading: 'heading', ocrTotal: 'ocr_total', ocrDone: 'ocr_done', ocrOk: 'ocr_ok', stepsTotal: 'steps_total', stepsDone: 'steps_done', secPage: 'sec_page', secOcr: 'sec_ocr', secStep: 'sec_step', learnDone: 'learn_done', warnings: 'warnings', timings: 'timings', finishedAt: 'finished_at' };
+
+const toSection = (r: Row): Section => ({ id: Number(r.id), docId: Number(r.doc_id), ord: Number(r.ord), level: Number(r.level), title: String(r.title), page: Number(r.page), pageEnd: Number(r.page_end), source: r.source === 'outline' ? 'outline' : 'heading', summary: (r.summary as string | null) ?? null });
 
 type Row = Record<string, string | number | null>;
 
@@ -153,12 +355,14 @@ function toDoc(r: Row): LibraryDoc {
     learnError: (r.learn_error as string | null) ?? null,
     facts: Number(r.facts),
     summary: (r.summary as string | null) ?? null,
+    overview: (r.overview as string | null) ?? null,
+    pages: Number(r.pages ?? 0),
     addedAt: String(r.added_at),
     readAt: (r.read_at as string | null) ?? null,
   };
 }
 
-const toPassage = (r: Row): Passage => ({ id: Number(r.id), docId: Number(r.doc_id), ord: Number(r.ord), place: String(r.place ?? ''), heading: (r.heading as string | null) ?? null, text: String(r.text) });
+const toPassage = (r: Row): Passage => ({ id: Number(r.id), docId: Number(r.doc_id), ord: Number(r.ord), place: String(r.place ?? ''), page: r.page === null || r.page === undefined ? null : Number(r.page), heading: (r.heading as string | null) ?? null, text: String(r.text) });
 
 /** A file name that is safe to show and store (no folders, no control characters). */
 export function cleanName(name: string): string {
@@ -242,7 +446,7 @@ export class LibraryStore {
   readonly db: DatabaseSync;
   readonly dir: string;
   readonly #now: () => Date;
-  #vecCache: { model: string; rows: { id: number; vec: Float32Array }[] } | undefined;
+  #index: VectorIndex | undefined;
   /** The last problem making passage vectors (shown on the Library page), cleared on success. */
   vectorError: string | undefined;
 
@@ -251,12 +455,265 @@ export class LibraryStore {
     this.dir = join(dataDir, 'library');
     this.#now = now;
     db.exec(SCHEMA);
+    for (const [table, col, sql] of MIGRATIONS) {
+      const cols = (db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[]).map((c) => c.name);
+      if (!cols.includes(col)) db.exec(sql);
+    }
+    db.exec('CREATE INDEX IF NOT EXISTS library_passages_page ON library_passages(doc_id, page)');
+  }
+
+  /** Where a document's original is kept. */
+  #path(sha: string, ext: string): string {
+    return join(this.dir, `${sha.slice(0, 40)}.${ext}`);
+  }
+
+  /** The original file's path on disk (big documents are read from there, piece by piece). */
+  filePath(doc: LibraryDoc): string | undefined {
+    const ext = (this.db.prepare('SELECT ext FROM library_docs WHERE id = ?').get(doc.id) as { ext: string } | undefined)?.ext ?? 'bin';
+    const path = this.#path(doc.sha, ext);
+    return existsSync(path) ? path : undefined;
+  }
+
+  /**
+   * Phase 74: takes a file already on disk (an upload streamed to a temporary file): moves it into
+   * the library folder and lists it as waiting to be read. Never reads it into memory.
+   */
+  addFile(f: { name: string; path: string; sha: string; keep: boolean; conversationId?: string | null; origin?: DocOrigin; learn?: boolean }): LibraryDoc {
+    const size = statSync(f.path).size;
+    if (!size) throw new Error('That file is empty.');
+    const name = cleanName(f.name);
+    const ext = extOf(name);
+    mkdirSync(this.dir, { recursive: true, mode: 0o700 });
+    const file = this.#path(f.sha, ext);
+    if (existsSync(file)) rmSync(f.path, { force: true });
+    else {
+      try {
+        renameSync(f.path, file);
+      } catch {
+        copyFileSync(f.path, file);
+        rmSync(f.path, { force: true });
+      }
+    }
+    const r = this.db
+      .prepare('INSERT INTO library_docs (name, size, sha, ext, keep, conversation_id, origin, learn, added_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
+      .run(name, size, f.sha, ext, f.keep ? 1 : 0, f.conversationId ?? null, f.origin ?? (f.keep ? 'library' : 'chat'), f.keep && f.learn !== false ? 'waiting' : 'off', this.#now().toISOString());
+    return this.get(Number(r.lastInsertRowid))!;
+  }
+
+  /** The first bytes of the original file (what kind it is), without reading the rest. */
+  head(doc: LibraryDoc, n = 1024): Buffer | undefined {
+    const path = this.filePath(doc);
+    if (!path) return undefined;
+    const fd = openSync(path, 'r');
+    try {
+      const b = Buffer.alloc(n);
+      const got = readSync(fd, b, 0, n, 0);
+      return b.subarray(0, got);
+    } finally {
+      closeSync(fd);
+    }
+  }
+
+  /** The same file (by its hash) already kept in her library, if any. */
+  findKeptSha(sha: string): LibraryDoc | undefined {
+    const r = this.db.prepare("SELECT * FROM library_docs WHERE sha = ? AND keep = 1 AND status != 'failed' ORDER BY id LIMIT 1").get(sha) as Row | undefined;
+    return r ? toDoc(r) : undefined;
+  }
+
+  // ---------------------------------------------------------------- Phase 74: reading jobs
+
+  job(docId: number): LibraryJob | undefined {
+    const r = this.db.prepare('SELECT * FROM library_jobs WHERE doc_id = ?').get(docId) as Row | undefined;
+    return r ? toJob(r) : undefined;
+  }
+
+  /** Jobs still to run (not paused, not waiting for the owner), oldest first. */
+  activeJobs(): LibraryJob[] {
+    return (this.db.prepare("SELECT * FROM library_jobs WHERE phase NOT IN ('done', 'cancelled') ORDER BY doc_id").all() as Row[]).map(toJob);
+  }
+
+  /** Starts (or restarts) a document's reading job from the first page. */
+  startJob(docId: number, phase: JobPhase = 'text'): LibraryJob {
+    const now = this.#now().toISOString();
+    this.db.exec('BEGIN');
+    try {
+      this.#dropPassages(docId);
+      this.db.prepare('DELETE FROM library_ocr WHERE doc_id = ?').run(docId);
+      this.db.prepare('DELETE FROM library_sections WHERE doc_id = ?').run(docId);
+      this.db.prepare('DELETE FROM library_jobs WHERE doc_id = ?').run(docId);
+      this.db.prepare('INSERT INTO library_jobs (doc_id, phase, started_at, updated_at) VALUES (?, ?, ?, ?)').run(docId, phase, now, now);
+      this.db.prepare("UPDATE library_docs SET status = 'reading', error = NULL, passages = 0, chars = 0, pages_seen = 0, overview = NULL WHERE id = ?").run(docId);
+      this.db.exec('COMMIT');
+    } catch (err) {
+      this.db.exec('ROLLBACK');
+      throw err;
+    }
+    this.#index = undefined;
+    return this.job(docId)!;
+  }
+
+  /** A job for a document that was read the ordinary way (structure and summaries for a long one). */
+  startLaterJob(docId: number, phase: JobPhase): LibraryJob {
+    const now = this.#now().toISOString();
+    this.db.prepare('DELETE FROM library_sections WHERE doc_id = ?').run(docId);
+    this.db.prepare('INSERT INTO library_jobs (doc_id, phase, started_at, updated_at) VALUES (?, ?, ?, ?) ON CONFLICT(doc_id) DO UPDATE SET phase = excluded.phase, paused = 0, needs = NULL, steps_total = 0, steps_done = 0, finished_at = NULL, updated_at = excluded.updated_at').run(docId, phase, now, now);
+    return this.job(docId)!;
+  }
+
+  updateJob(docId: number, patch: Partial<Omit<LibraryJob, 'docId' | 'startedAt' | 'updatedAt'>>): LibraryJob | undefined {
+    const sets: string[] = [];
+    const args: (string | number | null)[] = [];
+    for (const [k, v] of Object.entries(patch)) {
+      const col = JOB_COLS[k];
+      if (!col || v === undefined) continue;
+      sets.push(`${col} = ?`);
+      args.push(typeof v === 'boolean' ? (v ? 1 : 0) : Array.isArray(v) || (v && typeof v === 'object') ? JSON.stringify(v) : (v as string | number | null));
+    }
+    sets.push('updated_at = ?');
+    args.push(this.#now().toISOString());
+    this.db.prepare(`UPDATE library_jobs SET ${sets.join(', ')} WHERE doc_id = ?`).run(...args, docId);
+    return this.job(docId);
+  }
+
+  /** Adds a time to a phase's total (for the measurements). */
+  addTiming(docId: number, phase: string, ms: number): void {
+    const j = this.job(docId);
+    if (!j) return;
+    j.timings[phase] = Math.round((j.timings[phase] ?? 0) + ms);
+    this.updateJob(docId, { timings: j.timings });
+  }
+
+  /**
+   * Stores one page's text as passages (in its own transaction, together with the job's progress,
+   * so a restart never finds half a page). Headings found on the page are returned for the contents.
+   */
+  addPage(docId: number, page: number, text: string, opts: { heading?: string | null; jobPage?: number; ocr?: boolean } = {}): { passages: number; chars: number; heading: string | null; headings: { level: number; title: string }[] } {
+    const headings: { level: number; title: string }[] = [];
+    for (const m of text.matchAll(/^(#{1,6})\s+(.{1,200})$/gm)) headings.push({ level: m[1].length, title: m[2].trim() });
+    const ps = toPassages([{ text, where: `page ${page}`, heading: opts.heading ?? undefined }]);
+    this.db.exec('BEGIN');
+    try {
+      this.db.prepare('DELETE FROM library_vectors WHERE passage_id IN (SELECT id FROM library_passages WHERE doc_id = ? AND page = ?)').run(docId, page);
+      this.db.prepare('DELETE FROM library_passages WHERE doc_id = ? AND page = ?').run(docId, page);
+      const put = this.db.prepare('INSERT INTO library_passages (doc_id, ord, place, heading, text, page) VALUES (?, ?, ?, ?, ?, ?)');
+      ps.forEach((p, i) => put.run(docId, page * 1000 + i, p.place, p.heading, p.text, page));
+      if (opts.jobPage !== undefined) this.db.prepare('UPDATE library_jobs SET page = ?, heading = ?, updated_at = ? WHERE doc_id = ?').run(opts.jobPage, headings.at(-1)?.title ?? opts.heading ?? null, this.#now().toISOString(), docId);
+      if (opts.ocr) this.db.prepare("UPDATE library_ocr SET status = 'done' WHERE doc_id = ? AND page = ?").run(docId, page);
+      this.db.exec('COMMIT');
+    } catch (err) {
+      if (this.db.isTransaction) this.db.exec('ROLLBACK');
+      throw err;
+    }
+    return { passages: ps.length, chars: text.length, heading: headings.at(-1)?.title ?? opts.heading ?? null, headings };
+  }
+
+  /** Drops what was stored for pages from `page` on (a restart mid-way goes on cleanly). */
+  dropPagesFrom(docId: number, page: number): void {
+    this.db.prepare('DELETE FROM library_vectors WHERE passage_id IN (SELECT id FROM library_passages WHERE doc_id = ? AND page >= ?)').run(docId, page);
+    this.db.prepare('DELETE FROM library_passages WHERE doc_id = ? AND page >= ?').run(docId, page);
+    this.db.prepare("DELETE FROM library_sections WHERE doc_id = ? AND source = 'heading' AND page >= ?").run(docId, page);
+    this.db.prepare('DELETE FROM library_ocr WHERE doc_id = ? AND page >= ?').run(docId, page);
+  }
+
+  /** Marks a page as a scan for the picture model. */
+  addOcrPage(docId: number, page: number): void {
+    this.db.prepare("INSERT INTO library_ocr (doc_id, page, status) VALUES (?, ?, 'waiting') ON CONFLICT(doc_id, page) DO NOTHING").run(docId, page);
+  }
+
+  ocrPages(docId: number, status = 'waiting'): number[] {
+    return (this.db.prepare('SELECT page FROM library_ocr WHERE doc_id = ? AND status = ? ORDER BY page').all(docId, status) as { page: number }[]).map((r) => r.page);
+  }
+
+  ocrCounts(docId: number): Record<string, number> {
+    const out: Record<string, number> = {};
+    for (const r of this.db.prepare('SELECT status, COUNT(*) AS n FROM library_ocr WHERE doc_id = ? GROUP BY status').all(docId) as { status: string; n: number }[]) out[r.status] = r.n;
+    return out;
+  }
+
+  setOcrStatus(docId: number, page: number | null, status: 'waiting' | 'done' | 'failed' | 'skipped'): void {
+    if (page === null) this.db.prepare("UPDATE library_ocr SET status = ? WHERE doc_id = ? AND status = 'waiting'").run(status, docId);
+    else this.db.prepare('UPDATE library_ocr SET status = ? WHERE doc_id = ? AND page = ?').run(status, docId, page);
+  }
+
+  /** The text has been read (all pages, scans too): counts come from what was stored. */
+  finishPages(docId: number, r: { title?: string | null; kind: string; warnings: string[]; pagesSeen: number; pages: number }): LibraryDoc | undefined {
+    const c = this.db.prepare('SELECT COUNT(*) AS n, coalesce(SUM(length(text)), 0) AS chars FROM library_passages WHERE doc_id = ?').get(docId) as { n: number; chars: number };
+    this.db
+      .prepare("UPDATE library_docs SET status = 'ready', error = NULL, kind = ?, title = coalesce(?, title), warnings = ?, passages = ?, chars = ?, pages_seen = ?, pages = ?, read_at = ? WHERE id = ?")
+      .run(r.kind, r.title?.trim().slice(0, 300) || null, JSON.stringify(r.warnings.slice(0, 30)), Number(c.n), Number(c.chars), r.pagesSeen, r.pages, this.#now().toISOString(), docId);
+    this.#index = undefined;
+    return this.get(docId);
+  }
+
+  // ---------------------------------------------------------------- Phase 74: structure
+
+  sections(docId: number): Section[] {
+    return (this.db.prepare('SELECT * FROM library_sections WHERE doc_id = ? ORDER BY ord').all(docId) as Row[]).map(toSection);
+  }
+
+  addHeadingSections(docId: number, page: number, headings: { level: number; title: string }[]): void {
+    if (!headings.length) return;
+    const ord = (this.db.prepare('SELECT coalesce(MAX(ord), -1) + 1 AS n FROM library_sections WHERE doc_id = ?').get(docId) as { n: number }).n;
+    const put = this.db.prepare("INSERT INTO library_sections (doc_id, ord, level, title, page, source) VALUES (?, ?, ?, ?, ?, 'heading')");
+    headings.forEach((h, i) => put.run(docId, ord + i, h.level, h.title.slice(0, 200), page));
+  }
+
+  /** Replaces the contents (sections with their page ranges). */
+  setSections(docId: number, rows: { level: number; title: string; page: number; pageEnd: number; source: 'outline' | 'heading' }[]): Section[] {
+    this.db.exec('BEGIN');
+    try {
+      this.db.prepare('DELETE FROM library_sections WHERE doc_id = ?').run(docId);
+      const put = this.db.prepare('INSERT INTO library_sections (doc_id, ord, level, title, page, page_end, source) VALUES (?, ?, ?, ?, ?, ?, ?)');
+      rows.forEach((r, i) => put.run(docId, i, r.level, r.title.slice(0, 200), r.page, r.pageEnd, r.source));
+      this.db.exec('COMMIT');
+    } catch (err) {
+      if (this.db.isTransaction) this.db.exec('ROLLBACK');
+      throw err;
+    }
+    return this.sections(docId);
+  }
+
+  setSectionSummary(id: number, summary: string): void {
+    this.db.prepare('UPDATE library_sections SET summary = ? WHERE id = ?').run(summary.trim().slice(0, 1200) || null, id);
+  }
+
+  setOverview(docId: number, overview: string | null, about?: string | null): void {
+    this.db.prepare('UPDATE library_docs SET overview = ?, summary = coalesce(?, summary) WHERE id = ?').run(overview?.trim().slice(0, 4000) || null, about?.trim().slice(0, 300) || null, docId);
+  }
+
+  /** The text of a page range (for summaries), with page markers, up to maxChars. */
+  pagesText(docId: number, from: number, to: number, maxChars = 200_000): string {
+    let out = '';
+    let last = -1;
+    for (const p of this.db.prepare('SELECT page, text FROM library_passages WHERE doc_id = ? AND page >= ? AND page <= ? ORDER BY ord').iterate(docId, from, to) as Iterable<{ page: number; text: string }>) {
+      out += (out ? '\n\n' : '') + (p.page !== last ? `[page ${p.page}]\n` : '') + p.text;
+      last = p.page;
+      if (out.length >= maxChars) return out.slice(0, maxChars);
+    }
+    return out;
+  }
+
+  /** Phase 74: the page a quote from a paged document is on (key points cite their page). */
+  pageOf(docId: number, quote: string | null): number | undefined {
+    if (!quote) return undefined;
+    const doc = this.get(docId);
+    if (!doc?.pages) return undefined;
+    const want = quote.toLowerCase().replace(/\s+/g, ' ').trim();
+    for (const h of this.searchWords(quote, { docIds: [docId], limit: 5 })) {
+      if (h.passage.page && h.passage.text.toLowerCase().replace(/\s+/g, ' ').includes(want)) return h.passage.page;
+    }
+    return undefined;
+  }
+
+  /** The passages of one page (for reading a document from a page, and for citations). */
+  passagesAt(docId: number, page: number, limit = 20): Passage[] {
+    return (this.db.prepare('SELECT * FROM library_passages WHERE doc_id = ? AND page >= ? ORDER BY ord LIMIT ?').all(docId, page, limit) as Row[]).map(toPassage);
   }
 
   /** Saves the original file and lists it as waiting to be read. */
   add(f: { name: string; bytes: Buffer; keep: boolean; conversationId?: string | null; origin?: DocOrigin; learn?: boolean }): LibraryDoc {
     if (!f.bytes.length) throw new Error('That file is empty.');
-    if (f.bytes.length > MAX_DOC_BYTES) throw new Error(`Documents can be up to ${MAX_DOC_BYTES / 1024 / 1024} MB.`);
+    if (f.bytes.length > MAX_DOC_BYTES) throw new Error(`Documents sent this way can be up to ${MAX_DOC_BYTES / 1024 / 1024} MB.`);
     const name = cleanName(f.name);
     const sha = createHash('sha256').update(f.bytes).digest('hex');
     const ext = extOf(name);
@@ -284,7 +741,7 @@ export class LibraryStore {
   /** The original file's bytes. */
   file(doc: LibraryDoc): Buffer | undefined {
     const ext = (this.db.prepare('SELECT ext FROM library_docs WHERE id = ?').get(doc.id) as { ext: string } | undefined)?.ext ?? 'bin';
-    const path = join(this.dir, `${doc.sha.slice(0, 40)}.${ext}`);
+    const path = this.#path(doc.sha, ext);
     return existsSync(path) ? readFileSync(path) : undefined;
   }
 
@@ -296,18 +753,20 @@ export class LibraryStore {
     return (rows as Row[]).map(toDoc);
   }
 
-  /** Documents waiting to be read (oldest first). */
+  /** Documents waiting to be read (oldest first); ones with a reading job are run by the job. */
   waiting(limit = 5): LibraryDoc[] {
-    return (this.db.prepare("SELECT * FROM library_docs WHERE status IN ('waiting', 'reading') ORDER BY id LIMIT ?").all(limit) as Row[]).map(toDoc);
+    return (this.db.prepare("SELECT * FROM library_docs WHERE status IN ('waiting', 'reading') AND id NOT IN (SELECT doc_id FROM library_jobs) ORDER BY id LIMIT ?").all(limit) as Row[]).map(toDoc);
   }
 
-  /** Read documents whose key facts are still to be written. */
+  /** Read documents whose key facts are still to be written (a long document's job does its own). */
   toLearn(limit = 3): LibraryDoc[] {
-    return (this.db.prepare("SELECT * FROM library_docs WHERE status = 'ready' AND keep = 1 AND learn IN ('waiting', 'learning') ORDER BY id LIMIT ?").all(limit) as Row[]).map(toDoc);
+    return (this.db.prepare("SELECT * FROM library_docs WHERE status = 'ready' AND keep = 1 AND learn IN ('waiting', 'learning') AND id NOT IN (SELECT doc_id FROM library_jobs WHERE phase NOT IN ('done', 'cancelled')) ORDER BY id LIMIT ?").all(limit) as Row[]).map(toDoc);
   }
 
   setStatus(id: number, status: DocStatus, error: string | null = null): void {
     this.db.prepare('UPDATE library_docs SET status = ?, error = ? WHERE id = ?').run(status, error, id);
+    // Reading again from the start: the old job goes (the next round makes a new one).
+    if (status === 'waiting') this.db.prepare('DELETE FROM library_jobs WHERE doc_id = ?').run(id);
   }
 
   setLearn(id: number, learn: LearnStatus, patch: { error?: string | null; facts?: number; summary?: string | null } = {}): void {
@@ -342,7 +801,7 @@ export class LibraryStore {
       this.db.exec('ROLLBACK');
       throw err;
     }
-    this.#vecCache = undefined;
+    this.#index = undefined;
     return this.get(id);
   }
 
@@ -356,7 +815,7 @@ export class LibraryStore {
    * isn't in exports; its text is stored as a .txt so it can be downloaded and read again).
    * Runs inside the caller's transaction. Returns the new id, or the id of the same text already here.
    */
-  importDoc(d: { name: string; kind?: string | null; title?: string | null; summary?: string | null; addedAt?: string; passages: { place: string; heading: string | null; text: string }[] }): number {
+  importDoc(d: { name: string; kind?: string | null; title?: string | null; summary?: string | null; overview?: string | null; addedAt?: string; passages: { place: string; heading: string | null; text: string }[]; sections?: { level: number; title: string; page: number; pageEnd: number; summary: string | null }[] }): number {
     const body = Buffer.from(d.passages.map((p) => (p.place ? `[${p.place}]\n${p.text}` : p.text)).join('\n\n'), 'utf8');
     const sha = createHash('sha256').update(body).digest('hex');
     const had = this.db.prepare('SELECT id FROM library_docs WHERE sha = ? AND keep = 1').get(sha) as { id: number } | undefined;
@@ -370,17 +829,40 @@ export class LibraryStore {
         .prepare("INSERT INTO library_docs (name, kind, size, sha, ext, title, status, keep, origin, passages, chars, learn, summary, added_at, read_at) VALUES (?, ?, ?, ?, 'txt', ?, 'ready', 1, 'library', ?, ?, 'done', ?, ?, ?)")
         .run(cleanName(d.name), d.kind ?? null, body.length, sha, d.title ?? null, d.passages.length, chars, d.summary ?? null, d.addedAt ?? this.#now().toISOString(), this.#now().toISOString()).lastInsertRowid,
     );
-    const put = this.db.prepare('INSERT INTO library_passages (doc_id, ord, place, heading, text) VALUES (?, ?, ?, ?, ?)');
-    d.passages.forEach((p, i) => put.run(id, i, String(p.place ?? '').slice(0, 80), p.heading ?? null, String(p.text)));
-    this.#vecCache = undefined;
+    // Phase 74: pages come back from "page N" places (citations keep working), with the contents.
+    const put = this.db.prepare('INSERT INTO library_passages (doc_id, ord, place, heading, text, page) VALUES (?, ?, ?, ?, ?, ?)');
+    let pages = 0;
+    d.passages.forEach((p, i) => {
+      const place = String(p.place ?? '').slice(0, 80);
+      const pm = /^page (\d+)$/.exec(place);
+      const page = pm ? Number(pm[1]) : null;
+      if (page && page > pages) pages = page;
+      put.run(id, page ? page * 1000 + i : i, place, p.heading ?? null, String(p.text), page);
+    });
+    if (pages || d.overview) this.db.prepare('UPDATE library_docs SET pages = ?, overview = ? WHERE id = ?').run(pages, d.overview?.slice(0, 4000) ?? null, id);
+    if (Array.isArray(d.sections) && d.sections.length) {
+      const sput = this.db.prepare('INSERT INTO library_sections (doc_id, ord, level, title, page, page_end, source, summary) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
+      d.sections.slice(0, 5000).forEach((x, i) => sput.run(id, i, Number(x.level) || 1, String(x.title ?? '').slice(0, 200), Number(x.page) || 0, Number(x.pageEnd) || 0, 'outline', x.summary ? String(x.summary).slice(0, 1200) : null));
+    }
+    this.#index = undefined;
     return id;
   }
 
   /** For export: kept documents with the text she read. */
-  exportDocs(): { id: number; name: string; kind: string | null; title: string | null; summary: string | null; addedAt: string; passages: { place: string; heading: string | null; text: string }[] }[] {
+  exportDocs(): { id: number; name: string; kind: string | null; title: string | null; summary: string | null; overview: string | null; addedAt: string; passages: { place: string; heading: string | null; text: string }[]; sections: { level: number; title: string; page: number; pageEnd: number; summary: string | null }[] }[] {
     return this.list()
       .filter((d) => d.status === 'ready')
-      .map((d) => ({ id: d.id, name: d.name, kind: d.kind, title: d.title, summary: d.summary, addedAt: d.addedAt, passages: this.passages(d.id, { limit: 1_000_000 }).map((p) => ({ place: p.place, heading: p.heading, text: p.text })) }));
+      .map((d) => ({
+        id: d.id,
+        name: d.name,
+        kind: d.kind,
+        title: d.title,
+        summary: d.summary,
+        overview: d.overview,
+        addedAt: d.addedAt,
+        passages: this.passages(d.id, { limit: 1_000_000 }).map((p) => ({ place: p.place, heading: p.heading, text: p.text })),
+        sections: this.sections(d.id).map((x) => ({ level: x.level, title: x.title, page: x.page, pageEnd: x.pageEnd, summary: x.summary })),
+      }));
   }
 
   /** Removes a document, its passages and (if nothing else uses it) the original file. */
@@ -389,10 +871,11 @@ export class LibraryStore {
     if (!doc) return false;
     const ext = (this.db.prepare('SELECT ext FROM library_docs WHERE id = ?').get(id) as { ext: string }).ext;
     this.#dropPassages(id);
+    for (const t of ['library_jobs', 'library_ocr', 'library_sections']) this.db.prepare(`DELETE FROM ${t} WHERE doc_id = ?`).run(id);
     this.db.prepare('DELETE FROM library_docs WHERE id = ?').run(id);
     const others = (this.db.prepare('SELECT COUNT(*) AS n FROM library_docs WHERE sha = ?').get(doc.sha) as { n: number }).n;
     if (!others) rmSync(join(this.dir, `${doc.sha.slice(0, 40)}.${ext}`), { force: true });
-    this.#vecCache = undefined;
+    this.#index = undefined;
     return true;
   }
 
@@ -456,13 +939,13 @@ export class LibraryStore {
   }
 
   /** Makes vectors for up to a batch of passages that don't have one for the current model. */
-  async indexVectors(target: EmbedTarget | undefined, limit = VECTOR_BATCH): Promise<number> {
+  async indexVectors(target: EmbedTarget | undefined, limit = VECTOR_BATCH, docId?: number): Promise<number> {
     if (!target) return 0;
     const todo = this.db
       .prepare(
-        "SELECT p.id, p.text, p.heading FROM library_passages p JOIN library_docs d ON d.id = p.doc_id LEFT JOIN library_vectors v ON v.passage_id = p.id WHERE d.status = 'ready' AND (v.passage_id IS NULL OR v.model != ?) ORDER BY d.keep ASC, p.id LIMIT ?",
+        `SELECT p.id, p.doc_id, p.text, p.heading FROM library_passages p JOIN library_docs d ON d.id = p.doc_id LEFT JOIN library_vectors v ON v.passage_id = p.id WHERE d.status = 'ready' AND (v.passage_id IS NULL OR v.model != ?)${docId ? ' AND p.doc_id = ?' : ''} ORDER BY d.keep ASC, p.id LIMIT ?`,
       )
-      .all(target.model, limit) as { id: number; text: string; heading: string | null }[];
+      .all(target.model, ...(docId ? [docId] : []), limit) as { id: number; doc_id: number; text: string; heading: string | null }[];
     if (!todo.length) return 0;
     try {
       const doc = (t: string) => (/nomic-embed/i.test(target.model) ? `search_document: ${t}` : t);
@@ -471,7 +954,9 @@ export class LibraryStore {
       this.db.exec('BEGIN');
       todo.forEach((p, i) => put.run(p.id, target.model, new Uint8Array(vecs[i].buffer)));
       this.db.exec('COMMIT');
-      this.#vecCache = undefined;
+      // New vectors join the search block as they come (a full rebuild only after changes).
+      if (this.#index?.model === target.model) todo.forEach((p, i) => this.#index!.add(p.id, p.doc_id, vecs[i]));
+      else this.#index = undefined;
       this.vectorError = undefined;
       return todo.length;
     } catch (err) {
@@ -486,21 +971,17 @@ export class LibraryStore {
     return (this.db.prepare('SELECT COUNT(*) AS n FROM library_vectors WHERE model = ?').get(model) as { n: number }).n;
   }
 
-  #vectors(model: string): { id: number; vec: Float32Array }[] {
-    if (this.#vecCache?.model === model) return this.#vecCache.rows;
-    const rows = (this.db.prepare('SELECT passage_id, vec FROM library_vectors WHERE model = ?').all(model) as { passage_id: number; vec: Uint8Array }[]).map((r) => ({
-      id: r.passage_id,
-      vec: new Float32Array(r.vec.buffer.slice(r.vec.byteOffset, r.vec.byteOffset + r.vec.byteLength)),
-    }));
-    this.#vecCache = { model, rows };
-    return rows;
+  /** The meaning-search block for a model (built on first use, then kept up to date). */
+  vectorIndex(model: string): VectorIndex {
+    if (this.#index?.model !== model) this.#index = VectorIndex.load(this.db, model);
+    return this.#index;
   }
 
   /** Passages closest in meaning to the text (best first), above the floor. */
   async searchMeaning(target: EmbedTarget | undefined, text: string, opts: { conversationId?: string; docIds?: number[]; limit?: number; timeoutMs?: number } = {}): Promise<{ passage: Passage; score: number }[]> {
     if (!target || !text.trim()) return [];
-    const rows = this.#vectors(target.model);
-    if (!rows.length) return [];
+    const index = this.vectorIndex(target.model);
+    if (!index.count) return [];
     let q: Float32Array;
     try {
       const query = /nomic-embed/i.test(target.model) ? `search_query: ${text.slice(0, 2000)}` : /mxbai-embed/i.test(target.model) ? `Represent this sentence for searching relevant passages: ${text.slice(0, 2000)}` : text.slice(0, 2000);
@@ -510,10 +991,12 @@ export class LibraryStore {
       return [];
     }
     const scope = this.#scope(opts.conversationId, opts.docIds);
-    const allowed = new Set((this.db.prepare(`SELECT p.id FROM library_passages p JOIN library_docs d ON d.id = p.doc_id WHERE ${scope.sql}`).all(...scope.args) as { id: number }[]).map((r) => r.id));
-    const scored = rows
-      .filter((r) => allowed.has(r.id))
-      .map((r) => ({ id: r.id, score: cosine(q, r.vec) }))
+    const allowed = new Set((this.db.prepare(`SELECT d.id FROM library_docs d WHERE ${scope.sql}`).all(...scope.args) as { id: number }[]).map((r) => r.id));
+    // Approximate scores over the whole block, then the best few exactly.
+    const cands = index.candidates(q, allowed, Math.max(48, (opts.limit ?? 8) * 4));
+    const exact = exactScores(this.db, target.model, q, cands.map((c) => c.id));
+    const scored = cands
+      .map((c) => ({ id: c.id, score: exact.get(c.id) ?? c.score }))
       .filter((r) => r.score >= PASSAGE_MIN_SCORE)
       .sort((a, b) => b.score - a.score)
       .slice(0, opts.limit ?? 8);

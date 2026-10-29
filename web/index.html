@@ -820,6 +820,7 @@
           <label class="row small"><input id="lib-learn" type="checkbox" checked> Remember the key points</label>
         </div>
         <p id="lib-upload-status" class="small" role="status"></p>
+        <progress id="lib-upload-bar" class="lib-progress" max="1" value="0" hidden></progress>
         <div class="lib-tools" data-nodirty>
           <input id="lib-q" type="search" placeholder="Search her library">
         </div>
@@ -833,18 +834,45 @@
         <h2 id="lib-doc-name"></h2>
         <p id="lib-doc-about" class="muted small"></p>
         <p id="lib-doc-state" class="small"></p>
+        <div id="lib-doc-job" class="lib-job" hidden>
+          <p id="lib-doc-job-text" class="small" role="status"></p>
+          <progress id="lib-doc-job-bar" class="lib-progress" max="1" value="0"></progress>
+          <div id="lib-doc-ocr-ask" class="lib-ocr-ask" hidden>
+            <p id="lib-doc-ocr-text" class="small"></p>
+            <div class="actions-left" data-nodirty>
+              <button id="lib-doc-ocr-yes" type="button" class="small">Read them with this model</button>
+              <button id="lib-doc-ocr-no" type="button" class="ghost small">Skip the scanned pages</button>
+            </div>
+          </div>
+          <div class="actions-left" data-nodirty>
+            <button id="lib-doc-pause" type="button" class="ghost small">Pause</button>
+            <button id="lib-doc-resume" type="button" class="ghost small" hidden>Resume</button>
+            <button id="lib-doc-cancel" type="button" class="ghost small danger-text" title="She stops reading. What she read so far stays in her library.">Cancel reading</button>
+          </div>
+        </div>
         <ul id="lib-doc-warnings" class="small muted"></ul>
         <div class="actions-left" data-nodirty>
           <a id="lib-doc-download" class="button ghost small" href="#" download>Download</a>
+          <a id="lib-doc-pdf" class="button ghost small" href="#" target="_blank" rel="noopener" hidden>Open the PDF</a>
           <button id="lib-doc-keep" type="button" class="ghost small" hidden>Keep in her library</button>
           <button id="lib-doc-reread" type="button" class="ghost small" title="Read the file again from the start, for example after it couldn't be read.">Read it again</button>
           <button id="lib-doc-relearn" type="button" class="ghost small" title="Pick out again what to remember from it (the notes in Memory).">Learn again</button>
           <button id="lib-doc-delete" type="button" class="ghost small danger-text">Remove…</button>
         </div>
+        <div id="lib-doc-overview-box" hidden>
+          <h3>What it covers</h3>
+          <p id="lib-doc-overview" class="small"></p>
+        </div>
+        <div id="lib-doc-contents-box" hidden>
+          <h3>Contents</h3>
+          <p class="muted small">Chapters and sections with their pages, and a short summary of each. Press a page to read the text from there.</p>
+          <ol id="lib-doc-contents" class="lib-contents"></ol>
+        </div>
         <h3>What she learned from it</h3>
         <p class="muted small">Notes she keeps in her memory, each with the words it came from. Delete any that are wrong or not worth keeping.</p>
         <div id="lib-doc-facts" class="lib-facts"></div>
-        <h3>The text she read</h3>
+        <h3 id="lib-doc-text-head">The text she read</h3>
+        <p id="lib-doc-page-row" class="small" hidden><span id="lib-doc-page-note"></span> <a id="lib-doc-page-pdf" href="#" target="_blank" rel="noopener">Open the PDF at this page</a></p>
         <div id="lib-doc-text" class="lib-text"></div>
         <p><button id="lib-doc-more" type="button" class="ghost small" hidden>Show more</button></p>
       </section>
@@ -1762,6 +1790,39 @@
       <label id="search-key-row">API key <input id="search-key" type="password" autocomplete="off" placeholder="leave blank to keep current"></label>
       <label id="search-url-row" hidden>SearXNG URL <input id="search-url" placeholder="http://127.0.0.1:8888"></label>
       <p id="search-status" class="muted small"></p>
+        </section>
+        <section class="settings-page" data-page="ab-library" data-group="Abilities" data-title="Library" data-owner-only hidden>
+      <p class="muted small">How big the documents in her library may be, and how she reads long ones. A 1,000-page book is read in the background, page by page, and can be paused; every scanned page is read by her picture model. Saved as you change it.</p>
+      <label>Largest document
+        <select id="lib-max-mb">
+          <option value="100">Up to 100 MB</option>
+          <option value="250">Up to 250 MB</option>
+          <option value="500">Up to 500 MB</option>
+          <option value="1024">Up to 1 GB</option>
+          <option value="2048">Up to 2 GB</option>
+        </select>
+      </label>
+      <label id="lib-member-max-row">Largest document for household members
+        <select id="lib-member-max-mb">
+          <option value="25">Up to 25 MB</option>
+          <option value="50">Up to 50 MB</option>
+          <option value="100">Up to 100 MB</option>
+          <option value="250">Up to 250 MB</option>
+          <option value="500">Up to 500 MB</option>
+          <option value="1024">Up to 1 GB</option>
+        </select>
+      </label>
+      <label>Scanned pages
+        <select id="lib-ocr">
+          <option value="ask">Read them; ask me first when a cloud model would</option>
+          <option value="local">Read them only with a model on this computer</option>
+          <option value="off">Don't read scanned pages</option>
+        </select>
+      </label>
+      <label><span>Background reading: <span id="lib-speed-n"></span></span><input id="lib-speed" type="range" min="1" max="3" step="1" value="2"></label>
+      <p class="muted small">Her picture model reads the scanned pages. Pick it in <a href="/#view=settings:models-routes">Which model does what → Looking at pictures</a>.</p>
+      <p class="muted small">Files over 100 MB need to be PDFs. Behind a reverse proxy, big files are sent in 8 MB pieces, so a proxy limit of 10 MB or more is enough.</p>
+      <p id="lib-settings-status" class="muted small" role="status"></p>
         </section>
         <section class="settings-page" data-page="ab-mcp" data-group="Abilities" data-title="Other programs (MCP)" data-owner-only hidden>
       <p class="muted small">Plug-in tool servers (Model Context Protocol), such as your email or calendar. Their tools appear above: ones the server marks as read-only run on their own, everything that sends, changes or deletes asks you first.</p>

@@ -1,5 +1,8 @@
 // Phase 44: her library. A window listing the documents she keeps (add, search, open one to see
 // what she learned and the text she read, remove), plus the upload used by the 📎 in chat.
+// Phase 74: big files (up to ~1 GB) go up in 8 MB pieces that resume after a dropped connection;
+// a long document shows its reading progress (Pause / Resume / Cancel), its contents with section
+// summaries, and opens at a page (the links in her answers: /#view=library:<id>:<page>).
 import { serverText, t } from './naming.js';
 
 const $ = (sel) => document.querySelector(sel);
@@ -31,7 +34,9 @@ const sizeText = (n) => (n >= 1048576 ? `${(n / 1048576).toFixed(1)} MB` : `${Ma
  * Uploads one document. keep = in her library; otherwise only for `conversationId` (read once).
  * Returns the stored document (or the copy already in her library).
  */
-export async function uploadDoc(file, { keep = true, conversationId = null, learn = true } = {}) {
+export async function uploadDoc(file, { keep = true, conversationId = null, learn = true, onProgress = () => {} } = {}) {
+  // Big files: in pieces, so proxies with a request-size limit and dropped connections don't matter.
+  if (file.size > CHUNKED_FROM) return uploadInPieces(file, { keep, conversationId, learn, onProgress });
   const q = new URLSearchParams({ name: file.name, keep: keep ? '1' : '0', learn: learn ? '1' : '0' });
   if (conversationId) q.set('conversation', conversationId);
   const res = await fetch(`/api/library?${q}`, { method: 'POST', headers: { 'content-type': 'application/octet-stream' }, body: file });
@@ -39,6 +44,87 @@ export async function uploadDoc(file, { keep = true, conversationId = null, lear
   if (!res.ok) throw new Error(serverText(data, `HTTP ${res.status}`));
   return data.doc;
 }
+
+/** Files bigger than this are sent in pieces (the server says how big a piece is). */
+const CHUNKED_FROM = 8 * 1024 * 1024;
+
+async function uploadInPieces(file, { keep, conversationId, learn, onProgress }) {
+  const start = await api('/library/uploads', { method: 'POST', body: { name: file.name, size: file.size, keep, learn, ...(conversationId ? { conversation: conversationId } : {}) } });
+  const piece = start.chunkBytes || CHUNKED_FROM;
+  let sent = start.received || 0;
+  let tries = 0;
+  onProgress(sent, file.size);
+  while (sent < file.size) {
+    const end = Math.min(file.size, sent + piece);
+    try {
+      const res = await fetch(`/api/library/uploads/${start.id}?offset=${sent}`, { method: 'PUT', headers: { 'content-type': 'application/octet-stream' }, body: file.slice(sent, end) });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        sent = data.received;
+        tries = 0;
+      } else if (res.status === 409 && typeof data.received === 'number') sent = data.received; // the server has a different amount: go on from there
+      else throw Object.assign(new Error(serverText(data, `HTTP ${res.status}`)), { status: res.status });
+    } catch (err) {
+      // A dropped connection: ask where the server got to and go on from there (a few tries).
+      if (err.status && err.status !== 400) throw err;
+      if (++tries > 6) throw err;
+      await new Promise((r) => setTimeout(r, Math.min(15_000, 1000 * 2 ** tries)));
+      const st = await api(`/library/uploads/${start.id}`).catch(() => null);
+      if (st) sent = st.received;
+    }
+    onProgress(sent, file.size);
+  }
+  const done = await api(`/library/uploads/${start.id}/done`, { method: 'POST', body: {} });
+  return done.doc;
+}
+
+const mb = (n) => (n / 1048576).toFixed(n >= 100 * 1048576 ? 0 : 1);
+
+/** "about 6 minutes left" */
+function timeLeft(sec) {
+  if (!sec) return '';
+  if (sec < 90) return t('about a minute left');
+  if (sec < 90 * 60) return t('about {n} minutes left', { n: Math.round(sec / 60) });
+  return t('about {n} hours left', { n: (sec / 3600).toFixed(1) });
+}
+
+/** "about 6 minutes" (for the estimate before reading scanned pages). */
+function duration(sec) {
+  if (sec < 90) return t('about a minute');
+  if (sec < 90 * 60) return t('about {n} minutes', { n: Math.round(sec / 60) });
+  return t('about {n} hours', { n: (sec / 3600).toFixed(1) });
+}
+
+/** What a long document's reading job is doing, in a few words ("Reading page 412 of 980 · about 6 minutes left"). */
+export function jobText(job) {
+  if (!job || job.phase === 'done') return '';
+  if (job.phase === 'cancelled') return t('Reading was cancelled.');
+  const left = timeLeft(job.etaSeconds);
+  let what;
+  if (job.needs === 'ocr-approval') what = t('Waiting for you: read the scanned pages with a cloud model?');
+  else if (job.needs === 'local-ocr') what = t('Waiting for a picture model on this computer to read the scanned pages.');
+  else if (job.phase === 'text') what = job.pages ? t('Reading page {n} of {total}', { n: Math.min(job.page + 1, job.pages), total: job.pages }) : t('Opening it…');
+  else if (job.phase === 'ocr') what = t('Reading scanned pages: {n} of {total}', { n: job.ocrDone, total: job.ocrTotal });
+  else if (job.phase === 'structure') what = t('Finding the chapters and sections…');
+  else if (job.phase === 'summaries') what = t('Writing a summary of each section: {n} of {total}', { n: job.stepsDone, total: job.stepsTotal });
+  else if (job.phase === 'learn') what = t('Learning the key points…');
+  else what = t('Getting it ready for meaning search…');
+  if (job.paused) return `${t('Paused')} · ${what}`;
+  return left && !job.needs ? `${what} · ${left}` : what;
+}
+
+/** How far along it is (0 to 1), for the progress bar. */
+function jobFraction(job) {
+  if (!job) return 0;
+  const parts = { text: 0, ocr: 0.6, structure: 0.75, summaries: 0.78, learn: 0.9, vectors: 0.97, done: 1, cancelled: 1 };
+  const base = parts[job.phase] ?? 0;
+  if (job.phase === 'text') return job.pages ? 0.6 * (job.page / job.pages) : 0;
+  if (job.phase === 'ocr') return 0.6 + 0.15 * (job.ocrTotal ? job.ocrDone / job.ocrTotal : 1);
+  if (job.phase === 'summaries' || job.phase === 'learn') return base + 0.1 * (job.stepsTotal ? Math.min(1, job.stepsDone / job.stepsTotal) : 0);
+  return base;
+}
+
+const jobRunning = (job) => job && !['done', 'cancelled'].includes(job.phase);
 
 /** Waits until documents are read (or a limit), calling back with progress text. */
 export async function waitRead(ids, onState = () => {}, ms = 90_000) {
@@ -48,18 +134,24 @@ export async function waitRead(ids, onState = () => {}, ms = 90_000) {
     docs = (await Promise.all(ids.map((id) => api(`/library/${id}`).then((r) => r.doc).catch(() => null)))).filter(Boolean);
     const busy = docs.filter((d) => d.status === 'waiting' || d.status === 'reading');
     if (!busy.length) return docs;
-    onState(`${t('Reading')} ${busy.map((d) => d.name).join(', ')}…`);
+    const job = busy.find((d) => d.job)?.job;
+    onState(job ? `${busy.map((d) => d.name).join(', ')}: ${jobText(job)}` : `${t('Reading')} ${busy.map((d) => d.name).join(', ')}…`);
     await new Promise((r) => setTimeout(r, 1200));
   }
   return docs;
 }
 
-function statusText(d) {
+function statusText(d, { withJob = true } = {}) {
+  // The document page shows the job in its own panel (with the bar and buttons), so not twice.
+  if (!withJob && jobRunning(d.job)) d = { ...d, job: null, learn: null, status: d.status === 'reading' || d.status === 'waiting' ? 'ready' : d.status };
+  if (jobRunning(d.job) && (d.status === 'waiting' || d.status === 'reading' || d.job.paused || d.job.needs)) return jobText(d.job);
   if (d.status === 'waiting' || d.status === 'reading') return t('Reading it…');
   if (d.status === 'failed') return `${t("Couldn't read it")}: ${d.error ?? ''}`;
   const bits = [];
   if (d.passages) bits.push(`${d.passages} ${d.passages === 1 ? t('passage') : t('passages')}`);
+  if (d.pages) bits.push(`${d.pages} ${t('pages')}`);
   if (d.pagesSeen) bits.push(`${d.pagesSeen} ${t('scanned pages read')}`);
+  if (jobRunning(d.job)) bits.push(jobText(d.job));
   if (d.learn === 'waiting' || d.learn === 'learning') bits.push(t('learning the key points…'));
   else if (d.learn === 'done') bits.push(d.facts ? `${d.facts} ${d.facts === 1 ? t('note in her memory') : t('notes in her memory')}` : t('nothing to remember'));
   else if (d.learn === 'failed') bits.push(t("couldn't learn from it yet"));
@@ -98,20 +190,80 @@ async function loadList() {
     }),
   );
   // Still reading or learning: look again shortly.
-  if (r.docs.some((d) => ['waiting', 'reading'].includes(d.status) || ['waiting', 'learning'].includes(d.learn))) scheduleRefresh();
+  if (r.docs.some((d) => ['waiting', 'reading'].includes(d.status) || ['waiting', 'learning'].includes(d.learn) || (jobRunning(d.job) && !d.job.paused && !d.job.needs))) scheduleRefresh();
 }
 
 let refreshTimer = 0;
 function scheduleRefresh() {
-  clearTimeout(refreshTimer);
+  // Phase 74: a long document sends an event for every page; a look already planned stays
+  // planned (restarting the timer on each event would put it off until the reading ends).
+  if (refreshTimer) return;
   refreshTimer = setTimeout(() => {
+    refreshTimer = 0;
     if (!$('#library').open) return;
     if (current) void openDoc(current, { quiet: true });
     else void loadList();
   }, 2500);
 }
 
-async function openDoc(id, { quiet = false } = {}) {
+function showJob(d) {
+  const job = d.job;
+  const on = jobRunning(job);
+  $('#lib-doc-job').hidden = !on;
+  if (!on) return;
+  $('#lib-doc-job-text').textContent = jobText(job);
+  $('#lib-doc-job-bar').value = jobFraction(job);
+  $('#lib-doc-pause').hidden = job.paused;
+  $('#lib-doc-resume').hidden = !job.paused && job.needs !== 'local-ocr';
+  const ask = job.needs === 'ocr-approval' && job.estimate && !job.estimate.error;
+  $('#lib-doc-ocr-ask').hidden = !ask;
+  if (ask) {
+    const e = job.estimate;
+    const cost = e.usd === null ? t('the cost is not known for this model (see Settings → Data & health → Usage and costs)') : t('about ${usd}', { usd: e.usd.toFixed(2) });
+    $('#lib-doc-ocr-text').textContent = t('{n} scanned pages need her picture model, {model} ({provider}). It runs in the cloud: {time}, {cost}.', { n: e.pages, model: e.model, provider: e.provider, time: duration(e.seconds), cost });
+  }
+}
+
+/** The contents of a long document: chapters and sections, their pages and summaries. */
+function showContents(d, sections) {
+  $('#lib-doc-overview-box').hidden = !d.overview;
+  $('#lib-doc-overview').textContent = d.overview ?? '';
+  $('#lib-doc-contents-box').hidden = !sections?.length;
+  $('#lib-doc-contents').replaceChildren(
+    ...(sections ?? []).slice(0, 600).map((sec) => {
+      const li = el('li', `lib-sec lib-sec-${Math.min(4, sec.level)}`);
+      const head = el('div', 'lib-sec-head');
+      head.append(el('span', 'lib-sec-title', sec.title));
+      if (sec.page) {
+        const go = el('button', 'ghost small lib-sec-page', sec.pageEnd > sec.page ? t('pages {a}–{b}', { a: sec.page, b: sec.pageEnd }) : t('page {n}', { n: sec.page }));
+        go.type = 'button';
+        go.addEventListener('click', () => void showPage(d, sec.page));
+        head.append(go);
+      }
+      li.append(head);
+      if (sec.summary) li.append(el('p', 'muted small lib-sec-summary', sec.summary));
+      return li;
+    }),
+  );
+}
+
+/** Shows the text from a page on (and a link that opens the PDF itself there). */
+async function showPage(d, page) {
+  const r = await api(`/library/${d.id}/passages?page=${page}&limit=40`).catch(() => ({ passages: [] }));
+  textFrom = Infinity; // "Show more" goes on from the start view only
+  $('#lib-doc-text').replaceChildren();
+  showText(r.passages);
+  $('#lib-doc-more').hidden = true;
+  $('#lib-doc-page-row').hidden = false;
+  $('#lib-doc-page-note').textContent = t('From page {n}.', { n: page });
+  $('#lib-doc-page-pdf').hidden = d.kind !== 'pdf';
+  $('#lib-doc-page-pdf').href = `/api/library/${d.id}/file?inline=1#page=${page}`;
+  $('#lib-doc-text-head').scrollIntoView({ block: 'start', behavior: 'smooth' });
+  const first = [...$('#lib-doc-text').querySelectorAll('.lib-passage')].find((p) => p.dataset.place === `page ${page}`);
+  first?.classList.add('lib-cited');
+}
+
+async function openDoc(id, { quiet = false, page = 0 } = {}) {
   let r;
   try {
     r = await api(`/library/${id}`);
@@ -125,10 +277,14 @@ async function openDoc(id, { quiet = false } = {}) {
   $('#lib-doc').hidden = false;
   $('#lib-doc-name').textContent = `${KIND_ICON[d.kind] ?? '📄'} ${d.name}`;
   $('#lib-doc-about').textContent = [d.title && d.title !== d.name ? d.title : '', d.summary ?? ''].filter(Boolean).join(' · ');
-  $('#lib-doc-state').textContent = `${statusText(d)}${d.keep ? '' : ` · ${t('shared in one chat only')}`}`;
+  $('#lib-doc-state').textContent = `${statusText(d, { withJob: false })}${d.keep ? '' : ` · ${t('shared in one chat only')}`}`;
   $('#lib-doc-state').classList.toggle('error', d.status === 'failed');
   $('#lib-doc-warnings').replaceChildren(...(d.warnings ?? []).map((w) => el('li', '', w)));
   $('#lib-doc-download').href = `/api/library/${d.id}/file`;
+  $('#lib-doc-pdf').hidden = d.kind !== 'pdf' || d.status !== 'ready';
+  $('#lib-doc-pdf').href = `/api/library/${d.id}/file?inline=1`;
+  showJob(d);
+  showContents(d, r.sections);
   $('#lib-doc-download').setAttribute('download', d.name);
   $('#lib-doc-keep').hidden = d.keep;
   $('#lib-doc-relearn').hidden = !d.keep || d.status !== 'ready';
@@ -153,10 +309,12 @@ async function openDoc(id, { quiet = false } = {}) {
   );
   if (!quiet) {
     textFrom = 0;
+    $('#lib-doc-page-row').hidden = true;
     $('#lib-doc-text').replaceChildren();
     showText(r.passages);
+    if (page) await showPage(d, page);
   }
-  if (['waiting', 'reading'].includes(d.status) || ['waiting', 'learning'].includes(d.learn)) scheduleRefresh();
+  if (['waiting', 'reading'].includes(d.status) || ['waiting', 'learning'].includes(d.learn) || (jobRunning(d.job) && !d.job.paused && !d.job.needs)) scheduleRefresh();
 }
 
 function showText(passages) {
@@ -173,7 +331,7 @@ function showText(passages) {
     $('#lib-doc-text').append(para);
   }
   textFrom += passages.length;
-  $('#lib-doc-more').hidden = passages.length < 40;
+  $('#lib-doc-more').hidden = passages.length < 40 || !Number.isFinite(textFrom);
 }
 
 function showHome() {
@@ -188,10 +346,20 @@ async function addFiles(files) {
   if (!docs.length) return;
   const status = $('#lib-upload-status');
   status.classList.remove('error');
+  const bar = $('#lib-upload-bar');
   for (const f of docs) {
     status.textContent = `${t('Adding')} ${f.name}…`;
     try {
-      const d = await uploadDoc(f, { keep: true, learn: $('#lib-learn').checked });
+      const d = await uploadDoc(f, {
+        keep: true,
+        learn: $('#lib-learn').checked,
+        onProgress: (sent, total) => {
+          bar.hidden = false;
+          bar.value = total ? sent / total : 0;
+          status.textContent = t('Uploading {name}: {sent} of {total} MB', { name: f.name, sent: mb(sent), total: mb(total) });
+        },
+      });
+      bar.hidden = true;
       status.textContent = d ? `${t('Added')} ${d.name}. ${t('She is reading it now.')}` : '';
       // L7: the line goes once she has read it (the list shows the result).
       if (d?.id)
@@ -200,6 +368,7 @@ async function addFiles(files) {
           void loadList();
         });
     } catch (err) {
+      bar.hidden = true;
       status.textContent = `${f.name}: ${err.message}`;
       status.classList.add('error');
     }
@@ -207,14 +376,35 @@ async function addFiles(files) {
   }
 }
 
-export async function openLibrary(docId) {
+export async function openLibrary(docId, page = 0) {
   $('#lib-upload-status').textContent = '';
   $('#lib-q').value = '';
   $('#lib-hits').hidden = true;
   if (!$('#library').open) $('#library').showModal();
-  if (docId) await openDoc(docId);
+  if (docId) await openDoc(docId, { page });
   else showHome();
 }
+
+// ---------- Phase 74: the Library settings page (Settings → Abilities → Library)
+const SPEED_WORDS = { 1: 'Gentle (chat always first)', 2: 'Normal', 3: 'Fast' };
+function speedLabel() {
+  $('#lib-speed-n').textContent = t(SPEED_WORDS[$('#lib-speed').value] ?? 'Normal');
+}
+export async function loadLibrarySettings() {
+  const r = await api('/library/settings').catch(() => null);
+  if (!r) return;
+  $('#lib-max-mb').value = String(r.maxMb);
+  $('#lib-member-max-mb').value = String(r.memberMaxMb);
+  $('#lib-ocr').value = r.ocr;
+  $('#lib-speed').value = String(r.speed);
+  speedLabel();
+  $('#lib-settings-status').textContent = '';
+}
+export async function saveLibrarySettings() {
+  await api('/library/settings', { method: 'PUT', body: { maxMb: Number($('#lib-max-mb').value), memberMaxMb: Number($('#lib-member-max-mb').value), ocr: $('#lib-ocr').value, speed: Number($('#lib-speed').value) } });
+  $('#lib-settings-status').textContent = t('Saved.');
+}
+$('#lib-speed').addEventListener('input', speedLabel);
 
 $('#open-library').addEventListener('click', () => void openLibrary());
 $('#lib-back').addEventListener('click', showHome);
@@ -241,6 +431,19 @@ $('#lib-doc-reread').addEventListener('click', async () => {
   await api(`/library/${current}/reread`, { method: 'POST', body: {} });
   await openDoc(current);
 });
+const jobAction = (what, body = {}) => async () => {
+  try {
+    await api(`/library/${current}/${what}`, { method: 'POST', body });
+  } catch (err) {
+    $('#lib-doc-job-text').textContent = err.message;
+  }
+  await openDoc(current, { quiet: true });
+};
+$('#lib-doc-pause').addEventListener('click', jobAction('pause'));
+$('#lib-doc-resume').addEventListener('click', jobAction('resume'));
+$('#lib-doc-cancel').addEventListener('click', jobAction('cancel'));
+$('#lib-doc-ocr-yes').addEventListener('click', jobAction('ocr', { approve: true }));
+$('#lib-doc-ocr-no').addEventListener('click', jobAction('ocr', { approve: false }));
 $('#lib-doc-relearn').addEventListener('click', async () => {
   await api(`/library/${current}/learn`, { method: 'POST', body: {} });
   await openDoc(current);
@@ -286,7 +489,7 @@ $('#lib-q').addEventListener('input', () => {
             const b = el('button', 'lib-hit');
             b.type = 'button';
             b.append(el('span', 'lib-hit-src small', `${h.name}${h.place ? `, ${h.place}` : ''}`), el('span', 'lib-hit-text', h.text.length > 320 ? `${h.text.slice(0, 320)}…` : h.text));
-            b.addEventListener('click', () => void openDoc(h.docId));
+            b.addEventListener('click', () => void openDoc(h.docId, { page: h.page ?? 0 }));
             return b;
           })
         : [el('p', 'muted small', t('Nothing found.'))]),
