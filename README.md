@@ -10,7 +10,7 @@ your own server, with the models you pick.
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="License: MIT"></a>
   <img src="https://img.shields.io/badge/node-%E2%89%A5%2024-339933" alt="Node 24 or newer">
   <img src="https://img.shields.io/badge/runtime%20dependencies-0-brightgreen" alt="Zero runtime dependencies">
-  <img src="https://img.shields.io/badge/tests-663%20passing-brightgreen" alt="663 tests passing">
+  <img src="https://img.shields.io/badge/tests-678%20passing-brightgreen" alt="678 tests passing">
   <a href="docs/RESULTS.md"><img src="https://img.shields.io/badge/HumanEval%20pass%401-96.3%25-informational" alt="HumanEval pass@1 96.3%"></a>
   <a href="https://github.com/farena-ai/sara/releases/latest"><img src="https://img.shields.io/github/v/release/farena-ai/sara?label=release" alt="Latest release"></a>
   <a href="https://github.com/farena-ai/sara/pkgs/container/sara"><img src="https://img.shields.io/badge/docker-amd64%20%7C%20arm64-2496ED" alt="Docker image for amd64 and arm64"></a>
@@ -24,7 +24,7 @@ your own server, with the models you pick.
   <sub>A real, unedited session on a local model (qwen3.8 27B on Ollama, one RTX 5090) on a throwaway test server: she chats in character, writes the app, asks before starting a server, opens the preview and tests it in her own browser. The last frame is the app with numbers typed in.</sub>
 </p>
 
-> **Status:** 1.5, MIT licensed, with five feature releases since 1.0 (all below). The
+> **Status:** 1.6, MIT licensed, with six feature releases since 1.0 (all below). The
 > [Android app](https://play.google.com/store/apps/details?id=com.backstagecoding.sara) is on Google
 > Play; the iPhone app and the Mac App Store version are coming as soon as Apple approves them.
 > Read [docs/DISCLOSURES.md](docs/DISCLOSURES.md) before using or sharing Sara.
@@ -33,6 +33,7 @@ your own server, with the models you pick.
 
 | Release | What you get |
 |---|---|
+| **1.6** · Group chats | Put **two to four of your companions in one conversation**: each answers in her own personality, voice and colour; pick who answers (whoever fits, everyone, take turns, or only who you @mention) and how much they banter with each other. Safety, AI notices and the strictest adult setting apply to the whole room. [How it works](docs/GROUP_CHATS.md) |
 | **1.5** · Bring her from another app | Move in from **ChatGPT, Claude, Character.AI, SillyTavern, Replika, Nomi or Kindroid**. She reads the export on your own server, then shows you what she learned (facts in your own words, your history together, her style) and saves only what you approve. [How to export from each app](docs/IMPORT.md) |
 | **1.4** · Smoothness | Watch each file she writes **grow live in the chat** as the model streams it (OpenAI, Anthropic, xAI, OpenRouter and ChatGPT plans; Ollama sends it in one piece); a talking portrait that lip-syncs with nine mouth shapes; logs in plain text or JSON |
 | **1.3** · Smarter checks | Her "did she really do what she says?" check now works in all six languages; an optional small local model as judge raises what it catches from 38% to **88%** at 95% precision ([measured](docs/RESULTS.md)) |
@@ -45,7 +46,6 @@ Every release: [CHANGELOG.md](CHANGELOG.md) · [releases](https://github.com/far
 
 | Version | Feature |
 |---|---|
-| 1.6 | **Group chats:** two to four of your companions in one conversation, each in her own voice |
 | 1.7 | **Private local mode** in the Windows and Mac apps: a model on that computer and a switch that guarantees nothing leaves it |
 | 1.8 | **Video calls** with her moving, lip-synced avatar |
 | 1.9 | **Our moments:** a shared photo album with her captions |
@@ -81,6 +81,7 @@ what matters to you and the dates you care about (see, correct or forget any of 
 back, texting first if you want (with quiet hours), and a timeline of your story together.
 Coming from another app? Bring your chats from ChatGPT, Claude, Character.AI, SillyTavern, Replika,
 Nomi or Kindroid, and approve what she learns from them first ([docs/IMPORT.md](docs/IMPORT.md)).
+Or bring two to four of your companions into one group chat ([docs/GROUP_CHATS.md](docs/GROUP_CHATS.md)).
 
 ### Coding partner
 
@@ -184,8 +185,8 @@ README or SPEC that no test checked. What she adds today is the way of working (
 asks before risky steps, shows what ran), not a higher score on these sets. Details, per-task
 results and how to re-run: [docs/RESULTS.md](docs/RESULTS.md).
 
-Plus `npm run check`: a typecheck and 670 automated tests with a scripted fake model (no network,
-no GPU): 663 pass on Windows and the other 7 are Linux-only sandbox tests, run on a Linux server.
+Plus `npm run check`: a typecheck and 685 automated tests with a scripted fake model (no network,
+no GPU): 678 pass on Windows and the other 7 are Linux-only sandbox tests, run on a Linux server.
 
 ## How Sara compares
 

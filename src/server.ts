@@ -63,6 +63,8 @@ import { proactiveSettings } from './life.ts';
 import { expressionFor, leansPlayful, moodLabel } from './inner.ts';
 import { identityOf, loadPersona, SAFETY_BOUNDARIES, validatePersona, type Persona } from './persona.ts';
 import { cleanTags, CONVERSATION_MODES, importedName, Store, type Conversation, type ConversationMode, type StoredMessage } from './store.ts';
+import { clampBanter, GROUP_CHANNEL, groupRooms, isGroupChannel, MAX_MEMBERS, MIN_MEMBERS, TURN_STYLES, type GroupRoom, type TurnStyle } from './group.ts';
+import { runGroupRound, type RoundMember } from './group-round.ts';
 import { ToolRegistry } from './tools/registry.ts';
 import { clip, PERMISSIONS, type Permission } from './tools/types.ts';
 import { resolveInside, WORKSPACE_NAME_RE, workspaceDir } from './tools/workspace.ts';
@@ -788,6 +790,72 @@ export function createSaraServer(opts: ServerOptions): Server {
       await runTracked(conversationId, content, (ev) => write(`event: ${ev.type}\ndata: ${JSON.stringify(ev)}\n\n`), opts);
     } finally {
       clearInterval(heartbeat);
+      if (!res.writableEnded) res.end();
+    }
+  }
+
+  // ---------- Phase 66: group chats (see src/group.ts, docs/GROUP_CHATS.md) ----------
+  const rooms = () => groupRooms(app.rootDir ?? app.dataDir);
+  const companionApp = (id: string): AppContext | undefined => opts.companions?.get(id)?.app ?? (id === (app.companionId ?? 'main') ? app : undefined);
+  /** A room as the apps see it: members with their name and colour (a removed companion is marked gone). */
+  const roomView = (room: GroupRoom) => ({
+    id: room.id,
+    title: room.title,
+    turnStyle: room.turnStyle,
+    banter: room.banter,
+    private: room.private,
+    createdAt: room.createdAt,
+    members: room.members.map((id, i) => {
+      const a = companionApp(id);
+      return { id, name: a?.persona.name ?? '?', color: i, ...(a ? {} : { gone: true }) };
+    }),
+  });
+  /** The room a group conversation belongs to, with each member's own copy of it. */
+  function roomOf(conv: Conversation): { room: GroupRoom; members: RoundMember[] } | undefined {
+    if (!isGroupChannel(conv.channel)) return undefined;
+    const room = rooms().get(conv.channelKey);
+    if (!room) return undefined;
+    const members = room.members.flatMap((id, i): RoundMember[] => {
+      const a = companionApp(id);
+      const copy = a?.store.findChannelConversation(GROUP_CHANNEL, room.id);
+      return a && copy ? [{ id, app: a, convId: copy.id, speaker: { id, name: a.persona.name, color: i } }] : [];
+    });
+    return { room, members };
+  }
+  const groupInfo = (conv: Conversation) => {
+    const room = isGroupChannel(conv.channel) ? rooms().get(conv.channelKey) : undefined;
+    return room ? { group: roomView(room) } : {};
+  };
+  /** One round in a group chat, streamed like a turn (each reply starts with a `speaker` event). */
+  async function streamGroup(res: ServerResponse, conv: Conversation, content: string): Promise<void> {
+    const r = roomOf(conv);
+    if (!r) throw new HttpError(404, 'This group chat is gone.');
+    if (r.members.length < MIN_MEMBERS) throw new HttpError(400, 'This group chat needs at least two of its companions.');
+    const rs = rooms();
+    if (rs.isBusy(r.room.id) || active.has(conv.id)) throw new HttpError(409, 'The group is still answering. Wait for them or press Stop.');
+    res.writeHead(200, { 'content-type': 'text/event-stream; charset=utf-8', 'cache-control': 'no-store', 'x-accel-buffering': 'no', connection: 'keep-alive', ...SECURITY_HEADERS });
+    const write = (chunk: string) => {
+      if (!res.destroyed && !res.writableEnded) res.write(chunk);
+    };
+    const heartbeat = setInterval(() => write(': ping\n\n'), 15_000);
+    const controller = new AbortController();
+    const turn: ActiveTurn = { controller, startedAt: app.now().toISOString(), status: 'thinking', detail: '', approvals: new Map() };
+    rs.setBusy(r.room.id, controller);
+    active.set(conv.id, turn);
+    app.events?.publish({ type: 'turn', conversationId: conv.id, state: 'started' });
+    try {
+      for await (const ev of runGroupRound({ room: r.room, rooms: rs, members: r.members, viewerId: app.companionId ?? 'main', text: content, signal: controller.signal })) {
+        if (ev.type === 'speaker') {
+          turn.status = 'thinking';
+          turn.detail = ev.speaker?.name ?? '';
+        } else if (ev.type !== 'retract' && ev.type !== 'group_done') trackActivity(turn, ev);
+        write(`event: ${ev.type}\ndata: ${JSON.stringify(ev)}\n\n`);
+      }
+    } finally {
+      clearInterval(heartbeat);
+      rs.setBusy(r.room.id, null);
+      active.delete(conv.id);
+      app.events?.publish({ type: 'turn', conversationId: conv.id, state: 'ended' });
       if (!res.writableEnded) res.end();
     }
   }
@@ -1730,6 +1798,19 @@ export function createSaraServer(opts: ServerOptions): Server {
           throw err;
         }
         return send(res, 200, { ...view(), id });
+      }
+      // Phase 66: another companion's face (her own picture or look), for group chat bubbles.
+      if (b && c === 'face' && !parts[3] && method === 'GET') {
+        const other = cm.get(b);
+        if (!other) throw new HttpError(404, 'No such companion.');
+        for (const ext of Object.keys(AVATAR_TYPES)) {
+          const f = join(other.app.dataDir, `avatar.${ext}`);
+          if (!existsSync(f)) continue;
+          res.writeHead(200, { 'content-type': AVATAR_TYPES[ext], 'cache-control': 'no-cache', ...SECURITY_HEADERS });
+          return void createReadStream(f).pipe(res);
+        }
+        req.url = '/sara-avatar.jpg';
+        return void other.server.emit('request', req, res);
       }
       // Which companion a conversation belongs to (answering another companion's call).
       if (b === 'of' && c && method === 'GET') {
@@ -4422,11 +4503,44 @@ export function createSaraServer(opts: ServerOptions): Server {
       return send(res, 200, q ? app.store.search(q) : []);
     }
     if (a === 'tags' && !b && method === 'GET') return send(res, 200, { tags: app.store.allTags() });
+    // Phase 66: group chats (two to four companions in one conversation).
+    if (a === 'groups') {
+      const cm = opts.companions;
+      if (!cm || opts.demo) throw new HttpError(403, 'Not available in the demo.');
+      if (!b && method === 'GET') return send(res, 200, { rooms: rooms().list().map(roomView), styles: TURN_STYLES });
+      if (!b && method === 'POST') {
+        const body = await readJson(req);
+        const ids = Array.isArray(body.members) ? [...new Set(body.members.map((x) => String(x)))] : [];
+        if (ids.length < MIN_MEMBERS || ids.length > MAX_MEMBERS) throw new HttpError(400, 'Pick 2 to 4 companions.');
+        if (ids.some((id) => !cm.get(id))) throw new HttpError(400, 'No such companion.');
+        const title = String(body.title ?? '').replace(/\s+/g, ' ').trim().slice(0, 80) || 'Group chat';
+        const turnStyle: TurnStyle = (TURN_STYLES as readonly string[]).includes(String(body.turnStyle)) ? (String(body.turnStyle) as TurnStyle) : 'fits';
+        const room = rooms().create({ title, members: ids, turnStyle, banter: clampBanter(body.banter), private: body.private === true }, app.now());
+        const copies = ids.map((id) => cm.get(id)!.app.store.createConversation({ title, channel: GROUP_CHANNEL, channelKey: room.id, private: room.private }));
+        const mine = ids.indexOf(app.companionId ?? 'main');
+        // Made from a companion who isn't in it: the app switches to the first member.
+        return send(res, 201, { room: roomView(room), conversationId: copies[Math.max(0, mine)].id, companion: mine >= 0 ? null : ids[0] });
+      }
+      if (b && !c && method === 'PATCH') {
+        const room = rooms().get(b);
+        if (!room) throw new HttpError(404, 'This group chat is gone.');
+        const body = await readJson(req);
+        const title = body.title !== undefined ? String(body.title).replace(/\s+/g, ' ').trim().slice(0, 80) || room.title : undefined;
+        const turnStyle = body.turnStyle !== undefined && (TURN_STYLES as readonly string[]).includes(String(body.turnStyle)) ? (String(body.turnStyle) as TurnStyle) : undefined;
+        const updated = rooms().update(b, { ...(title ? { title } : {}), ...(turnStyle ? { turnStyle } : {}), ...(body.banter !== undefined ? { banter: clampBanter(body.banter) } : {}) })!;
+        if (title) for (const id of room.members) {
+          const a = companionApp(id);
+          const copy = a?.store.findChannelConversation(GROUP_CHANNEL, room.id);
+          if (a && copy) a.store.updateConversation(copy.id, { title });
+        }
+        return send(res, 200, { room: roomView(updated) });
+      }
+    }
     if (a === 'conversations') {
       if (!b && method === 'GET') {
         const mine = (id: string) => !opts.demo || demoOwner.get(id) === visitorKey(req);
         const off = offStore.listConversations().filter((c) => mine(c.id)).map((c) => ({ ...c, offRecord: true, working: active.has(c.id) }));
-        return send(res, 200, opts.demo ? off : [...off, ...app.store.listConversations().map((c) => ({ ...c, working: active.has(c.id) }))]);
+        return send(res, 200, opts.demo ? off : [...off, ...app.store.listConversations().map((c) => ({ ...c, working: active.has(c.id) || (isGroupChannel(c.channel) && rooms().isBusy(String(c.channelKey))), ...groupInfo(c) }))]);
       }
       if (!b && method === 'POST') {
         const body = await readJson(req);
@@ -4494,7 +4608,7 @@ export function createSaraServer(opts: ServerOptions): Server {
           // without it, everything (phone apps and older clients).
           const { limit } = pageOpts();
           const page = limit ? cx.store.messagesPage(b, { limit }) : { messages: cx.store.messages(b), earlier: 0 };
-          return send(res, 200, { ...conv, ...(offRecord ? { offRecord: true } : {}), messages: page.messages.map(view), earlier: page.earlier, pinned: pins(), activity: activityView(b), together: cx.together?.activity(b) ?? null });
+          return send(res, 200, { ...conv, ...(offRecord ? { offRecord: true } : {}), ...groupInfo(conv), messages: page.messages.map(view), earlier: page.earlier, pinned: pins(), activity: activityView(b), together: cx.together?.activity(b) ?? null });
         }
         if (c === 'messages' && !parts[3] && method === 'GET') {
           const { limit, before } = pageOpts();
@@ -4514,6 +4628,13 @@ export function createSaraServer(opts: ServerOptions): Server {
         }
         if (!c && method === 'PATCH') {
           const body = await readJson(req);
+          // Phase 66: renaming a group chat renames the room and every member's copy.
+          const grp = roomOf(conv);
+          if (grp && body.title !== undefined && String(body.title).trim()) {
+            const title = String(body.title).replace(/\s+/g, ' ').trim().slice(0, 80);
+            rooms().update(grp.room.id, { title });
+            for (const m of grp.members) if (m.convId !== b) m.app.store.updateConversation(m.convId, { title });
+          }
           return send(
             res,
             200,
@@ -4533,6 +4654,19 @@ export function createSaraServer(opts: ServerOptions): Server {
         }
         if (!c && method === 'DELETE') {
           active.get(b)?.controller.abort();
+          // Phase 66: deleting a group chat deletes it for every companion in it (and what each learned there, if asked).
+          const grp = roomOf(conv);
+          if (grp) {
+            const forget = new URL(req.url ?? '/', 'http://x').searchParams.get('forget') === '1';
+            let forgotten = 0;
+            for (const m of grp.members) {
+              if (forget && m.app.memory) forgotten += m.app.memory.deleteForConversation(m.convId);
+              m.app.store.deleteConversation(m.convId);
+              m.app.events?.publish({ type: 'memory', conversationId: m.convId });
+            }
+            rooms().remove(grp.room.id);
+            return send(res, 200, { ok: true, forgotten });
+          }
           // What she learned from it stays unless the owner asks her to forget it too.
           const forgotten = new URL(req.url ?? '/', 'http://x').searchParams.get('forget') === '1' && cx.memory ? cx.memory.deleteForConversation(b) : 0;
           cx.store.deleteConversation(b);
@@ -4558,8 +4692,21 @@ export function createSaraServer(opts: ServerOptions): Server {
         if (c === 'stop' && method === 'POST') {
           const t = active.get(b);
           t?.controller.abort();
-          return send(res, 200, { stopped: Boolean(t) });
+          // Phase 66: Stop in a group chat ends the whole round, from any member's copy.
+          const roundStopped = isGroupChannel(conv.channel) && rooms().stop(String(conv.channelKey));
+          return send(res, 200, { stopped: Boolean(t) || roundStopped });
         }
+        if (c === 'messages' && method === 'POST' && isGroupChannel(conv.channel)) {
+          requireDisclosure(req);
+          const body = await readJson(req);
+          if ((Array.isArray(body.images) && body.images.length) || (Array.isArray(body.docs) && body.docs.length)) throw new HttpError(400, 'Photos and documents can’t be sent in group chats yet.');
+          if (body.background === true) throw new HttpError(400, 'Group chats answer in the app only for now.');
+          const content = String(body.content ?? '').trim();
+          if (!content) throw new HttpError(400, 'Message is empty');
+          if (content.length > 100_000) throw new HttpError(413, 'Message too long');
+          return streamGroup(res, conv, content);
+        }
+        if ((c === 'retry' || c === 'continue') && method === 'POST' && isGroupChannel(conv.channel)) throw new HttpError(400, 'Regenerate, edit and continue aren’t available in group chats yet.');
         if (c === 'messages' && method === 'POST') {
           requireDisclosure(req);
           // Photos are refused off the record and in the demo, so those never need the big limit.
@@ -4734,6 +4881,13 @@ export function createSaraServer(opts: ServerOptions): Server {
       }
       const conv = app.store.getConversation(convId);
       if (!conv || conv.partner) return refuseUpgrade(socket, 404, 'Not Found');
+      // Phase 66: calls are one to one; a group chat has none.
+      if (isGroupChannel(conv.channel)) {
+        const gws = acceptWebSocket(req, socket, head);
+        if (!gws) return;
+        gws.send(JSON.stringify({ type: 'ended', reason: 'Calls aren’t available in group chats.' }));
+        return gws.close(1000);
+      }
       if (!app.settings.get().disclosureAcceptedAt) return refuseUpgrade(socket, 403, 'Forbidden');
       // Security review: a private conversation only goes to hardware the owner controls, and live
       // calls run on a cloud voice service (her character, memories and earlier lines would go

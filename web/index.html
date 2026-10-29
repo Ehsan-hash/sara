@@ -105,6 +105,7 @@
       <div class="side-tools">
         <button id="new-project" type="button" class="ghost small" title="Group conversations, to-dos and notes for one project">+ Project</button>
         <button id="new-offrecord" type="button" class="ghost small" title="A conversation that is never saved: no memory, not in backups, gone when you close it">🕶 Off the record</button>
+        <button id="new-group" type="button" class="ghost small" title="A group chat with two to four of your companions" hidden>👥 Group</button>
       </div>
       <div class="side-search"><input id="conv-search" type="search" placeholder="Search everything" autocomplete="off" aria-label="Search conversations, memories, notes, to-dos and files"></div>
       <div id="tag-filter" class="tag-filter" hidden></div>
@@ -835,6 +836,32 @@
       <div class="actions">
         <button id="starter-go" type="button">Make it</button>
         <button value="cancel" class="ghost">Cancel</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="group-dialog">
+    <form method="dialog" class="settings-body">
+      <h2><span id="gc-heading-text">New group chat</span> <button type="button" class="tip" data-tip="Two to four of your companions in one chat, each with her own personality, model, memories and safety rules. Each one remembers the chat as she heard it. Web app only for now.">?</button></h2>
+      <label><span>Title <button type="button" class="tip" data-tip="The name of the chat in every member's list. Change it any time; it changes for all of them.">?</button></span><input id="gc-title" maxlength="80" placeholder="e.g. Movie night"></label>
+      <p class="muted small"><span id="gc-pick-label">Who's in it</span> · <span id="gc-count"></span> <button type="button" class="tip" data-tip="Pick two to four companions. The members can't change later: start a new group chat for a different line-up.">?</button></p>
+      <div id="gc-members" class="pick-cards gc-members" role="group" aria-labelledby="gc-pick-label"></div>
+      <label>Who answers <button type="button" class="tip" data-tip="Whoever fits: a quick helper step picks one or two. Everyone answers: each in order. Take turns: one per message, in a circle. @mention only: who you name with @. Saved as you change it.">?</button>
+        <select id="gc-style">
+          <option value="fits">Whoever fits</option>
+          <option value="everyone">Everyone answers</option>
+          <option value="turns">Take turns</option>
+          <option value="mention">@mention only</option>
+        </select>
+      </label>
+      <p id="gc-style-hint" class="muted small"></p>
+      <label><span>Banter: <span id="gc-banter-n">0</span> <button type="button" class="tip" data-tip="How many extra replies they may trade with each other after answering you (0 to 2). 0 keeps it calm and cheap; 2 is livelier. Never during a hard moment. Saved as you change it.">?</button></span><input id="gc-banter" type="range" min="0" max="2" step="1" value="0"></label>
+      <label class="row"><input id="gc-private" type="checkbox"> Private: models on my own hardware only <button type="button" class="tip" data-tip="Like a private conversation, for every member: only local models, no web or add-on tools. Set when the chat is made.">?</button></label>
+      <p class="muted small">Group chats use read-only tools only (looking things up, her past chats, her library). Each companion's AI notice is shown when the chat starts and every 3 hours.</p>
+      <p id="gc-saved" class="muted small" role="status"></p>
+      <p id="gc-error" class="error"></p>
+      <div class="actions">
+        <button id="gc-create" type="button">Start the group chat</button>
       </div>
     </form>
   </dialog>

@@ -13,6 +13,7 @@ import { initRecipes, loadRecipes } from './recipes.js';
 import { initOtherApps, keyUse, loadOtherApps } from './other-apps.js';
 import { initCards } from './cards.js';
 import { initImport, loadImport } from './import.js';
+import { groupTag, initGroups, isGroup, openGroupDialog, showGroupButton, speakerHeader } from './group.js';
 import { appLink, inPhoneApp, phoneKind } from './pair-link.js';
 const $ = (sel) => document.querySelector(sel);
 
@@ -296,7 +297,9 @@ function convRow(c) {
   a.dataset.id = c.id;
   const title = el('span', 'conv-title', c.title);
   a.append(title);
-  if (c.channel && c.channel !== 'web') a.append(el('span', 'channel-tag', c.partner ? `${c.channel} · ${c.partner}` : c.channel));
+  // Phase 66: a group chat shows who's in it.
+  if (isGroup(c)) a.append(el('span', 'channel-tag group-tag', groupTag(c)));
+  else if (c.channel && c.channel !== 'web') a.append(el('span', 'channel-tag', c.partner ? `${c.channel} · ${c.partner}` : c.channel));
   if (c.offRecord) {
     a.classList.add('offrecord');
     title.prepend('🕶 ');
@@ -502,6 +505,7 @@ function convMenu(c, anchor) {
   if (c.projectId !== null) item(t('No project'), () => moveConversation(c.id, { projectId: null }));
   item(t('+ New project…'), () => openProjectDialog(null, c.id));
   menu.append(el('hr'));
+  if (isGroup(c)) item(t('Group chat settings…'), () => openGroupDialog(c));
   item(t('Rename…'), async () => {
     const title = prompt(t('Rename conversation'), c.title)?.trim();
     if (!title || title === c.title) return;
@@ -751,7 +755,7 @@ function setComposerBusy(busy) {
 }
 
 // ---------- activity indicator ----------
-const ACTIVITY_LABEL = { thinking: 'Sara is thinking', writing: 'Sara is writing', running: 'Working', waiting: 'Waiting for your OK', listening: 'Listening', hearing: 'Hearing you' };
+const ACTIVITY_LABEL = { thinking: 'Sara is thinking', writing: 'Sara is writing', running: 'Working', waiting: 'Waiting for your OK', listening: 'Listening', hearing: 'Hearing you', answering: 'Answering' };
 const activity = { timer: null, startedAt: 0, stepAt: 0, status: '', detail: '' };
 
 function fmtSecs(ms) {
@@ -910,7 +914,7 @@ function bubble(role, text, kind, id, images = [], docs = []) {
   return div;
 }
 
-function msgActions(div, m, { last, lastUser }) {
+function msgActions(div, m, { last, lastUser, other = false }) {
   const bar = el('div', 'msg-actions');
   if (m.role === 'assistant') {
     const copy = el('button', 'ghost small', t('Copy'));
@@ -956,7 +960,8 @@ function msgActions(div, m, { last, lastUser }) {
     pin.title = on ? t('Unpin') : t('Pin to the top of this conversation');
     pin.addEventListener('click', () => setPinned(m, !(m.meta?.pinned === true), pin));
     bar.append(pin);
-    if (!state.conv?.offRecord) {
+    // Another companion's line in a group chat is hers to keep, not this one's scrapbook moment.
+    if (!state.conv?.offRecord && !other) {
       const keep = el('button', 'ghost small', '♡');
       keep.type = 'button';
       keep.title = t('Keep this moment in your scrapbook');
@@ -1027,6 +1032,8 @@ function renderMessages(messages, opts = {}) {
         b.classList.add('imported');
         b.prepend(el('span', 'msg-from muted small', `${IMPORTED_NAMES[m.meta.importedFrom] ?? t('Another assistant')} ${t('said (imported)')}`));
       }
+      // Phase 66: who said it, in a group chat (her face, name and colour).
+      if (m.role === 'assistant' && m.meta?.speaker) speakerHeader(b, m.meta.speaker);
       if (m.meta?.unverified) flagClaims(b, m.meta.unverified);
       if (Array.isArray(m.meta?.proof) && m.meta.proof.length) b.append(proofStrip(m.meta.proof));
       if (m.meta?.team?.id) {
@@ -1050,9 +1057,10 @@ function renderMessages(messages, opts = {}) {
   for (const b of els) {
     if (!b._msg) continue;
     const m = b._msg;
-    msgActions(b, m, { last: m === lastAssistant && lastAssistant.id > (lastUser?.id ?? 0), lastUser: m === lastUser && !m.meta?.forgotten && !state.conv?.partner });
+    const solo = !isGroup(state.conv);
+    msgActions(b, m, { last: solo && m === lastAssistant && lastAssistant.id > (lastUser?.id ?? 0), lastUser: solo && m === lastUser && !m.meta?.forgotten && !state.conv?.partner, other: Boolean(m.meta?.groupFrom) });
   }
-  if (!opts.busy && !state.conv?.partner && unfinished(messages)) box.append(continueBar());
+  if (!opts.busy && !state.conv?.partner && !isGroup(state.conv) && unfinished(messages)) box.append(continueBar());
   if (state.conv?.earlier) {
     const more = el('button', 'ghost small earlier-btn', t('Show earlier messages ({earlier})', { earlier: state.conv.earlier }));
     more.type = 'button';
@@ -1309,6 +1317,8 @@ async function runStream(path, body, userBubble) {
   state.streaming = controller;
   setComposerBusy(true);
   setActivity('thinking');
+  // Phase 66: in a group chat each reply starts with a "speaker" event (who is answering now).
+  let groupSpeaker = null;
   const endReply = () => {
     finishTyping(reply);
     if (reply) setReply(reply, reply._raw ?? '');
@@ -1336,6 +1346,23 @@ async function runStream(path, body, userBubble) {
         const dataLine = block.split('\n').find((l) => l.startsWith('data: '));
         if (!dataLine) continue;
         const ev = JSON.parse(dataLine.slice(6));
+        if (ev.type === 'speaker') {
+          if (voiceOn()) speaker.flush();
+          endReply();
+          groupSpeaker = ev.speaker;
+          speaker.voice = ev.speaker?.id ?? null;
+          setActivity('answering', ev.speaker?.name ?? '');
+          continue;
+        }
+        if (ev.type === 'retract') {
+          // A banter reply with nothing to add is taken back.
+          if (voiceOn()) speaker.stop();
+          finishTyping(reply);
+          (reply ?? [...document.querySelectorAll('#messages .msg.assistant')].pop())?.remove();
+          reply = null;
+          continue;
+        }
+        if (ev.type === 'group_done') continue;
         if (ev.type === 'notice') {
           const n = bubble('notice', ev.key ? serverText(ev, ev.text) : ev.text, ev.kind);
           if (ev.kind === 'disclosure' && userBubble) userBubble.before(n);
@@ -1391,9 +1418,11 @@ async function runStream(path, body, userBubble) {
           document.querySelector(`.approval[data-call="${CSS.escape(ev.id)}"]`)?.remove();
           setActivity('thinking');
         } else if (ev.type === 'token') {
-          if (activity.status !== 'writing') setActivity('writing');
+          if (groupSpeaker) setActivity('answering', groupSpeaker.name);
+          else if (activity.status !== 'writing') setActivity('writing');
           if (!reply) {
             reply = bubble('assistant', '', 'typing');
+            speakerHeader(reply, groupSpeaker);
             append(reply);
           }
           queueReply(reply, (reply._raw ?? '') + ev.text);
@@ -1434,7 +1463,7 @@ async function runStream(path, body, userBubble) {
           append(bubble('assistant', '', 'photo', undefined, [`/api/uploads/${ev.id}`]));
         } else if (ev.type === 'error') {
           dropBuilding();
-          append(bubble('error', ev.message));
+          append(bubble('error', ev.speaker ? `${ev.speaker.name}: ${serverText(ev, ev.message)}` : ev.message));
         }
         // A call that was dropped (a fallback, a blocked reply) never stays half-written.
         if (ev.type === 'notice' || ev.type === 'replace' || ev.type === 'claim_check' || ev.type === 'done') dropBuilding();
@@ -1449,6 +1478,7 @@ async function runStream(path, body, userBubble) {
     if (!controller.signal.aborted) await Promise.all([typedOut(reply), typedOut(pendingTyped)]);
     else finishTyping(pendingTyped);
     endReply();
+    speaker.voice = null;
     state.streaming = null;
     setActivity(null);
     setComposerBusy(false);
@@ -1844,6 +1874,16 @@ function renderConvSummary() {
   const c = state.conv;
   if (!c) return;
   syncCallButton();
+  // Phase 66: no photos, calls, regenerate or edit in a group chat (yet).
+  $('#main').classList.toggle('in-group', isGroup(c));
+  const input = $('#input');
+  input.dataset.solo ??= input.placeholder;
+  input.placeholder = isGroup(c) ? t('Message the group…') : input.dataset.solo;
+  if (isGroup(c)) {
+    const style = { fits: t('Whoever fits'), everyone: t('Everyone answers'), turns: t('Take turns'), mention: t('@mention only') }[c.group?.turnStyle] ?? '';
+    $('#conv-summary').textContent = `${groupTag(c)} · ${style}${c.group?.banter ? ` · ${t('Banter: {n}', { n: c.group.banter })}` : ''}`;
+    return;
+  }
   const demo = document.body.classList.contains('demo');
   $('#offrecord-bar').hidden = !c.offRecord || demo;
   $('#demo-bar').hidden = !demo;
@@ -1879,6 +1919,7 @@ async function csLoadModels(selected) {
 
 $('#conv-settings-btn').addEventListener('click', async () => {
   if (!state.conv) return;
+  if (isGroup(state.conv)) return openGroupDialog(state.conv);
   await loadProviders();
   const c = state.conv;
   $('#cs-error').textContent = '';
@@ -2397,8 +2438,9 @@ $('#cmpx-run').addEventListener('click', async () => {
 
 // ---------- voice ----------
 const voice = { cfg: null, mic: new Mic(), call: null };
-const speaker = new Speaker(async (text) => {
-  const res = await fetch('/api/voice/speak', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ text }) });
+const speaker = new Speaker(async (text, who) => {
+  // Phase 66: a group chat line goes to its companion's own voice (her settings), by the companion header.
+  const res = await fetch('/api/voice/speak', { method: 'POST', headers: { 'content-type': 'application/json', ...(who ? { 'x-sara-companion': who } : {}) }, body: JSON.stringify({ text }) });
   return res.ok ? res.blob() : null;
 });
 const voiceOn = () => localStorage.getItem('sara.speak') === '1' || Boolean(voice.call?.active);
@@ -3992,6 +4034,16 @@ async function catchUp(away) {
 
 // ---------- Phase 31: companions ----------
 const COMPANION_COOKIE = 'sara_companion';
+// Phase 66: group chats (web/group.js).
+initGroups({ api, openConversation, loadConversations, switchCompanion: (id, convId) => switchCompanion(id, convId), companions: () => state.companions?.companions ?? [], current: () => state.companions?.companions.find((c) => c.current)?.id ?? null,
+  // The open chat follows its room's settings right away (the line under the title).
+  onRoom: (room) => {
+    if (state.conv?.group?.id !== room.id) return;
+    state.conv = { ...state.conv, group: room, title: room.title };
+    $('#chat-title').textContent = room.title;
+    renderConvSummary();
+  },
+});
 /** Switches the whole app to another companion (the page reloads as her). */
 function switchCompanion(id, convId) {
   document.cookie = `${COMPANION_COOKIE}=${encodeURIComponent(id)}; path=/; max-age=31536000; samesite=lax${location.protocol === 'https:' ? '; secure' : ''}`;
@@ -4029,6 +4081,7 @@ async function loadCompanions() {
   state.companions = d;
   const many = d.companions.length > 1;
   $('#companion-switch').hidden = !many;
+  showGroupButton(d.companions.length);
   const menu = $('#companion-menu');
   menu.replaceChildren(
     ...d.companions.map((c) => {
@@ -5349,7 +5402,7 @@ function usageWords(x) {
   return `${t('{tokens} tokens ({input} in, {output} out)', { tokens: k(x.tokens), input: k(x.input), output: k(x.output) })} · ${cost}`;
 }
 let usageData = null;
-const PURPOSE_WORDS = { chat: 'Chat', coding: 'Coding', adult: 'Chat (adult)', private: 'Private chats', vision: 'Photos', research: 'Research', team: 'Team tasks', job: 'Background jobs', memory: 'Memory', library: 'Library reading', 'her-life': 'Her life', background: 'Helpers', quick: 'Quick helpers', writing: 'Writing', planning: 'Planning', other: 'Other' };
+const PURPOSE_WORDS = { group: 'Group chats', chat: 'Chat', coding: 'Coding', adult: 'Chat (adult)', private: 'Private chats', vision: 'Photos', research: 'Research', team: 'Team tasks', job: 'Background jobs', memory: 'Memory', library: 'Library reading', 'her-life': 'Her life', background: 'Helpers', quick: 'Quick helpers', writing: 'Writing', planning: 'Planning', other: 'Other' };
 const numOrEmpty = (v) => (v ? String(v) : '');
 function renderUsage() {
   const d = usageData;

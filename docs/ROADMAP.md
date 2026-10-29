@@ -71,7 +71,7 @@ version's details are in the [changelog](../CHANGELOG.md).
 | 63 | Smoothness: tool calls that stream as they happen, a more expressive talking portrait, server logs | ✅ 1.4 |
 | 64 | Be found: app stores, NAS catalogs, Home Assistant's store and directories | ongoing |
 | 65 | Bring her from another app: import chats and characters from other companion apps | ✅ 1.5 |
-| 66 | Group chats with two or more of your companions | 1.6 |
+| 66 | Group chats with two or more of your companions | ✅ 1.6 |
 | 67 | A private local mode in the desktop apps: the model runs on that computer, nothing leaves it | 1.7 |
 | 68 | Video calls with her moving avatar | 1.8 |
 | 69 | Our moments: a shared photo album with her captions | 1.9 |

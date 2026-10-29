@@ -2,6 +2,22 @@
 
 Format: newest first. Versions follow `0.<phase>.<patch>` until 1.0.0.
 
+## 1.6.0 (2026-10-28): group chats
+
+- **Group chats** (👥 Group in the sidebar): two to four of your companions in one conversation, each
+  with her own personality, model, memories, voice and colour, and her face next to every reply.
+  Choose who answers: *whoever fits* (a quick step picks one or two), *everyone*, *take turns*, or
+  *only who you @mention* (accents optional, `@all` works). A banter slider (0–2) lets them answer
+  each other a little without you; replies per message are capped.
+- **Safety per room:** each companion's AI notice at the start and every 3 hours; the minors block
+  covers the whole room; a crisis message shows the crisis resources first and every companion
+  answers supportively (no banter); adult content only if every member has Adult mode on.
+- **Memory stays honest:** each companion keeps her own copy and remembers only what was said in
+  her presence, tagged with the room; another companion's lines are never taken as facts about you.
+- Group chats are web-only for now, read-only for tools, never shown to other apps, MCP or the
+  OpenAI-compatible API, and not available in the demo. The phone apps get them in a later release.
+  How it works: docs/GROUP_CHATS.md.
+
 ## 1.5.1 (2026-10-28)
 
 - **New front page** in all six languages: what's new in each release since 1.0, what's coming

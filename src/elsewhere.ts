@@ -17,6 +17,7 @@ const MAX_CHARS = 2400;
 function where(c: Conversation): string {
   const place = c.channel.startsWith('discord') ? 'Discord' : c.channel.startsWith('telegram') ? 'Telegram' : 'the app';
   if (c.partner) return `${place}, with other people (${c.title})`;
+  if (c.channel === 'group') return `a group chat in the app with other AI companions ("${c.title}")`;
   if (isWorkChannel(c.channel)) return `${place}, working with you in a shared channel (${c.title})`;
   return place === 'the app' ? `another chat in the app ("${c.title}")` : `${place}, just the two of you`;
 }
@@ -58,7 +59,9 @@ export function elsewhereNote(app: AppContext, current: Conversation, now: Date,
         const text = m.content.replace(/\s+/g, ' ').trim();
         const clipped = text.length > LINE_CHARS ? `${text.slice(0, LINE_CHARS)}…` : text;
         // Lines from other people already carry their name ("[Bob]: …").
-        const who = m.role === 'assistant' ? 'You' : c.partner ? '' : ownerName;
+        // Phase 66: another companion's line in a group chat carries her name.
+        const from = m.role === 'assistant' && m.meta?.groupFrom && typeof m.meta.groupFrom === 'object' ? String((m.meta.groupFrom as { name?: unknown }).name ?? '') : '';
+        const who = from ? `${from} (another AI companion)` : m.role === 'assistant' ? 'You' : c.partner ? '' : ownerName;
         return `  ${who ? `${who}: ` : ''}${clipped}`;
       });
     if (!lines.length) continue;

@@ -15,10 +15,19 @@ import { ToolError } from './tools/types.ts';
  */
 export function sharedWithApps(c: { partner: string | null; private: boolean; channel: string } | undefined): boolean {
   if (!c) return true;
-  return !c.partner && !c.private && !isImportChannel(c.channel) && !/-nsfw$/.test(c.channel);
+  // Phase 66: group chats stay in the app (like private ones), never shared with other apps.
+  return !c.partner && !c.private && !isImportChannel(c.channel) && !/-nsfw$/.test(c.channel) && c.channel !== 'group';
+}
+/** Phase 66: the companion who said a group-chat line (its meta as stored). */
+function groupFromName(meta: string | null): string {
+  try {
+    return String((JSON.parse(meta ?? '{}') as { groupFrom?: { name?: unknown } }).groupFrom?.name ?? 'Another companion');
+  } catch {
+    return 'Another companion';
+  }
 }
 /** The SQL form of sharedWithApps for a conversation row `c`. */
-const APP_SAFE_SQL = `c.partner IS NULL AND c.private = 0 AND c.channel NOT LIKE 'import-%' AND c.channel NOT LIKE '%-nsfw'`;
+const APP_SAFE_SQL = `c.partner IS NULL AND c.private = 0 AND c.channel NOT LIKE 'import-%' AND c.channel NOT LIKE '%-nsfw' AND c.channel <> 'group'`;
 
 /** Everyday words that say nothing about what a memory is about. */
 const COMMON = new Set('went go going goes gone got get gets getting did does done make made making had have having was were been said say says tell told know knew want wanted really just like yeah okay good great nice fun thing things stuff time night day lot little bit'.split(' '));
@@ -139,7 +148,7 @@ export interface RecallHit {
   when: string;
   /** Phase 51: set when it comes from imported history ("ChatGPT"): those replies weren't hers. */
   from?: string;
-  lines: { role: 'you' | 'owner' | 'other'; text: string; id: number }[];
+  lines: { role: 'you' | 'owner' | 'other'; text: string; id: number; name?: string }[];
 }
 
 const clip = (s: string, n: number) => {
@@ -220,7 +229,8 @@ export function recallMessages(
       when: localStamp(r.created_at, opts.timeZone),
       ...(from ? { from } : {}),
       // Phase 51: another assistant's replies in imported history are never "you".
-      lines: pick.map((p) => ({ role: p.role === 'user' ? 'owner' : p.meta?.includes('"importedFrom"') ? 'other' : 'you', text: clip(p.content, p.id === r.id ? 600 : 240), id: p.id })),
+      // Phase 66: another companion's line in a group chat is hers, with her name.
+      lines: pick.map((p) => ({ role: p.role === 'user' ? 'owner' : p.meta?.includes('"importedFrom"') || p.meta?.includes('"groupFrom"') ? 'other' : 'you', text: clip(p.content, p.id === r.id ? 600 : 240), id: p.id, ...(p.meta?.includes('"groupFrom"') ? { name: groupFromName(p.meta) } : {}) })),
     });
   }
   return hits;
@@ -232,7 +242,7 @@ export function formatHits(hits: RecallHit[], owner: string): string {
     .map((h) => {
       const other = h.from ?? 'another assistant';
       const where = h.from ? `in ${owner}'s imported ${h.from} history ("${h.title}"; ${h.from} said these replies, not you)` : `in "${h.title}"`;
-      const who = (l: RecallHit['lines'][number]) => (l.role === 'owner' ? (h.from ? `${owner} (to ${h.from})` : owner) : l.role === 'other' ? `${other} said` : 'You');
+      const who = (l: RecallHit['lines'][number]) => (l.role === 'owner' ? (h.from ? `${owner} (to ${h.from})` : owner) : l.role === 'other' ? (l.name ? `${l.name} (another AI companion) said` : `${other} said`) : 'You');
       return `• ${h.when}, ${where}:\n${h.lines.map((l) => `  ${who(l)}: ${l.text}`).join('\n')}`;
     })
     .join('\n');
@@ -274,12 +284,12 @@ export function lastTimeNote(app: AppContext, currentId: string, owner: string, 
   const summary = app.memory?.list({ kind: 'summary', limit: 50 }).find((m) => m.conversationId === row.id && m.supersededBy === null);
   const through = app.memory?.state(row.id).summarizedThrough ?? 0;
   const tail = (store.db
-    .prepare(`SELECT id, role, content FROM messages m WHERE conversation_id = ? AND id > ? AND role IN ('user','assistant') AND (meta IS NULL OR meta NOT LIKE '%"forgotten":true%') AND ${NOT_IMPORTED} ORDER BY id DESC LIMIT 8`)
-    .all(row.id, through) as { id: number; role: string; content: string }[]).reverse();
+    .prepare(`SELECT id, role, content, meta FROM messages m WHERE conversation_id = ? AND id > ? AND role IN ('user','assistant') AND (meta IS NULL OR meta NOT LIKE '%"forgotten":true%') AND ${NOT_IMPORTED} ORDER BY id DESC LIMIT 8`)
+    .all(row.id, through) as { id: number; role: string; content: string; meta: string | null }[]).reverse();
   if (!summary && !tail.length) return undefined;
   const parts = [`Your last conversation with ${owner} was "${row.title}" (${localStamp(row.last, tz)}).`];
   if (summary) parts.push(`What happened: ${clip(summary.content, 700)}`);
-  if (tail.length) parts.push(`${summary ? 'How it ended' : 'How it went'}:\n${tail.map((m) => `  ${m.role === 'user' ? owner : 'You'}: ${clip(m.content, 300)}`).join('\n')}`);
+  if (tail.length) parts.push(`${summary ? 'How it ended' : 'How it went'}:\n${tail.map((m) => `  ${m.role === 'user' ? owner : m.meta?.includes('"groupFrom"') ? `${groupFromName(m.meta)} (another AI companion)` : 'You'}: ${clip(m.content, 300)}`).join('\n')}`);
   return parts.join('\n');
 }
 

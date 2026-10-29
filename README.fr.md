@@ -14,7 +14,7 @@ modèles que vous choisissez.
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="License: MIT"></a>
   <img src="https://img.shields.io/badge/node-%E2%89%A5%2024-339933" alt="Node 24 or newer">
   <img src="https://img.shields.io/badge/runtime%20dependencies-0-brightgreen" alt="Zero runtime dependencies">
-  <img src="https://img.shields.io/badge/tests-663%20passing-brightgreen" alt="663 tests passing">
+  <img src="https://img.shields.io/badge/tests-678%20passing-brightgreen" alt="678 tests passing">
   <a href="docs/RESULTS.md"><img src="https://img.shields.io/badge/HumanEval%20pass%401-96.3%25-informational" alt="HumanEval pass@1 96.3%"></a>
   <a href="https://github.com/farena-ai/sara/releases/latest"><img src="https://img.shields.io/github/v/release/farena-ai/sara?label=release" alt="Latest release"></a>
   <a href="https://github.com/farena-ai/sara/pkgs/container/sara"><img src="https://img.shields.io/badge/docker-amd64%20%7C%20arm64-2496ED" alt="Docker image for amd64 and arm64"></a>
@@ -28,7 +28,7 @@ modèles que vous choisissez.
   <sub>Une vraie session, non montée, avec un modèle local (qwen3.8 27B sur Ollama, une RTX 5090) sur un serveur de test jetable : elle discute avec sa personnalité, écrit l'application, demande avant de lancer un serveur, ouvre l'aperçu et le teste dans son propre navigateur. La dernière image montre l'application avec des nombres saisis.</sub>
 </p>
 
-> **État :** 1.5, licence MIT, avec cinq versions riches en nouveautés depuis la 1.0 (toutes
+> **État :** 1.6, licence MIT, avec six versions riches en nouveautés depuis la 1.0 (toutes
 > ci-dessous). L'[app Android](https://play.google.com/store/apps/details?id=com.backstagecoding.sara) est sur Google Play ;
 > l'app iPhone et la version Mac App Store arrivent dès qu'Apple les aura approuvées. Lisez
 > [docs/DISCLOSURES.md](docs/DISCLOSURES.md) avant d'utiliser ou de partager Sara.
@@ -37,6 +37,7 @@ modèles que vous choisissez.
 
 | Version | Ce que vous y gagnez |
 |---|---|
+| **1.6** · Discussions de groupe | Réunissez **deux à quatre de vos compagnes dans une même conversation** : chacune répond avec sa personnalité, sa voix et sa couleur ; choisissez qui répond (celle qui convient, toutes, à tour de rôle, ou seulement celle que vous mentionnez avec @) et combien elles bavardent entre elles. La sécurité, les avis d'IA et le réglage adulte le plus strict valent pour tout le salon. [Comment ça marche](docs/GROUP_CHATS.md) |
 | **1.5** · Faites-la venir d'une autre app | Quittez **ChatGPT, Claude, Character.AI, SillyTavern, Replika, Nomi ou Kindroid** pour elle. Elle lit l'export sur votre propre serveur, puis vous montre ce qu'elle a appris (des faits avec vos propres mots, votre histoire commune, son style) et n'enregistre que ce que vous approuvez. [Comment exporter depuis chaque app](docs/IMPORT.md) |
 | **1.4** · Plus de fluidité | Regardez chaque fichier qu'elle écrit **grandir en direct dans le chat** pendant que le modèle le diffuse (OpenAI, Anthropic, xAI, OpenRouter et offres ChatGPT ; Ollama l'envoie d'un seul bloc) ; un portrait qui parle, synchronisé sur les lèvres avec neuf formes de bouche ; des journaux en texte brut ou en JSON |
 | **1.3** · Des vérifications plus fines | Sa vérification « a-t-elle vraiment fait ce qu'elle dit ? » fonctionne désormais dans les six langues ; un petit modèle local facultatif, utilisé comme juge, fait passer la détection de 38 % à **88 %** avec 95 % de précision ([mesuré](docs/RESULTS.md)) |
@@ -49,7 +50,6 @@ Toutes les versions : [CHANGELOG.md](CHANGELOG.md) · [versions](https://github.
 
 | Version | Fonctionnalité |
 |---|---|
-| 1.6 | **Discussions de groupe :** deux à quatre de vos compagnes dans une même conversation, chacune avec sa propre voix |
 | 1.7 | **Mode local privé** dans les applications Windows et Mac : un modèle sur cet ordinateur et un interrupteur qui garantit que rien n'en sort |
 | 1.8 | **Appels vidéo** avec son avatar animé, synchronisé sur les lèvres |
 | 1.9 | **Nos moments :** un album photo partagé avec ses légendes |
@@ -88,7 +88,7 @@ propre journée et ses loisirs, la mémoire de ce qui compte pour vous et des da
 part si vous le souhaitez (avec des heures calmes) et une frise de votre histoire commune.
 Vous venez d'une autre app ? Importez vos conversations depuis ChatGPT, Claude, Character.AI,
 SillyTavern, Replika, Nomi ou Kindroid, et validez d'abord ce qu'elle en retient
-([docs/IMPORT.md](docs/IMPORT.md)).
+([docs/IMPORT.md](docs/IMPORT.md)). Ou réunissez deux à quatre de vos compagnes dans une discussion de groupe ([docs/GROUP_CHATS.md](docs/GROUP_CHATS.md)).
 
 ### Partenaire de programmation
 
@@ -202,8 +202,8 @@ qu'aucun test ne vérifiait. Ce qu'elle apporte aujourd'hui, c'est la manière d
 lance les tests, demande avant les étapes risquées, montre ce qui a tourné), pas un meilleur score
 sur ces jeux. Détails, résultats par tâche et comment relancer : [docs/RESULTS.md](docs/RESULTS.md).
 
-En plus, `npm run check` : une vérification des types et 670 tests automatiques avec un faux modèle
-scripté (sans réseau, sans GPU) : 663 passent sous Windows, et les 7 autres sont des tests
+En plus, `npm run check` : une vérification des types et 685 tests automatiques avec un faux modèle
+scripté (sans réseau, sans GPU) : 678 passent sous Windows, et les 7 autres sont des tests
 d'isolation propres à Linux, exécutés sur un serveur Linux.
 
 ## Comparaison

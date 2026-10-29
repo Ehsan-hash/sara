@@ -206,7 +206,8 @@ summary { cursor: pointer; color: var(--accent-2); }
 .file-btn { cursor: pointer; text-decoration: underline; }
 
 /* Conversation list: projects */
-.side-tools { display: flex; gap: 6px; padding: 0 16px 6px; }
+.side-tools { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 16px 6px; }
+.side-tools > button { flex: 1 1 auto; white-space: nowrap; }
 .conv-group { margin-bottom: 6px; }
 .group-head { display: flex; align-items: center; gap: 2px; border-radius: 6px; padding-right: 4px; }
 .group-head.drop { outline: 2px dashed var(--accent); }
@@ -1254,3 +1255,20 @@ button.file-btn { background: none; border: 0; padding: 0; color: inherit; font:
 .ci-item-body { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
 .ci-edit { width: 100%; }
 @media (max-width: 600px) { .settings-body label.ci-speaker { grid-template-columns: 1fr auto; } .ci-speaker select { grid-column: 1 / -1; } }
+
+/* Phase 66: group chats: who said it (her face, name and colour), the "+ Group" window. */
+.msg.from-companion { border-left: 3px solid var(--spk, var(--accent)); }
+.msg-speaker { display: flex; align-items: center; gap: 6px; margin: -2px 0 6px; font-size: 13px; font-weight: 600; white-space: normal; }
+.msg-speaker .spk-name { color: var(--spk, var(--accent)); overflow: hidden; text-overflow: ellipsis; }
+.spk-face { width: 22px; height: 22px; border-radius: 50%; object-fit: cover; flex: none; background: var(--panel); }
+.spk-0 { --spk: #d6497f; }
+.spk-1 { --spk: #3a7bd5; }
+.spk-2 { --spk: #1f9d6c; }
+.spk-3 { --spk: #c27c0e; }
+.channel-tag.group-tag { text-transform: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gc-members .pick-card { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 8px; }
+.gc-members .pick-card .spk-face { width: 32px; height: 32px; }
+.gc-members .pick-card small { flex-basis: 100%; }
+.gc-members .pick-card:disabled { cursor: default; opacity: 0.85; }
+/* Her own mood line is about one companion: not shown above a group chat. */
+#main.in-group #attach, #main.in-group #call, #main.in-group #sara-status { display: none; }

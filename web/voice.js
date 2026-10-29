@@ -170,7 +170,8 @@ export class Speaker {
 
   #enqueue(text) {
     const gen = this.gen;
-    const item = { text, url: null };
+    // Phase 66: in a group chat each line is spoken in the voice of the companion who said it.
+    const item = { text, url: null, voice: this.voice ?? null };
     this.queue.push(item);
     this.#prefetch();
     if (!this.playing) this.#next(gen);
@@ -178,7 +179,7 @@ export class Speaker {
 
   #prefetch() {
     for (const q of this.queue.slice(0, 2)) {
-      if (!q.url) q.url = this.fetchAudio(q.text).then((blob) => (blob ? URL.createObjectURL(blob) : null)).catch(() => null);
+      if (!q.url) q.url = this.fetchAudio(q.text, q.voice).then((blob) => (blob ? URL.createObjectURL(blob) : null)).catch(() => null);
     }
   }
 

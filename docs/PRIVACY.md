@@ -69,6 +69,16 @@ MCP or the API. The uploaded file is deleted as soon as it's read, and the parse
 in the server's memory for two hours at most. *Remove imported history* (Data & health → Export and
 import) deletes everything an import kept.
 
+## Group chats
+
+In a group chat ([GROUP_CHATS.md](GROUP_CHATS.md)) each companion's reply goes to **her own** model
+and provider, with her own memories, so what reaches a cloud model depends on each member's model
+choice; a group chat made **Private** uses only models on your own hardware for every member. Each
+member keeps her own copy of the chat in her own database and remembers it as she heard it: your
+lines as yours, the other companions' lines as theirs, tagged with the chat's name. Companions who
+aren't in the chat learn nothing from it. Group chats are never shown to other apps, MCP or the API,
+and deleting one deletes every member's copy.
+
 ## Her logs
 
 Her logs stay on your server (`<data>/logs/sara.log`, the system journal or `docker logs`, and a

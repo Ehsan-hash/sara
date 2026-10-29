@@ -70,6 +70,7 @@ import type { Vault } from './vault.ts';
 import { personalize } from './identity.ts';
 import { ownerFocused } from './traits.ts';
 import { metered } from './usage.ts';
+import { cutOtherSpeakers, GROUP_TOOLS, isGroupChannel, otherLine, ownerLine, stripLeadTag } from './group.ts';
 
 export interface AppContext {
   store: Store;
@@ -280,7 +281,8 @@ export function resolveChain(app: AppContext, conv: Conversation, job: Job, adul
   const s = app.settings.get();
   const routes = s.routes ?? {};
   const has = (r?: { providerId: string }) => Boolean(r && s.providers.some((p) => p.id === r.providerId));
-  const tagFor = (p: string) => ({ purpose: p, ...(conv.id ? { conversationId: conv.id } : {}) });
+  // Phase 66: every model call in a group chat is metered as 'group' (per companion).
+  const tagFor = (p: string) => ({ purpose: isGroupChannel(conv.channel) ? 'group' : p, ...(conv.id ? { conversationId: conv.id } : {}) });
   if (conv.providerId) {
     const r = resolveProvider(app, conv.providerId, conv.model, tagFor(job === 'turn' ? (conv.mode === 'coding' ? 'coding' : 'chat') : job));
     if (conv.private && (!r.provider.config.local || isCloudModel(r.model))) throw new Error(`This conversation is private, so it only uses models on your own hardware. ${r.provider.config.label} isn't marked local: pick a local model for this conversation, or set a Private route in Settings.`);
@@ -514,7 +516,7 @@ export function stripOwnTag(text: string, name: string): string {
   return out.trim() ? out : text;
 }
 
-export function buildHistory(messages: StoredMessage[], budgetChars = Number.POSITIVE_INFINITY, loadImage?: (id: string) => ImageData | undefined): { messages: ChatMessage[]; firstKeptId: number; dropped: number } {
+export function buildHistory(messages: StoredMessage[], budgetChars = Number.POSITIVE_INFINITY, loadImage?: (id: string) => ImageData | undefined, group?: { ownerName: string }): { messages: ChatMessage[]; firstKeptId: number; dropped: number } {
   const out: ChatMessage[] = [];
   const ids: number[] = [];
   // Photos are sent for the two most recent owner messages that have them; older ones are named only.
@@ -529,7 +531,12 @@ export function buildHistory(messages: StoredMessage[], budgetChars = Number.POS
       const images = loadImage && withPhotos.includes(m.id) ? photoIds.map(loadImage).filter((x): x is ImageData => Boolean(x)) : [];
       const note = photoIds.length && !images.length ? ` [${photoIds.length} photo(s) shared earlier]` : '';
       const docs = Array.isArray(m.meta?.docs) ? docsNote(m.meta.docs as SharedDoc[]) : '';
-      out.push({ role: 'user', content: m.content + note + docs, ...(images.length ? { images } : {}) });
+      out.push({ role: 'user', content: (group ? ownerLine(group.ownerName, m.content) : m.content) + note + docs, ...(images.length ? { images } : {}) });
+    }
+    else if (m.role === 'assistant' && m.meta?.groupFrom && typeof m.meta.groupFrom === 'object') {
+      // Phase 66: another companion's line in a group chat: hers to read, labelled, never as her own.
+      const from = String((m.meta.groupFrom as { name?: unknown }).name ?? 'Another companion');
+      if (m.content.trim()) out.push({ role: 'user', content: otherLine(from, m.content) });
     }
     else if (m.role === 'assistant' && typeof m.meta?.importedFrom === 'string') {
       // Phase 51: a reply from another assistant in imported history: she sees it, but not as hers.
@@ -606,7 +613,14 @@ export function buildHistory(messages: StoredMessage[], budgetChars = Number.POS
       for (const c of m.toolCalls) if (!answered.has(c.id)) fixed.push({ role: 'tool', toolCallId: c.id, name: c.name, content: 'Cancelled: no result.' });
     }
   }
-  return { messages: fixed, firstKeptId: start > 0 ? (ids[start] ?? 0) : 0, dropped: start };
+  // Phase 66: in a group chat several lines in a row reach her as "user" (the owner, the others): one message.
+  const merged = group ? fixed.reduce<ChatMessage[]>((acc, m) => {
+    const prev = acc.at(-1);
+    if (prev && prev.role === 'user' && m.role === 'user' && !prev.images?.length && !m.images?.length) acc[acc.length - 1] = { ...prev, content: `${prev.content}\n\n${m.content}` };
+    else acc.push(m);
+    return acc;
+  }, []) : fixed;
+  return { messages: merged, firstKeptId: start > 0 ? (ids[start] ?? 0) : 0, dropped: start };
 }
 
 export interface TurnOptions {
@@ -632,6 +646,26 @@ export interface TurnOptions {
   clientHistory?: { role: 'user' | 'assistant'; content: string }[];
   /** Phase 57: the other app's own instructions, added after hers as a low-priority note (never replacing them). */
   clientNote?: { app: string; text: string };
+  /**
+   * Phase 66: one reply in a group chat (src/group-round.ts). The round has already shown the AI
+   * notices, run the room-wide minors check, shown crisis help and saved the owner's message in her
+   * copy; this turn answers it (or, for banter, the others' last lines) without saving it again.
+   */
+  group?: GroupTurn;
+}
+
+/** Phase 66: what one group-chat reply needs to know. */
+export interface GroupTurn {
+  /** Her first reply to a new owner message (her mood reacts to it once). */
+  ownerTurn: boolean;
+  /** The owner's message may be a crisis: supportive, crisis note in her instructions. */
+  crisis: boolean;
+  /** Every companion in the room has Adult mode on (strictest wins). */
+  adult: boolean;
+  /** The room line from groupNote(). */
+  note: string;
+  /** The other companions' names (lines she writes for them are cut). */
+  others: string[];
 }
 
 /** Phase 57: how an app's own instructions reach her: after her own, and clearly lower in rank. */
@@ -670,14 +704,15 @@ export async function* runTurn(app: AppContext, conversationId: string, userText
   const now = app.now();
 
   // Other people (bridges) get their own disclosure schedule per conversation.
-  if (disclosureDue(store.lastDisclosureAt(conv.partner ? conv.id : undefined), now)) {
+  // Phase 66: in a group chat the round shows each companion's notice (src/group-round.ts).
+  if (!opts.group && disclosureDue(store.lastDisclosureAt(conv.partner ? conv.id : undefined), now)) {
     store.addMessage(conv.id, 'notice', `disclosure:${disclosureText(app.persona.name, appLanguage(app.settings.get()))}`);
     yield { type: 'notice', kind: 'disclosure', text: disclosureText(app.persona.name, appLanguage(app.settings.get())) };
   }
 
   const isFirst = store.messages(conv.id).every((m) => m.role === 'notice');
   const meta = { ...(opts.images?.length ? { images: opts.images } : {}), ...(opts.docs?.length ? { docs: opts.docs } : {}) };
-  const userMsg = opts.resume ? store.messages(conv.id).filter((m) => m.role === 'user').at(-1) : store.addMessage(conv.id, 'user', text, Object.keys(meta).length ? meta : undefined);
+  const userMsg = opts.resume || opts.group ? store.messages(conv.id).filter((m) => m.role === 'user').at(-1) : store.addMessage(conv.id, 'user', text, Object.keys(meta).length ? meta : undefined);
   if (!userMsg) {
     yield { type: 'error', message: 'Nothing to continue.' };
     return;
@@ -685,8 +720,8 @@ export async function* runTurn(app: AppContext, conversationId: string, userText
   // Phase 4: her inner state reacts to the message; time since the last one.
   const prevOwnerAt = store.lastOwnerMessageAt(userMsg.id);
   const gapHours = prevOwnerAt ? (now.getTime() - prevOwnerAt.getTime()) / 3_600_000 : null;
-  const innerState = app.inner && innerEnabled(app) && !conv.partner ? (opts.resume ? app.inner.get() : app.inner.onOwnerMessage(text, gapHours, now)) : undefined;
-  if (isFirst && conv.title === 'New conversation') {
+  const innerState = app.inner && innerEnabled(app) && !conv.partner ? (opts.resume || (opts.group && !opts.group.ownerTurn) ? app.inner.get() : app.inner.onOwnerMessage(text, gapHours, now)) : undefined;
+  if (isFirst && conv.title === 'New conversation' && !opts.group) {
     store.updateConversation(conv.id, { title: text.replace(/\s+/g, ' ').slice(0, 60) });
   }
 
@@ -715,7 +750,8 @@ export async function* runTurn(app: AppContext, conversationId: string, userText
   }
 
   const safetyNotes: string[] = [];
-  const adultOn = adultModeOn(app.settings.get());
+  // Phase 66: in a group chat, adult content only when every companion in the room has Adult mode on.
+  const adultOn = adultModeOn(app.settings.get()) && (!opts.group || opts.group.adult);
   if (conv.partner) {
     // Phase 47: bots in the chat (recently, or this message) get one more sentence.
     const bots = isBotLine(text) || store.messagesPage(conv.id, { limit: 30 }).messages.some((m) => m.role === 'user' && isBotLine(m.content));
@@ -725,8 +761,9 @@ export async function* runTurn(app: AppContext, conversationId: string, userText
     if (isWorkChannel(conv.channel)) safetyNotes.push(workNote(app.settings.get().ownerName?.trim() || 'the owner', conv.channel, adultOn));
     if (!adultOn) safetyNotes.push(ADULT_OFF_NOTE);
   }
-  if (detectCrisis(text) || label === 'CRISIS') {
-    if (!opts.resume) {
+  if (opts.group) safetyNotes.push(opts.group.note);
+  if (detectCrisis(text) || label === 'CRISIS' || opts.group?.crisis) {
+    if (!opts.resume && !opts.group) {
       store.recordSafetyEvent('crisis_referral', conv.id);
       store.addMessage(conv.id, 'notice', `crisis:${CRISIS_RESOURCES}`);
       yield { type: 'notice', kind: 'crisis', text: CRISIS_RESOURCES };
@@ -776,6 +813,8 @@ export async function* runTurn(app: AppContext, conversationId: string, userText
   let tools = noTools.has(modelKey) || conv.partner || opts.noTools ? [] : app.tools.enabled(s.toolPermissions).filter((t) => !(conv.private && OFFSERVER_TOOL(t.spec.name)));
   // Hardening M3: with her tools allowed for other apps, her look-back over every past conversation stays out.
   if (opts.externalApp) tools = tools.filter((t) => t.spec.name !== 'recall');
+  // Phase 66: group chats get read-only tools only, and only those that run without asking (no approvals mid-round).
+  if (opts.group) tools = tools.filter((t) => GROUP_TOOLS.has(t.spec.name) && app.tools.permission(t.spec.name, s.toolPermissions) === 'auto');
   // Private conversations: commands get no network either (nothing leaves the server).
   const sandbox: SandboxInfo = { ...app.sandbox, network: conv.private ? false : (s.shellNetwork ?? true) };
   let wsDir = '';
@@ -889,12 +928,13 @@ export async function* runTurn(app: AppContext, conversationId: string, userText
       threads: innerState ? threadsNote(app.life) : undefined,
       stayYourself: nudge ? nudge.note || 'it sounded generic, not like you' : undefined,
       ...bondContext(app, innerState?.closeness),
+      ...(opts.group ? { adultOn } : {}),
       partner: Boolean(conv.partner),
       // Phase 37: things that just happened in the owner's life and haven't come up since.
       followUps: !conv.partner && app.memory && memCfg.enabled ? followUpsNote(followUps(app.memory, localDate(now.toISOString(), s.timeZone), (day) => store.ownerMessagesSince(dayStartUtc(day, s.timeZone).toISOString())).filter((f) => !appSafe || appSafe(f.memory)), s.ownerName?.trim() || 'the owner') : undefined,
       // Phase 37: an activity you're doing together in this conversation (games, journaling…).
       together: conv.partner ? undefined : activityNote(app.together?.activity(conv.id), s.ownerName?.trim() || 'the owner'),
-      elsewhere: conv.partner || opts.externalApp ? undefined : elsewhereNote(app, conv, now, s.ownerName?.trim() || 'the owner'),
+      elsewhere: conv.partner || opts.externalApp || opts.group ? undefined : elsewhereNote(app, conv, now, s.ownerName?.trim() || 'the owner'),
       // Phase 53: her reply language (the owner's pick, or the language they write in). Not for other people's chats.
       language: conv.partner ? undefined : languageLine(talkLanguage(s, text)),
     });
@@ -910,7 +950,7 @@ export async function* runTurn(app: AppContext, conversationId: string, userText
           }
           return { messages: [...earlier, ...own], firstKeptId: userMsg.id, dropped: 0 };
         })()
-      : buildHistory(store.messages(conv.id), budget, app.uploads && sees(provider, model) ? (id) => app.uploads!.load(id) : undefined);
+      : buildHistory(store.messages(conv.id), budget, app.uploads && sees(provider, model) ? (id) => app.uploads!.load(id) : undefined, opts.group ? { ownerName: s.ownerName?.trim() || 'the owner' } : undefined);
     const messages: ChatMessage[] = [{ role: 'system', content: opts.clientNote?.text.trim() ? system + clientNoteSection(opts.clientNote) : system }];
     if (hist.dropped) {
       // Older parts didn't fit: say so, with this conversation's own summary if there is one.
@@ -1004,7 +1044,9 @@ export async function* runTurn(app: AppContext, conversationId: string, userText
     if (injection?.ids.length) meta.memoryIds = injection.ids;
     // In shared chats people's lines reach her as "[Name]: text", and models copy the pattern:
     // her own name tag never goes out (or into the history, where it would teach it again).
-    const untagged = conv.channel !== 'web' ? stripOwnTag(reply, app.persona.name) : reply;
+    const tagless = conv.channel !== 'web' ? stripOwnTag(reply, app.persona.name) : reply;
+    // Phase 66: lines she goes on to write for the others in a group chat are cut.
+    const untagged = opts.group ? cutOtherSpeakers(stripLeadTag(tagless, [conv.title, app.persona.name, ...opts.group.others]), [...opts.group.others, s.ownerName?.trim() || '']) : tagless;
     const saved = store.addMessage(conv.id, 'assistant', untagged, meta);
     lastAssistantId = saved.id;
     if (untagged.trim()) answered = true;

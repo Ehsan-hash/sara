@@ -71,6 +71,8 @@ function transcriptLine(m: StoredMessage, owner: string, tz?: string, name = 'Sa
   if (m.role === 'user') return `[#${m.id} ${owner} ${when}] ${m.content}`;
   // Phase 51: another assistant's reply in imported history is labelled as theirs.
   if (m.role === 'assistant' && typeof m.meta?.importedFrom === 'string') return m.content.trim() ? `[#${m.id} ${importedName(`import-${m.meta.importedFrom}`) ?? 'Other assistant'} (another AI assistant, not ${name}) ${when}] ${m.content}` : null;
+  // Phase 66: another companion's line in a group chat is labelled as hers, never this companion's.
+  if (m.role === 'assistant' && m.meta?.groupFrom && typeof m.meta.groupFrom === 'object') return m.content.trim() ? `[#${m.id} ${String((m.meta.groupFrom as { name?: unknown }).name ?? 'Another companion')} (another AI companion in this group chat, not ${name}) ${when}] ${m.content}` : null;
   if (m.role === 'assistant') return m.content.trim() ? `[#${m.id} ${name} ${when}] ${m.content}` : null;
   if (m.role === 'tool') return `[#${m.id} tool receipt] ${String(m.meta?.summary ?? m.meta?.name ?? 'tool')} → ${String(m.meta?.status ?? 'ok')}`;
   return null;
@@ -154,6 +156,17 @@ export interface SummarizeResult {
   error?: string;
 }
 
+/** Phase 66: the note added to the memory prompt for a group chat: what she remembers is what was said there, in her presence, tagged with the room. */
+export function groupChatNote(owner: string, name: string, title: string, others: string[]): string {
+  const who = others.length ? others.join(', ') : 'other AI companions';
+  return `\n\nIMPORTANT: this is a group chat called "${title}" with ${owner}, ${name} and other AI companions (${who}). Start the summary with: In the group chat "${title}". Lines marked as another AI companion are that companion's words, not ${name}'s and not ${owner}'s. facts, dates, promises by the owner and milestones come ONLY from ${owner}'s own lines; sara comes ONLY from ${name}'s own lines; what the other companions said is never a fact about ${owner} or ${name}.`;
+}
+
+/** Phase 66: the other companions who spoke in these lines. */
+function groupNames(messages: StoredMessage[]): string[] {
+  return [...new Set(messages.flatMap((m) => (m.meta?.groupFrom && typeof m.meta.groupFrom === 'object' ? [String((m.meta.groupFrom as { name?: unknown }).name ?? '')] : [])).filter(Boolean))];
+}
+
 /** Phase 51: the note added to the memory prompt for imported history (another assistant was there, not her). */
 export function importedHistoryNote(owner: string, other: string, name: string): string {
   return `\n\nIMPORTANT: this is from ${owner}'s imported ${other} history. ${owner} was talking with ${other}, a different AI assistant, not with ${name}; lines marked ${other} are ${other}'s words, not ${name}'s. Write the summary about ${owner} and ${other} (e.g. "${owner} asked ${other} for help planning a trip to Lisbon"), never saying ${name} said, did or was there. facts, dates, promises, decisions and milestones come ONLY from ${owner}'s own lines (message_id of an ${owner} line, quote from it); what ${other} said is never a fact about ${owner}. sara must be [].`;
@@ -169,7 +182,7 @@ export async function summarizeConversation(app: AppContext, mem: MemoryStore, c
   const all = app.store.messages(conversationId).filter((m) => m.id > (opts.fromId ?? state.summarizedThrough));
   const other = importedName(conv.channel);
   /** Another assistant's line in imported history: never evidence for anything. */
-  const theirs = (m: StoredMessage) => m.role === 'assistant' && typeof m.meta?.importedFrom === 'string';
+  const theirs = (m: StoredMessage) => m.role === 'assistant' && (typeof m.meta?.importedFrom === 'string' || Boolean(m.meta?.groupFrom));
   const usable = all.filter((m) => !isForgotten(m));
   if (!usable.some((m) => m.role === 'user')) {
     if (all.length) mem.setState(conversationId, { summarizedThrough: all.at(-1)!.id, lastError: null });
@@ -200,7 +213,7 @@ export async function summarizeConversation(app: AppContext, mem: MemoryStore, c
     const transcript = lines.map((l) => l.line).join('\n');
     // Earlier facts and decisions on the same subjects, so changes replace them (Phase 32).
     related = relatedNotes(mem, lines.filter((l) => l.m.role === 'user').map((l) => l.m.content).join(' '));
-    const prompt = memoryPrompt(owner, transcript, identityOf(app.persona), mem.openPromises(15).map((p) => ({ id: p.id, content: p.content })), related) + (other ? importedHistoryNote(owner, other, app.persona.name) : '');
+    const prompt = memoryPrompt(owner, transcript, identityOf(app.persona), mem.openPromises(15).map((p) => ({ id: p.id, content: p.content })), related) + (other ? importedHistoryNote(owner, other, app.persona.name) : '') + (conv.channel === 'group' ? groupChatNote(owner, app.persona.name, conv.title, groupNames(usable)) : '');
     for (let tryNo = 0; tryNo < 2 && !parsed; tryNo++) {
       let out = '';
       const messages = [

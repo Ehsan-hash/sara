@@ -19,6 +19,8 @@ const RAW = [
   '#story-list', '.lookback-text',
   // Logged problems quote program text; gallery cards describe other characters (H4, M7).
   '#log-problems', '.gallery-head', '.gallery-pitch', '.gallery-line', '.gallery-tags',
+  // Phase 66: group chats name every member (the line under the title, the member cards).
+  '#conv-summary', '#gc-members',
 ].join(',');
 const ATTRS = ['placeholder', 'title', 'aria-label', 'alt', 'data-tip', 'aria-description'];
 const NAME_RE = /\b(Sara|she|her|hers|herself|She|Her|Hers|Herself)\b/;
