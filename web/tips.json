@@ -1158,6 +1158,14 @@
     "ab-recipes": [
       "How she did tricky jobs before, saved as recipes she finds and follows next time. Open one to read, edit or delete it.",
       "recipes"
+    ],
+    "household": [
+      "Invite other adults to their own private space on this server, choose the models they may use and a daily limit, see how much they use, pause or remove them.",
+      "household"
+    ],
+    "account": [
+      "Your member account here: what the owner allowed you, today’s use, your sign-in, downloading your data and deleting your account.",
+      "household"
     ]
   }
 }

@@ -81,6 +81,19 @@ lines as yours, the other companions' lines as theirs, tagged with the chat's na
 aren't in the chat learn nothing from it. Group chats are never shown to other apps, MCP or the API,
 and deleting one deletes every member's copy.
 
+## More than one person (household)
+
+If the owner of a server invites other adults ([HOUSEHOLD.md](HOUSEHOLD.md)), each person's
+companions, conversations, memories, planner, notes, library, moments, devices, API keys and
+notifications live in their own folder with their own databases, and the app only ever opens the
+signed-in person's folder. The owner sees how many messages each person sends per day and an
+estimated cost per model, nothing they wrote. Members' companions use the models the owner allowed,
+so what reaches a cloud model depends on those models, as above. Whoever runs a server can still
+read its disk, and the owner's server backups contain every space (encrypted when they leave the
+server); a member who wants more than that should run a server of their own. A member can download
+their data or delete their whole space at any time; when the owner removes someone, they have a few
+days to download it first.
+
 ## Our moments
 
 The photo album ([MOMENTS.md](MOMENTS.md)) stays on your server, per companion. Her captions are

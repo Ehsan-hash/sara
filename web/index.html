@@ -56,6 +56,16 @@
       <button id="demo-start" type="button" class="ghost" hidden>Try the demo (no sign-in)</button>
       <p id="demo-note" class="muted small" hidden>This is Sara's demo server: conversations aren't saved and disappear after a few hours. Please don't share personal information.</p>
       <p id="login-paircode" class="small" hidden><a href="/pair">Have a code from Settings → Devices and sign-in? Sign in with it</a></p>
+      <!-- Phase 71: joining a household with an invite (docs/HOUSEHOLD.md) -->
+      <p id="join-open" class="small"><button id="join-show" type="button" class="linkish">I have an invite</button></p>
+      <div id="join" class="join-box" hidden>
+        <p class="or-divider"><span>Join with an invite</span></p>
+        <p id="join-who" class="muted small">The owner of this server sent you an invite. With it you get your own space here: your own companion, conversations and memories, which the owner can't read.</p>
+        <label class="claim-code-row">Invite code <button type="button" class="tip" data-tip="16 letters and numbers from the invite the owner sent you (the link fills it in). It works once and only until it expires.">?</button>
+          <input id="join-code" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="24"></label>
+        <label class="row join-18"><input id="join-18" type="checkbox"> <span>I am 18 or older <button type="button" class="tip" data-tip="This app is for adults only. There is no ID check: you confirm it yourself, as the owner did when inviting you.">?</button></span></label>
+        <button id="join-go" type="button">Join</button>
+      </div>
       <div id="login-app-block" class="login-app-block" hidden>
         <p class="or-divider"><span>Or use the phone app</span></p>
         <a id="login-app" class="button-link pair-app ghost">Open in the Sara app</a>
@@ -74,6 +84,29 @@
       <button id="claimed-copy" type="button" class="ghost small">Copy</button>
       <label class="claimed-saved"><input id="claimed-saved" type="checkbox"> I saved it <button type="button" class="tip" data-tip="Sara keeps only a fingerprint of the token, so nobody can show it to you again. Lost it? Make a new one in Settings → Devices and sign-in while you're signed in, or with sara reset-token on the server.">?</button></label>
       <button id="claimed-done" type="button" disabled>Continue</button>
+    </div>
+  </section>
+
+  <!-- Phase 71: the member token after joining with an invite, shown once -->
+  <section id="joined" class="screen card-screen" hidden>
+    <div class="card">
+      <h1>Welcome!</h1>
+      <p>This is your member token. It is shown only now: save it in your password manager. You need it to sign in on another device or app, or here again after signing out.</p>
+      <code id="joined-token" class="claimed-token" data-raw></code>
+      <button id="joined-copy" type="button" class="ghost small">Copy</button>
+      <p class="muted small">Your space is private: the owner of this server sees only how many messages you send and roughly what they cost, never what you write.</p>
+      <label class="claimed-saved"><input id="joined-saved" type="checkbox"> I saved it <button type="button" class="tip" data-tip="The server keeps only a fingerprint of the token, so nobody can show it to you again. Lost it? Sign in on a device that is still signed in and make a new one in Settings → Your account.">?</button></label>
+      <button id="joined-done" type="button" disabled>Continue</button>
+    </div>
+  </section>
+
+  <!-- Phase 71: a member whose account is paused or being removed -->
+  <section id="member-paused" class="screen card-screen" hidden>
+    <div class="card">
+      <h1 id="paused-title">Your account is paused</h1>
+      <p id="paused-text">The owner of this server has paused your account. Nothing was deleted. Ask them to resume it.</p>
+      <p id="paused-export" hidden><a class="button-link" href="/api/household/me/export" download>Download my data</a></p>
+      <button id="paused-logout" type="button" class="ghost">Sign out</button>
     </div>
   </section>
 
@@ -119,7 +152,7 @@
         <button id="open-scrapbook" type="button" title="Scrapbook (Alt+B)"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="15" rx="2"/><circle cx="9" cy="11" r="2"/><path d="M21 17l-5-5-8 8"/></svg><span>Scrapbook</span></button>
         <button id="open-moments" type="button" title="Our moments: your photo album with her captions"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="3" width="15" height="13" rx="2"/><path d="M3 7v12a2 2 0 0 0 2 2h12"/><path d="M6 13l4-4 3 3 2-2 6 6"/><circle cx="16" cy="7.5" r="1.3"/></svg><span>Moments</span></button>
         <button id="open-story" type="button" title="Your story: your time together, in order (Alt+Y)"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3v18"/><circle cx="6" cy="7" r="2"/><circle cx="6" cy="17" r="2"/><path d="M10 7h10M10 17h7M10 12h5"/></svg><span>Your story</span></button>
-        <button id="open-team" type="button" title="Team: helpers she leads on bigger jobs"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><circle cx="17" cy="9" r="2.5"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6M15 14.5c.6-.3 1.3-.5 2-.5 2.8 0 4 2 4 5"/></svg><span>Team</span><i id="team-dot" class="side-dot" hidden></i></button>
+        <button id="open-team" type="button" data-owner-only title="Team: helpers she leads on bigger jobs"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><circle cx="17" cy="9" r="2.5"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6M15 14.5c.6-.3 1.3-.5 2-.5 2.8 0 4 2 4 5"/></svg><span>Team</span><i id="team-dot" class="side-dot" hidden></i></button>
         <button id="open-sara" type="button" title="Her page: her day, mood, character (Alt+H)"><img class="side-face avatar" src="/sara-avatar.jpg" alt=""><span class="side-her">Sara</span></button>
         <button id="open-settings" type="button" title="Settings (Ctrl+,)"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg><span>Settings</span></button>
         <button id="open-help" type="button" title="Help: tours, the guide, and asking her"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.3a2.6 2.6 0 0 1 5 .9c0 1.7-2.5 2.3-2.5 3.8M12 17.2v.1"/></svg><span>Help</span></button>
@@ -1170,7 +1203,7 @@
       <label>To-dos, reminders and notes <select id="cmp-planner"><option value="shared">One planner, shared by all companions</option><option value="separate">Each companion keeps her own</option></select></label>
       <p id="cmp-planner-note" class="muted small">A change applies after the next restart or update.</p>
         </section>
-        <section class="settings-page" data-page="her-import" data-group="Her" data-title="Bring her from another app" hidden>
+        <section class="settings-page" data-page="her-import" data-group="Her" data-title="Bring her from another app" data-owner-only hidden>
       <p class="muted small">Bring your chats from Character.AI, SillyTavern, Replika, Nomi, Kindroid, ChatGPT, Claude or a saved transcript. She reads them and suggests what she learned about you, your history together and her character. Nothing is saved until you check it and press Save. <a href="/help#import" target="_blank" rel="noopener">How to export from each app</a></p>
       <h3>Choose the file</h3>
       <p class="muted small">A .zip export (up to 200 MB) or one chat file: .json, .jsonl, .csv, .txt or .md (up to 50 MB). Character cards are imported in Name and personality instead.</p>
@@ -1381,7 +1414,7 @@
       </div>
       <div id="ph-taken" class="ph-taken"></div>
         </section>
-        <section class="settings-page" data-page="models-local" data-group="Models" data-title="On this computer" hidden>
+        <section class="settings-page" data-page="models-local" data-group="Models" data-title="On this computer" data-owner-only hidden>
       <p class="muted small">Run her model on this computer, and if you like, keep everything here: nothing goes to the internet.</p>
       <div class="pl-card" id="pl-card" data-noauto data-nodirty>
         <label class="row pl-switch"><input id="pl-on" type="checkbox"> <span>Nothing leaves this computer</span> <button type="button" class="tip" data-tip="On: Sara only connects to this computer (127.0.0.1, ::1, localhost). Cloud models, web search, bridges, phone notifications, updates and reports pause until you turn it off. Your model must run here.">?</button></label>
@@ -1432,7 +1465,7 @@
         </select>
       </label>
         </section>
-        <section class="settings-page" data-page="models-routes" data-group="Models" data-title="Which model does what" hidden>
+        <section class="settings-page" data-page="models-routes" data-group="Models" data-title="Which model does what" data-owner-only hidden>
       <p class="muted small">Every job uses your default model unless you pick one here. A conversation's own model choice still wins. <em>✨ Use recommended</em> fills in picks from what's connected; changes save by themselves.</p>
       <div class="jobs-top">
         <button id="jobs-recommend" type="button" class="ghost">✨ Use recommended</button>
@@ -1453,7 +1486,7 @@
       </details>
       <p class="muted small">Pictures she makes: <a href="#" data-goto="her-pictures">Pictures from her</a>. Hearing you and her voice: <a href="#" data-goto="her-voice">Voice</a>.</p>
         </section>
-        <section class="settings-page" data-page="models-subs" data-group="Models" data-title="Subscriptions" hidden>
+        <section class="settings-page" data-page="models-subs" data-group="Models" data-title="Subscriptions" data-owner-only hidden>
       <p class="muted small">Use a subscription you already pay for instead of an API key. Each one shows up as a model provider once you're signed in.</p>
       <p id="sub-error" class="error small" role="alert"></p>
       <div class="sub-card">
@@ -1486,7 +1519,7 @@
         <p id="sub-grok-code" class="small" hidden></p>
       </div>
         </section>
-        <section class="settings-page" data-page="models-providers" data-group="Models" data-title="Model providers" hidden>
+        <section class="settings-page" data-page="models-providers" data-group="Models" data-title="Model providers" data-owner-only hidden>
       <p class="muted small">Where Sara's models come from. Keys are stored encrypted on your server and never shown again. Subscriptions (Settings → Models → Subscriptions) add themselves here.</p>
       <div id="provider-list"></div>
 
@@ -1587,7 +1620,7 @@
       <p id="adult-app-note" class="muted small" hidden>Adult mode can only be turned on in a web browser, not in the phone apps.</p>
         </section>
 
-        <section class="settings-page" data-page="ab-tools" data-group="Abilities" data-title="Tools and approvals" hidden>
+        <section class="settings-page" data-page="ab-tools" data-group="Abilities" data-title="Tools and approvals" data-owner-only hidden>
       <p id="sandbox-status" class="muted"></p>
       <p id="sandbox-note" class="small" hidden></p>
       <div id="tool-list"></div>
@@ -1596,7 +1629,7 @@
       <p id="browser-status" class="muted small" role="status"></p>
       <div class="add-row"><button id="browser-recheck" type="button" class="ghost small">Look again</button></div>
         </section>
-        <section class="settings-page" data-page="ab-google" data-group="Abilities" data-title="Gmail and Calendar" hidden>
+        <section class="settings-page" data-page="ab-google" data-group="Abilities" data-title="Gmail and Calendar" data-owner-only hidden>
       <p id="g-status" class="muted small" role="status"></p>
       <div id="g-connected" class="add-row" hidden><button id="g-disconnect" type="button" class="ghost">Sign out of Google</button></div>
       <details id="g-setup" data-noauto>
@@ -1616,7 +1649,7 @@
       </details>
       <p class="muted small">Using another email provider? Email and calendar with an app password are under "Tools from other programs" below (Fastmail, iCloud, Outlook and more).</p>
         </section>
-        <section class="settings-page" data-page="ab-github" data-group="Abilities" data-title="GitHub" hidden>
+        <section class="settings-page" data-page="ab-github" data-group="Abilities" data-title="GitHub" data-owner-only hidden>
       <p class="muted small">Only needed if you want her to push to GitHub. Make a <strong>fine-grained token</strong> at github.com → Settings → Developer settings → Personal access tokens, for just the repositories you choose, with <em>Contents: Read and write</em>. Pushing still asks you first. Delegating to Claude Code or Grok Build needs those subscriptions signed in (Models → Subscriptions).</p>
       <div class="add-row"><label>GitHub token <input id="gh-token" type="password" autocomplete="off" placeholder="not set"></label><button id="gh-save" type="button">Save</button><button id="gh-clear" type="button" class="ghost" hidden>Remove</button></div>
       <p id="gh-status" class="muted small" role="status"></p>
@@ -1629,12 +1662,12 @@
       </div>
       <p id="ghw-status" class="muted small" role="status"></p>
         </section>
-        <section class="settings-page" data-page="ab-projects" data-group="Abilities" data-title="Coding projects" hidden>
+        <section class="settings-page" data-page="ab-projects" data-group="Abilities" data-title="Coding projects" data-owner-only hidden>
       <p class="muted small">What she knows about the code in each workspace: how to build and test it, its layout and rules, and the notes she keeps (decisions, conventions, commands). She looks again by herself every hour; coding conversations and her team use it.</p>
       <div class="add-row"><label>Workspace <select id="pj-ws"></select></label><button id="pj-refresh" type="button" class="ghost">Look again</button></div>
       <div id="pj-list" class="pj-list"></div>
         </section>
-        <section class="settings-page" data-page="ab-recipes" data-group="Abilities" data-title="Recipes" hidden>
+        <section class="settings-page" data-page="ab-recipes" data-group="Abilities" data-title="Recipes" data-owner-only hidden>
       <p class="muted small">After a tricky job goes well she can write down how she did it (a <strong>recipe</strong>: when to use it and the steps that worked). In coding conversations she sees the recipes that fit what you ask and follows them. Saving one asks you first; you can change that for <code>recipe_save</code> in Tools and approvals.</p>
       <div id="rc-list" class="rc-list"></div>
       <div id="rc-edit" class="rc-edit" data-nodirty hidden>
@@ -1647,7 +1680,7 @@
         <p id="rc-status" class="muted small" role="status"></p>
       </div>
         </section>
-        <section class="settings-page" data-page="ab-home" data-group="Abilities" data-title="Home Assistant" hidden>
+        <section class="settings-page" data-page="ab-home" data-group="Abilities" data-title="Home Assistant" data-owner-only hidden>
       <p class="muted small">Let her see and control your home through <strong>Home Assistant</strong>: lights, switches, thermostats, locks, blinds, scenes. She can look on her own; every change asks you first. Your Home Assistant must be reachable from this server (for example your Nabu Casa address, or over Tailscale).</p>
       <label>Home Assistant address <input id="ha-url" placeholder="https://homeassistant.local:8123" autocomplete="off"></label>
       <label>Long-lived access token <input id="ha-token" type="password" autocomplete="off" placeholder="not set"></label>
@@ -1655,7 +1688,7 @@
       <div class="add-row"><button id="ha-save" type="button">Save and test</button><button id="ha-clear" type="button" class="ghost" hidden>Disconnect</button></div>
       <p id="ha-status" class="muted small" role="status"></p>
         </section>
-        <section class="settings-page" data-page="ab-search" data-group="Abilities" data-title="Web search" hidden>
+        <section class="settings-page" data-page="ab-search" data-group="Abilities" data-title="Web search" data-owner-only hidden>
       <label>Search service
         <select id="search-provider">
           <option value="">Off</option>
@@ -1669,7 +1702,7 @@
       <label id="search-url-row" hidden>SearXNG URL <input id="search-url" placeholder="http://127.0.0.1:8888"></label>
       <p id="search-status" class="muted small"></p>
         </section>
-        <section class="settings-page" data-page="ab-mcp" data-group="Abilities" data-title="Other programs (MCP)" hidden>
+        <section class="settings-page" data-page="ab-mcp" data-group="Abilities" data-title="Other programs (MCP)" data-owner-only hidden>
       <p class="muted small">Plug-in tool servers (Model Context Protocol), such as your email or calendar. Their tools appear above: ones the server marks as read-only run on their own, everything that sends, changes or deletes asks you first.</p>
       <div id="mcp-list"></div>
       <details id="mcp-add" data-noauto>
@@ -1714,7 +1747,7 @@
       <p class="small"><button id="push-on" type="button" class="ghost">Turn on for this device</button> <button id="push-off" type="button" class="ghost" hidden>Turn off for this device</button> <button id="push-test" type="button" class="ghost" hidden>Send a test</button> <span id="push-status" class="muted"></span></p>
       </div>
       <label class="row"><input id="push-preview" type="checkbox"> Show the message text in notifications (turn off if others see your lock screen)</label>
-      <details id="apns-box" class="apns-box" data-noauto data-nodirty>
+      <details id="apns-box" class="apns-box" data-noauto data-nodirty data-owner-only>
         <summary><strong>iPhone app notifications</strong> <span class="muted small" id="apns-state"></span></summary>
         <div id="apns-devices" class="list"></div>
         <p class="muted small">Apple only delivers notifications to the iPhone app when this server signs them with an Apple push key. One-time setup, about 3 minutes:</p>
@@ -1733,7 +1766,7 @@
       </details>
       <p id="install-row" class="small" hidden><button id="install-app" type="button" class="ghost">Install Sara as an app</button></p>
         </section>
-        <section class="settings-page" data-page="co-telegram" data-group="Connections" data-title="Telegram" hidden>
+        <section class="settings-page" data-page="co-telegram" data-group="Connections" data-title="Telegram" data-owner-only hidden>
       <p class="muted small">Text Sara from your phone. In Telegram, message <strong>@BotFather</strong>, send <code>/newbot</code>, pick a name, and paste the token it gives you here. Then press <em>Link my Telegram</em>.</p>
       <label>Bot token <input id="tg-token" type="password" autocomplete="off" placeholder="not set"></label>
       <label class="row"><input id="tg-enabled" type="checkbox"> Connected</label>
@@ -1748,7 +1781,7 @@
       <label class="row"><input id="tg-everyone" type="checkbox"> Answer @all and @everyone in a group</label>
       <label class="web-adult" hidden>Adult groups (group IDs) <input id="tg-nsfw" placeholder="e.g. -1001234567890" spellcheck="false"></label>
         </section>
-        <section class="settings-page" data-page="co-discord" data-group="Connections" data-title="Discord" hidden>
+        <section class="settings-page" data-page="co-discord" data-group="Connections" data-title="Discord" data-owner-only hidden>
       <p class="muted small">At <strong>discord.com/developers</strong>: New Application → Bot → Reset Token (paste it here) and turn on <em>Message Content Intent</em>. Invite it with OAuth2 → URL Generator (scope <code>bot</code>; Send Messages, Read Message History). Then link yourself.</p>
       <label>Bot token <input id="dc-token" type="password" autocomplete="off" placeholder="not set"></label>
       <label class="row"><input id="dc-enabled" type="checkbox"> Connected</label>
@@ -1781,8 +1814,8 @@
       <div id="oa-key-show" class="tok-new" hidden><p class="small"><strong>The new key</strong> (shown only now; paste it into the app):</p><code id="oa-key-value"></code> <button id="oa-key-copy" type="button" class="ghost small">Copy</button></div>
       <p id="oa-key-status" class="small" role="status"></p>
       <ul id="oa-keys" class="dev-list"></ul>
-      <h3>What other apps may do</h3>
-      <div data-nodirty data-noauto>
+      <h3 data-owner-only>What other apps may do</h3>
+      <div data-nodirty data-noauto data-owner-only>
       <label class="row"><input id="oa-tools" type="checkbox"> <span>Let other apps use her tools <button type="button" class="tip" data-tip="Off: in chats from other apps she only talks (no web search, files, planner or other tools). On: she may use her tools there too, and anything that asks you first still waits for your OK in Sara.">?</button></span></label>
       <label class="row"><input id="oa-changes" type="checkbox"> <span>Let other apps change things <button type="button" class="tip" data-tip="Off: MCP apps can only read (memory, to-dos, notes, library, today). On: they can also add to-dos and notes and ask her to remember a fact. Your approval settings still apply; remembering a fact always asks you first.">?</button></span></label>
       <label><span>Browser apps that may call her <button type="button" class="tip" data-tip="Only for apps that run in a web browser on another address, like SillyTavern at http://localhost:8000. Type that address (several: separate with commas). Leave empty if you don't use one: other web pages are then always refused.">?</button></span> <input id="oa-origins" placeholder="e.g. http://localhost:8000" spellcheck="false"></label>
@@ -1841,7 +1874,7 @@
         <p class="small"><button type="button" class="ghost small" data-copy-snip="js">Copy</button></p>
       </details>
         </section>
-        <section class="settings-page" data-page="dh-health" data-group="Data & health" data-title="Health" hidden>
+        <section class="settings-page" data-page="dh-health" data-group="Data & health" data-title="Health" data-owner-only hidden>
       <div id="access-box" class="access-box">
         <p class="small"><strong>How you reach her:</strong> <span id="access-line">…</span> <button type="button" class="tip" data-tip="The address to open on your phone or another computer, set when Sara was installed: Tailscale (private, works anywhere, with HTTPS), just this computer, your own web address, or your home network. Scan the code with your phone's camera to open it. To change it, run the installer again or the sara access command on this computer.">?</button></p>
         <p id="access-warn" class="muted small" hidden></p>
@@ -1885,7 +1918,7 @@
       <p class="muted small">Every browser, phone or app signed in to Sara. Sign out any you don't recognize or no longer use.</p>
       <ul id="dev-list" class="dev-list"></ul>
       <p class="actions-left"><button id="dev-others" type="button" class="ghost small">Sign out all other devices</button> <button id="logout" type="button" class="ghost small">Sign out of this device</button></p>
-      <details>
+      <details data-owner-only>
         <summary class="small">Make a new owner token</summary>
         <p class="muted small">Use this if someone else may know your token. Every other device is signed out; this one stays signed in. Type the current token to confirm.</p>
         <div class="add-row"><label>Current token <input id="tok-current" type="password" autocomplete="current-password"></label><button id="tok-rotate" type="button">Make a new token</button></div>
@@ -1911,7 +1944,7 @@
       <div id="ts-off-row" class="add-row" hidden><label>Current code <input id="ts-off-code" inputmode="numeric" maxlength="6" autocomplete="one-time-code" data-nodirty></label><button id="ts-stop" type="button" class="ghost">Turn off</button></div>
       <p id="ts-status" class="small" role="status"></p>
 </section>
-        <section class="settings-page" data-page="dh-backups" data-group="Data & health" data-title="Backups" hidden>
+        <section class="settings-page" data-page="dh-backups" data-group="Data & health" data-title="Backups" data-owner-only hidden>
       <p class="muted small">A backup has everything needed to rebuild Sara on a new server, including your keys, so keep downloaded copies private. Restore one where she runs with <code data-admin="restore">sudo sara restore &lt;file&gt;</code>.</p>
       <label class="row"><input id="bk-auto" type="checkbox"> Back up automatically every day, keep <input id="bk-keep" type="number" min="1" max="60" class="tiny" aria-label="Days of backups to keep"> days</label>
       <p class="small"><button id="bk-now" type="button" class="ghost">Back up now</button> <span id="bk-status" class="muted"></span></p>
@@ -1941,7 +1974,7 @@
         <p class="muted small">Once a week Sara downloads the newest off-server copy, unlocks it with your passphrase and restores it into a temporary folder to check it really works (your live data isn't touched).</p>
       </div>
         </section>
-        <section class="settings-page" data-page="dh-data" data-group="Data & health" data-title="Export and import" hidden>
+        <section class="settings-page" data-page="dh-data" data-group="Data & health" data-title="Export and import" data-owner-only hidden>
       <h3>Bring your history <button type="button" class="tip" data-tip="Bring in your ChatGPT or Claude export: the chats become past conversations she can look through (archived, with their dates), and she learns key facts from what you wrote. It stays on your server. Remove imported history undoes it.">?</button></h3>
       <p class="muted small">Ask ChatGPT (Settings → Data controls → Export data) or Claude (Settings → Privacy → Export data) for your data, then choose the .zip they email you. You see what's in it before anything is imported. Up to 500 MB.</p>
       <p class="actions-left"><button type="button" class="ghost file-button" data-pick="hist-file">Choose an export (.zip)</button><input id="hist-file" type="file" accept=".zip,application/zip,.json,application/json" hidden data-noauto></p>
@@ -1969,7 +2002,7 @@
       </div>
       <p id="import-status" class="muted small"></p>
         </section>
-        <section class="settings-page" data-page="dh-updates" data-group="Data & health" data-title="Updates" hidden>
+        <section class="settings-page" data-page="dh-updates" data-group="Data & health" data-title="Updates" data-owner-only hidden>
       <p class="muted small">New versions bring fixes and new things to do. Updating makes a backup first, then installs and restarts Sara (about a minute; conversations in progress stop). If the new version doesn't start properly, Sara goes back to the version she had by herself.</p>
       <p><strong id="up-version"></strong></p>
       <p id="up-message" class="small" role="status"></p>
@@ -1978,7 +2011,7 @@
       <p id="up-download-row" hidden><a id="up-download" class="button" target="_blank" rel="noopener noreferrer" href="https://github.com/farena-ai/sara/releases/latest">Download the new version</a></p>
       <p id="up-manual" class="muted small" hidden><span data-admin-when="known">To update her: <code data-admin="update">sudo sara update</code>.</span><span data-admin-when="unknown">This server updates from the command line. On the server run <code>sudo sara update</code> (Docker: <code>docker compose pull &amp;&amp; docker compose up -d</code>).</span></p>
         </section>
-        <section class="settings-page" data-page="dh-usage" data-group="Data & health" data-title="Usage and costs" hidden>
+        <section class="settings-page" data-page="dh-usage" data-group="Data & health" data-title="Usage and costs" data-owner-only hidden>
       <div class="add-row" data-nodirty>
         <label>Show <select id="usage-range"><option value="today">Today</option><option value="week">Last 7 days</option><option value="month">Last 30 days</option></select></label>
       </div>
@@ -2006,6 +2039,54 @@
         <ul id="usage-defaults" class="usage-list small"></ul>
       </details>
         </section>
+        <section class="settings-page" data-page="household" data-group="Household" data-title="People on this server" data-owner-only hidden>
+      <p class="muted small">Invite other adults to use this server with their own companions and a private space of their own. You choose which models they may use and how much a day. You can't read their conversations, memories, companions or moments: you only see how much they use, to manage the bill.</p>
+      <h3>Invite someone <button type="button" class="tip" data-tip="Makes a one-time invite link and code. Send it to them privately. It works once, until it expires, and you can cancel it below while it waits.">?</button></h3>
+      <div class="hh-invite" data-nodirty data-noauto>
+        <label>Their name <button type="button" class="tip" data-tip="Only a label for you, shown in this list. Example: Sam. They pick their own companion's name later.">?</button> <input id="hh-name" maxlength="40" placeholder="e.g. Sam"></label>
+        <label>The invite works for <button type="button" class="tip" data-tip="How long the link and code can be used. After that, or once used, it stops working. Shorter is safer.">?</button>
+          <select id="hh-hours"><option value="1">1 hour</option><option value="24" selected>1 day</option><option value="72">3 days</option><option value="168">7 days</option></select></label>
+        <div class="hh-field"><span class="hh-legend">Models they may use <button type="button" class="tip" data-tip="Their companions can only use the models you tick, and every reply, memory note and caption made for them is checked against this list. The first ticked model is their default.">?</button></span><div id="hh-models" class="hh-models"></div></div>
+        <label>Messages a day <button type="button" class="tip" data-tip="Their own messages to their companions, all together, per day. When reached, their companions pause until midnight.">?</button>
+          <select id="hh-msgs"></select></label>
+        <label>Spending a day <button type="button" class="tip" data-tip="Estimated from the token meter and your price table (local models count as $0). When reached, their companions pause until midnight.">?</button>
+          <select id="hh-cost"></select></label>
+        <label class="row"><input id="hh-voice" type="checkbox" checked> <span>Voice <button type="button" class="tip" data-tip="Voice notes, reading replies aloud and live calls. They use your voice service, which may cost money.">?</button></span></label>
+        <label class="row"><input id="hh-pictures" type="checkbox" checked> <span>Pictures from her <button type="button" class="tip" data-tip="Her photos and new looks, made with your picture service (which may cost money).">?</button></span></label>
+        <label class="row"><input id="hh-18" type="checkbox"> <span>This person is 18 or older <button type="button" class="tip" data-tip="This app is for adults. There is no ID check: you confirm it here and they confirm it again when they join.">?</button></span></label>
+        <p><button id="hh-invite" type="button">Make invite</button></p>
+      </div>
+      <div id="hh-new" class="tok-new" hidden>
+        <p class="small"><strong>Send this to them</strong> (shown only now):</p>
+        <p class="small"><code id="hh-new-url" data-raw></code> <button id="hh-new-copy" type="button" class="ghost small">Copy link</button></p>
+        <p class="small">Code: <code id="hh-new-code" data-raw></code></p>
+        <img id="hh-new-qr" class="pair-qr" alt="QR code of the invite link">
+      </div>
+      <p id="hh-status" class="small" role="status"></p>
+      <h3>Waiting invites</h3>
+      <ul id="hh-invites" class="dev-list" data-noauto data-nodirty></ul>
+      <h3>People</h3>
+      <p id="hh-none" class="muted small">Nobody else uses this server yet.</p>
+      <div id="hh-members" class="hh-members" data-noauto data-nodirty></div>
+      <p class="muted small">Whoever runs a server can technically read its disk, and your server backups contain every space (encrypted when they leave the server). The app itself never shows you their data.</p>
+    </section>
+        <section class="settings-page" data-page="account" data-group="Household" data-title="Your account" data-member-only hidden>
+      <p class="muted small">You use this server as a member of the owner's household. Your companions, conversations, memories, planner, library and moments are yours: the owner can't read them, and sees only how many messages you send and roughly what they cost.</p>
+      <dl id="acc-info" class="acc-info"></dl>
+      <h3>Sign-in and devices</h3>
+      <p class="small"><button id="acc-devices" type="button" class="ghost">Devices and sign-in</button> <span class="muted">Passkeys, two-step sign-in, phones and apps, API keys.</span></p>
+      <details>
+        <summary class="small">Make a new member token</summary>
+        <p class="muted small">Use this if someone else may know your token. Every other device is signed out; this one stays signed in.</p>
+        <div class="add-row"><label>Current token <button type="button" class="tip" data-tip="The member token you use now. After this, only the new token works; every other device is signed out.">?</button> <input id="acc-tok-current" type="password" autocomplete="current-password"></label><button id="acc-tok-rotate" type="button">Make a new token</button></div>
+        <div id="acc-tok-new" class="tok-new" hidden><p class="small"><strong>Your new token</strong> (shown only now; save it in your password manager):</p><code id="acc-tok-value" data-raw></code></div>
+      </details>
+      <h3>Your data <button type="button" class="tip" data-tip="One file with every companion's conversations, memories, planner, notes, library list and usage. Keep it private.">?</button></h3>
+      <p><a id="acc-export" class="button-link" href="/api/household/me/export" download>Download my data</a></p>
+      <h3>Delete my account <button type="button" class="tip" data-tip="Deletes your whole space on this server at once: every companion, conversation, memory, photo and document. It can't be undone; download your data first.">?</button></h3>
+      <div class="add-row"><label>Your member token <input id="acc-del-token" type="password" autocomplete="current-password" data-nodirty></label><button id="acc-delete" type="button" class="danger">Delete my account</button></div>
+      <p id="acc-status" class="small" role="status"></p>
+    </section>
         <section class="settings-page" data-page="dh-reports" data-group="Data & health" data-title="Reports" hidden>
       <p class="muted small">Replies you reported with ⚑. Each is kept here; unless you unticked it, it was also sent to the app's developer (only the reply, the reason and your note).</p>
       <div id="reports-list" class="list"></div>

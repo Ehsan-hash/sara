@@ -108,3 +108,14 @@ content is possible only while Adult mode is on, and only in Discord channels th
 marks NSFW (age-gated by Discord) or Discord channels / Telegram groups the owner lists as adult;
 the minor block and crisis handling apply everywhere. Strangers who DM the Telegram bot are told
 once that she is an AI companion that only talks with her owner.
+
+## More than one person on one server (household mode, 2.0)
+
+Each person the owner invites has their own space, with the same disclosure screen before first use,
+the notice at every session start and every 3 hours, honest answers, crisis resources and the
+minor-content block, kept per person (their own disclosure state, in their own database); nothing
+the owner sets can turn them off. Both the owner (when inviting) and the person (when joining)
+confirm the person is 18 or older; there is no ID check, as for the owner. Adult mode is off for a
+new member and only that member can switch it on, in their own web browser, with the same 18+
+self-confirmation. Crisis-referral counts stay per space. Household mode is refused on the demo
+server. See [HOUSEHOLD.md](HOUSEHOLD.md).

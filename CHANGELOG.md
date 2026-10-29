@@ -2,6 +2,36 @@
 
 Format: newest first. Versions follow `0.<phase>.<patch>` until 1.0.0.
 
+## 2.0.0 (2026-10-29): household mode
+
+Phase 71. See [docs/HOUSEHOLD.md](docs/HOUSEHOLD.md).
+
+- **Household mode:** invite the people you live with (up to 20 adults) to your Sara server. Each
+  person gets their own complete space: their own companions, conversations, memory, planner,
+  library, moments, devices, apps and API keys, in a folder of their own. You stay the only
+  administrator.
+- **Invites:** a one-time link, code or QR code that expires in 1, 3 or 7 days. You confirm the
+  person is an adult and they confirm it again when they join (no ID check). Their sign-in token is
+  shown once; passkeys work too. The phone and desktop apps, VS Code, `sara-chat` and the MCP bridge
+  sign members in the usual ways.
+- **Private from you too:** you see how many messages each person sends and what their models cost,
+  never what they say. The app says so plainly, and also says that whoever runs the server can read
+  its disk.
+- **You decide what they use:** which of your models each person may use (Ollama Cloud models are
+  marked, since they use your subscription), daily message and cost limits, and whether voice and
+  pictures are on. Your keys are never shown to them. Tools that act on the server or your accounts
+  (shell, files, browser, GitHub, Google, Home Assistant, computer control) stay off for members.
+- **Pause, remove, leave:** pause someone; remove them (they get 7 days to download their data); a
+  member can download their own data or delete their account.
+- **Safety is per person:** AI notices, crisis help and the minors block for everyone; Adult mode is
+  each person's own choice from their own browser.
+- **Tested:** a test signs in you and two members and has each try every kind of request with the
+  others' ids: 20,318 requests, none reached another person's data.
+- **No change for single-owner servers:** with no members nothing moves and nothing new appears. Not
+  on the demo.
+- Not in 2.0: group chats across people, server tools for members, imports and Telegram/Discord for
+  members.
+
 ## 1.10.0 (2026-10-29): our moments
 
 Phase 70. See [docs/MOMENTS.md](docs/MOMENTS.md).

@@ -13,7 +13,7 @@ testa software em um ambiente isolado, no seu próprio servidor, com os modelos 
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="License: MIT"></a>
   <img src="https://img.shields.io/badge/node-%E2%89%A5%2024-339933" alt="Node 24 or newer">
   <img src="https://img.shields.io/badge/runtime%20dependencies-0-brightgreen" alt="Zero runtime dependencies">
-  <img src="https://img.shields.io/badge/tests-740%20passing-brightgreen" alt="740 tests passing">
+  <img src="https://img.shields.io/badge/tests-763%20passing-brightgreen" alt="763 tests passing">
   <a href="docs/RESULTS.md"><img src="https://img.shields.io/badge/HumanEval%20pass%401-96.3%25-informational" alt="HumanEval pass@1 96.3%"></a>
   <a href="https://github.com/farena-ai/sara/releases/latest"><img src="https://img.shields.io/github/v/release/farena-ai/sara?label=release" alt="Latest release"></a>
   <a href="https://github.com/farena-ai/sara/pkgs/container/sara"><img src="https://img.shields.io/badge/docker-amd64%20%7C%20arm64-2496ED" alt="Docker image for amd64 and arm64"></a>
@@ -27,7 +27,7 @@ testa software em um ambiente isolado, no seu próprio servidor, com os modelos 
   <sub>Uma sessão real, sem edição, com um modelo local (qwen3.8 27B no Ollama, uma RTX 5090) em um servidor de testes descartável: ela conversa com a personalidade dela, escreve o app, pede permissão antes de iniciar um servidor, abre a prévia e testa no próprio navegador. O último quadro é o app com números já digitados.</sub>
 </p>
 
-> **Status:** 1.10, licença MIT, com dez versões com novos recursos desde a 1.0 (todas abaixo). O
+> **Status:** 2.0, licença MIT, com onze versões com novos recursos desde a 1.0 (todas abaixo). O
 > [app Android](https://play.google.com/store/apps/details?id=com.backstagecoding.sara) está no Google
 > Play; o app de iPhone e a versão da Mac App Store chegam assim que a Apple aprovar. Leia
 > [docs/DISCLOSURES.md](docs/DISCLOSURES.md) antes de usar ou compartilhar a Sara.
@@ -36,6 +36,7 @@ testa software em um ambiente isolado, no seu próprio servidor, com os modelos 
 
 | Versão | O que você ganha |
 |---|---|
+| **2.0** · Modo casa | **Compartilhe seu servidor Sara com quem mora com você.** Convide um adulto com um link de uso único; ele ganha as próprias companheiras, conversas, memória, biblioteca e apps num espaço só dele. Você continua sendo o administrador: escolhe quais modelos ele usa, define limites diários e vê o uso e o custo, nunca o que ele diz. [Como funciona](docs/HOUSEHOLD.md) |
 | **1.10** · Nossos momentos | **Um álbum de fotos compartilhado** com as suas fotos e as que ela manda, cada uma com uma legenda que ela escreve com a própria voz a partir da conversa de vocês. Álbuns que se enchem sozinhos (Nós, Lugares, Os looks dela), "Neste dia", e às vezes ela traz um: *lembra disso?* Conversas privadas ficam de fora, a não ser que você as adicione. [Como funciona](docs/MOMENTS.md) |
 | **1.9** · Chamadas de vídeo | **Veja ela enquanto vocês conversam:** uma chamada de vídeo mostra o retrato animado dela em tela cheia, com os lábios no ritmo da voz e o rosto acompanhando o humor, com a roupa e o lugar atuais. Ligue sua câmera se quiser e ela olha a cada poucos segundos (ou quando você toca em *Olha isto*); nada é gravado. [Como funciona](docs/VIDEO_CALLS.md) |
 | **1.8** · Vários servidores em um app | Tenha **todas as suas Saras em um só app** (casa e trabalho, ou várias em um servidor) e troque por um menu sem sair da conta: os apps de Windows e Mac, Android e iPhone, VS Code, `sara-chat` e a ponte MCP. Cada uma mantém seu próprio login; arquivos, microfone e câmera vão só para a que está em uso. [Como funciona](docs/SERVERS.md) |
@@ -53,7 +54,6 @@ Todas as versões: [CHANGELOG.md](CHANGELOG.md) · [versões](https://github.com
 
 | Versão | Recurso |
 |---|---|
-| 2.0 | **Modo casa:** várias pessoas em um servidor, cada uma com as próprias companheiras e dados privados |
 | 2.1 | **A voz dela na sua casa:** Alexa ("Alexa, pergunte à Sara…"), o assistente do Android e o Google Home, Atalhos da Siri, e reações a quem está em casa pelo Home Assistant |
 | 2.2 | **Seus outros servidores por SSH:** com senha ou chave; depois de entrar com senha ela cria a própria chave, diz onde ela está e só guarda a senha se você pedir (com um aviso) |
 | 2.3 | **Documentos grandes:** PDFs e livros de 500 a 1.000 páginas na biblioteca dela, todas as páginas digitalizadas lidas e respostas com o número da página |
@@ -200,8 +200,8 @@ verificava. O que ela acrescenta hoje é o jeito de trabalhar (roda os testes, p
 de passos arriscados, mostra o que foi executado), não uma nota maior nesses conjuntos. Detalhes,
 resultados por tarefa e como rodar de novo: [docs/RESULTS.md](docs/RESULTS.md).
 
-E também `npm run check`: uma checagem de tipos e 748 testes automáticos com um modelo falso
-roteirizado (sem rede, sem GPU): 740 passam no Windows e os outros 8 são testes de isolamento só
+E também `npm run check`: uma checagem de tipos e 771 testes automáticos com um modelo falso
+roteirizado (sem rede, sem GPU): 763 passam no Windows e os outros 8 são testes de isolamento só
 para Linux, executados em um servidor Linux.
 
 ## Como a Sara se compara

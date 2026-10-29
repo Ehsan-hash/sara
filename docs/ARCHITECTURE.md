@@ -179,6 +179,7 @@ Every module in `src/`, roughly in the order they were added (the phase is noted
 | `src/platform.ts`, `src/tailscale.ts`, `src/sara-windows.ts` | Phase 46: what differs between Linux, Windows and macOS; finding Tailscale; the `sara` command on Windows |
 | `src/providers/anthropic.ts`, `src/providers/openai-compatible.ts`, `src/providers/registry.ts`, `src/providers/types.ts` | The Anthropic and OpenAI-compatible adapters, the provider templates, and the `Provider` interface |
 | `src/sse.ts`, `src/ws.ts` | Small server-sent-events parser and WebSocket server/client (no dependencies) |
+| `src/household.ts` | Phase 71: household mode ([HOUSEHOLD.md](HOUSEHOLD.md)). `HouseholdStore` (`<data>/household.json`: members, limits, invites as hashes only, single use, expiry), `MemberSettings` (a member's own `settings.json`; the owner's providers, prices and timezone read through, never written; models only from the allowed list), `memberVault` (read-only, only the keys the member's models and switched-on voice/pictures need), `MemberPolicy` (allowed model and daily message/cost limit, checked in `chat.ts` before every model call), `memberRouteCheck` (the `MEMBER_ROUTES` allowlist of API families; everything else is the owner's), `PairRegistry` (pairing codes scoped to one space), member token prefix `sara_m.<id>.` |
 | `src/net-guard.ts` | Phase 67: the one way out. `netFetch` (every outgoing HTTP request in `src/`), `openWebSocket`, `checkOutbound` (before the few raw connections: web_fetch, the testing browser's proxy, the DevTools socket, APNs) and `assertOnline` (programs that talk to their vendor). While private local mode is on only literal loopback hosts pass (`127.0.0.0/8`, `::1`, `localhost`, decided before DNS), the global `fetch` is wrapped too, and a loopback Ollama can't be asked to pull, search the web or run a cloud model. `test/private-local.test.ts` scans `src/` for any other way out |
 | `src/private-local.ts` | Phase 67: "Nothing leaves this computer": the server-wide state (`<data>/private-local.json`, `SARA_PRIVATE_LOCAL=1` always on / `start` on until turned off), `onThisComputer` (loopback API providers, not subscriptions or Ollama Cloud models), `talksHere` (companions shown as paused), `whatWouldLeave` (the paused list on the settings page). Routing (`resolveChain`) keeps every job on a model on this computer; tools that reach out are hidden; commands get no network (`PRIVATE_LOCAL_ENV` on Windows); bridges and push pause |
 | `src/local-models.ts`, `web/local-models.js` | Phase 67: Settings → Models → On this computer: Ollama found at `127.0.0.1:11434`, hardware (`nvidia-smi`, `sysctl`, `os.totalmem`), the hardware → model table (`GPU_TIERS`, `CPU_TIERS`, docs/CHOOSING_A_MODEL.md), Ollama's `/api/pull` stream with progress and Cancel (`PullProgress`, `ModelPuller`), the downloaded model as her model and the background model, optional `winget install Ollama.Ollama` after a click; routes `GET/PUT /api/private-local`, `GET /api/local-models`, `POST/GET/DELETE /api/local-models/pull`, `POST /api/local-models/use`, `POST /api/local-models/install-ollama` (owner only, never in the demo) |
@@ -203,6 +204,18 @@ Everything lives in `SARA_DATA` (`/var/lib/sara` native, the `sara-data` volume 
 Support/Sara` on a Mac): `sara.db` (SQLite), `settings.json`, `persona.json`, `secrets.enc`,
 `master.key`, `owner.json`, `library/`, `uploads/`, `workspaces/`, `companions/`, `cache/codemap`,
 `logs/` and `backups/`.
+
+**Household mode (Phase 71).** Each extra person the owner invites gets a whole data folder of their
+own, `members/<id>/`, laid out like the owner's (their own `owner.json`, `sara.db`, `settings.json`,
+`persona.json`, `companions/`, `library/`, `uploads/`, devices, API keys, push registrations), built
+by the same code that builds the owner's space. `src/main.ts` keeps one *space* per person; the
+front router resolves the person first (the `sara_m.<id>.` token prefix, or which space's session
+cookie verifies), then the companion inside that space, and the request only ever reaches that
+space's server instance, stores and event hub. There is no shared table with a person column to
+forget to filter on. Members reach a fixed allowlist of route families (`memberRouteCheck`); the
+owner's tools, server settings, backups, updates, logs, bridges and keys are not in it. With no
+members nothing changes: no `household.json`, no `members/` folder, the owner's data stays where it
+was. See [HOUSEHOLD.md](HOUSEHOLD.md) and THREAT_MODEL.md § Household mode.
 
 `sara backup` (or the daily automatic backup) makes a consistent copy while she runs: each
 database is snapshotted with SQLite's `VACUUM INTO`, then everything goes into one `.tar.gz`.

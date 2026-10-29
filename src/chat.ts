@@ -201,6 +201,11 @@ export interface AppContext {
   previews?: import('./preview.ts').PreviewManager;
   /** Phase 49: her testing browser (one per conversation, closed after the turn or when idle). */
   browsers?: import('./browser.ts').BrowserManager;
+  /**
+   * Phase 71: set in a household member's space: the models the owner allowed them and their daily
+   * limits, checked before every model call (src/household.ts). Unset for the owner.
+   */
+  member?: import('./household.ts').MemberPolicy;
 }
 
 export type ChatEvent =
@@ -258,6 +263,11 @@ export function resolveProvider(app: AppContext, providerId: string | null, mode
   if (!config) throw new Error(`Provider "${id}" is not configured.`);
   const chosen = model ?? (providerId ? undefined : s.defaultModel) ?? config.defaultModel;
   if (!chosen) throw new Error(`Choose a model for ${config.label} in Settings.`);
+  // Phase 71: a household member only uses the models the owner allowed, within their daily limits.
+  if (app.member) {
+    app.member.checkModel(config.id, chosen);
+    app.member.checkBudget();
+  }
   const key = app.vault.get(vaultKeyFor(config.id));
   if (config.needsKey && !key) throw new Error(`${config.label} needs an API key. Add it in Settings.`);
   const factory = app.providerFactory ?? createProvider;

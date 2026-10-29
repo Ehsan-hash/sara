@@ -18,6 +18,9 @@ import { initLocalModels, loadLocalModels, setPrivateBadge } from './local-model
 import { groupTag, initGroups, isGroup, openGroupDialog, showGroupButton, speakerHeader } from './group.js';
 import { appLink, inPhoneApp, phoneKind } from './pair-link.js';
 import { addToMomentsButton, initMoments, loadMoments, openMoments, renderTodayMoments } from './moments.js';
+import { initHousehold, joinFromLink, loadAccount, loadHousehold, showPaused } from './household.js';
+/** Phase 71: a household member (their own space; owner-only pages and loaders are left out). */
+const isMember = () => document.body.classList.contains('member');
 const $ = (sel) => document.querySelector(sel);
 
 const state = {
@@ -94,8 +97,15 @@ async function boot() {
   if (!session.authenticated) {
     offerPhoneApp(session);
     showClaim(session.claim);
+    // Phase 71: joining a household with an invite (not on the demo server).
+    $('#join-open').hidden = Boolean(session.demo);
+    if (!session.demo) joinFromLink();
     return show('login');
   }
+  // Phase 71: the owner, or a household member in their own space.
+  document.body.classList.toggle('member', session.role === 'member');
+  buildSettingsNav(); // the nav was built before we knew who signed in: owner or member pages
+  if (session.role === 'member' && session.member?.status !== 'active') return showPaused(session.member);
   const langChanged = await applyLanguage(session.language, session.appLanguage);
   setIdentity(session.identity);
   // Phase 68: the apps name this server after her (until renamed) and show the server switcher.
@@ -1923,7 +1933,9 @@ function renderConvSummary() {
   const kind = s.providers.find((p) => p.id === prov)?.kind;
   const plan = kind === 'chatgpt' ? ` · ${t('Using ChatGPT plan')}` : kind === 'claude-code' ? ` · ${t('Claude subscription')}` : kind === 'grok-cli' ? ` · ${t('Grok subscription')}` : '';
   // L11: "main" is the main folder of her workspaces.
-  $('#conv-summary').textContent = `${c.mode === 'coding' ? `${t('Coding')} · ` : ''}${c.workspace === 'main' ? `📁 ${t('main folder')}` : `📁 ${c.workspace}`} · ${model || label}${plan}`;
+  // Phase 71: members have no workspace folders (the file tools are the owner's), so no folder part.
+  const folder = isMember() ? '' : `${c.workspace === 'main' ? `📁 ${t('main folder')}` : `📁 ${c.workspace}`} · `;
+  $('#conv-summary').textContent = `${c.mode === 'coding' ? `${t('Coding')} · ` : ''}${folder}${model || label}${plan}`;
 }
 
 async function csLoadModels(selected) {
@@ -5289,7 +5301,16 @@ $('#model-select').addEventListener('change', () => {
 const OLD_TABS = { yours: 'her-character', models: 'models-default', you: 'you-about', abilities: 'ab-tools', connections: 'co-phone', voice: 'her-voice', data: 'dh-health' };
 // In the phone apps the adult-mode page isn't offered (store rules; it's a web-browser setting).
 // Adult mode is web-browser only (hidden in the phone and desktop apps); "This computer" only in the desktop app.
-const settingsPages = () => [...document.querySelectorAll('#settings .settings-page')].filter((p) => !(p.dataset.page === 'you-adult' && /\b(SaraPhone|SaraDesktop)\/\d/.test(navigator.userAgent)) && !(p.dataset.page === 'desktop-app' && !window.SaraDesktop));
+// Phase 71: a household member sees only their own pages (data-member-only), never the owner's
+// (data-owner-only); the household page isn't on the demo server.
+const settingsPages = () =>
+  [...document.querySelectorAll('#settings .settings-page')].filter(
+    (p) =>
+      !(p.dataset.page === 'you-adult' && /\b(SaraPhone|SaraDesktop)\/\d/.test(navigator.userAgent)) &&
+      !(p.dataset.page === 'desktop-app' && !window.SaraDesktop) &&
+      !(isMember() ? 'ownerOnly' in p.dataset : 'memberOnly' in p.dataset) &&
+      !(p.dataset.page === 'household' && document.body.classList.contains('demo')),
+  );
 
 function buildSettingsNav() {
   const nav = $('#settings-nav-list');
@@ -5362,6 +5383,8 @@ function showSettingsTab(page, opts = {}) {
   if (pick === 'co-apps') void loadOtherApps();
   if (pick === 'her-import') void loadImport();
   if (pick === 'models-local') void loadLocalModels();
+  if (pick === 'household') void loadHousehold();
+  if (pick === 'account') void loadAccount();
   $('#settings-empty').hidden = true;
   $('#settings').classList.add('page-open'); // phone: show the page instead of the list
   $('.settings-pages').scrollTop = 0;
@@ -5426,6 +5449,8 @@ async function loadSettingsPages() {
     sel.value = v;
   }
   renderProviders();
+  // Phase 71: a household member's space answers only their own pages; the owner's are skipped.
+  if (isMember()) return void (await Promise.all([loadDevices().catch(() => {}), loadPhotos().catch(() => {}), loadBriefing(), loadVoice().catch(() => {}), loadCalls().catch(() => {}), loadPush(), loadAdult(), loadReports(), loadLeaveBy(), loadReview(), loadSecurity(), renderCompanionsPage(), loadDesktop()]));
   await loadTools();
   await Promise.all([loadDevices().catch(() => {}), loadPhotos(), loadOffsite(), loadBriefing(), loadSearch(), loadMcp(), renderRoutes(), loadVoice(), loadCalls(), loadTelegram(), loadDiscord(), loadPush(), loadHealth(), loadBackups(), loadSubs(), loadGitHub(), loadHome(), loadGoogle(), loadAdult(), loadApns(), loadReports(), loadLeaveBy(), loadReview(), loadSecurity(), renderCompanionsPage(), loadDesktop(), loadDesktopGet(), loadHistory(), loadUsage(), loadMcpPresets()]);
 }
@@ -6963,6 +6988,7 @@ async function openStory() {
 }
 $('#open-story').addEventListener('click', () => void openStory());
 initMoments({ openAtMessage });
+initHousehold({ show, boot, copyText, showSettingsTab });
 for (const b of document.querySelectorAll('[data-story]')) {
   b.addEventListener('click', () => {
     storyState.filter = b.dataset.story;

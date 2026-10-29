@@ -76,7 +76,7 @@ version's details are in the [changelog](../CHANGELOG.md).
 | 68 | Several servers in one app: the desktop, phone and other apps switch between your Saras without signing out | ✅ 1.8 |
 | 69 | Video calls with her moving avatar | ✅ 1.9 |
 | 70 | Our moments: a shared photo album with her captions | ✅ 1.10 |
-| 71 | Household mode: several people on one server, each with their own companions | 2.0 |
+| 71 | Household mode: several people on one server, each with their own companions | ✅ 2.0 |
 | 72 | Her voice in the home: Alexa, Android's assistant and Google Home, Siri Shortcuts, smart-home presence | 2.1 |
 | 73 | Work on your other servers over SSH: password or key; after a password login she makes and uses her own key and keeps the password only if you insist | 2.2 |
 | 74 | Big documents: 500–1,000-page PDFs and books in her library, every scanned page read, answers with page numbers | 2.3 |

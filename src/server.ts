@@ -32,6 +32,7 @@ import { acceptWebSocket, refuseUpgrade } from './ws.ts';
 import { previewUrl } from './preview.ts';
 import { extname, join, normalize, resolve, sep } from 'node:path';
 import { DEVICE_TOKEN_PREFIX, deviceLabel, LoginLimiter, OwnerAuth, SESSION_COOKIE } from './auth.ts';
+import { cleanLimits as cleanMemberLimits, COST_LIMITS, HouseholdError, INVITE_HOURS, LEAVING_DAYS, MESSAGE_LIMITS, memberRouteCheck, type MemberRecord, type ModelPick, type PairRegistry } from './household.ts';
 import type { FirstClaim } from './claim.ts';
 import { cleanScope, DeviceFlow } from './device-flow.ts';
 import { handleOpenAI } from './openai-api.ts';
@@ -157,6 +158,44 @@ export interface ServerOptions {
   companions?: import('./companions.ts').CompanionManager;
   /** Phase 59: first sign-in in the browser on a new server (src/claim.ts); shared by every companion. */
   claim?: FirstClaim;
+  /**
+   * Phase 71: household mode. `member` is set for a member's space (their record, read live), and
+   * makes this server answer only the member routes (src/household.ts → MEMBER_ROUTES). `household`
+   * is set for the owner's space: the admin page and joining with an invite.
+   */
+  member?: MemberHooks;
+  household?: HouseholdHooks;
+  /** Phase 71: sign-in registries shared by every space (device codes, pairing codes, passkey challenges). */
+  deviceFlow?: DeviceFlow;
+  pairs?: PairRegistry;
+  challenges?: Map<string, { purpose: 'signin' | 'register' | 'confirm'; expires: number }>;
+  /** Phase 71: the space this server belongs to ('owner' or a member id), for the shared registries. */
+  spaceId?: string;
+  /** Phase 71: whether anyone on this server has a passkey (the sign-in page offers passkey sign-in). */
+  anyPasskeys?: () => boolean;
+}
+
+/** Phase 71: what a member's space needs from main.ts. */
+export interface MemberHooks {
+  record: () => MemberRecord | undefined;
+  /** Every companion of this member, for their own export and usage. */
+  apps: () => AppContext[];
+  /** Deletes this member's whole space (asked by the member, re-authenticated). */
+  deleteSelf: () => Promise<void>;
+}
+
+/** Phase 71: the owner's household admin, implemented in main.ts (it builds and stops spaces). */
+export interface HouseholdHooks {
+  store: import('./household.ts').HouseholdStore;
+  /** The owner's chat models a member may be given. */
+  models: () => (ModelPick & { label: string })[];
+  /** Uses an invite: makes the member's space; returns their token (shown once) and a session cookie value. */
+  join: (code: string, confirm18: unknown, deviceLabel: string) => Promise<{ token: string; session: { value: string; maxAgeSeconds: number } }>;
+  usage: (id: string) => ReturnType<typeof import('./household.ts').memberUsage> | null;
+  /** Deletes a member's space now (after Remove). */
+  deleteNow: (id: string) => Promise<void>;
+  /** Signs a member out everywhere (suspend, remove). */
+  signOutAll: (id: string) => void;
 }
 
 /** A soft square picture with a companion's initial (until she has a look of her own). */
@@ -989,15 +1028,17 @@ export function createSaraServer(opts: ServerOptions): Server {
   }
 
   let pairing: { hash: Buffer; expires: number } | undefined;
+  /** Phase 71: whose space this server is ('owner' or a member id), for the shared sign-in registries. */
+  const spaceId = opts.spaceId ?? 'owner';
   // Phase 52: device-code sign-in requests (in memory, 10 minutes).
-  const deviceFlow = new DeviceFlow();
+  const deviceFlow = opts.deviceFlow ?? new DeviceFlow();
   /** The device id when the request came with a device token (apps can't approve other apps). */
   const deviceTokenOf = (req: IncomingMessage) => {
     const h = req.headers.authorization;
     return h?.startsWith(`Bearer ${DEVICE_TOKEN_PREFIX}`) ? auth.deviceTokenId(h.slice(7)) : undefined;
   };
   // Phase 24: passkey challenges (one use, 5 minutes).
-  const challenges = new Map<string, { purpose: 'signin' | 'register' | 'confirm'; expires: number }>();
+  const challenges = opts.challenges ?? new Map<string, { purpose: 'signin' | 'register' | 'confirm'; expires: number }>();
   const issueChallenge = (purpose: 'signin' | 'register' | 'confirm') => {
     const now = Date.now();
     for (const [k, v] of challenges) if (v.expires < now) challenges.delete(k);
@@ -1260,6 +1301,36 @@ export function createSaraServer(opts: ServerOptions): Server {
       return send(res, 200, { ok: true });
     }
 
+    // Phase 71: joining with an invite (docs/HOUSEHOLD.md). Only the owner's space answers it; the
+    // invite code is the proof (one use, expires), and the new member confirms 18+.
+    if (a === 'household' && b === 'join' && !c && opts.household && !opts.member && !opts.demo && (method === 'GET' || method === 'POST')) {
+      const ip = clientIp(req, opts.trustProxy);
+      if (limiter.blocked(ip)) throw new HttpError(429, 'Too many attempts. Try again later.');
+      if (method === 'GET') {
+        const inv = opts.household.store.checkInvite(new URL(req.url ?? '/', 'http://x').searchParams.get('code') ?? '');
+        if (!inv) {
+          limiter.fail(ip, Date.now(), 0.5);
+          throw new HttpError(404, 'That invite is wrong, was already used, or has expired. Ask for a new one.');
+        }
+        return send(res, 200, { invite: inv });
+      }
+      sameSiteOnly();
+      const body = await readJson(req);
+      let joined;
+      try {
+        joined = await opts.household.join(String(body.code ?? ''), body.confirm18, deviceLabel(req.headers['user-agent']));
+      } catch (err) {
+        if (err instanceof HouseholdError) {
+          if (err.status === 404) limiter.fail(ip);
+          throw new HttpError(err.status, err.message);
+        }
+        throw err;
+      }
+      limiter.reset(ip);
+      res.setHeader('set-cookie', cookie(joined.session.value, joined.session.maxAgeSeconds));
+      return send(res, 200, { ok: true, token: joined.token });
+    }
+
     // Phase 59: first sign-in in the browser on a new server (src/claim.ts, docs/THREAT_MODEL.md).
     // GET tells the sign-in page whether setup is open; POST claims the server: a new owner token
     // (the one in the log stops working), shown once, and this browser is signed in.
@@ -1298,7 +1369,7 @@ export function createSaraServer(opts: ServerOptions): Server {
       const body = await readJson(req);
       if (b === 'signin-options') {
         limiter.fail(ip, Date.now(), 0.2); // asking is cheap but not free: 50 asks = one failed sign-in budget
-        if (!auth.passkeys().length) throw new HttpError(404, 'No passkeys yet: sign in with the owner token, then add one in Settings → Devices and sign-in.');
+        if (!(opts.anyPasskeys?.() ?? auth.passkeys().length > 0)) throw new HttpError(404, 'No passkeys yet: sign in with the owner token, then add one in Settings → Devices and sign-in.');
         return send(res, 200, { challenge: issueChallenge('signin'), rpId: site.rpId, userVerification: 'required', timeout: 120_000 });
       }
       const id = String(body.id ?? '');
@@ -1328,7 +1399,8 @@ export function createSaraServer(opts: ServerOptions): Server {
       if (limiter.blocked(ip)) throw new HttpError(429, 'Too many attempts. Try again later.');
       const body = await readJson(req);
       const given = normalizePairCode(String(body.code ?? ''));
-      const ok = pairing && pairing.expires > Date.now() && given.length === PAIR_LEN && timingSafeEqual(createHash('sha256').update(given).digest(), pairing.hash);
+      // Phase 71: with the shared registry, a code only works in the space it was made in.
+      const ok = opts.pairs ? given.length === PAIR_LEN && opts.pairs.take(spaceId, given) : pairing && pairing.expires > Date.now() && given.length === PAIR_LEN && timingSafeEqual(createHash('sha256').update(given).digest(), pairing.hash);
       if (!ok) {
         limiter.fail(ip);
         throw new HttpError(401, 'That code is wrong or has expired. Make a new one in Settings → Devices and sign-in.');
@@ -1358,7 +1430,9 @@ export function createSaraServer(opts: ServerOptions): Server {
         disclosureAccepted: authed ? (opts.demo ? demoAccepted.has(visitorKey(req)) : Boolean(app.settings.get().disclosureAcceptedAt)) : false,
         ...(opts.demo ? { demo: true } : {}),
         // Phase 24: the sign-in page offers "Sign in with a passkey" when one exists.
-        ...(!authed && !opts.demo && auth.passkeys().length ? { passkeys: true } : {}),
+        ...(!authed && !opts.demo && (opts.anyPasskeys?.() ?? auth.passkeys().length > 0) ? { passkeys: true } : {}),
+        // Phase 71: who is signed in (the owner, or a household member and their account's state).
+        ...(authed && !opts.demo ? (opts.member ? { role: 'member', member: (({ name, status, deleteAfter, limits }) => ({ name, status, deleteAfter: deleteAfter ?? null, voice: limits.voice, pictures: limits.pictures }))(opts.member.record() ?? ({ name: '', status: 'suspended', limits: { voice: false, pictures: false } } as unknown as MemberRecord)) } : { role: 'owner', ...(opts.household ? { household: true } : {}) }) : {}),
         // Phase 59: a new server that can be set up in the browser (only while nobody has signed in).
         ...(() => {
           const st = !authed && !opts.demo && auth.setupPending ? opts.claim?.status() : undefined;
@@ -1406,6 +1480,11 @@ export function createSaraServer(opts: ServerOptions): Server {
     }
 
     if (!isAuthed(req)) throw new HttpError(401, 'Sign in first.');
+    // Phase 71: a household member's space answers only the member routes (src/household.ts).
+    if (opts.member) {
+      const chk = memberRouteCheck(opts.member.record(), method, parts);
+      if (chk) throw new HttpError(chk.status, chk.message, chk.ownerOnly ? { ownerOnly: true } : undefined);
+    }
     // Security review: an app signed in with a device code (terminal, VS Code) can chat and work,
     // but can't change how you sign in, list or sign out devices, make pairing codes or let in
     // other apps: those need you in the web app.
@@ -3856,13 +3935,14 @@ export function createSaraServer(opts: ServerOptions): Server {
     if (a === 'pair' && !b && method === 'POST') {
       // A new code replaces any earlier one.
       const code = newPairCode();
-      pairing = { hash: createHash('sha256').update(normalizePairCode(code)).digest(), expires: Date.now() + PAIR_MS };
+      pairing = { hash: createHash('sha256').update(normalizePairCode(code)).digest(), expires: opts.pairs ? opts.pairs.issue(spaceId, code) : Date.now() + PAIR_MS };
       const origin = typeof req.headers.origin === 'string' && req.headers.origin !== 'null' ? req.headers.origin : `http://${req.headers.host}`;
       const url = `${origin}/pair#${code}`;
       return send(res, 200, { code, url, expiresAt: new Date(pairing.expires).toISOString(), qr: `data:image/svg+xml;base64,${Buffer.from(qrSvg(url)).toString('base64')}` });
     }
     if (a === 'pair' && !b && method === 'DELETE') {
       pairing = undefined;
+      opts.pairs?.clear(spaceId);
       return send(res, 200, { ok: true });
     }
     // "Report this reply" (Phase 19).
@@ -3987,9 +4067,111 @@ export function createSaraServer(opts: ServerOptions): Server {
       } else ok = auth.twoStepOn ? auth.checkTwoStep(String(body.code ?? '')) : auth.verifyToken(String(body.token ?? ''));
       if (!ok) {
         limiter.fail(ip);
-        throw new HttpError(403, auth.twoStepOn ? 'Enter the current code from your authenticator app to confirm.' : 'Enter your owner token to confirm.', { confirm: auth.twoStepOn ? 'code' : 'token' });
+        throw new HttpError(403, auth.twoStepOn ? 'Enter the current code from your authenticator app to confirm.' : opts.member ? en('Enter your member token to confirm.') : 'Enter your owner token to confirm.', { confirm: auth.twoStepOn ? 'code' : 'token' });
       }
     };
+    // ---------- Phase 71: household mode (docs/HOUSEHOLD.md) ----------
+    if (a === 'household') {
+      if (opts.demo) throw new HttpError(403, 'Not available in the demo.');
+      const herr = (err: unknown): never => {
+        if (err instanceof HouseholdError) throw new HttpError(err.status, err.message, err.message.includes('{n}') ? { params: { n: 20 } } : undefined);
+        throw err;
+      };
+      // A member's own account (memberRouteCheck already limited this space to household/me…).
+      if (opts.member) {
+        const rec = opts.member.record();
+        if (!rec || b !== 'me') throw new HttpError(404, 'Not found');
+        if (!c && method === 'GET') {
+          const models = app.settings.get().providers;
+          return send(res, 200, {
+            name: rec.name,
+            status: rec.status,
+            createdAt: rec.createdAt,
+            deleteAfter: rec.deleteAfter ?? null,
+            limits: { ...rec.limits, models: rec.limits.models.map((m) => ({ ...m, label: models.find((p) => p.id === m.providerId)?.label ?? m.providerId })) },
+            today: app.member?.today() ?? { messages: 0, usd: 0 },
+            companions: opts.member.apps().length,
+          });
+        }
+        if (c === 'export' && !parts[3] && method === 'GET') {
+          const file = {
+            format: 'sara-member-export',
+            version: 1,
+            exportedAt: app.now().toISOString(),
+            companions: opts.member.apps().map((x) => ({ id: x.companionId ?? 'main', name: x.persona.name, persona: x.persona, data: exportAll(x) })),
+          };
+          res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'content-disposition': `attachment; filename="sara-my-data-${app.now().toISOString().slice(0, 10)}.json"`, 'cache-control': 'no-store', ...SECURITY_HEADERS });
+          return void res.end(JSON.stringify(file, null, 2));
+        }
+        if (c === 'delete' && !parts[3] && method === 'POST') {
+          // Deleting everything needs proof it's really them (their member token, two-step code or a passkey).
+          confirmIdentity(await readJson(req), { passkey: true });
+          res.setHeader('set-cookie', cookie('', 0));
+          send(res, 200, { ok: true });
+          await opts.member.deleteSelf().catch((err: Error) => console.warn(`household: deleting an account failed: ${err.message}`));
+          return;
+        }
+        throw new HttpError(404, 'Not found');
+      }
+      const H = opts.household;
+      if (!H) throw new HttpError(404, 'Not found');
+      const memberView = (m: MemberRecord) => ({ id: m.id, name: m.name, status: m.status, createdAt: m.createdAt, deleteAfter: m.deleteAfter ?? null, limits: m.limits, usage: H.usage(m.id) });
+      const view = () => ({
+        members: H.store.members().map(memberView),
+        invites: H.store.invites(),
+        models: H.models(),
+        options: { hours: INVITE_HOURS, messages: MESSAGE_LIMITS, cost: COST_LIMITS, leavingDays: LEAVING_DAYS },
+      });
+      if (!b && method === 'GET') return send(res, 200, view());
+      if (b === 'invites' && !c && method === 'POST') {
+        const body = await readJson(req);
+        try {
+          const limits = cleanMemberLimits(body.limits, H.models());
+          const { code, invite } = H.store.invite({ name: body.name, hours: body.hours, confirm18: body.confirm18, limits });
+          const origin = typeof req.headers.origin === 'string' && req.headers.origin !== 'null' ? req.headers.origin : `${isHttps(req) ? 'https' : 'http'}://${req.headers.host}`;
+          const url = `${origin}/#join=${code}`;
+          return send(res, 200, { code, url, invite, qr: `data:image/svg+xml;base64,${Buffer.from(qrSvg(url)).toString('base64')}`, ...view() });
+        } catch (err) {
+          return herr(err);
+        }
+      }
+      if (b === 'invites' && c && !parts[3] && method === 'DELETE') {
+        if (!H.store.revokeInvite(c)) throw new HttpError(404, 'That invite is gone.');
+        return send(res, 200, view());
+      }
+      if (b === 'members' && c) {
+        const d = parts[3];
+        const cur = H.store.get(c);
+        if (!cur) throw new HttpError(404, 'No such member.');
+        try {
+          if (!d && method === 'PUT') {
+            const body = await readJson(req);
+            if (body.limits !== undefined) H.store.setLimits(c, cleanMemberLimits(body.limits, H.models(), cur.limits));
+            if (body.name !== undefined) H.store.rename(c, body.name);
+            return send(res, 200, view());
+          }
+          if ((d === 'suspend' || d === 'resume') && !parts[4] && method === 'POST') {
+            await readJson(req);
+            H.store.setStatus(c, d === 'suspend' ? 'suspended' : 'active');
+            return send(res, 200, view());
+          }
+          if (d === 'remove' && !parts[4] && method === 'POST') {
+            await readJson(req);
+            H.store.markLeaving(c);
+            return send(res, 200, view());
+          }
+          if (!d && method === 'DELETE') {
+            if (cur.status !== 'leaving') throw new HttpError(409, 'Remove them first (they get a few days to download their data).');
+            await H.deleteNow(c);
+            return send(res, 200, view());
+          }
+        } catch (err) {
+          return herr(err);
+        }
+      }
+      throw new HttpError(404, 'Not found');
+    }
+
     // Phase 24: passkeys and two-step sign-in (Settings → Devices and sign-in).
     if (a === 'security' && !b && method === 'GET') return send(res, 200, { passkeys: auth.passkeys(), twoStep: auth.twoStepOn });
     // Security review: a passkey can confirm it's you (approving an app's device code).
@@ -4105,7 +4287,8 @@ export function createSaraServer(opts: ServerOptions): Server {
           if (!p) throw new HttpError(404, 'That code is wrong, was already used, or has expired. Start the sign-in again in the app.');
           return send(res, 200, { request: p });
         }
-        return send(res, 200, { pending: deviceFlow.pending() });
+        // Phase 71: a member types the code their app shows; the server's waiting list is the owner's.
+        return send(res, 200, { pending: opts.member ? [] : deviceFlow.pending() });
       }
       if ((b === 'approve' || b === 'deny') && method === 'POST') {
         const body = await readJson(req);
@@ -4200,6 +4383,8 @@ export function createSaraServer(opts: ServerOptions): Server {
       // First-run guide: is setup needed, and what can be found on this machine without typing.
       if (!b && method === 'GET') {
         const s = app.settings.get();
+        // Phase 71: a member's models are set up by the owner: no first-run guide.
+        if (opts.member) return send(res, 200, { done: true, ownerName: s.ownerName ?? '', ollama: [], subscriptions: { grok: false, claude: false, chatgpt: false } });
         const done = Boolean(s.setupDone) || (s.providers.length > 0 && Boolean(s.ownerName));
         const ollama: { url: string; models: number }[] = [];
         if (!done || /[?&]detect\b/.test(req.url ?? '')) {
@@ -4231,6 +4416,23 @@ export function createSaraServer(opts: ServerOptions): Server {
       }
     }
     if (a === 'providers') {
+      // Phase 71: a member sees only the models the owner allowed them: no addresses, keys or presets.
+      if (opts.member) {
+        const allowed = opts.member.record()?.limits.models ?? [];
+        const s = app.settings.get();
+        const mine = (id: string) => allowed.filter((m) => m.providerId === id).map((m) => m.model);
+        if (!b && method === 'GET') {
+          return send(res, 200, {
+            presets: [],
+            providers: s.providers.filter((p) => mine(p.id).length).map((p) => ({ id: p.id, label: p.label, kind: p.kind, baseUrl: '', local: Boolean(p.local), needsKey: false, hasKey: true, defaultModel: mine(p.id)[0] })),
+            defaultProviderId: s.defaultProviderId ?? null,
+            defaultModel: s.defaultModel ?? null,
+            member: true,
+          });
+        }
+        if (b && c === 'models' && !parts[3] && method === 'GET') return send(res, 200, { models: mine(b), hidden: 0 });
+        throw new HttpError(403, 'Only the owner of this server can use this.', { ownerOnly: true });
+      }
       if (!b && method === 'GET') return send(res, 200, providerView());
       if (b && !c && method === 'PUT') {
         const body = await readJson(req);
@@ -5205,6 +5407,8 @@ export function createSaraServer(opts: ServerOptions): Server {
       }
       const url = new URL(req.url ?? '/', 'http://localhost');
       // Phase 57: other apps, with an API key: the OpenAI-compatible API and the MCP server.
+      // Phase 71: a paused or leaving member's API keys stop working.
+      if (opts.member && (url.pathname === '/v1' || url.pathname.startsWith('/v1/') || url.pathname === '/mcp' || url.pathname === '/mcp/') && opts.member.record()?.status !== 'active') throw new HttpError(403, 'This account is paused on this server.');
       if (url.pathname === '/v1' || url.pathname.startsWith('/v1/')) {
         return await handleOpenAI(req, res, url.pathname, { app, auth, ...(opts.companions ? { companions: opts.companions } : {}), demo: Boolean(opts.demo), limiter: appLimiter });
       }
@@ -5220,9 +5424,10 @@ export function createSaraServer(opts: ServerOptions): Server {
         throw new HttpError(405, 'Method not allowed');
       }
     } catch (err) {
-      const status = err instanceof HttpError ? err.status : 500;
+      // Phase 71: a member's attempt to change the owner's keys (src/household.ts memberVault) is a 403.
+      const status = err instanceof HttpError ? err.status : err instanceof HouseholdError ? err.status : 500;
       if (status === 500) console.error(err);
-      if (!res.headersSent) send(res, status, { error: status === 500 ? en('Internal error') : (err as Error).message, ...(err instanceof HttpError ? err.extra : {}) });
+      if (!res.headersSent) send(res, status, { error: status === 500 ? en('Internal error') : (err as Error).message, ...(err instanceof HttpError ? err.extra : err instanceof HouseholdError ? { ownerOnly: true } : {}) });
       else res.end();
     }
   });
@@ -5247,6 +5452,8 @@ export function createSaraServer(opts: ServerOptions): Server {
       }
       if (origin && originHost !== req.headers.host) return refuseUpgrade(socket, 403, 'Forbidden');
       if (!isAuthed(req)) return refuseUpgrade(socket, 401, 'Unauthorized');
+      // Phase 71: a member's calls follow their account's state and the voice switch.
+      if (opts.member && memberRouteCheck(opts.member.record(), 'GET', ['live'])) return refuseUpgrade(socket, 403, 'Forbidden');
       let convId = '';
       try {
         convId = safeDecode(m[1]);

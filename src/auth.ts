@@ -91,10 +91,13 @@ export class OwnerAuth {
   /** Set only when a new token was generated during this process start. */
   readonly newToken: string | undefined;
   #fresh = false;
+  /** Phase 71: a member's tokens start with `sara_m.<member id>.` (the owner's have no prefix). */
+  readonly #prefix: string;
 
-  constructor(dataDir: string, now: () => Date = () => new Date()) {
+  constructor(dataDir: string, now: () => Date = () => new Date(), opts: { tokenPrefix?: string } = {}) {
     this.#path = join(dataDir, FILE);
     this.#now = now;
+    this.#prefix = opts.tokenPrefix ?? '';
     if (existsSync(this.#path)) {
       this.#owner = JSON.parse(readFileSync(this.#path, 'utf8')) as OwnerFile;
       if (!this.#owner.sessions) {
@@ -103,7 +106,7 @@ export class OwnerAuth {
         this.#save();
       }
     } else {
-      const { owner, token } = OwnerAuth.#generate();
+      const { owner, token } = OwnerAuth.#generate(this.#prefix);
       this.#owner = owner;
       this.newToken = token;
       this.#fresh = true;
@@ -123,8 +126,8 @@ export class OwnerAuth {
     this.#save();
   }
 
-  static #generate(): { owner: OwnerFile; token: string } {
-    const token = randomBytes(24).toString('base64url');
+  static #generate(prefix = ''): { owner: OwnerFile; token: string } {
+    const token = `${prefix}${randomBytes(24).toString('base64url')}`;
     return { token, owner: { tokenHash: sha256(token), sessionSecret: randomBytes(32).toString('base64url'), sessions: [] } };
   }
 
@@ -142,7 +145,7 @@ export class OwnerAuth {
    * two-step sign-in stay, unless `clearSecurity` (the server-side recovery: `sara reset-token`).
    */
   resetToken(opts: { clearSecurity?: boolean } = {}): string {
-    const { owner, token } = OwnerAuth.#generate();
+    const { owner, token } = OwnerAuth.#generate(this.#prefix);
     if (!opts.clearSecurity) {
       if (this.#owner.passkeys) owner.passkeys = this.#owner.passkeys;
       if (this.#owner.totp) owner.totp = this.#owner.totp;
@@ -309,6 +312,11 @@ export class OwnerAuth {
   deviceKind(id: string): 'api' | 'app' | 'home-assistant' | undefined {
     const d = this.#owner.sessions?.find((x) => x.id === id);
     return !d?.tokenHash ? undefined : d.kind === 'api' || d.kind === 'home-assistant' ? d.kind : 'app';
+  }
+
+  /** Phase 71: whether a device or app sign-in with this id is listed here (routing only; tokens are still checked). */
+  hasDevice(id: string): boolean {
+    return Boolean(this.#owner.sessions?.some((x) => x.id === id));
   }
 
   /** Phase 57: the label of a signed-in device or API key. */

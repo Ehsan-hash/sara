@@ -177,6 +177,47 @@ What runs in a preview is code she (or a repository) wrote, so it is treated as 
 - Every decision, promise, milestone and "no longer true" mark must quote the words actually said in the conversation, or it is dropped, the same receipt rule as facts.
 - Sharing between companions is off by default. When it is on, it shares only facts about the owner, never conversations, summaries or what a companion said about herself.
 
+## Household mode (Phase 71)
+
+More than one person on one server (docs/HOUSEHOLD.md). New attackers: **a member** (an invited,
+signed-in adult) trying to reach another member's or the owner's data or the owner's server powers;
+**the owner** trying to read a member's space through the app; **someone holding a leaked invite**.
+Out of scope, said plainly in the UI and docs: the person who runs the server can read its disk.
+
+**Design that makes it structural.** Each person has a separate folder (`<data>/members/<id>/`, the
+owner's space is the data folder itself) with their own `owner.json` (sign-in), databases, settings
+and files, and their own set of running objects (stores, event hub, push service, approval brokers,
+group rooms, workers) built by the same code as the owner's companions. The front server resolves
+the person first, then the companion inside that person's space; every route then checks sign-in
+against that space's own `owner.json`. There is no shared table with a person column to forget a
+filter on.
+
+| Attack | How it is blocked |
+|---|---|
+| Member A sends B's (or the owner's) conversation id, message id, upload hash, memory id, task id, library document id, moment id, companion id, ring id, group room id | A's request is served by A's space, whose stores, companion manager and rooms only contain A's data: 404. `test/household-isolation.test.ts` tries every route family with the others' ids |
+| A's session cookie used for B or the owner | Each space signs cookies with its own secret; a cookie verifies in one space only. The front router never picks a space from a header or cookie the client names |
+| A forges the companion cookie / `x-sara-companion` header with B's companion id | Companion picking happens inside A's space (`pickCompanion(A's companions)`); unknown ids fall back to A's first companion |
+| Device token or API key of A used on `/api`, `/v1`, `/mcp` | Tokens are issued and checked by A's own `owner.json`; on `/v1` and `/mcp` they reach A's companions only. Other apps' tools stay off for members |
+| A approves a device code or redeems a pairing code to get into B's space | The person who approves a device code (with re-authentication) decides whose space its token is in; pairing codes are made in one space and redeem only there; codes grant nothing by themselves. A member's list of waiting device requests is empty (they type the code their app shows) |
+| A passkey of A used to sign in as B | Passkeys are stored per space; the front routes a passkey sign-in by its credential id and the signature is checked against that space's key |
+| A calls owner-only routes (backups, updates, logs, doctor, providers' keys, subscriptions, MCP, bridges, GitHub/Google/Home Assistant, workspaces, jobs, previews, team, private local mode, local models, imports, household admin) | Allowlist (`MEMBER_ROUTES`): anything not on it is 403 `ownerOnly`. Previews need a job, which members can't start |
+| A's companion uses tools to act on the server or the owner's accounts (shell, files, browser, jobs, GitHub, Google, Home Assistant, MCP, agent bridges, computer control) | A member's tool registry is built from a safe list only; the built-in file/shell/web-fetch tools and every server-acting tool are never added, so the model can't call them whatever it asks |
+| A reads the owner's keys or spends on models the owner didn't allow | `MemberVault` returns only allowed providers' keys (plus voice/picture keys when switched on), never lists or writes; provider lists hide addresses and key status; `resolveProvider` refuses models outside the member's list and calls past the daily message/cost limit |
+| File paths: uploads, look pictures, avatars, library files, moment photos, character files | Every file route resolves inside the space's own folder (content hashes and fixed names checked as before); there is no route that takes a folder or person from the request |
+| Search, recall, memory, her "lately in your other conversations" context, moments, story | All read the space's own databases; the find route's workspace search is empty for members (no workspaces) |
+| Events stream and notifications | Each space has its own event hub and push service (subscriptions in its own database), so a reminder, message or call only reaches that person's devices |
+| Group chats | Rooms live in the space's own `groups.json` and members are that person's companions only; no cross-person rooms in 2.0 |
+| Backups, exports, logs | Backups and logs are owner-only routes; the backup holds every space (needed to restore the server) and goes off-site only encrypted. A member's export reads only their space; the owner's export only the owner's. Logs never contain message text |
+| Imports (history, other companion apps, character cards) | History and companion imports are owner-only in 2.0; character cards import into the member's own companion |
+| The owner reads a member's data through the app | No owner route opens a member's stores except the household admin's usage numbers (messages per day, token cost per model) and the export/delete that runs on the member's request or at removal (the export is never sent to the owner) |
+| A leaked or guessed invite | 16 random characters (≈80 bits), only a hash kept, expires (1 h – 7 days), works once, can be revoked, joining is rate-limited per address like sign-in, and the owner's 18+ confirmation is recorded with it |
+| A suspended or removed member keeps a session | The space refuses every route but session/sign-out (suspended) or Your account + export (removing, 7 days), then the folder and its sign-ins are deleted |
+| The demo server | Household routes refuse, and no member space is loaded |
+
+**Remaining (accepted):** the server's administrator (and anyone with the owner's backups and the
+vault key) can read every space on disk; members share the owner's model providers, so a cloud
+provider sees each member's messages like the owner's; private local mode is server-wide.
+
 ## Known limits (accepted for now)
 
 - **`SARA_SANDBOX=none`** (Windows, Linux without bubblewrap, or macOS if `sandbox-exec` fails):

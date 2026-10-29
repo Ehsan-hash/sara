@@ -91,8 +91,12 @@ import { createTuneTool } from './studio.ts';
 import { DriftStore } from './drift.ts';
 import { paceFactor, tensionHalfLife } from './bond.ts';
 import { CompanionManager, CompanionSettings, companionDirs, LinkedToolRegistry, MAIN_ID, type Companion } from './companions.ts';
-import { pickCompanion } from './server.ts';
-import { createServer } from 'node:http';
+import { pickCompanion, type HouseholdHooks, type MemberHooks } from './server.ts';
+import { createServer, type IncomingMessage } from 'node:http';
+import { DeviceFlow } from './device-flow.ts';
+import { SESSION_COOKIE } from './auth.ts';
+import { cookieValue, HouseholdStore, MEMBER_TOKEN_PREFIX, MemberPolicy, MemberSettings, memberDirs, memberOfToken, memberUsage, memberVault, PairRegistry, peekJson, type MemberRecord, type ModelPick } from './household.ts';
+import type { Vault as VaultT } from './vault.ts';
 
 // A promise nobody waited for that failed: log it and carry on (a background job, a model call
 // whose answer was no longer needed). A thrown error nothing caught: log it plainly and stop, so
@@ -293,6 +297,30 @@ const google = new GoogleAccount(vault);
 // Local voice tools are Linux only for now (deploy/install-voice.sh).
 const voice = new LocalVoiceEngine(resolve(process.env.SARA_VOICE_DIR ?? (localVoiceSupported() ? '/opt/sara-voice' : join(dataDir, 'voice'))), dataDir);
 const companions = new CompanionManager(dataDir);
+
+/**
+ * Phase 71: a person's space (docs/HOUSEHOLD.md). The owner's is the data folder itself, exactly as
+ * before; each household member's is members/<id>/ with its own sign-in, settings, event hub,
+ * notifications and companions, built by the same buildCompanion below.
+ */
+interface Space {
+  id: string;
+  dir: string;
+  auth: OwnerAuth;
+  settings: SettingsStore;
+  vault: VaultT;
+  events: EventHub;
+  companions: CompanionManager;
+  push?: PushService;
+  member?: MemberPolicy;
+}
+const ownerSpace: Space = { id: 'owner', dir: dataDir, auth, settings, vault, events, companions };
+const memberSpaces = new Map<string, Space>();
+const household = new HouseholdStore(dataDir);
+// Sign-in registries shared by every space (codes are made or approved by a signed-in person).
+const deviceFlow = new DeviceFlow();
+const pairs = new PairRegistry();
+const challenges = new Map<string, { purpose: 'signin' | 'register' | 'confirm'; expires: number }>();
 // Phase 49: preview links (one list for the whole server) and the testing browsers.
 const previews = new PreviewManager({ ownPorts: () => [port] });
 const browsers = new BrowserManager({ sandbox: () => sandbox, previews, sweep: true });
@@ -335,6 +363,10 @@ const serverOpts = {
   ...(isDemo && process.env.SARA_DEMO_CALL_CODE?.trim() ? { demoCallCode: process.env.SARA_DEMO_CALL_CODE.trim() } : {}),
   ...(isDemo && process.env.SARA_DEMO_CALL_MINUTES_PER_DAY && Number.isFinite(Number(process.env.SARA_DEMO_CALL_MINUTES_PER_DAY)) ? { demoCallMinutesPerDay: Math.max(0, Number(process.env.SARA_DEMO_CALL_MINUTES_PER_DAY)) } : {}),
   companions,
+  deviceFlow,
+  pairs,
+  challenges,
+  anyPasskeys: () => auth.passkeys().length > 0 || [...memberSpaces.values()].some((sp) => sp.auth.passkeys().length > 0),
 };
 
 /** Builds one companion: the first lives in the data folder itself, the others in companions/<id>/. */
@@ -347,21 +379,24 @@ const modelCatalog = isDemo
       companions: () => companions.all().map((c) => ({ name: c.app.persona.name, settings: c.app.settings })),
     });
 
-function buildCompanion(id: string, dir: string): Companion {
+function buildCompanion(space: Space, id: string, dir: string): Companion {
   const main = id === MAIN_ID;
-  const settingsC = main ? settings : new CompanionSettings(dir, settings);
-  const tools = main ? mainTools : new LinkedToolRegistry(mainTools);
-  tools.add(createWebSearchTool(() => searchConfig(settingsC, vault)));
+  // Phase 71: in a household member's space only the safe tools are added (docs/HOUSEHOLD.md).
+  const isMember = Boolean(space.member);
+  const spaceVault = space.vault;
+  const settingsC = main ? space.settings : new CompanionSettings(dir, space.settings);
+  const tools = isMember ? new ToolRegistry([]) : main ? mainTools : new LinkedToolRegistry(mainTools);
+  if (!isMember) tools.add(createWebSearchTool(() => searchConfig(settingsC, vault)));
   const store = new Store(join(dir, 'sara.db'));
   const memory = new MemoryStore(store.db);
   // The planner: the first companion's, shared, unless the owner chose separate planners.
-  const sharedPlanner = !main && settings.get().companionPlanner !== 'separate';
-  const planner = sharedPlanner ? companions.main.app.planner! : new PlannerStore(store.db);
+  const sharedPlanner = !main && space.settings.get().companionPlanner !== 'separate';
+  const planner = sharedPlanner ? space.companions.main.app.planner! : new PlannerStore(store.db);
   for (const t of createPlannerTools({ planner, now: () => new Date(), timeZone: () => settingsC.get().timeZone, callsOn: () => settingsC.get().calls?.enabled === true })) tools.add(t);
   const uploads = new UploadStore(dir);
   const xaiProviderKeyOf = () => {
     const p = settingsC.get().providers.find((x) => /api\.x\.ai/.test(x.baseUrl));
-    return p ? vault.get(vaultKeyFor(p.id)) : undefined;
+    return p ? spaceVault.get(vaultKeyFor(p.id)) : undefined;
   };
   const scrapbook = new Scrapbook(store.db);
   tools.add(createScrapbookTool(scrapbook));
@@ -375,13 +410,13 @@ function buildCompanion(id: string, dir: string): Companion {
   // Phase 34: she can adjust her own dials when asked (the owner approves each change).
   tools.add(createTuneTool(() => app));
   // Phase 50: the code map tools and her recipes.
-  for (const t of createCodeTools(() => app.codemap)) tools.add(t);
-  for (const t of createRecipeTools(() => app)) tools.add(t);
-  for (const t of createPhotoTools({
+  if (!isMember) for (const t of createCodeTools(() => app.codemap)) tools.add(t);
+  if (!isMember) for (const t of createRecipeTools(() => app)) tools.add(t);
+  for (const t0 of createPhotoTools({
     webDir,
     uploads,
     settings: settingsC,
-    vault,
+    vault: spaceVault,
     xaiProviderKey: xaiProviderKeyOf,
     persona: () => app.persona,
     // Phase 43: shared channels (owner work in a Discord channel or Telegram group) stay non-explicit.
@@ -404,58 +439,65 @@ function buildCompanion(id: string, dir: string): Companion {
       }
       return undefined;
     },
-  }))
+  })) {
+    // Phase 71: pictures from her follow the member's switch (the owner pays for them).
+    const t = isMember ? { ...t0, isAvailable: () => (t0.isAvailable?.() ?? true) && space.member!.limits().pictures } : t0;
     tools.add(t);
+  }
   const app: AppContext = {
     store,
     log,
     uploads,
     settings: settingsC,
-    vault,
+    vault: spaceVault,
     // Her edited character (Settings → Character) overrides the default sheet.
     persona: loadPersona(existsSync(join(dir, 'persona.json')) ? join(dir, 'persona.json') : defaultPersonaPath),
     defaultPersonaPath,
     now: () => new Date(),
     dataDir: dir,
-    rootDir: dataDir,
+    rootDir: space.dir,
     companionId: id,
-    companions,
+    companions: space.companions,
     tools,
     approvals: new ApprovalBroker(),
     sandbox,
-    mcp,
+    ...(isMember ? {} : { mcp }),
     redactor,
-    snapshots: new SnapshotStore(dataDir),
+    snapshots: new SnapshotStore(space.dir),
     memory,
-    codemap: codemaps,
+    ...(isMember ? {} : { codemap: codemaps }),
     recipes: new RecipeStore(store.db),
     // Phase 44: her own library, or the first companion's when the owner shares one.
-    library: !main && settings.get().companionLibrary === 'shared' ? companions.main.app.library : new LibraryStore(store.db, dir),
+    library: !main && space.settings.get().companionLibrary === 'shared' ? space.companions.main.app.library : new LibraryStore(store.db, dir),
     drift: new DriftStore(store.db),
     planner,
-    events: new CompanionHub(events, id),
+    events: new CompanionHub(space.events, id),
     inner: new InnerStore(store.db, undefined, { tensionHalfLife: () => tensionHalfLife(app.persona.traits?.forgiveness), closenessRate: () => paceFactor(app.persona.traits?.pace) }),
     life: new LifeStore(store.db),
     scrapbook,
     moments,
     look: new LookBuilder({
       dataDir: dir,
-      key: async () => (await xaiImageKey({ vault, xaiProviderKey: xaiProviderKeyOf, grokToken: async () => subscriptions.grokAccessToken() })) ?? undefined,
+      key: async () => (isMember && !space.member!.limits().pictures ? undefined : ((await xaiImageKey({ vault: spaceVault, xaiProviderKey: xaiProviderKeyOf, grokToken: async () => subscriptions.grokAccessToken() })) ?? undefined)),
       model: () => photoSettings(settingsC).model || DEFAULT_IMAGE_MODEL,
       faceLock: () => settingsC.get().faceLock !== false,
     }),
     voice,
     subscriptions,
-    google,
+    ...(isMember ? {} : { google }),
   };
-  // The health history and notifications are the server's: one of each, shared.
-  healthHistory ??= new HealthHistory(store.db, { problems: () => log.problems, dataDir });
-  app.healthHistory = healthHistory;
-  if (!push) {
-    push = new PushService(store.db, vault, settings);
-    push.apns = new ApnsSender(store.db, vault);
+  if (space.member) app.member = space.member;
+  // The health history is the server's (the owner's); notifications are per space (each person's devices).
+  if (!isMember) {
+    healthHistory ??= new HealthHistory(store.db, { problems: () => log.problems, dataDir });
+    app.healthHistory = healthHistory;
   }
-  app.push = push;
+  if (!space.push) {
+    space.push = new PushService(store.db, vault, space.settings);
+    space.push.apns = new ApnsSender(store.db, vault);
+    if (!isMember) push = space.push;
+  }
+  app.push = space.push;
   app.privateLocal = privateLocal;
   app.modelPuller = modelPuller;
   // Phase 52: the cost and token meter (the owner's prices win over the shipped ones).
@@ -465,11 +507,11 @@ function buildCompanion(id: string, dir: string): Companion {
   // Phase 13: background jobs, git and delegating to Claude Code / Grok Build.
   app.jobs = new JobManager(app, store.db);
   app.reports = new ReportStore(store.db, app.now);
-  for (const t of createCodingTools(app)) tools.add(t);
+  if (!isMember) for (const t of createCodingTools(app)) tools.add(t);
   // Phase 49: previews of the web apps her jobs run, and her testing browser.
-  app.previews = previews;
-  app.browsers = browsers;
-  app.jobs.onEnd = (job) => {
+  if (!isMember) app.previews = previews;
+  if (!isMember) app.browsers = browsers;
+  if (!isMember) app.jobs.onEnd = (job) => {
     previews.jobEnded(job.id, app.jobs);
     // Phase 50: a finished job may have changed files: the code map looks again.
     try {
@@ -478,12 +520,14 @@ function buildCompanion(id: string, dir: string): Companion {
       /* not a workspace name */
     }
   };
-  for (const t of createBrowserTools(app)) tools.add(t);
-  for (const t of createGitHubTools(app)) tools.add(t);
-  // Phase 29: Home Assistant (off until the owner connects it).
-  for (const t of createHomeTools(app)) tools.add(t);
-  // Phase 14: Gmail and Google Calendar (the owner's own Google app; off until they sign in).
-  for (const t of createGoogleTools(google, () => settingsC.get().timeZone)) tools.add(t);
+  if (!isMember) {
+    for (const t of createBrowserTools(app)) tools.add(t);
+    for (const t of createGitHubTools(app)) tools.add(t);
+    // Phase 29: Home Assistant (off until the owner connects it).
+    for (const t of createHomeTools(app)) tools.add(t);
+    // Phase 14: Gmail and Google Calendar (the owner's own Google app; off until they sign in).
+    for (const t of createGoogleTools(google, () => settingsC.get().timeZone)) tools.add(t);
+  }
 
   // Phase 38: meaning search (vectors made a few at a time while the embeddings job is set).
   app.vectors = new MemoryVectors(store.db, memory, () => embedTarget(app));
@@ -492,15 +536,15 @@ function buildCompanion(id: string, dir: string): Companion {
   const memoryWorker = new MemoryWorker(app, memory);
   app.memoryNudge = () => memoryWorker.nudge();
   // Phase 44: a shared library is read (and learned into memory) by the first companion's worker.
-  const ownsLibrary = main || settings.get().companionLibrary !== 'shared';
+  const ownsLibrary = main || space.settings.get().companionLibrary !== 'shared';
   const libraryWorker = ownsLibrary ? new LibraryWorker(app, () => app.library) : undefined;
-  app.libraryNudge = ownsLibrary ? () => libraryWorker!.nudge() : () => companions.main.app.libraryNudge?.();
+  app.libraryNudge = ownsLibrary ? () => libraryWorker!.nudge() : () => space.companions.main.app.libraryNudge?.();
   // With a shared planner, each companion delivers the reminders set in her own conversations;
   // the first one also takes those whose conversation is gone.
   const owns = sharedPlanner
     ? (r: Reminder) => Boolean(r.conversationId && store.getConversation(r.conversationId))
     : main
-      ? (r: Reminder) => !r.conversationId || Boolean(store.getConversation(r.conversationId)) || !companions.byConversation(r.conversationId)
+      ? (r: Reminder) => !r.conversationId || Boolean(store.getConversation(r.conversationId)) || !space.companions.byConversation(r.conversationId)
       : undefined;
   const reminders = new ReminderScheduler(app, planner, owns ? { owns } : {});
   app.reminders = reminders;
@@ -522,30 +566,30 @@ function buildCompanion(id: string, dir: string): Companion {
     sceneOf: (image) => photoSettings(settingsC).taken?.find((x) => x.id === image)?.scene,
   });
   // Phase 39: team tasks she leads (helpers with their own models, tools and approvals).
-  app.team = new TeamManager(app, store.db);
-  for (const t of createTeamTools(() => app)) tools.add(t);
+  if (!isMember) app.team = new TeamManager(app, store.db);
+  if (!isMember) for (const t of createTeamTools(() => app)) tools.add(t);
   // Phase 52: new projects from tested starter templates.
-  tools.add(createStarterTool(() => app));
+  if (!isMember) tools.add(createStarterTool(() => app));
   // Phase 40: project knowledge, review mode, GitHub issues as tasks (watching is off by default).
   app.projects = new ProjectKnowledgeStore(app, store.db);
-  tools.add(createProjectNoteTool(() => app));
+  if (!isMember) tools.add(createProjectNoteTool(() => app));
   tools.add(createSettingsGuideTool());
-  for (const t of createReviewTools(() => app)) tools.add(t);
-  tools.add(createIssueTool(() => app));
-  const issueWatcher = new IssueWatcher(app);
+  if (!isMember) for (const t of createReviewTools(() => app)) tools.add(t);
+  if (!isMember) tools.add(createIssueTool(() => app));
+  const issueWatcher = isMember ? undefined : new IssueWatcher(app);
   // Phase 37: things to do together and shared lists.
   app.together = new TogetherStore(store.db, () => app.now());
   tools.add(createSharedListTool(() => app.together));
   // Phase 36: her closet (dresses for the scenario when the owner turns it on).
   const wardrobe = new WardrobeWorker(app);
   app.wardrobe = wardrobe;
-  // Phase 51: bring your history (ChatGPT / Claude exports), learned from a few a minute.
-  app.historyImport = new HistoryImporter(() => app);
+  // Phase 51: bring your history (ChatGPT / Claude exports), learned from a few a minute (owner only in 2.0).
+  if (!isMember) app.historyImport = new HistoryImporter(() => app);
   tools.add(createWardrobeTool(() => app));
   // Telegram and Discord: one bot each, for the first companion (shared with the others' settings).
-  if (main) bridges = { telegram: new TelegramBridge(app), discord: new DiscordBridge(app) };
-  app.bridges = bridges;
-  const server = createSaraServer({ ...serverOpts, app });
+  if (main && !isMember) bridges = { telegram: new TelegramBridge(app), discord: new DiscordBridge(app) };
+  if (!isMember) app.bridges = bridges;
+  const server = createSaraServer({ ...serverOpts, app, auth: space.auth, companions: space.companions, spaceId: space.id, ...(isMember ? { member: memberHooksFor(space) } : isDemo ? {} : { household: householdHooks }) });
   return {
     id,
     app,
@@ -554,9 +598,9 @@ function buildCompanion(id: string, dir: string): Companion {
       memoryWorker.start();
       libraryWorker?.start();
       vectorTimer = setInterval(indexVectors, 60_000);
-      if (!isDemo) issueWatcher.start();
+      if (!isDemo) issueWatcher?.start();
       // Team tasks that were running when the server stopped carry on.
-      setTimeout(() => app.team?.resumeInterrupted(), 15_000).unref();
+      if (app.team) setTimeout(() => app.team?.resumeInterrupted(), 15_000).unref();
       setTimeout(indexVectors, 5_000).unref();
       reminders.start();
       lifeWorker.start();
@@ -577,7 +621,7 @@ function buildCompanion(id: string, dir: string): Companion {
       memoryWorker.stop();
       libraryWorker?.stop();
       clearInterval(vectorTimer);
-      issueWatcher.stop();
+      issueWatcher?.stop();
       app.story?.stop();
       app.momentsWorker?.stop();
       reminders.stop();
@@ -592,10 +636,99 @@ function buildCompanion(id: string, dir: string): Companion {
     },
   };
 }
-companions.build = buildCompanion;
-companions.add(buildCompanion(MAIN_ID, dataDir));
+// ---- Phase 71: household members' spaces (docs/HOUSEHOLD.md) ----
+function memberHooksFor(space: Space): MemberHooks {
+  return { record: () => household.get(space.id), apps: () => space.companions.all().map((c) => c.app), deleteSelf: () => deleteMemberSpace(space.id) };
+}
+/** The owner's chat models a member can be given (from each provider's kept list, or its default). */
+function availableModels(): (ModelPick & { label: string })[] {
+  const out: (ModelPick & { label: string })[] = [];
+  for (const p of settings.get().providers) {
+    const listed = modelCatalog?.view(p.id).models ?? [];
+    const names = new Set([...(p.defaultModel ? [p.defaultModel] : []), ...(settings.get().defaultProviderId === p.id && settings.get().defaultModel ? [settings.get().defaultModel!] : []), ...listed]);
+    for (const model of names) if (!/embed/i.test(model)) out.push({ providerId: p.id, model, label: p.label });
+  }
+  return out.slice(0, 400);
+}
+/** Notifications: a space's messages and calls go to that person's devices, named after the companion. */
+function notifyFrom(space: Space): void {
+  space.events.subscribe((ev) => {
+    const c = space.companions.get(ev.companion) ?? space.companions.main;
+    void space.push?.onEvent(ev, c.app.persona.name, (id) => Boolean(space.companions.byConversation(id)?.app.store.getConversation(id)?.partner), (s) => redactor.redact(s)).catch((err: Error) => console.warn(`push: ${err.message}`));
+  });
+}
+function buildMemberSpace(member: MemberRecord, dir: string, givenAuth?: OwnerAuth): Space {
+  const limits = () => household.get(member.id)?.limits ?? { models: [], messagesPerDay: 0, costPerDay: 0, voice: false, pictures: false };
+  const space: Space = {
+    id: member.id,
+    dir,
+    auth: givenAuth ?? new OwnerAuth(dir, undefined, { tokenPrefix: `${MEMBER_TOKEN_PREFIX}${member.id}.` }),
+    settings: new MemberSettings(dir, settings, limits),
+    vault: memberVault(vault, limits),
+    events: new EventHub(),
+    companions: new CompanionManager(dir),
+  };
+  space.member = new MemberPolicy(household, member.id, () => space.companions.all().map((c) => c.app));
+  space.companions.build = (id, d) => buildCompanion(space, id, d);
+  space.companions.add(buildCompanion(space, MAIN_ID, dir));
+  for (const c of companionDirs(dir)) space.companions.add(buildCompanion(space, c.id, c.dir));
+  notifyFrom(space);
+  memberSpaces.set(member.id, space);
+  return space;
+}
+/** Stops a member's space and deletes it for good (Delete now, Delete my account, or after removal). */
+async function deleteMemberSpace(id: string): Promise<void> {
+  const sp = memberSpaces.get(id);
+  memberSpaces.delete(id);
+  pairs.clear(id);
+  if (sp) {
+    for (const c of sp.companions.all()) await c.stop().catch(() => {});
+    for (const c of sp.companions.all()) c.app.store.close();
+  }
+  household.deleteMember(id);
+  console.log('Household: a member\'s space was deleted.');
+}
+const householdHooks: HouseholdHooks = {
+  store: household,
+  models: availableModels,
+  join: async (code, confirm18, label) => {
+    const { member, dir } = household.redeem(code, confirm18);
+    try {
+      const mAuth = new OwnerAuth(dir, undefined, { tokenPrefix: `${MEMBER_TOKEN_PREFIX}${member.id}.` });
+      const token = mAuth.newToken!;
+      mAuth.markSignedIn();
+      const sp = buildMemberSpace(member, dir, mAuth);
+      for (const c of sp.companions.all()) c.start();
+      console.log('Household: someone joined with an invite.');
+      return { token, session: mAuth.createSession(label) };
+    } catch (err) {
+      await deleteMemberSpace(member.id).catch(() => {});
+      throw err;
+    }
+  },
+  usage: (id) => {
+    const sp = memberSpaces.get(id);
+    return sp ? memberUsage(sp.companions.all().map((c) => c.app), new Date()) : null;
+  },
+  deleteNow: deleteMemberSpace,
+  signOutAll: (id) => void memberSpaces.get(id)?.auth.signOut('others'),
+};
+
+companions.build = (id, dir) => buildCompanion(ownerSpace, id, dir);
+companions.add(buildCompanion(ownerSpace, MAIN_ID, dataDir));
 // The other companions (not on the demo server).
-if (!isDemo) for (const c of companionDirs(dataDir)) companions.add(buildCompanion(c.id, c.dir));
+if (!isDemo) for (const c of companionDirs(dataDir)) companions.add(buildCompanion(ownerSpace, c.id, c.dir));
+// Phase 71: household members' spaces (never on the demo server).
+if (!isDemo) {
+  for (const m of memberDirs(dataDir, household)) {
+    try {
+      buildMemberSpace(m.member, m.dir);
+    } catch (err) {
+      console.warn(`Household: a member's space could not start (${(err as Error).message}).`);
+    }
+  }
+  if (memberSpaces.size) console.log(`Household: ${memberSpaces.size} member${memberSpaces.size === 1 ? '' : 's'} besides the owner.`);
+}
 const mainApp = companions.main.app;
 console.log(`Tool sandbox: ${sandbox.mode} (${sandbox.detail})`);
 {
@@ -607,10 +740,7 @@ console.log(`Local voice: ${va.stt || va.tts ? `speech-to-text ${va.stt ? 'yes' 
 if (companions.all().length > 1) console.log(`Companions: ${companions.all().map((c) => c.app.persona.name).join(', ')}`);
 
 // Notifications: every companion's messages and calls, named after the one who sent them.
-events.subscribe((ev) => {
-  const c = companions.get(ev.companion) ?? companions.main;
-  void push!.onEvent(ev, c.app.persona.name, (id) => Boolean(companions.byConversation(id)?.app.store.getConversation(id)?.partner), (s) => redactor.redact(s)).catch((err: Error) => console.warn(`push: ${err.message}`));
-});
+notifyFrom(ownerSpace);
 
 function backupTick(): void {
   // The demo server keeps nothing worth backing up (visitors are in memory only).
@@ -637,12 +767,75 @@ const backupTimer = setInterval(() => guard('backup', backupTick), 3600_000);
 backupTimer.unref();
 setTimeout(() => guard('backup', backupTick), 120_000).unref();
 
+// Phase 71: removed members' spaces are deleted when their download window is over.
+function householdSweep(): void {
+  household.sweepInvites();
+  for (const m of household.due()) void deleteMemberSpace(m.id).catch((err: Error) => console.warn(`Household: ${err.message}`));
+}
+const householdTimer = setInterval(() => guard('household', householdSweep), 3600_000);
+householdTimer.unref();
+if (!isDemo) setTimeout(() => guard('household', householdSweep), 60_000).unref();
+
+/**
+ * Phase 71: whose space a request is for, from the credential it carries (a session cookie, a device
+ * token or a member token that a member's own sign-in knows). Anything else is the owner's space, as
+ * before. The space's own server checks the credential again: this only picks where to look.
+ */
+function spaceByCredential(req: IncomingMessage): Space | undefined {
+  if (!memberSpaces.size) return undefined;
+  const cookie = cookieValue(req, SESSION_COOKIE);
+  if (cookie) {
+    if (auth.sessionId(cookie)) return ownerSpace;
+    for (const sp of memberSpaces.values()) if (sp.auth.sessionId(cookie)) return sp;
+  }
+  const h = req.headers.authorization;
+  if (h?.startsWith('Bearer ')) {
+    const tok = h.slice(7).trim();
+    const m = memberOfToken(tok);
+    if (m) return memberSpaces.get(m);
+    if (tok.startsWith('sara_dev.')) {
+      const id = tok.slice('sara_dev.'.length).split('.')[0];
+      for (const sp of memberSpaces.values()) if (sp.auth.hasDevice(id)) return sp;
+    }
+  }
+  return undefined;
+}
+/** Sign-ins without a credential yet: the member token, a member's pairing code or passkey decides. */
+async function spaceBySignIn(req: IncomingMessage): Promise<Space | undefined> {
+  if (!memberSpaces.size || req.method !== 'POST') return undefined;
+  const path = (req.url ?? '/').split('?')[0];
+  if (path !== '/api/login' && path !== '/api/pair/redeem' && path !== '/api/passkey/signin') return undefined;
+  if (!String(req.headers['content-type'] ?? '').startsWith('application/json')) return undefined;
+  const body = await peekJson(req);
+  if (path === '/api/login') {
+    const m = memberOfToken(body.token);
+    return m ? memberSpaces.get(m) : undefined;
+  }
+  if (path === '/api/pair/redeem') {
+    const id = pairs.spaceOf(String(body.code ?? ''));
+    return id && id !== 'owner' ? memberSpaces.get(id) : undefined;
+  }
+  const pk = String(body.id ?? '');
+  for (const sp of memberSpaces.values()) if (pk && sp.auth.passkey(pk)) return sp;
+  return undefined;
+}
+
 // Phase 31: one front server; each request goes to the right companion (see pickCompanion).
+// Phase 71: first the person's space, then the companion inside it.
 const server = createServer((req, res) => {
-  pickCompanion(companions, req).server.emit('request', req, res);
+  const known = spaceByCredential(req);
+  if (known) return void pickCompanion(known.companions, req).server.emit('request', req, res);
+  if (!memberSpaces.size) return void pickCompanion(companions, req).server.emit('request', req, res);
+  void spaceBySignIn(req).then(
+    (sp) => pickCompanion((sp ?? ownerSpace).companions, req).server.emit('request', req, res),
+    () => {
+      res.statusCode = 400;
+      res.end();
+    },
+  );
 });
 server.on('upgrade', (req, socket, head) => {
-  pickCompanion(companions, req).server.emit('upgrade', req, socket, head);
+  pickCompanion((spaceByCredential(req) ?? ownerSpace).companions, req).server.emit('upgrade', req, socket, head);
 });
 
 server.listen(port, host, () => {
@@ -656,6 +849,7 @@ server.listen(port, host, () => {
   console.log(`Sara is listening on http://${host}:${port} (data: ${dataDir})${isDemo ? ' [DEMO]' : ''}`);
   if (privateLocal.get().on) console.log(`Private local mode is on: nothing leaves this computer (only 127.0.0.1 / ::1 / localhost)${privateLocal.get().locked ? ' [SARA_PRIVATE_LOCAL=1]' : ''}.`);
   for (const c of companions.all()) c.start();
+  for (const sp of memberSpaces.values()) for (const c of sp.companions.all()) c.start();
   codemaps.start();
   modelCatalog?.start(guard);
   if (!isDemo) healthHistory?.start();
@@ -680,6 +874,8 @@ async function shutdown(): Promise<void> {
   if (shuttingDown) return;
   shuttingDown = true;
   for (const c of companions.all()) await c.stop();
+  for (const sp of memberSpaces.values()) for (const c of sp.companions.all()) await c.stop().catch(() => {});
+  clearInterval(householdTimer);
   await browsers.closeAll().catch(() => {});
   codemaps.stop();
   modelCatalog?.stop();
@@ -690,6 +886,7 @@ async function shutdown(): Promise<void> {
   mcp.stopAll();
   server.close(() => {
     for (const c of companions.all()) c.app.store.close();
+    for (const sp of memberSpaces.values()) for (const c of sp.companions.all()) c.app.store.close();
     codemaps.close();
     process.exit(0);
   });

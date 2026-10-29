@@ -124,6 +124,8 @@ function walk(root: string, dir: string, out: FileRef[]): void {
     if (dir === root && (SKIP_TOP.has(name) || isRestoreLeftover(name))) continue;
     // Phase 31: other companions' databases are snapshotted safely below, like the main one.
     if (dir !== root && /^companions\/[^/]+\/sara\.db(-wal|-shm)?$/.test(rel)) continue;
+    // Phase 71: household members' databases (members/<id>/sara.db and their companions') too.
+    if (/^members\/[^/]+\/(companions\/[^/]+\/)?sara\.db(-wal|-shm)?$/.test(rel)) continue;
     const st = statSync(full, { throwIfNoEntry: false });
     if (!st) continue;
     if (st.isDirectory()) {
@@ -143,6 +145,14 @@ export function createBackup(dataDir: string, outFile: string, opts: { saraVersi
   const snaps: string[] = [];
   const cdir = join(dataDir, 'companions');
   if (existsSync(cdir)) for (const n of readdirSync(cdir)) if (existsSync(join(cdir, n, 'sara.db'))) dbs.push(`companions/${n}/sara.db`);
+  const mdir = join(dataDir, 'members');
+  if (existsSync(mdir)) {
+    for (const m of readdirSync(mdir)) {
+      if (existsSync(join(mdir, m, 'sara.db'))) dbs.push(`members/${m}/sara.db`);
+      const mc = join(mdir, m, 'companions');
+      if (existsSync(mc)) for (const n of readdirSync(mc)) if (existsSync(join(mc, n, 'sara.db'))) dbs.push(`members/${m}/companions/${n}/sara.db`);
+    }
+  }
   for (const rel of dbs) {
     const dbFile = join(dataDir, ...rel.split('/'));
     if (!existsSync(dbFile)) continue;

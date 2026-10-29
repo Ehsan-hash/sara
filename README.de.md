@@ -14,7 +14,7 @@ Modellen deiner Wahl.
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="License: MIT"></a>
   <img src="https://img.shields.io/badge/node-%E2%89%A5%2024-339933" alt="Node 24 or newer">
   <img src="https://img.shields.io/badge/runtime%20dependencies-0-brightgreen" alt="Zero runtime dependencies">
-  <img src="https://img.shields.io/badge/tests-740%20passing-brightgreen" alt="740 tests passing">
+  <img src="https://img.shields.io/badge/tests-763%20passing-brightgreen" alt="763 tests passing">
   <a href="docs/RESULTS.md"><img src="https://img.shields.io/badge/HumanEval%20pass%401-96.3%25-informational" alt="HumanEval pass@1 96.3%"></a>
   <a href="https://github.com/farena-ai/sara/releases/latest"><img src="https://img.shields.io/github/v/release/farena-ai/sara?label=release" alt="Latest release"></a>
   <a href="https://github.com/farena-ai/sara/pkgs/container/sara"><img src="https://img.shields.io/badge/docker-amd64%20%7C%20arm64-2496ED" alt="Docker image for amd64 and arm64"></a>
@@ -28,7 +28,7 @@ Modellen deiner Wahl.
   <sub>Eine echte, ungeschnittene Sitzung mit einem lokalen Modell (qwen3.8 27B auf Ollama, eine RTX 5090) auf einem Wegwerf-Testserver: Sie plaudert mit ihrer Persönlichkeit, schreibt die App, fragt, bevor sie einen Server startet, öffnet die Vorschau und testet sie in ihrem eigenen Browser. Das letzte Bild zeigt die App mit eingetippten Zahlen.</sub>
 </p>
 
-> **Status:** 1.10, MIT-Lizenz, mit zehn Funktions-Releases seit 1.0 (alle unten). Die
+> **Status:** 2.0, MIT-Lizenz, mit elf Funktions-Releases seit 1.0 (alle unten). Die
 > [Android-App](https://play.google.com/store/apps/details?id=com.backstagecoding.sara) ist bei Google
 > Play; die iPhone-App und die Version für den Mac App Store folgen, sobald Apple sie freigibt.
 > Lies [docs/DISCLOSURES.md](docs/DISCLOSURES.md), bevor du Sara nutzt oder weitergibst.
@@ -37,6 +37,7 @@ Modellen deiner Wahl.
 
 | Version | Was du bekommst |
 |---|---|
+| **2.0** · Haushaltsmodus | **Teile deinen Sara-Server mit den Menschen, mit denen du lebst.** Lade einen Erwachsenen mit einem Einmal-Link ein; er bekommt eigene Begleiterinnen, Chats, Erinnerungen, Bibliothek und Apps in einem eigenen Bereich. Du bleibst Admin: Du wählst, welche Modelle er nutzt, setzt Tageslimits und siehst Nutzung und Kosten, nie die Inhalte. [So funktioniert es](docs/HOUSEHOLD.md) |
 | **1.10** · Unsere Momente | **Ein gemeinsames Fotoalbum** mit deinen Fotos und denen, die sie schickt, jedes mit einer Bildunterschrift, die sie in ihrer eigenen Stimme aus eurem Gespräch schreibt. Alben, die sich selbst füllen (Wir, Orte, Ihre Looks), „An diesem Tag“, und manchmal holt sie eins hervor: *Weißt du noch?* Private Chats bleiben draußen, außer du fügst sie hinzu. [So funktioniert es](docs/MOMENTS.md) |
 | **1.9** · Videoanrufe | **Sieh sie, während ihr redet:** Ein Videoanruf zeigt ihr bewegtes Porträt groß, die Lippen synchron zu ihrer Stimme, ihr Gesicht folgt ihrer Stimmung, im aktuellen Outfit und Ort. Schalte deine Kamera ein, wenn du willst, und sie schaut alle paar Sekunden hin (oder wenn du *Schau mal* drückst); nichts wird aufgezeichnet. [So funktioniert es](docs/VIDEO_CALLS.md) |
 | **1.8** · Mehrere Server in einer App | **Alle deine Saras in einer App** (zu Hause und bei der Arbeit, oder mehrere auf einem Server) und Wechsel per Menü, ohne dich abzumelden: Windows- und Mac-App, Android und iPhone, VS Code, `sara-chat` und die MCP-Brücke. Jede behält ihre eigene Anmeldung; Dateien, Mikrofon und Kamera gehen nur an die gerade genutzte. [So funktioniert es](docs/SERVERS.md) |
@@ -54,7 +55,6 @@ Alle Versionen: [CHANGELOG.md](CHANGELOG.md) · [Releases](https://github.com/fa
 
 | Version | Funktion |
 |---|---|
-| 2.0 | **Haushaltsmodus:** mehrere Personen auf einem Server, jede mit eigenen Begleiterinnen und privaten Daten |
 | 2.1 | **Ihre Stimme bei dir zu Hause:** Alexa („Alexa, frag Sara …"), der Android-Assistent und Google Home, Siri-Kurzbefehle, und über Home Assistant reagiert sie darauf, wer zu Hause ist |
 | 2.2 | **Deine anderen Server per SSH:** mit Passwort oder Schlüssel; nach einer Anmeldung mit Passwort erstellt sie ihren eigenen Schlüssel, sagt dir, wo er liegt, und behält das Passwort nur, wenn du es ausdrücklich willst (mit Warnung) |
 | 2.3 | **Große Dokumente:** PDFs und Bücher mit 500–1.000 Seiten in ihrer Bibliothek, jede gescannte Seite gelesen, Antworten mit Seitenzahlen |
@@ -203,8 +203,8 @@ wurden. Was sie heute beiträgt, ist die Arbeitsweise (sie lässt die Tests lauf
 riskanten Schritten, zeigt, was gelaufen ist), nicht ein höheres Ergebnis bei diesen Sätzen.
 Details, Ergebnisse pro Aufgabe und wie man es wiederholt: [docs/RESULTS.md](docs/RESULTS.md).
 
-Dazu `npm run check`: eine Typprüfung und 748 automatische Tests mit einem geskripteten
-Schein-Modell (ohne Netz, ohne GPU): 740 laufen unter Windows durch, die anderen 8 sind
+Dazu `npm run check`: eine Typprüfung und 771 automatische Tests mit einem geskripteten
+Schein-Modell (ohne Netz, ohne GPU): 763 laufen unter Windows durch, die anderen 8 sind
 Linux-spezifische Sandbox-Tests, die auf einem Linux-Server laufen.
 
 ## Sara im Vergleich

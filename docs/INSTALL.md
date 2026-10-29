@@ -470,6 +470,14 @@ Grok subscription's usage): sign it in once as the demo user, for example
 `sudo runuser -u sara-demo -- env HOME=/var/lib/sara-demo/agents/grok /opt/sara-agents/bin/grok login`.
 Restart the demo after editing the file.
 
+## More than one person on one server (optional)
+
+Since 2.0 the owner can invite other adults (a partner, a flatmate, a grown-up child) to use the
+same server, each with their own companions and a private space the owner can't read: **Settings →
+Household → People on this server**. Nothing to install; the owner chooses which models each person
+may use and a daily limit. Not on the demo server. See [HOUSEHOLD.md](HOUSEHOLD.md). For complete
+separation (each with their own owner and server settings), use several Saras instead, below.
+
 ## Several Saras on one server (optional)
 
 For a family, a small team or a hosting provider: several separate Saras on one Linux server, each
