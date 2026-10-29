@@ -17,6 +17,7 @@ import { initImport, loadImport } from './import.js';
 import { initLocalModels, loadLocalModels, setPrivateBadge } from './local-models.js';
 import { groupTag, initGroups, isGroup, openGroupDialog, showGroupButton, speakerHeader } from './group.js';
 import { appLink, inPhoneApp, phoneKind } from './pair-link.js';
+import { addToMomentsButton, initMoments, loadMoments, openMoments, renderTodayMoments } from './moments.js';
 const $ = (sel) => document.querySelector(sel);
 
 const state = {
@@ -989,6 +990,8 @@ function msgActions(div, m, { last, lastUser, other = false }) {
       });
       bar.append(keep);
     }
+    // Phase 70: a photo can go in "Our moments" by hand (e.g. from a private conversation).
+    if (!state.conv?.offRecord && !other && Array.isArray(m.meta?.images) && m.meta.images.length) bar.append(addToMomentsButton(m.id));
   }
   if (m.role === 'user' && lastUser) {
     const edit = el('button', 'ghost small', t('✎ Edit'));
@@ -4077,6 +4080,10 @@ function startEvents() {
   });
   es.addEventListener('library', () => window.dispatchEvent(new Event('sara:library')));
   // Phase 53: a look back is ready (or failed).
+  // Phase 70: photos added to the album or captions written.
+  es.addEventListener('moments', () => {
+    if ($('#moments').open) void loadMoments();
+  });
   es.addEventListener('story', () => {
     if ($('#story').open) void loadStory();
   });
@@ -5812,6 +5819,7 @@ async function loadToday(fresh = false) {
     }
     box.replaceChildren(face, words);
   }
+  renderTodayMoments(d);
   $('#td-dates').hidden = !d.dates.length;
   list('td-dates').replaceChildren(...d.dates.map((x) => todayRow(x.what, inDaysWords(x.inDays), x.inDays === 0 ? 'overdue' : '')));
   // Phase 56: retired models and what now uses their replacement.
@@ -5828,6 +5836,10 @@ async function openToday() {
 }
 $('#open-today').addEventListener('click', openToday);
 $('#td-refresh').addEventListener('click', () => loadToday(true));
+$('#td-otd-open').addEventListener('click', () => {
+  $('#today').close();
+  void openMoments();
+});
 $('#td-ask').addEventListener('click', async () => {
   $('#today').close();
   if (!state.currentId || state.conv?.offRecord) await newConversation();
@@ -5855,7 +5867,7 @@ document.addEventListener('keydown', (e) => {
 
 // Links that open a view: /#view=today|planner|memory|scrapbook|her|settings[:page] (Phase 19).
 window.saraCompanionCount = () => state.companions?.companions.length ?? 1;
-const VIEWS = { today: openToday, planner: () => $('#open-planner').click(), memory: () => $('#open-memory').click(), library: () => $('#open-library').click(), scrapbook: () => $('#open-scrapbook').click(), story: () => $('#open-story').click(), her: () => $('#open-sara').click(), team: () => $('#open-team').click(), help: () => $('#open-help').click() };
+const VIEWS = { today: openToday, planner: () => $('#open-planner').click(), memory: () => $('#open-memory').click(), library: () => $('#open-library').click(), scrapbook: () => $('#open-scrapbook').click(), moments: () => $('#open-moments').click(), story: () => $('#open-story').click(), her: () => $('#open-sara').click(), team: () => $('#open-team').click(), help: () => $('#open-help').click() };
 function openViewFromHash() {
   const v = /#view=([\w:-]+)/.exec(location.hash)?.[1];
   if (!v || !$('#main') || $('#main').hidden) return false;
@@ -6950,6 +6962,7 @@ async function openStory() {
   if (!$('#story').open) $('#story').showModal();
 }
 $('#open-story').addEventListener('click', () => void openStory());
+initMoments({ openAtMessage });
 for (const b of document.querySelectorAll('[data-story]')) {
   b.addEventListener('click', () => {
     storyState.filter = b.dataset.story;

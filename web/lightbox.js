@@ -22,7 +22,8 @@ box.innerHTML = `
   </div>
   <button type="button" class="lb-prev" aria-label="Previous">‹</button>
   <button type="button" class="lb-next" aria-label="Next">›</button>
-  <div class="lb-dots" role="tablist"></div>`;
+  <div class="lb-dots" role="tablist"></div>
+  <p class="lb-caption" hidden></p>`;
 document.body.append(box);
 const $ = (s) => box.querySelector(s);
 const img = $('.lb-img');
@@ -76,9 +77,12 @@ function show(i) {
   img.src = it.src;
   img.alt = it.label ?? '';
   $('.lb-label').textContent = it.label ?? '';
+  // Phase 70: her caption under a photo from "Our moments" (also shared with the picture).
+  $('.lb-caption').textContent = it.caption ?? '';
+  $('.lb-caption').hidden = !it.caption;
   $('.lb-count').textContent = items.length > 1 ? `${index + 1} / ${items.length}` : '';
   $('.lb-save').href = it.src;
-  $('.lb-save').download = `${(it.label || 'picture').replace(/[^\w -]+/g, '').trim() || 'picture'}.jpg`;
+  $('.lb-save').download = `${(it.caption ? it.caption.slice(0, 60) : it.label || 'picture').replace(/[^\p{L}\p{N} _-]+/gu, '').trim() || 'picture'}.${/\.(png|webp|gif)(\?|$)/.exec(it.src)?.[1] ?? 'jpg'}`;
   $('.lb-prev').hidden = $('.lb-next').hidden = items.length < 2;
   $('.lb-dots').replaceChildren(
     ...(items.length > 1 && items.length <= 24
@@ -205,7 +209,7 @@ if (window.SaraPhone?.platform === 'ios' && canShareFiles) $('.lb-save').hidden 
 $('.lb-share').addEventListener('click', async () => {
   try {
     const blob = await (await fetch(items[index].src)).blob();
-    await navigator.share({ files: [new File([blob], $('.lb-save').download, { type: blob.type || 'image/jpeg' })], title: items[index].label ?? '' });
+    await navigator.share({ files: [new File([blob], $('.lb-save').download, { type: blob.type || 'image/jpeg' })], title: items[index].label ?? '', ...(items[index].caption ? { text: items[index].caption } : {}) });
   } catch {
     /* cancelled */
   }

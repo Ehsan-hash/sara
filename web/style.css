@@ -688,7 +688,7 @@ a.pair-app.ghost:hover { border-color: var(--muted); filter: none; }
 .qr-how { margin: 6px 0 0; max-width: 260px; }
 
 /* ---------- Demo server (Phase 16): only what a visitor can use ---------- */
-body.demo #open-planner, body.demo #open-memory, body.demo #open-scrapbook, body.demo #open-settings,
+body.demo #open-planner, body.demo #open-memory, body.demo #open-scrapbook, body.demo #open-moments, body.demo .mo-add, body.demo #open-settings,
 body.demo #new-project, body.demo #new-offrecord, body.demo #conv-settings-btn, body.demo #attach,
 body.demo #sd-save, body.demo #sd-reroll, body.demo #pe-reset, body.demo .conv-more,
 body.demo #mic, body.demo:not(.demo-calls) #call, body.demo #speak-toggle { display: none !important; }
@@ -931,6 +931,8 @@ dialog.ring::backdrop { background: transparent; }
 .lightbox .lb-dots { position: absolute; bottom: max(14px, env(safe-area-inset-bottom)); left: 0; right: 0; display: flex; justify-content: center; gap: 7px; flex-wrap: wrap; padding: 0 20px; }
 .lightbox .lb-dots button { width: 9px; height: 9px; border-radius: 50%; border: 0; padding: 0; background: rgb(255 255 255 / 0.35); cursor: pointer; }
 .lightbox .lb-dots button.on { background: #fff; }
+.lightbox .lb-caption { position: absolute; left: 50%; transform: translateX(-50%); bottom: calc(max(14px, env(safe-area-inset-bottom)) + 22px); width: min(640px, 92vw); margin: 0; padding: 10px 14px; border-radius: 12px; background: rgb(0 0 0 / 0.6); color: #fff; font-size: .95rem; line-height: 1.4; text-align: center; pointer-events: none; }
+.lightbox .lb-caption[hidden] { display: none; }
 @media (max-width: 560px) { .lightbox .lb-prev, .lightbox .lb-next { display: none; } .lightbox .lb-img { max-width: 100vw; border-radius: 0; } }
 @media (prefers-reduced-motion: reduce) { .lightbox .lb-img { transition: none; } }
 .zoomable { cursor: zoom-in; }
@@ -1360,4 +1362,52 @@ body.private-local .pl-card { border-color: var(--accent); }
 @media (max-width: 520px) {
   .servers-list li > span.muted { flex: 1 0 60%; }
   .servers-list li > :nth-child(3) { margin-left: auto; }
+}
+
+/* Phase 70: Our moments (the photo album with her captions) */
+#moments { width: min(1000px, 96vw); }
+#moment-edit { width: min(760px, 96vw); }
+.mo-top { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; }
+.mo-top .mo-mode { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.mo-albums { display: flex; gap: 10px; overflow-x: auto; padding: 4px 2px 8px; scroll-snap-type: x proximity; }
+.mo-album { flex: 0 0 auto; width: 112px; display: grid; gap: 4px; justify-items: start; text-align: left; padding: 6px; border-radius: 12px; border: 1px solid var(--border); background: transparent; color: inherit; cursor: pointer; scroll-snap-align: start; }
+.mo-album.active { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.mo-cover { width: 100%; aspect-ratio: 1; border-radius: 8px; overflow: hidden; background: var(--panel-2); display: grid; place-items: center; }
+.mo-cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.mo-cover-empty { font-size: 1.6rem; opacity: .7; }
+.mo-album-name { font-weight: 600; font-size: .9rem; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mo-new { max-width: 420px; }
+.mo-album-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.mo-album-head h3 { margin: 0 auto 0 0; }
+.mo-month { margin: 18px 0 8px; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); font-weight: 600; }
+.mo-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 12px; }
+.mo-otd { margin-top: 10px; padding: 10px 12px 12px; border-radius: 14px; background: color-mix(in srgb, var(--accent) 10%, var(--panel-2)); }
+.mo-otd h3 { margin: 0 0 8px; }
+.mo-item { position: relative; margin: 0; display: grid; gap: 6px; align-content: start; min-width: 0; }
+.mo-item img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 12px; display: block; cursor: zoom-in; background: var(--panel-2); }
+.mo-item.mo-note .mo-quote { margin: 0; aspect-ratio: 1; overflow: hidden; padding: 14px; border-radius: 12px; background: var(--panel-2); font-style: italic; display: flex; align-items: center; line-height: 1.4; }
+.mo-item.pending .mo-caption { color: var(--muted); font-style: italic; }
+.mo-cap { display: grid; gap: 2px; min-width: 0; }
+.mo-caption { font-size: .9rem; line-height: 1.35; display: -webkit-box; -webkit-line-clamp: 3; line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
+.mo-meta { display: flex; flex-wrap: wrap; gap: 4px 6px; align-items: center; }
+.mo-badge { white-space: nowrap; }
+.mo-more-btn { position: absolute; top: 6px; right: 6px; width: 32px; height: 32px; padding: 0; border-radius: 50%; background: rgb(0 0 0 / 0.45); color: #fff; border: 0; }
+.mo-more-btn:hover { background: rgb(0 0 0 / 0.65); }
+.me-body { display: grid; grid-template-columns: minmax(0, 260px) minmax(0, 1fr); gap: 16px; align-items: start; }
+.me-img { width: 100%; border-radius: 12px; display: block; }
+.me-img[hidden] { display: none; }
+.me-side { display: grid; gap: 8px; min-width: 0; }
+.me-side textarea { width: 100%; }
+.me-side h3 { margin: 6px 0 0; }
+.me-albums { display: grid; gap: 2px; }
+.me-said { font-style: italic; overflow-wrap: anywhere; }
+.today-otd { display: grid; grid-template-columns: repeat(auto-fill, minmax(90px, 1fr)); gap: 8px; }
+.td-otd-item { margin: 0; display: grid; gap: 4px; }
+.td-otd-item img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 10px; cursor: zoom-in; display: block; }
+.td-otd-item figcaption { display: -webkit-box; -webkit-line-clamp: 3; line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+@media (max-width: 560px) {
+  .mo-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .mo-album { width: 92px; }
+  .me-body { grid-template-columns: minmax(0, 1fr); }
+  .me-img { max-height: 40vh; object-fit: contain; }
 }

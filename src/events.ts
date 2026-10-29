@@ -27,6 +27,8 @@ export type HubEvent = (
   | { type: 'turn'; conversationId: string; state: 'started' | 'ended' }
   /** Phase 49: a preview link opened (or closed: null) in a conversation. */
   | { type: 'preview'; conversationId: string; preview: { url: string; port: number; workspace: string; jobId: number } | null }
+  /** Phase 70: the album "Our moments" changed (photos added, captions written). */
+  | { type: 'moments'; added: number; captioned: number }
   /** Phase 53: a look back was written (or failed). */
   | { type: 'story'; what: 'lookback'; id?: number; error?: string }
 ) & {

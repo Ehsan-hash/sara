@@ -69,6 +69,7 @@ import { LookBuilder, PLACES } from './look.ts';
 import { createWardrobeTool, WardrobeWorker } from './wardrobe.ts';
 import { createSharedListTool, TogetherStore } from './together.ts';
 import { createScrapbookTool, Scrapbook } from './scrapbook.ts';
+import { createMomentsTool, MomentsStore, MomentsWorker } from './moments.ts';
 import { migrateProviderLabels, SettingsStore, StartupError } from './settings.ts';
 import { Store } from './store.ts';
 import { Vault } from './vault.ts';
@@ -364,6 +365,9 @@ function buildCompanion(id: string, dir: string): Companion {
   };
   const scrapbook = new Scrapbook(store.db);
   tools.add(createScrapbookTool(scrapbook));
+  // Phase 70: "Our moments", her album with captions (per companion).
+  const moments = new MomentsStore(store.db);
+  tools.add(createMomentsTool(() => app, moments));
   // Phase 32: she can look through her past conversations.
   tools.add(createRecallTool(() => app));
   // Phase 44: her library (documents she keeps), and the tool to look things up in it.
@@ -433,6 +437,7 @@ function buildCompanion(id: string, dir: string): Companion {
     inner: new InnerStore(store.db, undefined, { tensionHalfLife: () => tensionHalfLife(app.persona.traits?.forgiveness), closenessRate: () => paceFactor(app.persona.traits?.pace) }),
     life: new LifeStore(store.db),
     scrapbook,
+    moments,
     look: new LookBuilder({
       dataDir: dir,
       key: async () => (await xaiImageKey({ vault, xaiProviderKey: xaiProviderKeyOf, grokToken: async () => subscriptions.grokAccessToken() })) ?? undefined,
@@ -508,6 +513,14 @@ function buildCompanion(id: string, dir: string): Companion {
   app.review = new ReviewWorker(app);
   // Phase 53: your story together (look backs, the optional yearly one).
   app.story = new StoryWorker(app);
+  // Phase 70: the album keeps up with new photos and writes captions a few at a time.
+  app.momentsWorker = new MomentsWorker(app, moments, {
+    outfitNow: () => {
+      const meta = app.look?.custom ? app.look.currentMeta() : {};
+      return { wear: meta.wear, adult: meta.adult === true };
+    },
+    sceneOf: (image) => photoSettings(settingsC).taken?.find((x) => x.id === image)?.scene,
+  });
   // Phase 39: team tasks she leads (helpers with their own models, tools and approvals).
   app.team = new TeamManager(app, store.db);
   for (const t of createTeamTools(() => app)) tools.add(t);
@@ -552,6 +565,7 @@ function buildCompanion(id: string, dir: string): Companion {
       app.leaveBy!.start();
       app.review!.start();
       if (!isDemo) app.story!.start();
+      if (!isDemo) app.momentsWorker!.start();
       if (!isDemo) wardrobe.start();
       // Learning from imported history that was still going when the server stopped carries on.
       if (!isDemo) setTimeout(() => app.historyImport?.start(), 20_000).unref();
@@ -565,6 +579,7 @@ function buildCompanion(id: string, dir: string): Companion {
       clearInterval(vectorTimer);
       issueWatcher.stop();
       app.story?.stop();
+      app.momentsWorker?.stop();
       reminders.stop();
       lifeWorker.stop();
       weeklyWorker.stop();

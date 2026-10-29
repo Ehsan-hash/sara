@@ -95,6 +95,7 @@ import { mcpSecrets, mergeSecrets, searchConfig } from './integrations.ts';
 import { MCP_PRESETS, mcpVaultKey, validateMcpConfig, type McpServerConfig } from './tools/mcp.ts';
 import { SEARCH_PROVIDERS, searchVaultKey, type SearchProvider } from './tools/search.ts';
 import { gatherStory, lookbacks, STORY_FILTERS, type StoryFilter } from './story.ts';
+import { captionModel, deletePhotoEverywhere, handEligible, MOMENTS_MODES, momentsSettings, type Moment, type MomentsMode } from './moments.ts';
 
 function validMode(v: unknown): ConversationMode {
   if (!CONVERSATION_MODES.includes(v as ConversationMode)) throw new HttpError(400, 'mode must be chat or coding');
@@ -695,7 +696,7 @@ export function createSaraServer(opts: ServerOptions): Server {
         },
       })
     : offStore;
-  const offOverrides: Partial<AppContext> = { store: ctxStore, memory: undefined, inner: undefined, tools: noTools, uploads: undefined, together: app.together ? new TogetherStore(offStore.db, app.now) : undefined };
+  const offOverrides: Partial<AppContext> = { store: ctxStore, memory: undefined, inner: undefined, tools: noTools, uploads: undefined, moments: undefined, momentsWorker: undefined, together: app.together ? new TogetherStore(offStore.db, app.now) : undefined };
   const offApp = new Proxy(app, { get: (t, k: string) => (k in offOverrides ? offOverrides[k as keyof AppContext] : t[k as keyof AppContext]) }) as AppContext;
   /** The context a conversation lives in (off-the-record ones are only in memory). */
   const ctxOf = (id: string): AppContext => (offStore.getConversation(id) ? offApp : app);
@@ -2805,7 +2806,12 @@ export function createSaraServer(opts: ServerOptions): Server {
 
     // Phase 14: the phone app's home-screen widget (her face, mood, last message) and its
     // notification check (her messages that arrived on their own, after a given id).
-    if (a === 'today' && !b && method === 'GET') return send(res, 200, await buildToday(app, { fresh: new URL(req.url ?? '/', 'http://x').searchParams.has('fresh') }));
+    if (a === 'today' && !b && method === 'GET') {
+      const today = await buildToday(app, { fresh: new URL(req.url ?? '/', 'http://x').searchParams.has('fresh') });
+      // Phase 70: "On this day" from the album (never on the demo; adults-only photos only with Adult mode, never in the phone apps).
+      const otd = opts.demo ? undefined : app.moments?.onThisDay(app.now(), app.settings.get().timeZone, { adultOk: adultModeOn(app.settings.get()) && !fromPhoneApp(req) });
+      return send(res, 200, otd ? { ...today, onThisDay: { kind: otd.kind, ...(otd.years ? { years: otd.years } : {}), items: otd.items.map((m) => ({ id: m.id, image: m.image, caption: m.caption, text: m.text.slice(0, 200), takenAt: m.takenAt, from: m.from })) } } : today);
+    }
     if (a === 'phone' && b === 'widget' && method === 'GET') {
       const s = app.settings.get();
       const now = app.now();
@@ -4496,7 +4502,10 @@ export function createSaraServer(opts: ServerOptions): Server {
         }
         if (!text.trim()) throw new HttpError(400, 'Nothing to save.');
         const kind = body.kind === 'joke' ? 'joke' : 'moment';
-        return send(res, 201, book.add({ kind, text, note: String(body.note ?? ''), conversationId, messageId, addedBy: 'owner' }));
+        const entry = book.add({ kind, text, note: String(body.note ?? ''), conversationId, messageId, addedBy: 'owner' });
+        // Phase 70: a pinned moment enters "Our moments" (with its photo, if it has one).
+        if (kind === 'moment') void app.momentsWorker?.nudge();
+        return send(res, 201, entry);
       }
       if (b && method === 'PATCH') {
         const body = await readJson(req);
@@ -4507,6 +4516,141 @@ export function createSaraServer(opts: ServerOptions): Server {
       if (b && method === 'DELETE') {
         if (!book.delete(Number(b))) throw new HttpError(404, 'Not found');
         return send(res, 200, { ok: true });
+      }
+    }
+    // Phase 70: "Our moments": the album, its captions and albums (owner only; never the demo, MCP or /v1).
+    if (a === 'moments') {
+      const book = app.moments;
+      if (!book) throw new HttpError(404, 'Our moments is not available here.');
+      const d = parts[3];
+      const adultOk = adultModeOn(app.settings.get()) && !fromPhoneApp(req);
+      const nudge = () => void app.momentsWorker?.nudge();
+      const convs = new Map(app.store.listConversations().map((x) => [x.id, x]));
+      const view = (m: Moment) => {
+        const cv = m.conversationId ? (convs.get(m.conversationId) ?? app.store.getConversation(m.conversationId)) : undefined;
+        return { ...m, conversation: cv ? cv.title : null, private: Boolean(cv?.private), albums: book.albumsOf(m.id) };
+      };
+      if (!b && method === 'GET') {
+        book.prune();
+        const album = new URL(req.url ?? '/', 'http://x').searchParams.get('album') ?? undefined;
+        const items = book.list({ adultOk, ...(album ? { album } : {}) });
+        const otd = book.onThisDay(app.now(), app.settings.get().timeZone, { adultOk });
+        return send(res, 200, {
+          settings: momentsSettings(app.settings),
+          items: items.map(view),
+          albums: book.albums({ adultOk }),
+          onThisDay: otd ? { kind: otd.kind, ...(otd.years ? { years: otd.years } : {}), ids: otd.items.map((m) => m.id) } : null,
+          pending: book.pendingCount(),
+          waiting: book.waitingCount(),
+          hiddenAdult: book.count({ adultOk: true }) - book.count({ adultOk }),
+          phoneApp: fromPhoneApp(req),
+          captioner: captionModel(app),
+        });
+      }
+      if (b === 'settings' && method === 'PUT') {
+        const body = await readJson(req);
+        const mode = String(body.mode ?? '') as MomentsMode;
+        if (!MOMENTS_MODES.includes(mode)) throw new HttpError(400, 'Pick all photos, only kept moments, or off.');
+        app.settings.update({ moments: { ...app.settings.get().moments, mode } });
+        nudge();
+        return send(res, 200, momentsSettings(app.settings));
+      }
+      if (b === 'captions' && !c && method === 'POST') {
+        await readJson(req);
+        const n = book.requestMore();
+        nudge();
+        return send(res, 200, { queued: n });
+      }
+      if (b === 'albums') {
+        if (!c && method === 'POST') {
+          const body = await readJson(req);
+          try {
+            return send(res, 201, book.createAlbum(String(body.name ?? '')));
+          } catch (err) {
+            throw new HttpError(400, (err as Error).message);
+          }
+        }
+        if (c && !d && method === 'PATCH') {
+          const body = await readJson(req);
+          try {
+            book.updateAlbum(c, { ...(body.name !== undefined ? { name: String(body.name) } : {}), ...(body.cover !== undefined ? { cover: body.cover === null ? null : Number(body.cover) } : {}) });
+          } catch (err) {
+            throw new HttpError(/not found/i.test((err as Error).message) ? 404 : 400, (err as Error).message);
+          }
+          return send(res, 200, { albums: book.albums({ adultOk }) });
+        }
+        if (c && !d && method === 'DELETE') {
+          try {
+            book.deleteAlbum(c);
+          } catch (err) {
+            throw new HttpError(/not found/i.test((err as Error).message) ? 404 : 400, (err as Error).message);
+          }
+          return send(res, 200, { ok: true });
+        }
+        if (c && d === 'items' && method === 'POST') {
+          const body = await readJson(req);
+          const ids = (Array.isArray(body.ids) ? body.ids : [body.id]).map(Number).filter((x: number) => Number.isInteger(x));
+          try {
+            return send(res, 200, { added: book.addToAlbum(c, ids) });
+          } catch (err) {
+            throw new HttpError(404, (err as Error).message);
+          }
+        }
+        if (c && d === 'items' && parts[4] && method === 'DELETE') {
+          try {
+            if (!book.removeFromAlbum(c, Number(parts[4]))) throw new HttpError(404, 'Not in that album');
+          } catch (err) {
+            if (err instanceof HttpError) throw err;
+            throw new HttpError(404, (err as Error).message);
+          }
+          return send(res, 200, { ok: true });
+        }
+      }
+      if (!b && method === 'POST') {
+        // Add a message's photo by hand (e.g. from a private conversation or a group chat).
+        const body = await readJson(req);
+        const m = app.store.messageById(Number(body.messageId));
+        if (!m) throw new HttpError(404, 'Message not found');
+        if (!handEligible(app.store.getConversation(m.conversationId))) throw new HttpError(400, "Photos from other people's chats or other apps can't go in your moments.");
+        try {
+          const added = book.addByHand(app.store, m.id, body.image ? String(body.image) : undefined);
+          nudge();
+          return send(res, 201, { items: added.map(view) });
+        } catch (err) {
+          throw new HttpError(400, (err as Error).message);
+        }
+      }
+      if (b && /^\d+$/.test(b)) {
+        const id = Number(b);
+        if (!c && method === 'PATCH') {
+          const body = await readJson(req);
+          if (!book.get(id)) throw new HttpError(404, 'Not found');
+          try {
+            return send(res, 200, view(book.setCaption(id, String(body.caption ?? ''))!));
+          } catch (err) {
+            throw new HttpError(400, (err as Error).message);
+          }
+        }
+        if (c === 'caption' && method === 'POST') {
+          await readJson(req);
+          const m = book.requestCaption(id);
+          if (!m) throw new HttpError(404, 'Not found');
+          nudge();
+          return send(res, 200, view(m));
+        }
+        // "Remove from moments": the message and its photo stay.
+        if (!c && method === 'DELETE') {
+          if (!book.remove(id)) throw new HttpError(404, 'Not found');
+          return send(res, 200, { ok: true });
+        }
+        // "Delete photo everywhere" (the app asks first): out of every message, the scrapbook and the album; the file goes.
+        if (c === 'delete-everywhere' && method === 'POST') {
+          const body = await readJson(req);
+          if (body.confirm !== true) throw new HttpError(400, 'Confirm first: this deletes the photo from your conversations too.');
+          const m = book.get(id, { hidden: true });
+          if (!m?.image) throw new HttpError(404, 'Not found');
+          return send(res, 200, deletePhotoEverywhere(app, book, m.image));
+        }
       }
     }
     // Phase 51: bring your history (a ChatGPT or Claude export): preview, import, learn, undo.

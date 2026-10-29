@@ -2,6 +2,27 @@
 
 Format: newest first. Versions follow `0.<phase>.<patch>` until 1.0.0.
 
+## 1.10.0 (2026-10-29): our moments
+
+Phase 70. See [docs/MOMENTS.md](docs/MOMENTS.md).
+
+- **Our moments:** a shared photo album in the sidebar. Every photo from your conversations (yours
+  and hers) and the moments you keep with ♡, grouped by month, with "On this day" at the top. Photos
+  open in the large view with her caption; Save and Share keep the caption.
+- **Her captions:** she writes each one in her own voice from what you two were saying (and from the
+  picture when the model can see). Edit or regenerate any caption. A few are written a minute in the
+  background; the album says which model writes them and what that costs (free on your own hardware).
+- **Albums:** Us, Places and Her looks fill themselves; make your own, rename them, pick a cover.
+- **She remembers with you:** her `moments` tool lets her bring up a photo ("remember this?") when it
+  fits, at most once a day unasked, never in work channels or group chats. Today shows an "On this
+  day" card.
+- **Private by default:** photos from private conversations, group chats, imports and other apps
+  stay out unless you add them (🖼). Nothing of the album reaches MCP or the OpenAI-compatible API.
+  "Remove from moments" keeps the message; "Delete photo everywhere" asks first. Adults-only photos
+  are hidden while Adult mode is off and always in the phone apps. Not in the demo.
+- **After the update:** existing photos and kept moments join the album in the background (the newest
+  40 get captions by themselves; "Write the missing captions" does more).
+
 ## 1.9.0 (2026-10-29): video calls
 
 Phase 69. See [docs/VIDEO_CALLS.md](docs/VIDEO_CALLS.md).

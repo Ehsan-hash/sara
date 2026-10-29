@@ -81,6 +81,17 @@ lines as yours, the other companions' lines as theirs, tagged with the chat's na
 aren't in the chat learn nothing from it. Group chats are never shown to other apps, MCP or the API,
 and deleting one deletes every member's copy.
 
+## Our moments
+
+The photo album ([MOMENTS.md](MOMENTS.md)) stays on your server, per companion. Her captions are
+written by the companion's background model (or the *Looking at pictures* model for photos you sent,
+which then receives that photo) with the few lines of conversation around it; if that is a cloud
+model, those lines and that photo go to it, and the album says which model it is and roughly what it
+costs. Photos from private conversations, group chats, other people's chats, shared channels,
+imported history and other apps never enter the album by themselves (you can add one from a private
+conversation or a group chat by hand), and nothing from the album is shared with other apps, MCP or
+the API. *Delete photo everywhere* deletes the file from the server.
+
 ## Her logs
 
 Her logs stay on your server (`<data>/logs/sara.log`, the system journal or `docker logs`, and a

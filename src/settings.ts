@@ -135,6 +135,8 @@ export interface Settings {
   talkLanguage?: string;
   /** Phase 53, per companion: the yearly look back on the anniversary of the first message (off by default). */
   story?: { yearly?: boolean; lastYear?: number };
+  /** Phase 70: "Our moments": which photos enter the album by themselves (per companion). */
+  moments?: Partial<import('./moments.ts').MomentsSettings>;
   /**
    * Phase 56: per provider: keep its model list up to date (default on); Ollama daemons: offer every
    * Ollama Cloud model (default: on when it has a cloud model) and remove retired cloud models (off).

@@ -168,6 +168,9 @@ export interface AppContext {
   wardrobe?: import('./wardrobe.ts').WardrobeWorker;
   /** Shared scrapbook (Phase 9). */
   scrapbook?: Scrapbook;
+  /** Phase 70: the album "Our moments" and its background work (captions). */
+  moments?: import('./moments.ts').MomentsStore;
+  momentsWorker?: import('./moments.ts').MomentsWorker;
   /** Local speech engines (Phase 5). */
   voice?: LocalVoiceEngine;
   /** provider/model pairs that rejected tool definitions; they get plain chat. */
@@ -849,6 +852,8 @@ export async function* runTurn(app: AppContext, conversationId: string, userText
   let tools = noTools.has(modelKey) || conv.partner || opts.noTools ? [] : app.tools.enabled(s.toolPermissions).filter((t) => !((conv.private || privateLocalOn()) && OFFSERVER_TOOL(t.spec.name)));
   // Hardening M3: with her tools allowed for other apps, her look-back over every past conversation stays out.
   if (opts.externalApp) tools = tools.filter((t) => t.spec.name !== 'recall');
+  // Phase 70: the album stays in her own conversations with the owner: never for other apps, shared work channels or groups.
+  if (opts.externalApp || opts.group || isWorkChannel(conv.channel) || ['api', 'mcp', 'home-assistant'].includes(conv.channel)) tools = tools.filter((t) => t.spec.name !== 'moments');
   // Phase 66: group chats get read-only tools only, and only those that run without asking (no approvals mid-round).
   if (opts.group) tools = tools.filter((t) => GROUP_TOOLS.has(t.spec.name) && app.tools.permission(t.spec.name, s.toolPermissions) === 'auto');
   // Private conversations: commands get no network either (nothing leaves the server).

@@ -992,6 +992,22 @@
     "ci-keep": [
       "Off by default: only what you tick is saved. On: the chats are kept too, archived and read-only, labelled as from the other app, and never shown to other apps or MCP.",
       "import"
+    ],
+    "mo-mode": [
+      "Which photos join the album by themselves: all photos you two share, only those in messages you keep with ♡, or none (add them yourself with 🖼 under a photo). Private chats and group chats never join by themselves.",
+      "moments"
+    ],
+    "mo-new-name": [
+      "Name a new album of your own, for example \"Our trip to Lisbon\". Then open a photo's ⋯ window and tick the album to add it.",
+      "moments"
+    ],
+    "me-caption": [
+      "Her caption for this photo. Change it to your own words: it saves when you leave the box. Press \"Let her write a new one\" to have her try again.",
+      "moments"
+    ],
+    "me-cover": [
+      "Make this photo the cover picture of an album (the picture on the album's card). Pick \"Not a cover\" to go back to the newest photo.",
+      "moments"
     ]
   },
   "pages": {

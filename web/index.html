@@ -117,6 +117,7 @@
         <button id="open-memory" type="button" title="What she remembers (Alt+M)"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 11c0 5.6-7 10-7 10z"/><path d="M9 11h6M12 8v6"/></svg><span>Memory</span></button>
         <button id="open-library" type="button" title="Library: documents she keeps and knows (Alt+L)"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19V5a2 2 0 0 1 2-2h4v18H6a2 2 0 0 1-2-2z"/><path d="M10 3h4v18h-4z"/><path d="M15.5 4.2l3.9-1 3 16.4-3.9 1z"/></svg><span>Library</span></button>
         <button id="open-scrapbook" type="button" title="Scrapbook (Alt+B)"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="15" rx="2"/><circle cx="9" cy="11" r="2"/><path d="M21 17l-5-5-8 8"/></svg><span>Scrapbook</span></button>
+        <button id="open-moments" type="button" title="Our moments: your photo album with her captions"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="3" width="15" height="13" rx="2"/><path d="M3 7v12a2 2 0 0 0 2 2h12"/><path d="M6 13l4-4 3 3 2-2 6 6"/><circle cx="16" cy="7.5" r="1.3"/></svg><span>Moments</span></button>
         <button id="open-story" type="button" title="Your story: your time together, in order (Alt+Y)"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3v18"/><circle cx="6" cy="7" r="2"/><circle cx="6" cy="17" r="2"/><path d="M10 7h10M10 17h7M10 12h5"/></svg><span>Your story</span></button>
         <button id="open-team" type="button" title="Team: helpers she leads on bigger jobs"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><circle cx="17" cy="9" r="2.5"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6M15 14.5c.6-.3 1.3-.5 2-.5 2.8 0 4 2 4 5"/></svg><span>Team</span><i id="team-dot" class="side-dot" hidden></i></button>
         <button id="open-sara" type="button" title="Her page: her day, mood, character (Alt+H)"><img class="side-face avatar" src="/sara-avatar.jpg" alt=""><span class="side-her">Sara</span></button>
@@ -353,6 +354,7 @@
         <section class="today-card" id="td-calendar" hidden><h3>Calendar</h3><div class="today-list"></div></section>
         <section class="today-card" id="td-mail" hidden><h3>Mail</h3><div class="today-list"></div></section>
         <section class="today-card" id="td-her" hidden><h3 id="td-her-name">Her</h3><div class="today-her"></div></section>
+        <section class="today-card" id="td-otd" hidden><h3 id="td-otd-title">On this day</h3><div class="today-otd"></div><button id="td-otd-open" type="button" class="ghost small">Open our moments</button></section>
         <section class="today-card" id="td-dates" hidden><h3>Coming up</h3><div class="today-list"></div></section>
         <section class="today-card" id="td-models" hidden><h3>Model changes</h3><div class="today-list"></div></section>
         <section class="today-card" id="td-jobs" hidden><h3>Running now</h3><div class="today-list"></div></section>
@@ -692,7 +694,59 @@
       </div>
       <div id="sb-moments" class="sb-list"></div>
       <div id="sb-photos" class="sb-photos" hidden></div>
+      <p class="small"><button id="sb-to-moments" type="button" class="ghost small">Open our moments (the album with her captions)</button></p>
       <div class="add-row"><input id="sb-joke" placeholder="Add an inside joke…"><button id="sb-joke-add" type="button">Add</button></div>
+    </form>
+  </dialog>
+
+  <!-- Phase 70: Our moments (the photo album with her captions) -->
+  <dialog id="moments" aria-label="Our moments">
+    <form method="dialog" class="settings-body moments">
+      <h2>Our moments</h2>
+      <p class="muted small">Every photo you two share and the moments you keep (♡), each with a short caption she writes. Only you see it here: it never goes to other apps.</p>
+      <div class="mo-top">
+        <label class="mo-mode">Add photos <select id="mo-mode"><option value="all">All photos</option><option value="pinned">Only kept moments</option><option value="off">Off (I add them myself)</option></select></label>
+        <span id="mo-cost" class="muted small"></span>
+      </div>
+      <p id="mo-status" class="muted small" role="status"></p>
+      <div id="mo-albums" class="mo-albums" role="tablist" aria-label="Albums"></div>
+      <div class="add-row mo-new" data-nodirty><input id="mo-new-name" maxlength="60" placeholder="New album name" aria-label="New album name"><button id="mo-new" type="button" class="ghost small">+ New album</button></div>
+      <div id="mo-album-head" class="mo-album-head" hidden>
+        <h3 id="mo-album-name"></h3>
+        <button id="mo-album-rename" type="button" class="ghost small">Rename</button>
+        <button id="mo-album-delete" type="button" class="ghost small">Delete album</button>
+      </div>
+      <section id="mo-otd" class="mo-otd" hidden>
+        <h3 id="mo-otd-title">On this day</h3>
+        <div class="mo-grid"></div>
+      </section>
+      <div id="mo-list" class="mo-list"></div>
+      <p class="actions-left small"><button id="mo-more" type="button" class="ghost small" hidden>Write the missing captions</button></p>
+    </form>
+  </dialog>
+
+  <dialog id="moment-edit" aria-label="Moment">
+    <form method="dialog" class="settings-body moment-edit">
+      <h2 id="me-title">Moment</h2>
+      <div class="me-body">
+        <img id="me-img" class="me-img" alt="">
+        <div class="me-side">
+          <p id="me-when" class="muted small"></p>
+          <label>Her caption <textarea id="me-caption" rows="3" maxlength="240"></textarea></label>
+          <p class="actions-left small"><button id="me-regen" type="button" class="ghost small">Let her write a new one</button> <span id="me-state" class="muted small"></span></p>
+          <p id="me-said" class="muted small me-said"></p>
+          <div id="me-albums-wrap">
+            <h3>In your albums</h3>
+            <div id="me-albums" class="me-albums"></div>
+          </div>
+          <label>Cover of <select id="me-cover"><option value="">Not a cover</option></select></label>
+          <p class="actions-left small">
+            <button id="me-open" type="button" class="ghost small">Open the conversation</button>
+            <button id="me-remove" type="button" class="ghost small">Remove from moments</button>
+            <button id="me-delete" type="button" class="small danger">Delete photo everywhere</button>
+          </p>
+        </div>
+      </div>
     </form>
   </dialog>
 
