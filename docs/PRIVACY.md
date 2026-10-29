@@ -96,6 +96,18 @@ only the time each kind of event last fired. The words said through Alexa, Siri 
 are in her conversations (named *Alexa*, *Siri*, *Home Assistant*) like any message, so you can
 read or delete them. More: [VOICE_ASSISTANTS.md](VOICE_ASSISTANTS.md).
 
+## Your other servers over SSH (2.2)
+
+| What | Goes to | When | How to turn it off |
+|---|---|---|---|
+| **A host key check** (`ssh-keyscan`) | The server you added | When you add a server or press *Read it again* | Don't add servers |
+| **The commands you approve, her public key line, the password once** | The server you named, over SSH | Each command you approve; the password only at the one sign-in you type it for | Revoke her key or remove the server (Settings → Abilities → Servers over SSH). Refused in private local mode for anything not on this computer |
+
+Kept on your server: the server list, the approved host keys and her keys in `<data>/ssh/`, and a
+password only if you asked her to save it (encrypted in the vault). The commands and their output
+are in the conversation like any tool result. Nothing of it is shown to other apps, MCP or the
+OpenAI-compatible API. More: [SSH.md](SSH.md).
+
 ## More than one person (household)
 
 If the owner of a server invites other adults ([HOUSEHOLD.md](HOUSEHOLD.md)), each person's

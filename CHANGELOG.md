@@ -2,6 +2,28 @@
 
 Format: newest first. Versions follow `0.<phase>.<patch>` until 1.0.0.
 
+## 2.2.0 (2026-10-29): your other servers over SSH
+
+Phase 73. See [docs/SSH.md](docs/SSH.md).
+
+- **She can work on your other servers over SSH**, with a password or a key. Add a server in Settings →
+  Abilities → Servers over SSH (or ask her). Every command goes through her approval rules, risky
+  ones always ask first, and you see the output and exit code.
+- **Signed in with a password, she makes her own key:** right after the first login she creates an
+  ed25519 key just for that server, adds it to the server's `authorized_keys` (once, with the right
+  permissions), checks that it works, and tells you she made it and where the key file is. From then
+  on she uses the key. **The password is not kept.**
+- **Keeping the password** happens only if you ask for it: she warns that it's a security risk, and
+  you tick "Save the password" and confirm. It's stored encrypted with her other secrets; one click
+  forgets it. Passwords are typed in Settings, never in chat; one typed in chat is replaced with
+  [REDACTED] before it's saved or sent to the model.
+- **Safe by default:** the server's host key is shown as a SHA256 fingerprint for you to approve, and
+  a changed host key stops her until you look. Keys are per server and can be listed, revoked (her
+  line is removed from the server too) and deleted. Nothing of this reaches other apps, MCP, the
+  OpenAI-compatible API, Alexa or Home Assistant; not for household members, not in the demo; with
+  "Nothing leaves this computer" on, only this computer can be reached.
+- Uses the system OpenSSH client (`ssh`, `ssh-keygen`); the Docker image now includes it.
+
 ## 2.1.0 (2026-10-29): her voice in the home
 
 Phase 72. See [docs/VOICE_ASSISTANTS.md](docs/VOICE_ASSISTANTS.md) and [docs/ALEXA.md](docs/ALEXA.md).

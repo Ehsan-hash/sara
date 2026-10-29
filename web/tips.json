@@ -1076,6 +1076,50 @@
     "pr-gap": [
       "Each kind of event (home, leaving, bedtime, morning) makes her speak at most once in this time, so a phone jumping in and out of home doesn't repeat it.",
       "home"
+    ],
+    "ssh-name": [
+      "Your own name for the server, used in chat (\"run the backup on web box\"). Example: web box, NAS, game server.",
+      "ssh"
+    ],
+    "ssh-host": [
+      "The server's name or IP address as you'd type it after ssh. Example: server.example.com or 192.168.1.20.",
+      "ssh"
+    ],
+    "ssh-port": [
+      "The SSH port on that server. Almost always 22; change it only if the server uses another one.",
+      "ssh"
+    ],
+    "ssh-user": [
+      "The user she signs in as. A normal user with sudo is safer than root. Example: deploy.",
+      "ssh"
+    ],
+    "ssh-auth-pw": [
+      "You type the password once. She signs in, makes her own key for this server, installs it, and from then on uses the key. The password is not kept unless you ask.",
+      "ssh"
+    ],
+    "ssh-auth-key": [
+      "Give her a private key the server already accepts: paste it, or the path of a key file on the Sara server. Keys with a passphrase can't be used.",
+      "ssh"
+    ],
+    "ssh-pw": [
+      "Used once to sign in and install her key, then dropped. Never typed into the chat, never written to logs.",
+      "ssh"
+    ],
+    "ssh-save-pw": [
+      "Off by default. Keeps the password encrypted with her other secrets for later sessions. A security risk: a key is safer and can be revoked per server.",
+      "ssh"
+    ],
+    "ssh-confirm-risk": [
+      "A second yes, because a saved password opens that server for anyone who gets into Sara. You can forget it later with one click.",
+      "ssh"
+    ],
+    "ssh-key-text": [
+      "Paste the whole private key, from -----BEGIN to END-----. She keeps her own copy in her data folder (only readable by Sara).",
+      "ssh"
+    ],
+    "ssh-key-path": [
+      "Or the full path of a key file on the computer Sara runs on (not your phone or laptop). She copies it into her data folder.",
+      "ssh"
     ]
   },
   "pages": {
@@ -1162,6 +1206,10 @@
     "ab-home": [
       "Home Assistant: she can see your lights, sensors and thermostat, and change things after you approve.",
       "home"
+    ],
+    "ab-ssh": [
+      "Let her work on your other servers over SSH. She checks each server's host key, makes her own key after one password sign-in, and every command asks you first.",
+      "ssh"
     ],
     "ab-github": [
       "Connect GitHub so she can commit, push, open pull requests and work with issues. Watch repositories and new issues become tasks.",

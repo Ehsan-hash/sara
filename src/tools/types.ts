@@ -39,6 +39,11 @@ export interface Tool {
    * ask the owner before every run unless the owner explicitly chose otherwise (Phase 46).
    */
   runsCommands?: boolean;
+  /**
+   * Phase 73: calls that ask the owner first even when the tool is set to run on its own (the
+   * "ask first" list: e.g. ssh_run with rm -rf, shutdown, a changed firewall).
+   */
+  asksFirst?: (args: Record<string, unknown>) => boolean;
   /** Source label for the settings UI, e.g. "built-in" or "MCP: github". */
   source?: string;
   /** Short human-readable description of a call, for the activity log and approval cards. */

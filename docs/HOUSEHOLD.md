@@ -23,6 +23,7 @@ space.
 | Models | Sets up providers, keys and subscriptions | Uses the models the owner picked for them; never sees a key |
 | Server settings, updates, backups, private local mode, instances | Yes | No |
 | Shell, workspace files, background jobs, browser, GitHub, Google, Home Assistant, MCP, agent bridges, Telegram/Discord | Yes | No (off for members in 2.0) |
+| Servers over SSH (2.2) | Yes | No: the owner's servers and keys; members' spaces have no SSH tools and `/api/ssh` answers 403 |
 | Chat, voice notes, live calls, pictures, library, planner, moments, scrapbook, group chats with their own companions, personality and look studios | Yes | Yes (voice and pictures can be switched off per member, since they cost the owner money) |
 | Reads another person's conversations, memories, companions or moments | No | No |
 

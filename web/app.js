@@ -13,6 +13,7 @@ import { initProjectMap, resetProjectMap } from './codemap.js';
 import { initRecipes, loadRecipes } from './recipes.js';
 import { initOtherApps, keyUse, loadOtherApps } from './other-apps.js';
 import { initAlexa, loadAlexa } from './alexa.js';
+import { initSsh, loadSsh } from './ssh.js';
 import { initPresence, loadPresence } from './home-presence.js';
 import { initCards } from './cards.js';
 import { initImport, loadImport } from './import.js';
@@ -1642,7 +1643,7 @@ function flagClaims(el, claims) {
 const STATUS_LABEL = { running: 'running…', ok: 'done', error: 'failed', denied: 'declined' };
 
 // Everyday tools read as plain words with an icon; code tools (files, shell, git) stay monospace.
-const TOOL_ICON = { remind: '⏰', todo: '✅', note: '📝', recall: '🧠', web_search: '🔎', web_fetch: '🌐', calendar: '📅', calendar_add: '📅', calendar_events: '📅', email: '✉️', gmail_search: '✉️', gmail_thread: '✉️', gmail_needs_answer: '✉️', home_control: '🏠', home_status: '🏠', take_photo: '📷', share_photo: '📷', change_outfit: '👗', scrapbook: '📔', shared_list: '🎲', settings_guide: '❓', tune_personality: '🎛️', team_task: '👥', work_on_issue: '👥', start_job: '⏳', project_note: '📝', preview_start: '🖥️', preview_stop: '🖥️', browser_open: '🧭', browser_screenshot: '📸', browser_click: '🖱️', browser_type: '⌨️', browser_read: '🧭', browser_check: '✔️' };
+const TOOL_ICON = { remind: '⏰', todo: '✅', note: '📝', recall: '🧠', web_search: '🔎', web_fetch: '🌐', calendar: '📅', calendar_add: '📅', calendar_events: '📅', email: '✉️', gmail_search: '✉️', gmail_thread: '✉️', gmail_needs_answer: '✉️', home_control: '🏠', home_status: '🏠', ssh_servers: '🖧', ssh_connect: '🖧', ssh_run: '🖧', ssh_forget_password: '🖧', ssh_revoke_key: '🖧', ssh_remove_server: '🖧', take_photo: '📷', share_photo: '📷', change_outfit: '👗', scrapbook: '📔', shared_list: '🎲', settings_guide: '❓', tune_personality: '🎛️', team_task: '👥', work_on_issue: '👥', start_job: '⏳', project_note: '📝', preview_start: '🖥️', preview_stop: '🖥️', browser_open: '🧭', browser_screenshot: '📸', browser_click: '🖱️', browser_type: '⌨️', browser_read: '🧭', browser_check: '✔️' };
 const CODE_TOOL = /^(shell|read_file|write_file|edit_file|list_dir|search|git|git_\w+|github_\w+|review_code|delegate_task)$/;
 
 function toolBlock({ name, summary, status, output, ms, snapshotId }) {
@@ -1809,6 +1810,12 @@ const TOOL_WORDS = {
   recipe_use: 'Follow a saved recipe.',
   share_photo: 'Send you one of her own pictures.',
   take_photo: 'Make a new picture of herself to send you.',
+  ssh_servers: 'See the list of your servers she can reach over SSH.',
+  ssh_connect: 'Add one of your servers to work on over SSH (you sign in to it in Settings).',
+  ssh_run: 'Run a command on one of your servers over SSH.',
+  ssh_forget_password: 'Forget a saved server password.',
+  ssh_revoke_key: 'Remove her SSH key from one of your servers.',
+  ssh_remove_server: 'Remove a server from her list.',
   start_job: 'Start a long task in the background and keep talking.',
   job_status: 'Check on a background task.',
   stop_job: 'Stop a background task.',
@@ -5391,6 +5398,7 @@ function showSettingsTab(page, opts = {}) {
   showSettingsHelp(pick);
   if (pick === 'dh-updates') void loadUpdates();
   if (pick === 'ab-recipes') void loadRecipes();
+  if (pick === 'ab-ssh') void loadSsh();
   if (pick === 'co-apps') void Promise.all([loadOtherApps(), loadAlexa()]);
   if (pick === 'her-import') void loadImport();
   if (pick === 'models-local') void loadLocalModels();
@@ -7421,6 +7429,7 @@ initCards({
 });
 initOtherApps({ copyText, confirmProof });
 initAlexa({ copyText });
+initSsh();
 initPresence();
 initLocalModels({ openSettings: (page) => void openSettings(page) });
 initImport();

@@ -310,6 +310,13 @@ When you build or change something with a web page:
 Never say you tested, clicked through or looked at something in a browser, or at phone width, unless your browser tools did it in this turn; if you couldn't see a screenshot, say so.`);
   }
   // Phase 41: questions about the app itself are answered from her settings guide, with a link.
+  // Phase 73: the owner's other servers over SSH: the password rule and her words about her key.
+  if (ctx.tools?.includes('ssh_run')) parts.push(`## ${owner}'s servers over SSH
+- You can work on servers ${owner} names over SSH (ssh_servers, ssh_connect, ssh_run). Every command follows your approval rules, and risky ones always ask first. These are real machines: say what you'll run and why, prefer read-only commands first, and show what came back.
+- Never ask for a password in the chat and never repeat one. ${owner} types it once in Settings → Abilities → Servers over SSH ([Open Servers over SSH](/#view=settings:ab-ssh)). If a message shows [REDACTED] where a password was, say you removed it, that passwords don't belong in the chat, and point to that page.
+- After a password sign-in you make your own SSH key for that server and use it from then on; the password is not kept. Say it plainly: you made an SSH key for the server, the full path of the private key on the Sara server, the public key line you installed, that you'll use the key from now on and that you did NOT keep the password.
+- Keep a password only if ${owner} asks in so many words to save it for future sessions. First warn that it is a security risk (anyone who gets into Sara could use it; a key can be revoked per server) and ask for an explicit yes; only then use ssh_connect with save_password, and ${owner} confirms it in Settings.
+- If a server's host key changed, stop and tell ${owner}: never work around it.`);
   if (ctx.tools?.includes('settings_guide')) parts.push(`## Questions about this app\nWhen ${owner} asks how this app works, what one of your settings or dials does, where to find something, which model to use, how to set something up, or wants to be shown around: look it up with settings_guide first, answer briefly in your own words, and give the link it returns as a markdown link, copied exactly (e.g. [Open Relationship](/#view=settings:her-relationship)). Don't invent settings that aren't in the guide.`);
   if (ctx.coding && ctx.project?.trim()) parts.push(`## This project\nWhat you know about the code here (looked up from the files; your own notes are kept with project_note):\n${ctx.project.trim()}`);
 

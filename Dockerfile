@@ -22,10 +22,11 @@ LABEL org.opencontainers.image.title="Sara" \
       org.opencontainers.image.vendor="Frank Arena and Backstage Coding" \
       org.opencontainers.image.version="${SARA_VERSION}"
 
-# git and curl for her coding tools; certificates for HTTPS; tini reaps the processes her tools
+# git and curl for her coding tools; openssh-client for your other servers over SSH (Phase 73);
+# certificates for HTTPS; tini reaps the processes her tools
 # leave behind and passes stop signals on.
 RUN apt-get update \
- && apt-get install -y --no-install-recommends git curl ca-certificates tini \
+ && apt-get install -y --no-install-recommends git curl openssh-client ca-certificates tini \
  && rm -rf /var/lib/apt/lists/* \
  && useradd --system --no-create-home --shell /usr/sbin/nologin sara-tools
 

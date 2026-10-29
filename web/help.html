@@ -33,6 +33,7 @@
   <a href="#groups">Group chats</a>
   <a href="#household">More than one person</a>
   <a href="#home">Home and places</a>
+  <a href="#ssh">Your other servers over SSH</a>
   <a href="#team">Sara leads a team</a>
   <a href="#workflows">Coding workflows</a>
   <a href="#starters">Starter projects</a>
@@ -397,6 +398,16 @@
   <li><strong>Place reminders</strong>: "remind me when I get to the store" or "…when I leave work". Save places in <em>Planner → Reminders → Places</em>: by address, or with "Save where I am" in the phone app. Then switch on <em>Place reminders</em> in <em>Settings → Connections → Phone and notifications</em> on your phone, and allow location "all the time".</li>
   <li>Your location stays on the phone. The phone only tells your server "arrived at Store" or "left Work". Looking up an address asks OpenStreetMap.</li>
   <li><strong>Presence</strong> (<em>Settings → Abilities → Home Assistant → Presence</em>, off until you switch it on): she notices through Home Assistant when someone gets home or leaves, at bedtime, or when a light goes on in the morning, and says a short word as a message or on a speaker. Each kind at most once every few hours, never in the quiet hours of <em>Calls from her</em>.</li>
+</ul>
+
+<h2 id="ssh">Your other servers over SSH</h2>
+<ul>
+  <li><strong>Add a server</strong> in <em>Settings → Abilities → Servers over SSH</em> (or ask her: "add my web box, deploy@203.0.113.5"): a name, the address, the port and the user. She reads the server's host key and shows its SHA256 fingerprint. Compare it with the server's own (<code>ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub</code> on the server) and trust it only if they match.</li>
+  <li><strong>With a password</strong>: type it once in the password box on that page, never in the chat. She signs in, makes her own SSH key for that server, adds it to <code>~/.ssh/authorized_keys</code> there and tells you where the key file is. From then on she uses the key and the password is not kept.</li>
+  <li><strong>Saving the password</strong> is off by default. Tick it only if you really need it: it is a security risk (anyone who gets into Sara could use it), so it asks you twice, is stored encrypted with her other secrets, and <em>Forget the password</em> removes it with one click.</li>
+  <li><strong>With a key</strong>: paste a private key the server already accepts, or give the path of a key file on the Sara server. Keys with a passphrase can't be used.</li>
+  <li>Then ask her things like "how full is the disk on web box?" or "restart nginx on web box". Every command asks you first (change that for <code>ssh_run</code> in <em>Tools and approvals</em>); risky ones (deleting, rebooting, users, firewall, keys) always ask, and you see the output.</li>
+  <li>If a server's host key changes, she stops and asks you. <em>Revoke her key</em> removes exactly her line from the server and deletes the key here; <em>Remove</em> forgets the server. Only you can use this: not people in your household, other apps, MCP or the demo. With <em>Nothing leaves this computer</em> on, she only reaches servers on this computer. More: <a href="https://github.com/farena-ai/sara/blob/main/docs/SSH.md">docs/SSH.md</a>.</li>
 </ul>
 
 <h2 id="assistants">Talking to her through Alexa, Google, Siri and your phone</h2>

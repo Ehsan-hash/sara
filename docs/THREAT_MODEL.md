@@ -458,6 +458,61 @@ docs/ALEXA.md.
   signed in to a linked account talks to that person's companion (the room rule keeps it
   non-explicit, and private chats stay out). Amazon sees what is said to Alexa.
 
+## Your other servers over SSH (Phase 73)
+
+New outbound capability: Sara signs in to servers the owner names and runs commands there
+(docs/SSH.md). What it adds to protect: her private keys (`<data>/ssh/keys/`, `0600`), the approved
+host keys, and, only if the owner asked, a server password in the vault.
+
+- **No home-made protocol code.** The system OpenSSH client does the cryptography; Sara starts
+  `ssh`, `ssh-keygen` and `ssh-keyscan` with argument arrays (`spawn`, `shell: false`, stdin
+  closed) and a fixed option set: `-F none` (the owner's ssh config can't add proxies or
+  forwarding), `StrictHostKeyChecking=yes` against a per-server known_hosts file bound by
+  `HostKeyAlias=sara-<id>` and `HostKeyAlgorithms` to the one approved key, `IdentitiesOnly=yes`
+  with her key only, `IdentityAgent=none`, `BatchMode=yes` for key sign-ins, no agent/X11/port
+  forwarding (`ClearAllForwardings=yes`), no control sockets, no `LocalCommand`, timeouts. The
+  environment is a short allowlist (no `SSH_AUTH_SOCK`). Names, users and ports are validated (no
+  leading `-`), and the host follows `--`.
+- **Host key trust.** Trust on first use, shown to the owner as a SHA256 fingerprint with the
+  command to compare it on the server; nothing is sent to the server before the owner trusts it,
+  and the trust call must name the same fingerprint that is waiting (no race to a different key).
+  A changed key makes `ssh` fail; Sara records the new fingerprint as pending, refuses every
+  further call before starting `ssh`, and only the owner's explicit trust of the new fingerprint
+  continues. The model has no tool that trusts a host key.
+- **The password.** Accepted only from the owner's settings page (owner session, same-origin JSON),
+  passed to `ssh` through `SSH_ASKPASS` + `SSH_ASKPASS_REQUIRE=force` from a `0600` file in a
+  `0700` folder that the helper deletes as it reads it (the folder is removed in a `finally`).
+  Never in argv, the environment, logs, tool output or stored messages; the server's stderr is
+  scrubbed of it; the request body's copy is dropped and the buffer zeroed (a JS string may still
+  linger until garbage collection: accepted). Saved only with `savePassword` AND `confirmRisk`
+  (two checkboxes plus a confirm in the UI); stored in the AES-256-GCM vault, so the Redactor
+  removes it from any output too. A password typed into the chat is replaced with `[REDACTED]`
+  before the message is stored or sent to a model (`redactTypedPassword`; values of 6+ characters
+  with a digit or symbol after a password word, in six languages).
+- **Her key on the server.** Installed with a fixed POSIX script that only appends her exact public
+  line once (`grep -qxF`), sets `~/.ssh` 700 and `authorized_keys` 600; revoked by removing that
+  exact line (`grep -vxF`, rewritten in place). The line is checked against a strict pattern (key
+  type, base64, a comment of safe characters) before it is put between single quotes, so it can't
+  break out of the quoting.
+- **Prompt injection.** Output from the server is labelled as information only. `ssh_run` asks by
+  default (`runsCommands`), and an ask-first list (`RISKY_COMMAND` in `src/tools/ssh.ts`: recursive
+  deletes, shutdown/reboot, disks, users/passwords, firewalls, stopping services, recursive
+  chmod/chown, curl-pipe-shell, `authorized_keys`/`sshd_config`/`/etc/shadow`/sudoers, system
+  folders, dropping databases, force pushes, removing containers, `kill -9`) asks even when the
+  owner set `ssh_run` to run on its own (`Tool.asksFirst`, checked in `chat.ts`). Adding a server,
+  forgetting a password, revoking a key and removing a server always ask.
+- **Who can reach it.** Owner only: the manager exists only in the owner's space and never on the
+  demo; household members have no SSH tools and `ssh` isn't in `MEMBER_ROUTES` (403); the demo's
+  allowlists don't include it (403). Every `ssh_*` tool is removed from turns of other apps
+  (`externalApp`, channels `api`, `mcp`, `home-assistant`, `alexa`), group chats, shared work
+  channels and private chats, even when the owner allows her tools for other apps; the MCP server's
+  fixed tool list has none. Private local mode refuses any host that isn't literally loopback
+  before a scan or connection (a LAN server is another computer).
+- **Accepted:** a command runs with the rights of the user the owner gave her; her keys have no
+  passphrase (she can't type one unattended), so whoever can read the data folder (root, or a copy
+  of a backup) can use them: revoke per server from the settings page. Her keys are in backups like
+  the vault.
+
 ## Desktop apps (Phase 33)
 
 - The page bridge (`window.SaraDesktop`) answers only pages from the configured server's origin;

@@ -1437,3 +1437,27 @@ body:not(.member) [data-member-only] { display: none !important; }
 .acc-info { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 4px 14px; margin: 8px 0 12px; }
 .acc-info dt { color: var(--muted); }
 .acc-info dd { margin: 0; overflow-wrap: anywhere; }
+
+/* Phase 73: Settings → Abilities → Servers over SSH */
+.ssh-list { display: grid; gap: 8px; margin: 8px 0; }
+.ssh-card { display: grid; gap: 2px; background: var(--panel-2); border-radius: 10px; padding: 10px 12px; min-width: 0; }
+.ssh-card-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.ssh-row { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.ssh-row code { overflow-wrap: anywhere; word-break: break-all; }
+.ssh-badge { font-size: 12px; padding: 2px 8px; border-radius: 999px; background: rgba(255,255,255,.08); }
+.ssh-badge.ok { background: rgba(80,200,120,.18); color: #8fe0a8; }
+.ssh-badge.wait { background: rgba(240,190,80,.16); color: #f0c36a; }
+.ssh-badge.bad { background: rgba(255,110,110,.18); color: #ff9a9a; }
+:root[data-theme="light"] .ssh-badge.ok { color: #1f7a3d; }
+:root[data-theme="light"] .ssh-badge.wait { color: #8a5a00; }
+:root[data-theme="light"] .ssh-badge.bad { color: #b0242e; }
+.ssh-actions { flex-wrap: wrap; margin-top: 6px; }
+.ssh-form { display: grid; gap: 8px; min-width: 0; }
+.ssh-auth { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 8px; }
+.settings-body label.ssh-auth-card, .ssh-auth-card { display: flex; flex-direction: row; gap: 10px; align-items: flex-start; text-align: left; background: var(--panel-2); border-radius: 10px; padding: 10px 12px; cursor: pointer; border: 1px solid transparent; }
+.ssh-auth-card:has(input:checked) { border-color: var(--accent); }
+.settings-body .ssh-auth-card input, .ssh-auth-card input { width: auto; flex: none; accent-color: var(--accent); margin-top: 3px; }
+.ssh-auth-card > span { display: grid; gap: 2px; }
+.ssh-fp { display: grid; gap: 4px; background: var(--panel-2); border-radius: 10px; padding: 10px 12px; overflow-wrap: anywhere; }
+.ssh-warn { margin: 0; padding: 8px 10px; border-radius: 10px; border: 1px solid #c9853a; background: rgba(240,150,60,.12); }
+.ssh-announce { margin: 8px 0; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--accent); background: var(--panel-2); overflow-wrap: anywhere; }

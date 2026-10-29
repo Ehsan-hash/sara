@@ -5,6 +5,7 @@ import { chatModels, CPU_TIERS, detectHardware, detectOllama, GPU_TIERS, install
 import { APNS_VAULT } from './apns.ts';
 import { closeSync, createReadStream, existsSync, mkdirSync, openSync, readdirSync, readFileSync, readSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { appLanguage, en, fill, toLang, trOwner } from './i18n.ts';
+import { SAVE_PASSWORD_WARNING, SshError } from './ssh.ts';
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { qrSvg } from './qr.ts';
@@ -4068,6 +4069,96 @@ export function createSaraServer(opts: ServerOptions): Server {
         if (token) app.vault.set(HOME_VAULT, token);
         return send(res, 200, { url, hasToken: true });
       }
+    }
+    // Phase 73: the owner's servers over SSH (src/ssh.ts, docs/SSH.md). Owner only: members get 403
+    // (not in MEMBER_ROUTES), the demo gets 403 (not in its allowlists) and has no manager anyway.
+    if (a === 'ssh') {
+      const ssh = app.ssh;
+      if (opts.demo || opts.member || !ssh) throw new HttpError(403, 'Servers over SSH are only for the owner of this server.');
+      const fail = (err: unknown): never => {
+        if (err instanceof SshError) throw new HttpError(err.code === 'NOT_FOUND' ? 404 : err.code === 'PRIVATE_LOCAL' ? 403 : 400, err.message);
+        throw err;
+      };
+      const view = async () => ({ servers: ssh.views(), available: await ssh.available(), privateLocal: privateLocalOn(), warning: SAVE_PASSWORD_WARNING, dir: ssh.dir });
+      if (!b && method === 'GET') return send(res, 200, await view());
+      if (b === 'servers' && !c && method === 'POST') {
+        const body = await readJson(req);
+        try {
+          const srv = await ssh.add({ name: body.name, host: body.host, port: body.port, user: body.user, auth: body.auth });
+          return send(res, 200, { server: ssh.view(srv), ...(await view()) });
+        } catch (err) {
+          return fail(err);
+        }
+      }
+      const id = b === 'servers' && c ? c : '';
+      const d = parts[3];
+      if (id) {
+        try {
+          ssh.get(id);
+        } catch (err) {
+          fail(err);
+        }
+        try {
+          if (!d && method === 'DELETE') {
+            const body = await readJson(req).catch(() => ({}) as Record<string, unknown>);
+            let message = '';
+            const srv = ssh.get(id);
+            if (body.revoke === true && srv.key?.source === 'made') message = (await ssh.revokeKey(id)).message;
+            ssh.remove(id);
+            return send(res, 200, { message, ...(await view()) });
+          }
+          if (d === 'scan' && method === 'POST') {
+            await ssh.scan(id);
+            return send(res, 200, { server: ssh.view(ssh.get(id)), ...(await view()) });
+          }
+          if (d === 'trust' && method === 'POST') {
+            const body = await readJson(req);
+            ssh.trust(id, String(body.fingerprint ?? ''));
+            return send(res, 200, { server: ssh.view(ssh.get(id)), ...(await view()) });
+          }
+          if (d === 'login' && method === 'POST') {
+            // The password arrives here once (a password box in Settings) and is never stored
+            // unless the owner ticked "Save" AND confirmed the warning.
+            const body = await readJson(req);
+            const pw = typeof body.password === 'string' ? body.password : '';
+            body.password = undefined;
+            const r = await ssh.loginWithPassword(id, pw, { savePassword: body.savePassword === true, confirmRisk: body.confirmRisk === true });
+            // She tells the owner in the conversation that added the server (or the newest one).
+            const srv = ssh.get(id);
+            const conv = (srv.conversationId && app.store.getConversation(srv.conversationId)) || undefined;
+            if (conv && !conv.private) {
+              const sayParams = { name: srv.name, path: r.keyPath, line: r.publicLine };
+              const said = r.passwordSaved
+                ? trOwner('I made my own SSH key for {name} and installed it there. The private key is at {path} on the Sara server, and the line I added to ~/.ssh/authorized_keys is: {line}. I’ll use the key from now on. You asked me to keep the password, so it is saved encrypted; you can forget it any time in Settings → Abilities → Servers over SSH.', app.settings.get(), sayParams, identityOf(app.persona))
+                : trOwner('I made my own SSH key for {name} and installed it there. The private key is at {path} on the Sara server, and the line I added to ~/.ssh/authorized_keys is: {line}. I’ll use the key from now on, and I did not keep your password.', app.settings.get(), sayParams, identityOf(app.persona));
+              const msg = app.store.addMessage(conv.id, 'assistant', said, { ssh: id });
+              app.events?.publish({ type: 'message', conversationId: conv.id, message: msg, reason: 'job' });
+            }
+            return send(res, 200, { server: ssh.view(srv), announcement: r.announcement, ...(await view()) });
+          }
+          if (d === 'key' && method === 'POST') {
+            const body = await readJson(req);
+            await ssh.importKey(id, { privateKey: typeof body.privateKey === 'string' ? body.privateKey : '', keyPath: typeof body.keyPath === 'string' ? body.keyPath : '' });
+            return send(res, 200, { server: ssh.view(ssh.get(id)), ...(await view()) });
+          }
+          if (d === 'test' && method === 'POST') {
+            const t = await ssh.test(id);
+            return send(res, 200, { ...t, server: ssh.view(ssh.get(id)), ...(await view()) });
+          }
+          if (d === 'password' && method === 'DELETE') {
+            ssh.forgetPassword(id);
+            return send(res, 200, { server: ssh.view(ssh.get(id)), ...(await view()) });
+          }
+          if (d === 'revoke' && method === 'POST') {
+            const body = await readJson(req);
+            const r = await ssh.revokeKey(id, { localOnly: body.localOnly === true });
+            return send(res, 200, { message: r.message, removedFromServer: r.removedFromServer, server: ssh.view(r.server), ...(await view()) });
+          }
+        } catch (err) {
+          return fail(err);
+        }
+      }
+      throw new HttpError(404, 'Not found');
     }
     if (a === 'github' && !b) {
       if (method === 'GET') {

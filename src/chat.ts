@@ -4,6 +4,8 @@ import { privateLocalOn } from './net-guard.ts';
 import { onThisComputer } from './private-local.ts';
 import { randomBytes } from 'node:crypto';
 import { buildSystemPrompt, identityOf, type Persona } from './persona.ts';
+import { redactTypedPassword } from './ssh.ts';
+import { isSshTool } from './tools/ssh.ts';
 import { appLanguage, en, fill, languageLine, talkLanguage } from './i18n.ts';
 import { createProvider } from './providers/registry.ts';
 import { isToolsUnsupported, type ChatMessage, type ImageData, type Provider, type ProviderConfig, type ToolCall } from './providers/types.ts';
@@ -201,6 +203,8 @@ export interface AppContext {
   reports?: import('./reports.ts').ReportStore;
   /** Gmail and Google Calendar on the owner's own Google sign-in (Phase 14). */
   google?: import('./google.ts').GoogleAccount;
+  /** Phase 73: the owner's servers over SSH (owner space only; never members or the demo). */
+  ssh?: import('./ssh.ts').SshManager;
   /** Phase 49: preview links to the web apps her jobs run (shared by every companion). */
   previews?: import('./preview.ts').PreviewManager;
   /** Phase 49: her testing browser (one per conversation, closed after the turn or when idle). */
@@ -751,7 +755,9 @@ export async function* runTurn(app: AppContext, conversationId: string, userText
     yield { type: 'error', message: 'Conversation not found.' };
     return;
   }
-  const text = userText.trim();
+  // Phase 73: a password typed into the chat by mistake is never stored, shown again or sent on.
+  const typed = redactTypedPassword(userText.trim());
+  const text = typed.text;
   if (!text) {
     yield { type: 'error', message: 'Message is empty.' };
     return;
@@ -872,6 +878,9 @@ export async function* runTurn(app: AppContext, conversationId: string, userText
   if (opts.externalApp) tools = tools.filter((t) => t.spec.name !== 'recall');
   // Phase 70: the album stays in her own conversations with the owner: never for other apps, shared work channels or groups.
   if (opts.externalApp || opts.group || isWorkChannel(conv.channel) || ['api', 'mcp', 'home-assistant', 'alexa'].includes(conv.channel)) tools = tools.filter((t) => t.spec.name !== 'moments');
+  // Phase 73: her SSH tools work on the owner's real servers: only in the owner's own chats with her
+  // (never other apps, MCP, the OpenAI-compatible API, group chats, shared work channels or private chats).
+  if (opts.externalApp || opts.group || conv.private || isWorkChannel(conv.channel) || ['api', 'mcp', 'home-assistant', 'alexa'].includes(conv.channel)) tools = tools.filter((t) => !isSshTool(t.spec.name));
   // Phase 66: group chats get read-only tools only, and only those that run without asking (no approvals mid-round).
   if (opts.group) tools = tools.filter((t) => GROUP_TOOLS.has(t.spec.name) && app.tools.permission(t.spec.name, s.toolPermissions) === 'auto');
   // Private conversations: commands get no network either (nothing leaves the server).
@@ -1166,7 +1175,9 @@ export async function* runTurn(app: AppContext, conversationId: string, userText
       const shown: string[] = [];
       const newProof: string[] = [];
 
-      const permission = tool ? app.tools.permission(call.name, s.toolPermissions) : 'never';
+      const set = tool ? app.tools.permission(call.name, s.toolPermissions) : 'never';
+      // Phase 73: a few commands always ask first, even when the owner lets the tool run on its own.
+      const permission = set === 'auto' && tool?.asksFirst?.(call.arguments) ? 'ask' : set;
       let allowed = permission === 'auto';
       if (!tool) {
         status = 'error';

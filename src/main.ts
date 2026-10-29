@@ -24,6 +24,8 @@ import { OwnerAuth } from './auth.ts';
 import { claimModeFrom, claimWindowMs, FirstClaim, formatClaimCode } from './claim.ts';
 import { vaultKeyFor, type AppContext } from './chat.ts';
 import { ApprovalBroker, ToolRegistry } from './tools/registry.ts';
+import { SshManager } from './ssh.ts';
+import { createSshTools } from './tools/ssh.ts';
 import { Redactor, vaultSecretValues } from './redact.ts';
 import { SnapshotStore } from './snapshots.ts';
 import { MemoryStore } from './memory.ts';
@@ -293,6 +295,10 @@ const mainTools = new ToolRegistry();
 // Phase 46: no sandbox (Windows, or none found): commands ask first unless the owner chose otherwise.
 mainTools.unsandboxed = sandbox.mode === 'none';
 const mcp = new McpManager(mainTools, { dataDir, sandbox, secrets: (name) => mcpSecrets(vault, name) });
+// Phase 73: the owner's other servers over SSH (docs/SSH.md). Owner only: not in household members'
+// spaces, and not on the demo server.
+const sshManager = isDemo ? undefined : new SshManager({ dir: dataDir, vault });
+if (sshManager) for (const t of createSshTools(() => sshManager)) mainTools.add(t);
 const events = new EventHub();
 const subscriptions = new Subscriptions(vault, dataDir);
 const google = new GoogleAccount(vault);
@@ -500,6 +506,7 @@ function buildCompanion(space: Space, id: string, dir: string): Companion {
     voice,
     subscriptions,
     ...(isMember ? {} : { google }),
+    ...(isMember || !sshManager ? {} : { ssh: sshManager }),
   };
   if (space.member) app.member = space.member;
   // The health history is the server's (the owner's); notifications are per space (each person's devices).

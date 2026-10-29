@@ -1710,6 +1710,45 @@
       <p id="pr-status" class="muted small" role="status"></p>
       </div>
         </section>
+        <section class="settings-page" data-page="ab-ssh" data-group="Abilities" data-title="Servers over SSH" data-owner-only hidden>
+      <p class="muted small">Let her work on your other servers over SSH, with a password or a key. Every command she runs there asks you first (you can change that in Tools and approvals), and risky ones always ask. After you sign in once with a password she makes her own key for that server and stops using the password.</p>
+      <p id="ssh-off" class="muted small" role="status" hidden></p>
+      <div id="ssh-list" class="ssh-list"></div>
+      <div id="ssh-signin" class="ssh-form" data-nodirty data-noauto hidden>
+        <h3 id="ssh-signin-head">Sign in</h3>
+        <div id="ssh-fp-box" class="ssh-fp" hidden>
+          <p id="ssh-fp-line" class="small"></p>
+          <p class="muted small">Compare it with the fingerprint the server shows for itself (on the server: ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub, or ask its hosting company). Trust it only if they match.</p>
+          <div class="add-row"><button id="ssh-trust" type="button">It matches: trust this host key</button><button id="ssh-rescan" type="button" class="ghost">Read it again</button></div>
+        </div>
+        <div id="ssh-pw-box" hidden>
+          <label>Password <input id="ssh-pw" type="password" autocomplete="off" maxlength="1024"></label>
+          <label class="row"><input id="ssh-save-pw" type="checkbox"> <span>Save the password for future sessions</span></label>
+          <p id="ssh-save-warn" class="ssh-warn small" hidden></p>
+          <label id="ssh-confirm-row" class="row" hidden><input id="ssh-confirm-risk" type="checkbox"> <span>I understand the risk. Keep the password anyway.</span></label>
+          <div class="add-row"><button id="ssh-login" type="button">Sign in and make her key</button><button id="ssh-cancel" type="button" class="ghost">Cancel</button></div>
+        </div>
+        <div id="ssh-key-box" hidden>
+          <label>Private key <textarea id="ssh-key-text" rows="5" autocomplete="off" spellcheck="false" placeholder="-----BEGIN OPENSSH …"></textarea></label>
+          <label>Or the path of a key file on the Sara server <input id="ssh-key-path" autocomplete="off" spellcheck="false" placeholder="/home/alex/.ssh/id_ed25519"></label>
+          <div class="add-row"><button id="ssh-key-go" type="button">Use this key</button><button id="ssh-key-cancel" type="button" class="ghost">Cancel</button></div>
+        </div>
+      </div>
+      <p id="ssh-announce" class="ssh-announce small" role="status" hidden></p>
+      <p id="ssh-status" class="muted small" role="status"></p>
+      <h3>Add a server <button type="button" class="tip" data-tip="Give it a name, its address and the user to sign in as. She first reads the server's host key and shows you its fingerprint to check; nothing is sent to the server until you trust it.">?</button></h3>
+      <div id="ssh-add" class="ssh-form" data-nodirty data-noauto>
+        <label>Name <input id="ssh-name" maxlength="60" placeholder="e.g. web box" autocomplete="off"></label>
+        <label>Server address <input id="ssh-host" maxlength="253" placeholder="server.example.com or 192.168.1.20" autocomplete="off" spellcheck="false"></label>
+        <label>Port <input id="ssh-port" type="number" min="1" max="65535" value="22"></label>
+        <label>User <input id="ssh-user" maxlength="64" placeholder="e.g. deploy" autocomplete="off" spellcheck="false"></label>
+        <div class="ssh-auth" role="radiogroup" aria-label="How you sign in the first time">
+          <label class="ssh-auth-card"><input id="ssh-auth-pw" type="radio" name="ssh-auth" value="password" checked> <span><strong>With a password</strong><span class="muted small">Type it once; she makes her own key and forgets the password.</span></span></label>
+          <label class="ssh-auth-card"><input id="ssh-auth-key" type="radio" name="ssh-auth" value="key"> <span><strong>With a key</strong><span class="muted small">Paste a private key, or give the path of a key file on the Sara server.</span></span></label>
+        </div>
+        <div class="add-row"><button id="ssh-add-go" type="button">Check the host key</button></div>
+      </div>
+        </section>
         <section class="settings-page" data-page="ab-search" data-group="Abilities" data-title="Web search" data-owner-only hidden>
       <label>Search service
         <select id="search-provider">

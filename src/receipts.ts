@@ -234,9 +234,12 @@ const BROWSER_I18N = w(
 /** Clause edges: punctuation and "but" words; negation counts only in the verb's own clause. */
 const CLAUSE = /\s*[,;:–—]\s*|\s+-\s+|\s+(?:but|however|pero|aunque|sin embargo|mais|cependant|aber|jedoch|doch|mas|porém|però|ma)\s+/i;
 /** Read-only tools: they never back an action claim. */
-const READ_ONLY = /^(?:read_file|list_dir|search|web_search|web_fetch|gmail_read|gmail_search|gmail_thread|gmail_needs_answer|calendar_events|github_list|github_read|home_status|job_status|browser_read|recall|find)$/;
+const READ_ONLY = /^(?:read_file|list_dir|search|web_search|web_fetch|gmail_read|gmail_search|gmail_thread|gmail_needs_answer|calendar_events|github_list|github_read|home_status|job_status|browser_read|recall|find|ssh_servers)$/;
 
 const WRITE_TOOLS = new Set(['write_file', 'edit_file']);
+/** Phase 73: a command on one of the owner's servers counts like her shell; these change her server list. */
+const COMMAND_TOOLS = new Set(['shell', 'ssh_run']);
+const SSH_CHANGE = new Set(['ssh_connect', 'ssh_revoke_key', 'ssh_remove_server', 'ssh_forget_password']);
 
 /**
  * The reply with things that aren't her own claims taken out (Phase 62): code blocks, block
@@ -292,13 +295,13 @@ function priorSupports(sentence: string, prior: Receipt[], kinds: (r: Receipt) =
 /** What this turn's receipts can back, per kind of claim. */
 function backing(receipts: Receipt[]) {
   const ok = receipts.filter((r) => r.status === 'ok');
-  const shells = ok.filter((r) => r.name === 'shell');
+  const shells = ok.filter((r) => COMMAND_TOOLS.has(r.name));
   const mcp = ok.some((r) => r.name.startsWith('mcp_'));
   const cmd = (r: Receipt) => String(r.args.command ?? '');
   return {
     ok,
     shells,
-    hasWrite: ok.some((r) => WRITE_TOOLS.has(r.name)) || mcp || shells.length > 0,
+    hasWrite: ok.some((r) => WRITE_TOOLS.has(r.name) || SSH_CHANGE.has(r.name)) || mcp || shells.length > 0,
     hasRun: shells.length > 0 || mcp,
     hasCommit: ok.some((r) => r.name === 'git_commit' || r.name === 'git_push') || shells.some((r) => /\bgit\b[\s\S]*\b(commit|push|merge|tag)\b/.test(cmd(r)) && exitCode(r.output) === 0),
     hasWeb: ok.some((r) => r.name === 'web_search' || r.name === 'web_fetch'),
@@ -372,11 +375,11 @@ export function judgedClaim(sentence: string, kind: ClaimKind, receipts: Receipt
 /** Does a tool in this turn (or an earlier one naming the same file) back this kind of claim? */
 function isBacked(sentence: string, kind: ClaimKind, receipts: Receipt[], prior: Receipt[]): boolean {
   const ok = receipts.filter((r) => r.status === 'ok');
-  const shell = ok.some((r) => r.name === 'shell');
+  const shell = ok.some((r) => COMMAND_TOOLS.has(r.name));
   const mcp = ok.some((r) => r.name.startsWith('mcp_'));
   const b = backing(receipts);
   const backed: Record<ClaimKind, boolean> = {
-    write: shell || mcp || ok.some((r) => WRITE_TOOLS.has(r.name)) || priorSupports(sentence, prior, (r) => WRITE_TOOLS.has(r.name) || r.name === 'shell'),
+    write: shell || mcp || ok.some((r) => WRITE_TOOLS.has(r.name) || SSH_CHANGE.has(r.name)) || priorSupports(sentence, prior, (r) => WRITE_TOOLS.has(r.name) || r.name === 'shell'),
     run: shell || mcp,
     tests_pass: shell || mcp,
     commit: mcp || ok.some((r) => r.name === 'git_push' || r.name === 'git_commit' || (r.name === 'shell' && /\bgit\b[\s\S]*\b(commit|push|merge|tag)\b/.test(String(r.args.command ?? '')))),
