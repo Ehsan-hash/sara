@@ -9,7 +9,7 @@ import { after, test } from 'node:test';
 import { OwnerAuth } from '../src/auth.ts';
 import { resolveProvider } from '../src/chat.ts';
 import { healthReport } from '../src/health.ts';
-import { catalogIdOf, cloudDaemonName, isCloudName, mergeCheck, ModelCatalog, NEW_FOR_MS, parseModel, pickReplacement, prettyModel } from '../src/model-catalog.ts';
+import { catalogIdOf, cloudDaemonName, isCloudName, mergeCheck, ModelCatalog, NEW_FOR_MS, ollamaCloudDefault, parseModel, pickReplacement, prettyModel } from '../src/model-catalog.ts';
 import { OpenAICompatibleProvider } from '../src/providers/openai-compatible.ts';
 import type { ChatRequest, Provider, ProviderConfig, StreamEvent } from '../src/providers/types.ts';
 import { createSaraServer } from '../src/server.ts';
@@ -305,6 +305,42 @@ test('Ollama daemon: the whole cloud catalog is offered; an unpulled one is pull
   const deletes = d.log.filter((l) => l.startsWith('DELETE'));
   assert.deepEqual(deletes, ['DELETE /api/delete {"model":"minimax-m3.1-flash:cloud"}']);
   assert.ok(!d.have.has('minimax-m3.1-flash:cloud'));
+});
+
+test('several Saras on one server: Ollama Cloud through the shared daemon is off for any other instance (hidden and refused before any request)', async () => {
+  assert.equal(ollamaCloudDefault(true, 'sara'), true);
+  assert.equal(ollamaCloudDefault(false, 'sara'), false);
+  assert.equal(ollamaCloudDefault(true, 'work'), false);
+  const d = await fakeDaemon(['gemma4:12b', 'glm-5.2:cloud', 'nomic-embed-text:latest']);
+  const dir = scratch();
+  const app = makeApp(dir, { now: new Date('2026-10-27T12:00:00Z') });
+  closers.push(() => app.store.close());
+  const config: ProviderConfig = { id: 'ollama-local', label: 'Ollama on the server', kind: 'openai-compatible', baseUrl: `${d.url}/v1`, local: true };
+  app.settings.update({ providers: [config], defaultProviderId: 'ollama-local', defaultModel: 'gemma4:12b' });
+  app.providerFactory = (c, key) => new OpenAICompatibleProvider(c, key);
+  const prev = process.env.SARA_INSTANCE;
+  process.env.SARA_INSTANCE = 'work';
+  try {
+    app.modelCatalog = new ModelCatalog(dir, { settings: app.settings, providerFor: (c) => new OpenAICompatibleProvider(c), fetch: cloudCatalogFetch(() => ['glm-5.2', 'gemma4:31b']), cloudCatalogUrl: 'https://fake-ollama.com/v1/models', now: app.now });
+    const cat = app.modelCatalog;
+    const v = await cat.refresh('ollama-local');
+    assert.equal(v.options.ollamaCloud, false, 'off by default for another instance');
+    assert.ok(v.models.includes('gemma4:12b'));
+    assert.ok(!v.models.some(isCloudName), `the daemon's cloud models are not offered: ${v.models.join(', ')}`);
+    const { provider, model } = resolveProvider(app, 'ollama-local', 'glm-5.2:cloud');
+    assert.deepEqual(await provider.listModels(), ['gemma4:12b', 'nomic-embed-text:latest']);
+    const before = d.log.length;
+    await assert.rejects(async () => {
+      for await (const _ of provider.stream({ model, messages: [{ role: 'user', content: 'hi' }] })) void _;
+    }, /Ollama Cloud model: it runs on ollama\.com and is billed to the ollama\.com account/);
+    assert.equal(d.log.length, before, 'refused before any request reached the daemon');
+    // The owner of this Sara can turn it on (e.g. it's her own Ollama account).
+    app.settings.update({ modelLists: { 'ollama-local': { ollamaCloud: true } } });
+    assert.ok((await cat.refresh('ollama-local')).models.includes('glm-5.2:cloud'));
+  } finally {
+    if (prev === undefined) delete process.env.SARA_INSTANCE;
+    else process.env.SARA_INSTANCE = prev;
+  }
 });
 
 test('Ollama daemon: a clear message when it is not signed in to ollama.com; the catalog being down retires nothing', async () => {

@@ -2,6 +2,7 @@
 // a GitHub pull request, with comments on files and lines, a short summary and a verdict. With
 // your OK the review can be posted on the pull request (as comments: GitHub doesn't let anyone
 // approve their own pull request).
+import { netFetch } from './net-guard.ts';
 import { type AppContext } from './chat.ts';
 import { complete } from './life.ts';
 import type { Conversation } from './store.ts';
@@ -73,7 +74,7 @@ export function parseDiff(diff: string): { files: DiffFile[]; additions: number;
 async function gh(app: AppContext, path: string, init: { method?: string; body?: unknown; accept?: string; signal?: AbortSignal } = {}): Promise<{ status: number; text: string }> {
   const t = app.vault.get(GITHUB_VAULT);
   if (!t) throw new ToolError('GitHub is not connected (Settings → Abilities → GitHub).');
-  const res = await fetch(`https://api.github.com${path}`, {
+  const res = await netFetch(`https://api.github.com${path}`, {
     method: init.method ?? 'GET',
     headers: { authorization: `Bearer ${t}`, accept: init.accept ?? 'application/vnd.github+json', 'x-github-api-version': '2022-11-28', 'user-agent': 'Sara', ...(init.body ? { 'content-type': 'application/json' } : {}) },
     ...(init.body ? { body: JSON.stringify(init.body) } : {}),

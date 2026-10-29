@@ -1,6 +1,7 @@
 // Phase 6: Web Push with no dependencies. VAPID (RFC 8292, ES256 JWT) + message encryption
 // (RFC 8291 / RFC 8188 aes128gcm) using node:crypto. Payloads are end-to-end encrypted: the
 // browser vendor's push service (Google, Mozilla, Apple) only relays ciphertext.
+import { netFetch, privateLocalOn } from './net-guard.ts';
 import { createCipheriv, createECDH, createPrivateKey, generateKeyPairSync, hkdfSync, randomBytes, sign } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import type { ApnsSender } from './apns.ts';
@@ -171,6 +172,9 @@ export class PushService {
 
   /** Sends to every subscribed device. Dead subscriptions (404/410) are removed. */
   async sendAll(payload: PushPayload): Promise<{ sent: number; failed: number; removed: number }> {
+    // Phase 67: browser and iPhone push services are off this computer: paused in private local
+    // mode (nothing is counted as a failure, so no device is dropped).
+    if (privateLocalOn()) return { sent: 0, failed: 0, removed: 0 };
     const [web, ios] = await Promise.all([this.#sendWeb(payload), this.apns ? this.apns.sendAll(payload).catch(() => ({ sent: 0, failed: 1, removed: 0 })) : { sent: 0, failed: 0, removed: 0 }]);
     return { sent: web.sent + ios.sent, failed: web.failed + ios.failed, removed: web.removed + ios.removed };
   }
@@ -182,7 +186,7 @@ export class PushService {
     await Promise.all(
       rows.map(async (r) => {
         try {
-          const res = await fetch(r.endpoint, {
+          const res = await netFetch(r.endpoint, {
             method: 'POST',
             headers: {
               ttl: '86400',

@@ -2,6 +2,7 @@
 // token (Settings → Abilities → Home Assistant). Reading states runs on its own; anything that
 // changes something (lights, switches, locks, covers, climate, scenes, scripts) asks the owner
 // first. Names in Home Assistant are information only, never instructions.
+import { netFetch } from '../net-guard.ts';
 import type { AppContext } from '../chat.ts';
 import { clip, num, str, ToolError, type Tool } from './types.ts';
 
@@ -84,7 +85,7 @@ export function serviceFor(entity: string, action: Action): { domain: string; se
   }
 }
 
-export function createHomeTools(app: AppContext, fetchImpl: FetchLike = fetch): Tool[] {
+export function createHomeTools(app: AppContext, fetchImpl: FetchLike = netFetch): Tool[] {
   const url = () => app.settings.get().home?.url;
   const token = () => app.vault.get(HOME_VAULT);
   const on = () => Boolean(url() && token());

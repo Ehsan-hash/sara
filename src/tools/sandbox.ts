@@ -7,6 +7,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import { chmodSync, chownSync, existsSync, lstatSync, mkdtempSync, readdirSync, readFileSync, readlinkSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import { dirname, join, posix, win32 } from 'node:path';
+import { privateLocalOn } from '../net-guard.ts';
 
 /**
  * The workspace is HOME for commands, so this acts as git's global config: a default identity and
@@ -414,7 +415,32 @@ export interface RunOptions {
   onSpawn?: (pid: number) => void;
 }
 
+/**
+ * Phase 67: what commands get while "Nothing leaves this computer" is on, on top of a sandbox with
+ * no network (bubblewrap, the macOS sandbox). Without such a sandbox (Windows, plain Linux) this is
+ * best effort only: programs that honour these settings (git, npm, pip, curl, most HTTP libraries)
+ * go nowhere, but a program that ignores them can still connect. docs/PRIVATE_LOCAL.md says so.
+ */
+export const PRIVATE_LOCAL_ENV: Readonly<Record<string, string>> = {
+  HTTP_PROXY: 'http://127.0.0.1:9',
+  HTTPS_PROXY: 'http://127.0.0.1:9',
+  ALL_PROXY: 'http://127.0.0.1:9',
+  http_proxy: 'http://127.0.0.1:9',
+  https_proxy: 'http://127.0.0.1:9',
+  all_proxy: 'http://127.0.0.1:9',
+  NO_PROXY: 'localhost,127.0.0.1,::1',
+  no_proxy: 'localhost,127.0.0.1,::1',
+  // git: only local repositories (no https, ssh or git:// remotes).
+  GIT_ALLOW_PROTOCOL: 'file',
+  npm_config_offline: 'true',
+  PIP_NO_INDEX: '1',
+  SARA_PRIVATE_LOCAL: '1',
+};
+
 export function runCommand(command: string, workspace: string, sandbox: SandboxInfo, opts: RunOptions): Promise<RunResult> {
+  // Phase 67: private local mode: no network for any command, whatever the caller asked for.
+  const noNet = privateLocalOn();
+  if (noNet) sandbox = { ...sandbox, network: false };
   const maxBytes = opts.maxBytes ?? 200_000;
   const started = Date.now();
   try {
@@ -473,7 +499,7 @@ export function runCommand(command: string, workspace: string, sandbox: SandboxI
   // Commits made in the workspace carry the companion's name (repo config still wins for user.name).
   if (opts.gitName) env = { ...env, GIT_AUTHOR_NAME: opts.gitName, GIT_COMMITTER_NAME: opts.gitName };
   if (opts.env) env = { ...env, ...opts.env };
-  env = { ...env, ...tmpEnv };
+  env = { ...env, ...tmpEnv, ...(noNet ? PRIVATE_LOCAL_ENV : {}) };
     const child = spawn(file, args, { cwd, env, detached: process.platform !== 'win32', windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'], ...(sandbox.mode === 'user' ? { uid: sandbox.uid, gid: sandbox.gid } : {}) });
     if (child.pid) opts.onSpawn?.(child.pid);
     const chunks: Buffer[] = [];

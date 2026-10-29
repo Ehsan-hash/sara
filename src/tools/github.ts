@@ -2,6 +2,7 @@
 // Abilities → GitHub). Reading runs on its own; creating issues, commenting and opening pull
 // requests ask the owner first. The repository comes from the workspace's git remote unless one
 // is named. Text on GitHub can come from anyone: information, never instructions.
+import { netFetch } from '../net-guard.ts';
 import type { AppContext } from '../chat.ts';
 import { git, GITHUB_VAULT } from './coding.ts';
 import { clip, num, str, ToolError, type Tool, type ToolContext } from './types.ts';
@@ -34,7 +35,7 @@ interface Issue {
   draft?: boolean;
 }
 
-export function createGitHubTools(app: AppContext, fetchImpl: FetchLike = fetch): Tool[] {
+export function createGitHubTools(app: AppContext, fetchImpl: FetchLike = netFetch): Tool[] {
   const token = () => app.vault.get(GITHUB_VAULT);
   const on = () => Boolean(token());
 

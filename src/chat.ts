@@ -1,5 +1,7 @@
 // One conversational turn: disclosure, safety checks, provider routing, then the agent loop
 // (model → tool calls → results → model …) with streaming and persistence.
+import { privateLocalOn } from './net-guard.ts';
+import { onThisComputer } from './private-local.ts';
 import { randomBytes } from 'node:crypto';
 import { buildSystemPrompt, identityOf, type Persona } from './persona.ts';
 import { appLanguage, en, fill, languageLine, talkLanguage } from './i18n.ts';
@@ -173,6 +175,10 @@ export interface AppContext {
   usage?: import('./usage.ts').UsageStore;
   /** Phase 56: every provider's model list, kept current (shared by every companion). */
   modelCatalog?: import('./model-catalog.ts').ModelCatalog;
+  /** Phase 67: "Nothing leaves this computer" (server-wide state; the guard is src/net-guard.ts). */
+  privateLocal?: import('./private-local.ts').PrivateLocalStore;
+  /** Phase 67: downloading a model into the local Ollama (one at a time, server-wide). */
+  modelPuller?: import('./local-models.ts').ModelPuller;
   /** Injectable for tests. */
   providerFactory?: (config: ProviderConfig, apiKey?: string, subs?: Subscriptions) => Provider;
   /** Subscription logins (ChatGPT / Claude / Grok). */
@@ -278,6 +284,23 @@ export interface ModelChoice {
  * then that model's fallbacks. Private conversations only ever use local providers.
  */
 export function resolveChain(app: AppContext, conv: Conversation, job: Job, adult = false): ModelChoice[] {
+  const chain = resolveChainAll(app, conv, job, adult);
+  if (!privateLocalOn()) return chain;
+  // Phase 67: "Nothing leaves this computer": only models on this computer (loopback, not Ollama
+  // Cloud, not a subscription program). The network guard would block the rest anyway; this keeps
+  // the turn on a model that works and says plainly why the others are paused.
+  const here = chain.filter((c) => onThisComputer(c.provider.config, c.model));
+  if (here.length) return here;
+  const priv = app.settings.get().routes?.private;
+  const privConfig = priv && app.settings.get().providers.find((p) => p.id === priv.providerId);
+  if (priv && privConfig && onThisComputer(privConfig, priv.model)) {
+    const r = resolveProvider(app, priv.providerId, priv.model, { purpose: 'private', ...(conv.id ? { conversationId: conv.id } : {}) });
+    return [{ ...r, from: 'private' }];
+  }
+  throw new Error(`${chain[0]?.provider.config.label ?? 'This model'} is paused in private local mode: it isn't on this computer. Pick a model on this computer in Settings → Models → On this computer, or turn "Nothing leaves this computer" off.`);
+}
+
+function resolveChainAll(app: AppContext, conv: Conversation, job: Job, adult: boolean): ModelChoice[] {
   const s = app.settings.get();
   const routes = s.routes ?? {};
   const has = (r?: { providerId: string }) => Boolean(r && s.providers.some((p) => p.id === r.providerId));
@@ -416,6 +439,9 @@ export async function classify(app: AppContext, text: string): Promise<Classifie
   if (!cfg) return 'OK';
   try {
     const { provider, model } = resolveProvider(app, cfg.providerId, cfg.model);
+    // Phase 67: in private local mode the optional check runs only on a model on this computer
+    // (else it's skipped: the built-in checks still apply, it only ever adds protection).
+    if (privateLocalOn() && !onThisComputer(provider.config, model)) return 'OK';
     let out = '';
     const messages: ChatMessage[] = [
       { role: 'system', content: CLASSIFIER_PROMPT },
@@ -438,6 +464,7 @@ export async function judgeClaims(app: AppContext, reply: string, receipts: Rece
   if (!cfg || reply.trim().length < 20 || !lines.length) return [];
   try {
     const { provider, model } = resolveProvider(app, cfg.providerId, cfg.model);
+    if (privateLocalOn() && !onThisComputer(provider.config, model)) return [];
     let out = '';
     const messages: ChatMessage[] = [
       { role: 'system', content: claimJudgePrompt() },
@@ -471,6 +498,7 @@ export async function judgeUnsure(app: AppContext, reply: string, receipts: Rece
     const { provider, model } = resolveProvider(app, cfg.providerId, cfg.model, { purpose: 'background' });
     // A private conversation never leaves the owner's hardware, not even for this check.
     if (opts.private && (!provider.config.local || isCloudModel(model))) return [];
+    if (privateLocalOn() && !onThisComputer(provider.config, model)) return [];
     return await confirmClaims(async (system, user, signal) => {
       let out = '';
       const messages: ChatMessage[] = [
@@ -810,13 +838,13 @@ export async function* runTurn(app: AppContext, conversationId: string, userText
   const s = app.settings.get();
   const modelKey = `${provider.config.id}/${model}`;
   const noTools = app.noToolModels ?? (app.noToolModels = new Set());
-  let tools = noTools.has(modelKey) || conv.partner || opts.noTools ? [] : app.tools.enabled(s.toolPermissions).filter((t) => !(conv.private && OFFSERVER_TOOL(t.spec.name)));
+  let tools = noTools.has(modelKey) || conv.partner || opts.noTools ? [] : app.tools.enabled(s.toolPermissions).filter((t) => !((conv.private || privateLocalOn()) && OFFSERVER_TOOL(t.spec.name)));
   // Hardening M3: with her tools allowed for other apps, her look-back over every past conversation stays out.
   if (opts.externalApp) tools = tools.filter((t) => t.spec.name !== 'recall');
   // Phase 66: group chats get read-only tools only, and only those that run without asking (no approvals mid-round).
   if (opts.group) tools = tools.filter((t) => GROUP_TOOLS.has(t.spec.name) && app.tools.permission(t.spec.name, s.toolPermissions) === 'auto');
   // Private conversations: commands get no network either (nothing leaves the server).
-  const sandbox: SandboxInfo = { ...app.sandbox, network: conv.private ? false : (s.shellNetwork ?? true) };
+  const sandbox: SandboxInfo = { ...app.sandbox, network: conv.private || privateLocalOn() ? false : (s.shellNetwork ?? true) };
   let wsDir = '';
   try {
     wsDir = workspaceDir(app.rootDir ?? app.dataDir, conv.workspace);
@@ -1105,6 +1133,9 @@ export async function* runTurn(app: AppContext, conversationId: string, userText
       } else if (conv.private && OFFSERVER_TOOL(call.name)) {
         status = 'denied';
         output = 'This is a private conversation: tools that reach outside the server are off.';
+      } else if (privateLocalOn() && OFFSERVER_TOOL(call.name)) {
+        status = 'denied';
+        output = 'Private local mode is on ("Nothing leaves this computer"): tools that reach outside this computer are paused.';
       } else if (permission === 'never') {
         status = 'denied';
         output = `The owner has disabled the ${call.name} tool.`;
@@ -1142,7 +1173,7 @@ export async function* runTurn(app: AppContext, conversationId: string, userText
               },
               canSee: seesShots(provider, model),
               ...(describeImage ? { describeImage } : {}),
-              webAllowed: !conv.private && app.tools.permission('web_fetch', s.toolPermissions) !== 'never',
+              webAllowed: !conv.private && !privateLocalOn() && app.tools.permission('web_fetch', s.toolPermissions) !== 'never',
             });
           } catch (err) {
             status = 'error';

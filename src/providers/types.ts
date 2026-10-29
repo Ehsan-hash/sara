@@ -1,3 +1,4 @@
+import { isPrivateLocalError, netFetch } from '../net-guard.ts';
 export type Role = 'system' | 'user' | 'assistant' | 'tool';
 
 /** A tool invocation requested by the model. `arguments` is the parsed JSON object. */
@@ -144,9 +145,10 @@ export async function failFromResponse(res: Response, label: string, model?: str
 /** fetch() that turns "can't connect" into a plain sentence naming the provider and address. */
 export async function reach(config: ProviderConfig, url: string, init: RequestInit): Promise<Response> {
   try {
-    return await fetch(url, init);
+    return await netFetch(url, init);
   } catch (err) {
-    if (init.signal?.aborted || (err as Error).name === 'AbortError') throw err;
+    // Phase 67: "blocked by private local mode" is the real reason: say that, not "couldn't reach".
+    if (init.signal?.aborted || (err as Error).name === 'AbortError' || isPrivateLocalError(err)) throw err;
     let host = url;
     try {
       host = new URL(url).host;

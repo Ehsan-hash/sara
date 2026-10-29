@@ -4,6 +4,7 @@
 // says no, also sent to the app developer's report inbox: only the reply's text, the reason and
 // the note, nothing else from the conversation. The developer's server runs with
 // SARA_REPORT_INBOX=1 to accept them (public, size- and rate-limited).
+import { netFetch } from './net-guard.ts';
 import type { DatabaseSync } from 'node:sqlite';
 
 export const REPORT_REASONS = ['harmful', 'sexual', 'hateful', 'false', 'other'] as const;
@@ -115,7 +116,7 @@ export class ReportStore {
   }
 
   /** Sends a report to the developer's inbox; records whether it worked. */
-  async send(id: number, info: { platform: string; appVersion: string }, inbox = DEFAULT_REPORT_INBOX, fetchImpl: typeof fetch = fetch): Promise<boolean> {
+  async send(id: number, info: { platform: string; appVersion: string }, inbox = DEFAULT_REPORT_INBOX, fetchImpl: typeof fetch = netFetch): Promise<boolean> {
     const r = this.get(id);
     if (!r) return false;
     try {

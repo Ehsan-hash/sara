@@ -17,6 +17,7 @@
 // The installer also uses two internal commands: `setup` (writes sara.env and sets up how she's
 // reached) and `unconfigure` (takes her out of Tailscale serve and the firewall again).
 // Settings live in sara.env next to SaraService.exe; the service reads it at every start.
+import { netFetch } from './net-guard.ts';
 import { spawn, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
@@ -238,7 +239,7 @@ function healthUrl(c: Record<string, string>): string {
 }
 async function healthy(c: Record<string, string>, seconds = 30): Promise<boolean> {
   for (let i = 0; i < seconds * 2; i++) {
-    const ok = await fetch(healthUrl(c), { signal: AbortSignal.timeout(1500) }).then((r) => r.ok, () => false);
+    const ok = await netFetch(healthUrl(c), { signal: AbortSignal.timeout(1500) }).then((r) => r.ok, () => false);
     if (ok) return true;
     await new Promise((r) => setTimeout(r, 500));
   }
@@ -380,7 +381,7 @@ function positional(args: string[]): string[] {
   const out: string[] = [];
   for (let i = 0; i < args.length; i++) {
     if (args[i].startsWith('--')) {
-      if (!args[i].includes('=') && ['--port', '--domain', '--mode', '--data', '--access'].includes(args[i])) i++;
+      if (!args[i].includes('=') && ['--port', '--domain', '--mode', '--data', '--access', '--private'].includes(args[i])) i++;
       continue;
     }
     out.push(args[i]);
@@ -525,7 +526,7 @@ export async function main(argv: string[]): Promise<void> {
     }
     // ---- used by the installer ----
     case 'setup': {
-      // setup --mode service|user --data <folder> --port N --access local|tailscale|lan|domain [--domain D] [--keep]
+      // setup --mode service|user --data <folder> --port N --access local|tailscale|lan|domain [--domain D] [--private start|off] [--keep]
       const c = readConfig();
       const keep = args.includes('--keep') && c.SARA_DATA;
       const mode = (keep ? c.SARA_MODE : opt(args, 'mode')) as Mode;
@@ -534,6 +535,10 @@ export async function main(argv: string[]): Promise<void> {
       if (!data) fail('setup: --data <folder>');
       mkdirSync(data, { recursive: true });
       writeConfig({ SARA_MODE: mode, SARA_DATA: data, SARA_INSTALLED: '1' });
+      // Phase 67: the installer's "Private: everything on this computer" (SARA_PRIVATE_LOCAL=start:
+      // on from the first start until the owner turns it off in Settings). Updates keep what's there.
+      const priv = keep ? undefined : opt(args, 'private');
+      if (priv === 'start' || priv === 'off') writeConfig({ SARA_PRIVATE_LOCAL: priv === 'start' ? 'start' : undefined });
       const cfg = readConfig();
       if (keep) {
         say(`Kept her settings: ${modeLabel(cfg.SARA_MODE)}, ${accessLabel(cfg.SARA_ACCESS)}, port ${cfg.SARA_PORT}.`);

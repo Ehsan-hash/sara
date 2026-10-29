@@ -13,6 +13,7 @@ import { initRecipes, loadRecipes } from './recipes.js';
 import { initOtherApps, keyUse, loadOtherApps } from './other-apps.js';
 import { initCards } from './cards.js';
 import { initImport, loadImport } from './import.js';
+import { initLocalModels, loadLocalModels, setPrivateBadge } from './local-models.js';
 import { groupTag, initGroups, isGroup, openGroupDialog, showGroupButton, speakerHeader } from './group.js';
 import { appLink, inPhoneApp, phoneKind } from './pair-link.js';
 const $ = (sel) => document.querySelector(sel);
@@ -95,6 +96,8 @@ async function boot() {
   }
   const langChanged = await applyLanguage(session.language, session.appLanguage);
   setIdentity(session.identity);
+  // Phase 67: the header shows when nothing may leave this computer.
+  setPrivateBadge(Boolean(session.privateLocal));
   void loadCompanions();
   if (!session.disclosureAccepted) {
     // The AI notice is written by the server in the owner's language: fetch it again if that just changed.
@@ -805,6 +808,13 @@ $('#offrecord-end').addEventListener('click', async () => {
 });
 
 $('#toggle-sidebar').addEventListener('click', () => $('#main').classList.toggle('show-sidebar'));
+// On a phone the list slides over the chat: ✕, a tap beside it, or Escape closes it.
+const closeSidebar = () => $('#main').classList.remove('show-sidebar');
+$('#close-sidebar').addEventListener('click', closeSidebar);
+$('#sidebar-scrim').addEventListener('click', closeSidebar);
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && $('#main').classList.contains('show-sidebar') && !document.querySelector('dialog[open]')) closeSidebar();
+});
 
 // ---------- messages ----------
 async function copyText(text, btn) {
@@ -2007,8 +2017,10 @@ $('#sara-status').addEventListener('click', () => openSara());
 function setFace(st) {
   const custom = st.customAvatar;
   const x = st.expression && st.expression !== 'default' ? st.expression : null;
-  const avatar = custom ? `/api/sara/avatar?t=${Date.now() >> 16}` : x ? `/sara/avatar-${x}.jpg` : '/sara-avatar.jpg';
-  const portrait = custom ? avatar : x ? `/sara/portrait-${x}.jpg` : '/sara-portrait.jpg';
+  // The look's version, so a new look is fetched instead of the copy the page already holds.
+  const v = state.lookVersion ? `?v=${state.lookVersion}` : '';
+  const avatar = custom ? `/api/sara/avatar?t=${Date.now() >> 16}` : x ? `/sara/avatar-${x}.jpg${v}` : `/sara-avatar.jpg${v}`;
+  const portrait = custom ? avatar : x ? `/sara/portrait-${x}.jpg${v}` : `/sara-portrait.jpg${v}`;
   for (const img of document.querySelectorAll('img.avatar')) if (!img.src.endsWith(avatar)) img.src = avatar;
   state.expression = x ?? 'default';
   state.customAvatar = custom ? avatar : null;
@@ -4086,6 +4098,8 @@ async function loadCompanions() {
   menu.replaceChildren(
     ...d.companions.map((c) => {
       const b = el('button', c.current ? 'current' : '', c.current ? `✓ ${c.name}` : c.name);
+      // Phase 67: her model isn't on this computer while nothing may leave it.
+      if (c.pausedLocal) b.append(el('span', 'muted small', ` · ${t('paused in private local mode')}`));
       b.type = 'button';
       b.setAttribute('role', 'menuitem');
             if (!c.current) b.addEventListener('click', () => switchCompanion(c.id));
@@ -4950,7 +4964,7 @@ function providerListCard(p, row) {
   switches.append(toggle('keepCurrent', t('Keep the model list up to date'), t('Sara checks this list once a day: new models show up marked New, retired ones disappear. Off: the list only changes when you press Refresh.')));
   if (opts.daemon) {
     switches.append(
-      toggle('ollamaCloud', t('Include all Ollama Cloud models'), t('Shows every Ollama Cloud model, not only the ones already added to this Ollama. Picking one adds it there first. That Ollama must be signed in to ollama.com: on that computer run ollama signin.')),
+      toggle('ollamaCloud', t('Use Ollama Cloud models'), t('Cloud models run on ollama.com and are billed to the account this Ollama is signed in to. Shows them all (picking one adds it there first). Off by default for extra Saras on a shared server.')),
       toggle('removeRetired', t('Remove retired cloud models from Ollama'), t('When Ollama Cloud retires a model, also remove it from this Ollama (it is hidden either way). Only cloud models are removed, never models downloaded to that computer.')),
     );
   }
@@ -5234,6 +5248,7 @@ function showSettingsTab(page, opts = {}) {
   if (pick === 'ab-recipes') void loadRecipes();
   if (pick === 'co-apps') void loadOtherApps();
   if (pick === 'her-import') void loadImport();
+  if (pick === 'models-local') void loadLocalModels();
   $('#settings-empty').hidden = true;
   $('#settings').classList.add('page-open'); // phone: show the page instead of the list
   $('.settings-pages').scrollTop = 0;
@@ -7249,6 +7264,7 @@ initCards({
   name: () => yours.persona?.name ?? 'character',
 });
 initOtherApps({ copyText, confirmProof });
+initLocalModels({ openSettings: (page) => void openSettings(page) });
 initImport();
 
 $('#st-check').addEventListener('change', async () => {
@@ -7602,7 +7618,8 @@ async function refreshLook() {
   } else if (!l.hasDraft) $('#look-draft-box').hidden = true;
   clearTimeout(yours.lookTimer);
   if (busy) yours.lookTimer = setTimeout(refreshLook, 2000);
-  if (st.state === 'done' && yours.lastLookState === 'building') lookChanged();
+  // Also when the page only sees it finished (it was closed or busy while the pictures were made).
+  if (st.state === 'done' && yours.lastLookState !== 'done') lookChanged();
   yours.lastLookState = st.state;
   $('#look-fix-row').hidden = $('#look-complete').hidden && $('#look-reset').hidden;
   renderLookExtras(l);

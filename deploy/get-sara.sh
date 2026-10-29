@@ -19,8 +19,10 @@ set -euo pipefail
 
 REPO="${SARA_REPO:-https://github.com/farena-ai/sara.git}"
 REF="${SARA_REF:-main}"
+# One source copy for every Sara on this server (each instance installs her own copy of the
+# program from it into /opt/<name>, and updates only herself).
 SRC=/opt/sara-src
-ENV_FILE=/etc/sara/sara.env
+INSTANCE="${SARA_INSTANCE:-sara}"
 
 log() { printf '\033[1;35m[sara]\033[0m %s\n' "$*"; }
 warn() { printf '\033[1;33m[sara]\033[0m %s\n' "$*" >&2; }
@@ -40,6 +42,8 @@ Options (for installs without questions):
   --sandbox | --no-sandbox install bubblewrap, a safer shell for her coding tools (default: yes)
   --voice | --no-voice     local voice on this server, about 650 MB download (default: no)
   --source PATH            install from a local folder or .tar(.gz) instead of downloading
+  --instance NAME          another, separate Sara next to an existing one (e.g. work): her own
+                           user, data, settings, port, service and admin command, all named NAME
   --help                   this text
 
 Environment: SARA_REPO (git URL or path; default the GitHub repository), SARA_REF (branch or
@@ -68,10 +72,19 @@ while [[ $# -gt 0 ]]; do
     --no-voice) VOICE=n; shift ;;
     --source) need_val "$@"; SOURCE="$2"; shift 2 ;;
     --source=*) SOURCE="${1#*=}"; shift ;;
+    --instance) need_val "$@"; INSTANCE="$2"; shift 2 ;;
+    --instance=*) INSTANCE="${1#*=}"; shift ;;
     -h|--help) usage; exit 0 ;;
     *) die "Unknown option: $1 (see --help)" ;;
   esac
 done
+# (the full checks, such as reserved names and existing accounts, run once Sara is downloaded)
+if ! [[ ${#INSTANCE} -ge 2 && ${#INSTANCE} -le 32 && "$INSTANCE" =~ ^[a-z][a-z0-9-]*$ && "$INSTANCE" != *- ]]; then
+  die "--instance must be 2 to 32 lowercase letters, digits or dashes, starting with a letter (for example: work)."
+fi
+ENV_FILE="/etc/$INSTANCE/$INSTANCE.env"
+# The admin command (and the name in messages) is the instance name.
+CMD="$INSTANCE"
 ACCESS="${ACCESS,,}"
 case "$ACCESS" in ''|tailscale|local|domain|lan) ;; *) die "--access must be tailscale, local, domain or lan." ;; esac
 if [[ -n "$PORT" ]] && ! { [[ "$PORT" =~ ^[0-9]+$ ]] && (( 10#$PORT >= 1024 && 10#$PORT <= 65535 )); }; then
@@ -98,8 +111,11 @@ case "$(uname -m)" in
   x86_64|aarch64|arm64) ;;
   *) die "Unsupported CPU: $(uname -m). Sara's installer supports x86_64 and arm64." ;;
 esac
-if id sara >/dev/null 2>&1 && [[ "$(id -u sara)" -ge 1000 ]]; then
-  die "An ordinary account named 'sara' already exists here (uid $(id -u sara)). Sara needs that name for her own service account; rename the existing account first. Nothing was changed."
+if id "$INSTANCE" >/dev/null 2>&1 && [[ "$(id -u "$INSTANCE")" -ge 1000 ]]; then
+  if [[ "$INSTANCE" == sara ]]; then
+    die "An ordinary account named 'sara' already exists here (uid $(id -u sara)). Sara needs that name for her own service account; rename the existing account first. Nothing was changed."
+  fi
+  die "An ordinary account named '$INSTANCE' already exists here (uid $(id -u "$INSTANCE")). Pick another --instance name. Nothing was changed."
 fi
 
 # Quick checks of what was asked for on the command line, before anything is downloaded.
@@ -227,13 +243,31 @@ fi
 VERSION="$(sed -n 's/.*"version": *"\([^"]*\)".*/\1/p' "$SRC/package.json" | head -1)"
 log "Sara ${VERSION:-?}$(git -C "$SRC" rev-parse --short HEAD 2>/dev/null | sed 's/^/ (/;s/$/)/' || true) is ready to install."
 
+if [[ -f "$SRC/deploy/lib-instance.sh" ]]; then
+  # shellcheck source=deploy/lib-instance.sh
+  . "$SRC/deploy/lib-instance.sh"
+  si_set "$INSTANCE"
+  if [[ "$INSTANCE" != sara ]]; then
+    WHY="$(si_check_name "$INSTANCE" 2>&1)" || die "$WHY"
+  fi
+else
+  [[ "$INSTANCE" == sara ]] || die "This copy of Sara ($SRC) is too old to install a second Sara (--instance). Update it first. Nothing was installed."
+  SI_NAME=sara
+fi
 # shellcheck source=deploy/lib-access.sh
 . "$SRC/deploy/lib-access.sh"
+# Is port $1 used by another Sara here (her settings), when the library knows?
+port_of_other() { declare -F si_port_assigned >/dev/null && si_port_assigned "$1"; }
 
 # ---- 3. Questions ----------------------------------------------------------------
 CUR_PORT="$(sa_env_get SARA_PORT)"
 SARA_RUNNING=0
-systemctl is-active --quiet sara 2>/dev/null && SARA_RUNNING=1
+systemctl is-active --quiet "$INSTANCE" 2>/dev/null && SARA_RUNNING=1
+# The suggested port: the one she has, else 7860 for the default Sara, else the next free one.
+DEF_PORT="${CUR_PORT:-}"
+if [[ -z "$DEF_PORT" ]]; then
+  if [[ "$INSTANCE" == sara ]]; then DEF_PORT=7860; else DEF_PORT="$(si_pick_port)" || die "No free port from 7860 up."; fi
+fi
 
 # (a) How will you reach her?
 if sa_ts_running; then DEF_ACCESS=tailscale; else DEF_ACCESS=local; fi
@@ -254,9 +288,9 @@ while :; do
       ACCESS="$DEF_ACCESS"
     fi
   fi
-  if sa_check "$ACCESS" "${PORT:-${CUR_PORT:-7860}}"; then break; fi
+  if sa_check "$ACCESS" "${PORT:-$DEF_PORT}"; then break; fi
   [[ $SA_INTERACTIVE -eq 1 ]] || die "Can't set up '$ACCESS' (see above). Nothing was installed or changed: run this again once that's fixed, or choose another way (--access local)."
-  sa_say "Let's pick another way (you can change it later with: sudo sara access)."
+  sa_say "Let's pick another way (you can change it later with: sudo $CMD access)."
   ACCESS="" SARA_DOMAIN="" SARA_EMAIL="" DEF_ACCESS=local
 done
 
@@ -269,6 +303,8 @@ elif [[ -z "$SANDBOX" ]]; then
 fi
 
 # (c) Voice on this server.
+# Local voice lives in /opt/sara-voice and is shared by every Sara here; install-voice.sh
+# --instance points this instance at it (and only downloads what is missing).
 if [[ "$(uname -m)" != x86_64 ]]; then
   [[ "$VOICE" == y ]] && warn "Local voice is x86_64 only for now; skipping it (cloud voices work in Settings → Voice)."
   VOICE=n
@@ -280,11 +316,13 @@ fi
 
 # (d) Port.
 while :; do
-  if [[ -z "$PORT" ]]; then sa_ask PORT "Port on this machine" "${CUR_PORT:-7860}"; fi
+  if [[ -z "$PORT" ]]; then sa_ask PORT "Port on this machine" "$DEF_PORT"; fi
   if ! sa_valid_port "$PORT"; then
     warn "The port must be a number from 1024 to 65535."
-  elif sa_port_busy "$PORT" && ! [[ $SARA_RUNNING -eq 1 && "$PORT" == "${CUR_PORT:-7860}" ]]; then
+  elif sa_port_busy "$PORT" && ! [[ $SARA_RUNNING -eq 1 && "$PORT" == "$DEF_PORT" ]]; then
     warn "Something else is already using port $PORT."
+  elif [[ "$PORT" != "${CUR_PORT:-}" ]] && port_of_other "$PORT"; then
+    warn "Port $PORT belongs to another Sara on this server."
   else
     break
   fi
@@ -297,12 +335,13 @@ PKGS=()
 [[ "$SANDBOX" == y && $HAVE_BWRAP -eq 0 ]] && PKGS+=(bubblewrap)
 [[ "$VOICE" == y ]] && ! command -v bzip2 >/dev/null && PKGS+=(bzip2)
 sa_say ""
-log "About to install Sara ${VERSION:-} with:"
-log "  Reach her:      $(sa_mode_label "$ACCESS")$([[ $ACCESS == domain ]] && echo " at https://$SARA_DOMAIN")$([[ $ACCESS == tailscale ]] && echo " at https://$(sa_ts_dnsname)")"
+log "About to install Sara ${VERSION:-}$([[ "$INSTANCE" == sara ]] || echo " as '$INSTANCE'") with:"
+log "  Reach her:      $(sa_mode_label "$ACCESS")$([[ $ACCESS == domain ]] && echo " at https://$SARA_DOMAIN")$([[ $ACCESS == tailscale ]] && echo " at $(sa_ts_url "$(sa_ts_https_port "$PORT")")")"
 log "  Safer shell:    $([[ $SANDBOX == y ]] && echo yes || echo no)"
 log "  Local voice:    $([[ $VOICE == y ]] && echo 'yes (about 650 MB)' || echo no)"
 log "  Port:           $PORT"
-log "  Files:          program in /opt/sara, your data in /var/lib/sara, settings in /etc/sara"
+log "  Files:          program in /opt/$INSTANCE, your data in /var/lib/$INSTANCE, settings in /etc/$INSTANCE"
+[[ "$INSTANCE" == sara ]] || log "  Admin command:  sudo $CMD (service $INSTANCE.service)"
 [[ ${#PKGS[@]} -gt 0 || "${SA_NEED_CADDY:-0}" == 1 ]] && log "  Also installs:  ${PKGS[*]}$([[ "${SA_NEED_CADDY:-0}" == 1 ]] && echo ' caddy') (from $PM)"
 if [[ $SA_INTERACTIVE -eq 1 ]] && ! sa_yes "Go ahead?" y; then
   die "Stopped. Nothing was installed (the downloaded copy stays in $SRC; run this again any time)."
@@ -338,12 +377,14 @@ fi
 sa_prepare "$ACCESS"
 
 log "Installing Sara (about a minute)..."
-SARA_ACCESS="$ACCESS" SARA_ACCESS_CHECKED=1 SARA_PORT="$PORT" SARA_DOMAIN="$SARA_DOMAIN" SARA_EMAIL="$SARA_EMAIL" \
+INSTANCE_ENV=()
+[[ "$INSTANCE" == sara ]] || INSTANCE_ENV=(SARA_INSTANCE="$INSTANCE")
+env ${INSTANCE_ENV[@]+"${INSTANCE_ENV[@]}"} SARA_ACCESS="$ACCESS" SARA_ACCESS_CHECKED=1 SARA_PORT="$PORT" SARA_DOMAIN="$SARA_DOMAIN" SARA_EMAIL="$SARA_EMAIL" \
   bash "$SRC/deploy/install.sh" || die "The install didn't finish (see above). Fix that and run this again; your data, if any, is untouched."
 
 if [[ "$VOICE" == y ]]; then
   log "Installing local voice (about 650 MB; this takes a while)..."
-  bash "$SRC/deploy/install-voice.sh" || warn "Local voice didn't install (see above). Sara works without it; try again later: sudo $SRC/deploy/install-voice.sh"
+  bash "$SRC/deploy/install-voice.sh" --instance "$INSTANCE" || warn "Local voice didn't install (see above). Sara works without it; try again later: sudo $SRC/deploy/install-voice.sh --instance $INSTANCE"
 fi
 log "All done. Sign in with the owner token above, then the setup guide takes you through the rest."
 }

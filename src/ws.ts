@@ -6,6 +6,7 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { request as httpRequest, type IncomingMessage } from 'node:http';
 import type { Duplex } from 'node:stream';
+import { checkOutbound } from './net-guard.ts';
 
 const GUID = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11';
 /** Largest message accepted from the browser (audio frames are a few KB). */
@@ -44,6 +45,12 @@ export function acceptWebSocket(req: IncomingMessage, socket: Duplex, head: Buff
 export function connectWebSocket(url: string, opts: { timeoutMs?: number; maxMessage?: number } = {}): Promise<WsConnection> {
   const u = new URL(url);
   if (u.protocol !== 'ws:') return Promise.reject(new Error('Only ws:// addresses are supported.'));
+  // Phase 67: the one check before connecting (private local mode allows only this computer).
+  try {
+    checkOutbound(u);
+  } catch (err) {
+    return Promise.reject(err as Error);
+  }
   const key = randomBytes(16).toString('base64');
   return new Promise((resolve, reject) => {
     const req = httpRequest({

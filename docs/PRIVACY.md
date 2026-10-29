@@ -31,6 +31,7 @@ reply you report with ⚑ is also sent to the app's developer unless you untick 
 | **Off-server backups** | The folder or S3-compatible storage you chose, encrypted with your passphrase before it leaves | After each daily backup, once you set it up | Settings → Data & health → Backups |
 | **Subscription programs** | OpenAI (Sign in with ChatGPT), Anthropic (Claude Code), xAI (Grok) | When a subscription is your model for a job | Sign out in Settings → Models → Subscriptions |
 | **The testing browser** | Only her own previews, plus public websites when web tools are on and the conversation isn't private | When she tests an app she built | Settings → Abilities → Tools and approvals |
+| **A model on this computer** (Settings → Models → On this computer) | Ollama's model library (`registry.ollama.ai`, fetched by your Ollama); for *Install Ollama with winget*, winget's sources | Only when you press **Download this model** or **Install Ollama with winget**. Finding Ollama and looking at the hardware sends nothing (`127.0.0.1:11434`, `nvidia-smi`, `sysctl`) | Don't press them (both are refused while *Nothing leaves this computer* is on) |
 | **Tailscale** | Tailscale's coordination servers (that's how Tailscale works) | If you chose "Tailscale" for how you reach her | `sara access local` (or another way) |
 | **Certificates for your own web address** | Let's Encrypt (through Caddy) | If you chose "My own web address" on Linux | `sara access local` (or another way) |
 
@@ -93,7 +94,19 @@ connected services. See [INSTALL.md → Logs](INSTALL.md#logs).
 
 ## Turning everything off at once
 
-To run Sara with nothing leaving the server: a local model (Ollama on the same machine or your own
+**Nothing leaves this computer** (Settings → Models → On this computer, or `SARA_PRIVATE_LOCAL=1`)
+does it with one switch, enforced in Sara's code: while it's on, her server connects only to the
+computer she runs on (`127.0.0.0/8`, `::1`, `localhost`), decided by the address before any DNS
+lookup, and every table row above that would reach another computer is refused or paused (cloud
+models and subscriptions, web search and pages, reports to the developer, update checks, weather
+and travel times, Gmail and Calendar, GitHub, MCP and Home Assistant on other computers, Telegram
+and Discord, notifications through browser and Apple push services, voices and calls, pictures of
+her, off-server S3 backups, the testing browser's public web, and internet for her commands). The
+same page finds Ollama on that computer and downloads a model that fits it. What it guarantees and
+what it can't (her commands on Windows, the system itself, your browser):
+[PRIVATE_LOCAL.md](PRIVATE_LOCAL.md).
+
+To do it by hand instead, with nothing leaving the server: a local model (Ollama on the same machine or your own
 network) for every job, local voice or no voice, no city for the weather, no connected accounts, no
 bridges, web tools off, reports set to `SARA_REPORT_TO=off`, and "Just this computer" or your home
 network for how you reach her. Private conversations already enforce most of this per

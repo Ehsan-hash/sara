@@ -31,6 +31,9 @@ final class SetupSheet: NSObject, NSTextFieldDelegate {
   var spinner: NSProgressIndicator!
   var setUpButton: NSButton!, otherButton: NSButton!, cancelButton: NSButton!
   var guideButton: NSButton!
+  /// Phase 67: "Private: everything on this Mac" (first setup only; nil when changing how she's reached).
+  var privateButton: NSButton?
+  var privateLocal: Bool? { privateButton.map { $0.state == .on } }
   var ts = TailscaleInfo()
   let changing: Bool
   let local: LocalServer
@@ -95,6 +98,18 @@ final class SetupSheet: NSObject, NSTextFieldDelegate {
     portNote = wrapLabel("", width: 330)
     portRow.addArrangedSubview(portNote)
     stack.addArrangedSubview(portRow)
+
+    // Phase 67: may her AI use the internet? Private sets SARA_PRIVATE_LOCAL=start in server.env:
+    // "Nothing leaves this computer" is on from the first start until the owner turns it off in
+    // Settings → Models → On this computer (where she also helps set up a model on this Mac).
+    if !changing || reviving {
+      stack.addArrangedSubview(spacer(6))
+      stack.addArrangedSubview(heading("Where her AI runs"))
+      let p = NSButton(checkboxWithTitle: "Private: everything on this Mac (nothing goes to the internet)", target: nil, action: nil)
+      privateButton = p
+      stack.addArrangedSubview(p)
+      stack.addArrangedSubview(indent(wrapLabel("Off: cloud models and web search can be used too. She helps you get a model that runs on this Mac either way.")))
+    }
 
     stack.addArrangedSubview(spacer(8))
     let progressRow = NSStackView()
@@ -209,6 +224,7 @@ final class SetupSheet: NSObject, NSTextFieldDelegate {
     for b in [setUpButton, otherButton, cancelButton] { b?.isEnabled = !on }
     for (a, b) in accessButtons { b.isEnabled = !on && (a != .tailscale || ts.running) }
     portField.isEnabled = !on
+    privateButton?.isEnabled = !on
   }
 }
 
@@ -301,8 +317,9 @@ extension AppDelegate {
     let reviving = local.switchedOff
     sheet.onDone = { [weak self] access, port in
       guard let self else { return }
+      let priv = sheet.privateLocal  // read on the main thread
       DispatchQueue.global().async {
-        let outcome = self.local.setUp(access: access, port: port) { msg in DispatchQueue.main.async { sheet.progress.stringValue = msg } }
+        let outcome = self.local.setUp(access: access, port: port, privateLocal: priv) { msg in DispatchQueue.main.async { sheet.progress.stringValue = msg } }
         DispatchQueue.main.async { self.afterSetUp(outcome, sheet: sheet, changing: changing && !reviving) }
       }
     }

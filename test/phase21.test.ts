@@ -1,12 +1,13 @@
 // Phase 21: outfits, saved looks, and a whole character in one file.
 import assert from 'node:assert/strict';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import type { AddressInfo } from 'node:net';
 import { join } from 'node:path';
 import { after, before, test } from 'node:test';
 import { OwnerAuth } from '../src/auth.ts';
 import { parseCharacter } from '../src/characterfile.ts';
 import { LOOK_PATHS, LookBuilder } from '../src/look.ts';
+import { EventHub } from '../src/events.ts';
 import { createSaraServer } from '../src/server.ts';
 import { makeApp, ROOT, tempDir } from './helpers.ts';
 
@@ -143,4 +144,23 @@ test('saved looks are kept out of the static files and need the owner', async ()
   const id = (await (await call('/api/look')).json()).saved[0].id;
   assert.equal((await fetch(`${base}/api/look/saved/${id}.jpg`)).status, 401);
   assert.ok(existsSync(join(dir, 'looks', id, 'look.json')));
+});
+
+test('a finished new look is announced to open windows and replaces an older uploaded picture', async () => {
+  app.events = new EventHub();
+  const seen: string[] = [];
+  const off = app.events.subscribe((e) => seen.push(e.type));
+  try {
+    // An earlier upload would otherwise keep showing instead of the new look.
+    writeFileSync(join(dir, 'avatar.jpg'), jpeg('uploaded'));
+    await call('/api/look/outfit', { outfit: 'winter' });
+    await settled();
+    assert.equal((await call('/api/look/build', { from: 'draft' })).status, 202);
+    await settled();
+    await until(async () => seen.includes('look'));
+    assert.ok(seen.includes('look'), `events: ${seen.join(',')}`);
+    assert.equal(existsSync(join(dir, 'avatar.jpg')), false, 'the uploaded picture is replaced by the new look');
+  } finally {
+    off();
+  }
 });

@@ -24,7 +24,7 @@ your own server, with the models you pick.
   <sub>A real, unedited session on a local model (qwen3.8 27B on Ollama, one RTX 5090) on a throwaway test server: she chats in character, writes the app, asks before starting a server, opens the preview and tests it in her own browser. The last frame is the app with numbers typed in.</sub>
 </p>
 
-> **Status:** 1.6, MIT licensed, with six feature releases since 1.0 (all below). The
+> **Status:** 1.7, MIT licensed, with seven feature releases since 1.0 (all below). The
 > [Android app](https://play.google.com/store/apps/details?id=com.backstagecoding.sara) is on Google
 > Play; the iPhone app and the Mac App Store version are coming as soon as Apple approves them.
 > Read [docs/DISCLOSURES.md](docs/DISCLOSURES.md) before using or sharing Sara.
@@ -33,6 +33,7 @@ your own server, with the models you pick.
 
 | Release | What you get |
 |---|---|
+| **1.7** · Private local mode | One switch, **Nothing leaves this computer**, enforced in code at a single gate: only this computer is reachable, cloud models and online tools pause, and her chats, memory and library keep working. The Windows and Mac apps find (or help you set up) Ollama, suggest a model that fits your graphics card and download it with a progress bar. [What it guarantees](docs/PRIVATE_LOCAL.md) |
 | **1.6** · Group chats | Put **two to four of your companions in one conversation**: each answers in her own personality, voice and colour; pick who answers (whoever fits, everyone, take turns, or only who you @mention) and how much they banter with each other. Safety, AI notices and the strictest adult setting apply to the whole room. [How it works](docs/GROUP_CHATS.md) |
 | **1.5** · Bring her from another app | Move in from **ChatGPT, Claude, Character.AI, SillyTavern, Replika, Nomi or Kindroid**. She reads the export on your own server, then shows you what she learned (facts in your own words, your history together, her style) and saves only what you approve. [How to export from each app](docs/IMPORT.md) |
 | **1.4** · Smoothness | Watch each file she writes **grow live in the chat** as the model streams it (OpenAI, Anthropic, xAI, OpenRouter and ChatGPT plans; Ollama sends it in one piece); a talking portrait that lip-syncs with nine mouth shapes; logs in plain text or JSON |
@@ -46,11 +47,13 @@ Every release: [CHANGELOG.md](CHANGELOG.md) · [releases](https://github.com/far
 
 | Version | Feature |
 |---|---|
-| 1.7 | **Private local mode** in the Windows and Mac apps: a model on that computer and a switch that guarantees nothing leaves it |
-| 1.8 | **Video calls** with her moving, lip-synced avatar |
-| 1.9 | **Our moments:** a shared photo album with her captions |
+| 1.8 | **Several servers in one app:** the desktop, phone and other apps keep a list of your Saras and switch between them without signing out |
+| 1.9 | **Video calls** with her moving, lip-synced avatar |
+| 1.10 | **Our moments:** a shared photo album with her captions |
 | 2.0 | **Household mode:** several people on one server, each with their own companions and private data |
 | 2.1 | **Her voice in your home:** Alexa ("Alexa, ask Sara…"), Android's assistant and Google Home, Siri Shortcuts, and reacting to who's home through Home Assistant |
+| 2.2 | **Your other servers over SSH:** with a password or a key; after a password login she makes her own key, tells you where it is, and keeps the password only if you ask (with a warning) |
+| 2.3 | **Big documents:** 500–1,000-page PDFs and books in her library, every scanned page read, answers with the page numbers |
 
 The full plan: [docs/ROADMAP.md](docs/ROADMAP.md).
 
@@ -82,6 +85,7 @@ back, texting first if you want (with quiet hours), and a timeline of your story
 Coming from another app? Bring your chats from ChatGPT, Claude, Character.AI, SillyTavern, Replika,
 Nomi or Kindroid, and approve what she learns from them first ([docs/IMPORT.md](docs/IMPORT.md)).
 Or bring two to four of your companions into one group chat ([docs/GROUP_CHATS.md](docs/GROUP_CHATS.md)).
+Want everything on one machine? Switch on **Nothing leaves this computer** ([docs/PRIVATE_LOCAL.md](docs/PRIVATE_LOCAL.md)).
 
 ### Coding partner
 

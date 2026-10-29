@@ -3,6 +3,7 @@
 // keeps her face. It uses the owner's Grok subscription sign-in (Imagine is in its weekly usage pool)
 // or an xAI API key; it asks by default because it spends the owner's usage.
 // Pictures are stored like the owner's photos (uploads) and attached to her reply.
+import { netFetch } from './net-guard.ts';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { detectExplicit, detectMinorSexualContent, isWorkChannel } from './safety.ts';
@@ -93,7 +94,7 @@ export async function generatePhoto(d: PhotoDeps, scene: string, signal?: AbortS
   const now = w?.wear || w?.place ? ` ${personalize(`Unless the scene says otherwise, she is wearing ${w.wear ?? 'what she wears in the picture'}${w.place ? ` and is at ${w.place}` : ''}.`, identityOf(who))}` : '';
   const face = d.faceRef?.();
   const prompt = `${personalize('A new photo of this same person', identityOf(who))}${look}. ${personalize('Keep her face, features, hair color and style identical so she is clearly the same person.', identityOf(who))}${face ? ' Her face is exactly the face in the second picture.' : ''} Scene: ${scene}.${now} ${personalize('Natural, candid photo, as if she took it or a friend did; realistic lighting. She is an adult.', identityOf(who))} No text or watermarks.`;
-  const res = await (d.fetch ?? fetch)('https://api.x.ai/v1/images/edits', {
+  const res = await (d.fetch ?? netFetch)('https://api.x.ai/v1/images/edits', {
     method: 'POST',
     headers: { authorization: `Bearer ${key}`, 'content-type': 'application/json' },
     body: JSON.stringify({ model: photoSettings(d.settings).model || DEFAULT_IMAGE_MODEL, prompt: prompt.slice(0, 1200), ...(face ? { images: [{ type: 'image_url', url: dataUrl(ref) }, { type: 'image_url', url: dataUrl(face) }] } : { image: { type: 'image_url', url: dataUrl(ref) } }), response_format: 'b64_json' }),

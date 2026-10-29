@@ -7,6 +7,7 @@
 // Phase 46: on Windows and macOS there is no root helper and no git checkout. "Check for
 // updates" reads the latest release from GitHub and compares versions; "Update" answers with the
 // download page, whose installer upgrades Sara in place.
+import { assertOnline, netFetch } from './net-guard.ts';
 import { existsSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -40,6 +41,12 @@ export interface UpdaterOptions {
   releaseUrl?: string;
   /** Tests stub the network. */
   fetch?: typeof fetch;
+}
+
+/** Several Saras on one server: the instance's name (its unit sets SARA_INSTANCE; default "sara"). */
+export function instanceName(env: NodeJS.ProcessEnv = process.env): string {
+  const n = env.SARA_INSTANCE ?? '';
+  return /^[a-z][a-z0-9-]{1,31}$/.test(n) ? n : 'sara';
 }
 
 const REQUEST = 'update-request';
@@ -76,14 +83,14 @@ export class Updater {
   /** True on a native systemd install with the updater unit (Docker and dev runs: no); always on Windows and macOS. */
   get available(): boolean {
     if (this.how === 'release') return true;
-    return existsSync(join(this.#o.unitDir ?? '/etc/systemd/system', 'sara-updater.path'));
+    return existsSync(join(this.#o.unitDir ?? '/etc/systemd/system', `${instanceName()}-updater.path`));
   }
 
   status(now = new Date()): UpdateStatus {
     if (this.how === 'release') return { ...this.#last };
     let s: UpdateStatus = { state: 'idle', message: '' };
     try {
-      const raw = JSON.parse(readFileSync(join(this.#o.statusDir ?? '/var/lib/sara-updater', STATUS), 'utf8')) as Record<string, unknown>;
+      const raw = JSON.parse(readFileSync(join(this.#o.statusDir ?? `/var/lib/${instanceName()}-updater`, STATUS), 'utf8')) as Record<string, unknown>;
       s = {
         state: String(raw.state) as UpdateState,
         message: String(raw.message ?? ''),
@@ -117,6 +124,8 @@ export class Updater {
   /** Linux: hands the request to the root updater. Windows/macOS: use check() and update() instead. */
   request(what: 'check' | 'update'): void {
     if (this.how === 'release') throw new Error('Use check() or update() here.');
+    // Phase 67: the root updater fetches from GitHub: never in private local mode.
+    assertOnline('Checking for updates');
     if (!this.available) throw new Error('This server updates from the command line: sudo sara update');
     const s = this.status();
     if (s.pending || s.state === 'checking' || s.state === 'updating') throw new Error('An update check or update is already running.');
@@ -127,7 +136,7 @@ export class Updater {
   async check(now = new Date()): Promise<UpdateStatus> {
     const version = this.#o.version ?? '0.0.0';
     const at = now.toISOString();
-    const f = this.#o.fetch ?? fetch;
+    const f = this.#o.fetch ?? netFetch;
     let rel: { tag_name?: unknown; name?: unknown; html_url?: unknown; body?: unknown; draft?: unknown; prerelease?: unknown };
     try {
       const res = await f(this.#o.releaseUrl ?? RELEASE_API, { headers: { accept: 'application/vnd.github+json', 'user-agent': `sara/${version}` }, signal: AbortSignal.timeout(15_000) });

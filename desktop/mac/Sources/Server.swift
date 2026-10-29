@@ -393,7 +393,7 @@ final class LocalServer {
 
   /// Writes the settings, sets up how she's reached and registers the service. Safe to run again
   /// (keeps the data and any other settings in server.env; switches her back on after switchOff).
-  func setUp(access: Access, port: Int, progress: (String) -> Void = { _ in }) -> Outcome {
+  func setUp(access: Access, port: Int, privateLocal: Bool? = nil, progress: (String) -> Void = { _ in }) -> Outcome {
     var out = Outcome()
     do { try ensureFolders() } catch { return Outcome(ok: false, notes: ["Couldn't make her data folder: \(error.localizedDescription)"]) }
     var env = readEnv()
@@ -406,6 +406,8 @@ final class LocalServer {
     env["SARA_SECURE_COOKIES"] = "0"
     env["SARA_TRUST_PROXY"] = "0"
     env["SARA_MAC_TS_SERVE"] = "0"
+    // Phase 67: the first setup's "Private: everything on this Mac" (nil: keep what's there).
+    if let p = privateLocal { env["SARA_PRIVATE_LOCAL"] = p ? "start" : nil }
     var chosen = access
     if hadServe && (access != .tailscale || oldPort != port) { progress("Removing the old Tailscale address…"); Tailscale.unserve(port: oldPort) }
     switch access {

@@ -2,6 +2,7 @@
 // tools and forwards every call to the Sara turn that started the CLI (127.0.0.1, per-turn
 // token), so approvals, the sandbox, snapshots and receipts work exactly as for other models.
 // Run: node src/agent-bridge.ts  (env SARA_BRIDGE_URL, SARA_BRIDGE_TOKEN)
+import { netFetch } from './net-guard.ts';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { createInterface } from 'node:readline';
@@ -24,7 +25,7 @@ function send(msg: unknown): void {
 }
 
 async function bridge(path: string, body?: unknown): Promise<unknown> {
-  const res = await fetch(`${url}${path}`, {
+  const res = await netFetch(`${url}${path}`, {
     method: body === undefined ? 'GET' : 'POST',
     headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),

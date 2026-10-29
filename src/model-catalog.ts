@@ -13,10 +13,12 @@
 // Anything set to a retired model (default model, a job, her own model, a helper, a backup) moves
 // to the best replacement on the same provider and says so in Health and on Today (owner setting
 // "Switch to the replacement automatically", on by default); with it off Sara only warns.
+import { netFetch, outboundAllowed, privateLocalOn } from './net-guard.ts';
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { isOllama } from './providers/openai-compatible.ts';
-import { ProviderError, type Provider, type ProviderConfig } from './providers/types.ts';
+import { instanceName } from './updates.ts';
+import { ProviderError, SUBSCRIPTION_KINDS, type Provider, type ProviderConfig } from './providers/types.ts';
 import { JOBS, recommend, type Candidate } from './modelpicks.ts';
 import type { ModelRoute, RoutePurpose, SettingsStore } from './settings.ts';
 
@@ -176,6 +178,18 @@ export const isOllamaDaemon = (c: ProviderConfig): boolean => c.kind === 'openai
 const daemonRoot = (c: ProviderConfig) => c.baseUrl.replace(/\/+$/, '').replace(/\/v1$/i, '');
 /** Could be an Ollama daemon worth probing: OpenAI-compatible and not Ollama's own cloud API. */
 const mayBeDaemon = (c: ProviderConfig): boolean => c.kind === 'openai-compatible' && !/ollama\.com/i.test(c.baseUrl);
+/**
+ * Ollama Cloud models through an Ollama daemon run on ollama.com and are billed to whatever account
+ * that daemon is signed in to, which on a shared server may not be this Sara's owner. Unless the owner
+ * chose, they are on only for the server's first Sara (instance "sara") when the daemon already has
+ * one, and always off for any other instance on the same server.
+ */
+export function ollamaCloudDefault(daemonHasCloud: boolean, instance = instanceName()): boolean {
+  return instance === 'sara' && daemonHasCloud;
+}
+/** The plain refusal when Ollama Cloud models are off for this Sara. */
+export const CLOUD_OFF = (label: string, model: string) =>
+  `${model} is an Ollama Cloud model: it runs on ollama.com and is billed to the ollama.com account ${label} is signed in to. Ollama Cloud models are turned off for this Sara (Settings → Models → ${label} → Use Ollama Cloud models).`;
 /** Hardening L1: a list this much shorter than the last one is treated as a glitch (nothing retired). */
 export const SHRINK_LIMIT = 0.5;
 
@@ -397,7 +411,7 @@ export class ModelCatalog {
   }
 
   #now = () => (this.#o.now ? this.#o.now() : new Date());
-  #fetch: typeof fetch = (...a) => (this.#o.fetch ?? fetch)(...a);
+  #fetch: typeof fetch = (...a) => (this.#o.fetch ?? netFetch)(...a);
   #save() {
     atomicWrite(this.#file, `${JSON.stringify(this.#data, null, 1)}\n`);
   }
@@ -427,13 +441,19 @@ export class ModelCatalog {
     }
   }
 
+  /** May this Sara use Ollama Cloud models through this provider's daemon? (the owner's choice, else the default) */
+  cloudAllowed(id: string): boolean {
+    const o = this.#o.settings.get().modelLists?.[id]?.ollamaCloud;
+    return o ?? ollamaCloudDefault((this.#data.providers[id]?.present ?? []).some(isCloudName));
+  }
+
   /** The owner's options for a provider, with the defaults filled in. */
   options(id: string): ModelListOptions {
     const config = this.#config(id);
     const o = this.#o.settings.get().modelLists?.[id] ?? {};
     const daemon = Boolean(config && this.#isDaemon(config));
     const hasCloud = (this.#data.providers[id]?.present ?? []).some(isCloudName);
-    return { keepCurrent: o.keepCurrent !== false, ollamaCloud: daemon && (o.ollamaCloud ?? hasCloud), removeRetired: daemon && o.removeRetired === true, daemon };
+    return { keepCurrent: o.keepCurrent !== false, ollamaCloud: daemon && (o.ollamaCloud ?? ollamaCloudDefault(hasCloud)), removeRetired: daemon && o.removeRetired === true, daemon };
   }
 
   /** What the pickers show for a provider (from the stored list; no network). */
@@ -518,7 +538,9 @@ export class ModelCatalog {
     if (daemon) {
       remote = await this.#daemonRemote(config);
       const isRemote = (m: string) => isCloudName(m) && (!remote || remote.includes(m));
-      const wantCloud = this.#o.settings.get().modelLists?.[id]?.ollamaCloud ?? models.some(isCloudName);
+      const wantCloud = this.#o.settings.get().modelLists?.[id]?.ollamaCloud ?? ollamaCloudDefault(models.some(isCloudName));
+      // Off: the daemon's cloud models (billed to the account it is signed in to) aren't offered at all.
+      if (!wantCloud) listed = models.filter((m) => !isCloudName(m));
       if (wantCloud) {
         const cloud = await this.#cloudCatalog();
         if (cloud) {
@@ -749,6 +771,8 @@ export class ModelCatalog {
       const due = this.#o.settings
         .get()
         .providers.filter((p) => this.options(p.id).keepCurrent)
+        // Phase 67: in private local mode only lists on this computer are checked (the rest would be blocked anyway).
+        .filter((p) => !privateLocalOn() || (outboundAllowed(p.baseUrl) && !SUBSCRIPTION_KINDS.includes(p.kind)))
         .map((p) => ({ id: p.id, d: this.#data.providers[p.id] }))
         .filter(({ d }) => (!d?.checkedAt || now - Date.parse(d.checkedAt) >= MAX_AGE_MS) && (!d?.triedAt || now - Date.parse(d.triedAt) >= 3600_000))
         .sort((a, b) => (a.d?.checkedAt ?? '').localeCompare(b.d?.checkedAt ?? ''));
@@ -793,10 +817,17 @@ export function pullError(config: ProviderConfig, model: string, status: number,
  */
 export function withCloudPull(provider: Provider, catalog: ModelCatalog): Provider {
   const config = provider.config;
+  // Refused before any request when Ollama Cloud models are off for this Sara (decided per request:
+  // the owner may change it, and the daemon probe may come later than the provider).
+  const cloudOff = (model: string) => isCloudName(model) && (catalog.isDaemon(config) || isOllama(config.baseUrl)) && !catalog.cloudAllowed(config.id);
   return {
     config,
-    listModels: (signal) => provider.listModels(signal),
+    listModels: async (signal) => {
+      const all = await provider.listModels(signal);
+      return all.filter((m) => !cloudOff(m));
+    },
     async *stream(req) {
+      if (cloudOff(req.model)) throw new ProviderError(CLOUD_OFF(config.label, req.model), 403);
       await catalog.ensurePulled(config, req.model, req.signal);
       try {
         yield* provider.stream(req);

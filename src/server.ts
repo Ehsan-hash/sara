@@ -1,4 +1,8 @@
 // HTTP API + static web UI. No framework; node:http only.
+import { blockedRecently, netFetch, privateLocalOn } from './net-guard.ts';
+import { onThisComputer, PrivateLocalStore, talksHere, whatWouldLeave } from './private-local.ts';
+import { chatModels, CPU_TIERS, detectHardware, detectOllama, GPU_TIERS, installOllamaWithWinget, installStatus, ModelPuller, OLLAMA_DOWNLOAD, ollamaRoot, recommendModel } from './local-models.ts';
+import { APNS_VAULT } from './apns.ts';
 import { closeSync, createReadStream, existsSync, mkdirSync, openSync, readdirSync, readFileSync, readSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { appLanguage, en, fill, toLang, trOwner } from './i18n.ts';
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
@@ -995,6 +999,66 @@ export function createSaraServer(opts: ServerOptions): Server {
   // Phase 23: updates from Settings.
   // Phase 31: the server's own folder (each companion's app.dataDir is her own folder).
   const rootDir = app.rootDir ?? app.dataDir;
+  // ---- Phase 67: private local mode and a model on this computer ----
+  const privateLocalOf = (): PrivateLocalStore => (app.privateLocal ??= new PrivateLocalStore(rootDir));
+  /** Chat models that run on this computer: the local Ollama's (providerId '' when Sara has no provider entry for it yet), and loopback providers with a model set. */
+  async function modelsOnThisComputer(): Promise<{ providerId: string; model: string }[]> {
+    const s = app.settings.get();
+    const out: { providerId: string; model: string }[] = [];
+    const ollama = await detectOllama(ollamaRoot(s.providers));
+    const op = s.providers.find((p) => onThisComputer(p) && ollamaRoot([p]) === ollama.url);
+    for (const m of chatModels(ollama.models)) out.push({ providerId: op?.id ?? '', model: m.name });
+    for (const p of s.providers) {
+      const model = p.defaultModel ?? (p.id === s.defaultProviderId ? s.defaultModel : undefined);
+      if (p !== op && model && onThisComputer(p, model)) out.push({ providerId: p.id, model });
+    }
+    return out;
+  }
+  /** The "Ollama on the server" provider at this computer's Ollama (added when missing). */
+  function ensureLocalOllamaProvider(): string {
+    const s = app.settings.get();
+    const root = ollamaRoot(s.providers);
+    const have = s.providers.find((p) => onThisComputer(p) && p.kind === 'openai-compatible' && ollamaRoot([p]) === root);
+    if (have) {
+      if (!have.local) app.settings.update({ providers: s.providers.map((p) => (p.id === have.id ? { ...p, local: true } : p)) });
+      return have.id;
+    }
+    const preset = PROVIDER_PRESETS.find((p) => p.id === 'ollama-local')!;
+    const id = s.providers.some((p) => p.id === preset.id) ? 'ollama-this-computer' : preset.id;
+    app.settings.update({ providers: [...s.providers, { ...preset, id, baseUrl: `${root}/v1`, local: true, needsKey: false }] });
+    return id;
+  }
+  /** Phase 67: a downloaded model becomes her model and the background model (provider marked local). */
+  function useLocalModel(model: string): void {
+    const providerId = ensureLocalOllamaProvider();
+    const s = app.settings.get();
+    const pick = { providerId, model };
+    app.settings.update({
+      companionModel: pick,
+      routes: { ...s.routes, background: { ...pick }, ...(s.routes?.private ? {} : { private: { ...pick } }) },
+      ...(s.defaultProviderId ? {} : { defaultProviderId: providerId, defaultModel: model }),
+    });
+    void app.modelCatalog?.refresh(providerId).catch(() => undefined);
+  }
+  async function privateLocalView(pl: PrivateLocalStore): Promise<Record<string, unknown>> {
+    const s = app.settings.get();
+    const here = await modelsOnThisComputer().catch(() => []);
+    const facts = {
+      google: Boolean(app.google?.status().connected),
+      github: Boolean(app.vault.get(GITHUB_VAULT)),
+      pushDevices: app.push?.list().length ?? 0,
+      apns: Boolean(app.vault.get(APNS_VAULT)),
+      homeToken: Boolean(app.vault.get(HOME_VAULT)),
+    };
+    return {
+      ...pl.get(),
+      demo: Boolean(opts.demo),
+      localModels: here,
+      leave: whatWouldLeave(s, facts),
+      blocked: blockedRecently(),
+      platform: process.platform,
+    };
+  }
   const updater = new Updater({ dataDir: rootDir, version: opts.info?.version ?? 'dev', platform: opts.updaterPlatform ?? (opts.updaterUnitDir ? 'linux' : process.platform), ...(opts.updaterFetch ? { fetch: opts.updaterFetch } : {}), ...(opts.updaterUnitDir ? { unitDir: opts.updaterUnitDir, statusDir: rootDir } : {}) });
   const info = opts.info ?? { version: 'dev', revision: null, startedAt: new Date().toISOString() };
   /** After sign-outs: notifications stop for devices that are no longer signed in. */
@@ -1264,6 +1328,8 @@ export function createSaraServer(opts: ServerOptions): Server {
           return st && (st.open || st.closed) ? { claim: st } : {};
         })(),
         ...(authed ? { identity: identityOf(app.persona) } : {}),
+        // Phase 67: the header badge while nothing may leave this computer.
+        ...(authed && privateLocalOn() ? { privateLocal: true } : {}),
         // Phase 53: the app language (the page loads its translations before showing anything).
         ...(authed ? { language: app.settings.get().language ?? 'auto', appLanguage: appLanguage(app.settings.get()) } : {}),
         // Phase 16: servers that had adult content before the switch existed ask once (web only).
@@ -1353,6 +1419,100 @@ export function createSaraServer(opts: ServerOptions): Server {
       return send(res, 200, { ok: true });
     }
 
+    // Phase 67: "Nothing leaves this computer" (private local mode) and a model on this computer.
+    if (a === 'private-local' && !b) {
+      const pl = privateLocalOf();
+      if (method === 'GET') return send(res, 200, await privateLocalView(pl));
+      if (method === 'PUT') {
+        if (opts.demo) throw new HttpError(403, 'Not available in the demo.');
+        const body = await readJson(req);
+        const want = body.on === true;
+        const cur = pl.get();
+        if (want === cur.on) return send(res, 200, await privateLocalView(pl));
+        if (!want) {
+          if (cur.locked) throw new HttpError(409, 'SARA_PRIVATE_LOCAL=1 is set on this server, so private local mode stays on.');
+          if (body.confirm !== true) throw new HttpError(409, 'Turning it off lets Sara reach the internet again. Confirm to turn it off.', { needsConfirm: true });
+        } else {
+          const here = await modelsOnThisComputer();
+          if (!here.length) throw new HttpError(409, 'Turning this on needs a model on this computer first. Download one on this page (or start Ollama), then try again.', { needsModel: true });
+          // Conversations need a model that works offline: if neither the default nor the
+          // private-conversation model is on this computer, the private job gets the first one here.
+          const s = app.settings.get();
+          const priv = s.routes?.private;
+          const privOk = priv && s.providers.some((p) => p.id === priv.providerId && onThisComputer(p, priv.model));
+          const def = s.providers.find((p) => p.id === s.defaultProviderId);
+          const defOk = def && onThisComputer(def, s.defaultModel ?? def.defaultModel);
+          if (!privOk && !defOk) {
+            const providerId = here[0].providerId || ensureLocalOllamaProvider();
+            app.settings.update({ routes: { ...app.settings.get().routes, private: { providerId, model: here[0].model } } });
+          }
+        }
+        pl.set(want);
+        // Bridges pause or come back; add-on programs restart with (or without) network.
+        void app.bridges?.telegram?.restart().catch(() => {});
+        void app.bridges?.discord?.restart().catch(() => {});
+        if (app.mcp) {
+          app.mcp.stopAll();
+          void app.mcp.startAll(app.settings.get().mcpServers ?? []).catch(() => {});
+        }
+        console.log(`Private local mode ${want ? 'on: nothing leaves this computer' : 'off'}.`);
+        return send(res, 200, await privateLocalView(pl));
+      }
+    }
+    if (a === 'local-models') {
+      const root = ollamaRoot(app.settings.get().providers);
+      const puller = (app.modelPuller ??= new ModelPuller());
+      if (!b && method === 'GET') {
+        const [hw, ollama] = await Promise.all([detectHardware(), detectOllama(root)]);
+        return send(res, 200, {
+          hardware: hw,
+          recommended: recommendModel(hw),
+          tiers: hw.basis === 'cpu' ? CPU_TIERS : GPU_TIERS,
+          ollama,
+          download: OLLAMA_DOWNLOAD,
+          winget: process.platform === 'win32' && !opts.demo,
+          install: installStatus() ?? null,
+          pull: puller.status() ?? null,
+          privateLocal: privateLocalOn(),
+          using: app.settings.get().companionModel ?? null,
+        });
+      }
+      if (opts.demo && method !== 'GET') throw new HttpError(403, 'Not available in the demo.');
+      if (b === 'pull' && method === 'GET') return send(res, 200, { pull: puller.status() ?? null });
+      if (b === 'pull' && method === 'POST') {
+        const body = await readJson(req);
+        if (privateLocalOn()) throw new HttpError(409, 'Downloading a model needs the internet. Turn "Nothing leaves this computer" off for the download, then on again.');
+        const model = String(body.model ?? '').trim();
+        try {
+          // A chat model becomes hers when it's done (an embedding model is only downloaded).
+          puller.onDone = (m) => {
+            if (!/embed|minilm|bge-|e5-/i.test(m)) useLocalModel(m);
+          };
+          return send(res, 202, { pull: puller.start(root, model) });
+        } catch (err) {
+          throw new HttpError(409, (err as Error).message);
+        }
+      }
+      if (b === 'pull' && method === 'DELETE') return send(res, 200, { cancelled: puller.cancel(), pull: puller.status() ?? null });
+      if (b === 'use' && method === 'POST') {
+        const body = await readJson(req);
+        const model = String(body.model ?? '').trim();
+        const ollama = await detectOllama(root);
+        if (!chatModels(ollama.models).some((m) => m.name === model)) throw new HttpError(400, 'That model is not on this computer yet.');
+        useLocalModel(model);
+        return send(res, 200, { ok: true, using: app.settings.get().companionModel ?? null });
+      }
+      if (b === 'install-ollama' && method === 'POST') {
+        const body = await readJson(req);
+        if (body.confirm !== true) throw new HttpError(400, 'Confirm first.');
+        if (privateLocalOn()) throw new HttpError(409, 'Installing Ollama needs the internet. Turn "Nothing leaves this computer" off first.');
+        try {
+          return send(res, 202, { install: installOllamaWithWinget() });
+        } catch (err) {
+          throw new HttpError(409, (err as Error).message);
+        }
+      }
+    }
     if (a === 'settings') {
       if (method === 'GET') {
         const s = app.settings.get();
@@ -1388,6 +1548,12 @@ export function createSaraServer(opts: ServerOptions): Server {
       if (method === 'PUT') {
         const body = await readJson(req);
         const patch: Partial<Settings> = {};
+        // Phase 67: while nothing may leave this computer, a newly picked model must be on it.
+        const pausedPick = (prov: { kind: import('./providers/types.ts').ProviderKind; baseUrl: string; label: string }, model: string | undefined, was?: { providerId: string; model: string }) => {
+          if (!privateLocalOn() || onThisComputer(prov, model)) return;
+          if (was && was.model === model && app.settings.get().providers.find((p) => p.id === was.providerId)?.label === prov.label) return; // unchanged: kept (and paused)
+          throw new HttpError(409, '{provider} is paused in private local mode: it isn\'t on this computer. Pick a model on this computer, or turn "Nothing leaves this computer" off first.', { params: { provider: prov.label } });
+        };
         if (body.ownerName !== undefined) patch.ownerName = String(body.ownerName).slice(0, 80);
         // Phase 53: languages ('auto' or one of ours) and the yearly look back.
         const langPick = (v: unknown, what: string) => {
@@ -1419,6 +1585,8 @@ export function createSaraServer(opts: ServerOptions): Server {
         if (body.defaultProviderId !== undefined) {
           const id = body.defaultProviderId ? String(body.defaultProviderId) : undefined;
           if (id && !app.settings.get().providers.some((p) => p.id === id)) throw new HttpError(400, 'Unknown provider');
+          const cur = app.settings.get();
+          if (id && id !== cur.defaultProviderId) pausedPick(cur.providers.find((p) => p.id === id)!, body.defaultModel ? String(body.defaultModel) : undefined);
           patch.defaultProviderId = id;
         }
         if (body.defaultModel !== undefined) patch.defaultModel = body.defaultModel ? String(body.defaultModel).slice(0, 200) : undefined;
@@ -1436,6 +1604,8 @@ export function createSaraServer(opts: ServerOptions): Server {
             const model = String(r.model ?? '').trim().slice(0, 200);
             if (!model) throw new HttpError(400, 'Route "{route}": choose a model', { params: { route: k } });
             if (k === 'private' && isCloudModel(model)) throw new HttpError(400, '{model} is an Ollama cloud model (it runs on Ollama\'s servers). Private conversations need a model on your own hardware.', { params: { model } });
+            const was = app.settings.get().routes?.[k as RoutePurpose];
+            pausedPick(prov, model, was);
             const fallbacks = cleanModelList((v as { fallbacks?: unknown }).fallbacks, k === 'private');
             routes[k as RoutePurpose] = { providerId: pid, model, ...(fallbacks.length ? { fallbacks } : {}) };
           }
@@ -1455,6 +1625,7 @@ export function createSaraServer(opts: ServerOptions): Server {
             const prov = app.settings.get().providers.find((p) => p.id === String(c.providerId));
             const model = String(c.model ?? '').trim().slice(0, 200);
             if (!prov || !model) throw new HttpError(400, 'Her model: choose a provider and a model.');
+            pausedPick(prov, model, app.settings.get().companionModel);
             patch.companionModel = { providerId: prov.id, model };
           }
         }
@@ -1776,7 +1947,8 @@ export function createSaraServer(opts: ServerOptions): Server {
       const cm = opts.companions;
       if (!cm) throw new HttpError(404, 'Not found');
       if (opts.demo && method !== 'GET') throw new HttpError(403, 'Not on the demo server.');
-      const view = () => ({ companions: cm.view(app.companionId ?? 'main'), planner: app.settings.get().companionPlanner ?? 'shared' });
+      // Phase 67: companions whose model isn't on this computer show as paused in private local mode.
+      const view = () => ({ companions: cm.view(app.companionId ?? 'main').map((x) => ({ ...x, ...(privateLocalOn() && !talksHere(cm.get(x.id)?.app.settings.get() ?? app.settings.get()) ? { pausedLocal: true } : {}) })), planner: app.settings.get().companionPlanner ?? 'shared' });
       if (!b && method === 'GET') return send(res, 200, await view());
       if (!b && method === 'POST') {
         const body = (await readJson(req)) as { name?: unknown; pronouns?: unknown; from?: unknown };
@@ -2716,7 +2888,7 @@ export function createSaraServer(opts: ServerOptions): Server {
         return send(res, 202, await view());
       }
       if (b === 'complete' && method === 'POST') {
-        look.complete().catch(() => {});
+        look.complete().then(() => app.events?.publish({ type: 'look' }), () => {});
         return send(res, 202, await view());
       }
       // Phase 21: the current look in another outfit (a draft to accept like any other).
@@ -2811,7 +2983,7 @@ export function createSaraServer(opts: ServerOptions): Server {
             if (target?.adult && !adultOk()) throw new Error('This look is adults-only: it needs Adult mode (in a web browser).');
             look.use(sv[1], app.now());
             app.events?.publish({ type: 'look' });
-            if (look.missingFrames().length) void look.complete().catch(() => {});
+            if (look.missingFrames().length) void look.complete().then(() => app.events?.publish({ type: 'look' }), () => {});
             return send(res, 200, await view());
           }
           if (sv[2] === '.jpg' && method === 'GET') {
@@ -2844,8 +3016,10 @@ export function createSaraServer(opts: ServerOptions): Server {
         look
           .build(base, fromUpload ? { newFace: true, place: 'room' } : undefined)
           .then(() => {
-            // The full set replaces the single uploaded picture.
-            if (fromUpload) for (const ext of Object.keys(AVATAR_TYPES)) rmSync(join(app.dataDir, `avatar.${ext}`), { force: true });
+            // The new look replaces any single uploaded picture (which would otherwise keep showing
+            // instead of it), and every open window shows it right away.
+            for (const ext of Object.keys(AVATAR_TYPES)) rmSync(join(app.dataDir, `avatar.${ext}`), { force: true });
+            app.events?.publish({ type: 'look' });
           })
           .catch(() => {});
         return send(res, 202, await view());
@@ -3012,7 +3186,7 @@ export function createSaraServer(opts: ServerOptions): Server {
         const body = await readJson(req);
         const q = String(body.address ?? '').trim();
         if (!q || q.length > 200) throw new HttpError(400, 'Type an address or place name (up to 200 characters).');
-        const r = await fetch(`https://nominatim.openstreetmap.org/search?${new URLSearchParams({ format: 'jsonv2', limit: '5', q })}`, { headers: { 'user-agent': 'Sara self-hosted companion (place reminders)', accept: 'application/json' }, signal: AbortSignal.timeout(10_000) }).catch(() => undefined);
+        const r = await netFetch(`https://nominatim.openstreetmap.org/search?${new URLSearchParams({ format: 'jsonv2', limit: '5', q })}`, { headers: { 'user-agent': 'Sara self-hosted companion (place reminders)', accept: 'application/json' }, signal: AbortSignal.timeout(10_000) }).catch(() => undefined);
         if (!r?.ok) throw new HttpError(502, 'Could not reach OpenStreetMap to look that up. Try again, or save the place from the phone app.');
         const found = ((await r.json()) as { display_name?: string; lat?: string; lon?: string }[]).map((x) => ({ label: String(x.display_name ?? '').slice(0, 160), lat: Number(x.lat), lon: Number(x.lon) })).filter((x) => Number.isFinite(x.lat) && Number.isFinite(x.lon));
         return send(res, 200, { found });
@@ -3628,7 +3802,7 @@ export function createSaraServer(opts: ServerOptions): Server {
         const base = app.settings.get().home?.url;
         const token = app.vault.get(HOME_VAULT);
         if (!base || !token) return send(res, 200, { url: base ?? '', hasToken: Boolean(token), ok: false });
-        const r = await fetch(`${base}/api/config`, { headers: { authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(8_000), redirect: 'error' }).catch((err: Error) => err);
+        const r = await netFetch(`${base}/api/config`, { headers: { authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(8_000), redirect: 'error' }).catch((err: Error) => err);
         if (r instanceof Error) return send(res, 200, { url: base, hasToken: true, ok: false, error: `Couldn't reach it from this server (${r.message}).` });
         if (r.status === 401) return send(res, 200, { url: base, hasToken: true, ok: false, error: 'Home Assistant refused the token.' });
         const cfg = r.ok ? ((await r.json().catch(() => ({}))) as { location_name?: string; version?: string }) : {};
@@ -3659,7 +3833,7 @@ export function createSaraServer(opts: ServerOptions): Server {
       if (method === 'GET') {
         const token = app.vault.get(GITHUB_VAULT);
         if (!token) return send(res, 200, { hasToken: false });
-        const r = await fetch('https://api.github.com/user', { headers: { authorization: `Bearer ${token}`, 'user-agent': 'Sara' }, signal: AbortSignal.timeout(10_000) }).catch(() => undefined);
+        const r = await netFetch('https://api.github.com/user', { headers: { authorization: `Bearer ${token}`, 'user-agent': 'Sara' }, signal: AbortSignal.timeout(10_000) }).catch(() => undefined);
         const login = r?.ok ? ((await r.json()) as { login?: string }).login : undefined;
         return send(res, 200, { hasToken: true, login: login ?? null, ok: Boolean(login) });
       }
@@ -3921,7 +4095,7 @@ export function createSaraServer(opts: ServerOptions): Server {
           await Promise.all(
             hosts.map(async (h) => {
               try {
-                const r = await fetch(`http://${h}:11434/api/tags`, { signal: AbortSignal.timeout(1500) });
+                const r = await netFetch(`http://${h}:11434/api/tags`, { signal: AbortSignal.timeout(1500) });
                 if (!r.ok) return;
                 const j = (await r.json()) as { models?: { name: string }[] };
                 ollama.push({ url: `http://${h}:11434/v1`, models: (j.models ?? []).filter((m) => !/embed/i.test(m.name)).length });
@@ -4046,6 +4220,7 @@ export function createSaraServer(opts: ServerOptions): Server {
       if (method === 'GET') return send(res, 200, await view());
       if (method === 'POST') {
         if (opts.demo) throw new HttpError(403, 'Not in the demo.');
+        if (privateLocalOn()) throw new HttpError(409, 'Paused in private local mode: checking for updates needs the internet.');
         const body = await readJson(req);
         // Phase 46: Windows and macOS check the release page; the installer does the update.
         if (updater.how === 'release') {

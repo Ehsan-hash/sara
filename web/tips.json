@@ -1023,6 +1023,10 @@
       "Pictures she can send you, made with an image model. Off unless you set it up.",
       "look"
     ],
+    "models-local": [
+      "Run her model on this computer: Sara finds Ollama, suggests a model that fits your graphics card or memory, and downloads it. The switch Nothing leaves this computer keeps every request on this computer.",
+      "private-local"
+    ],
     "models-default": [
       "The AI model she thinks with in new conversations. Each conversation can use a different one.",
       "brain"

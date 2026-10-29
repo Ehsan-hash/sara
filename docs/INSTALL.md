@@ -470,6 +470,64 @@ Grok subscription's usage): sign it in once as the demo user, for example
 `sudo runuser -u sara-demo -- env HOME=/var/lib/sara-demo/agents/grok /opt/sara-agents/bin/grok login`.
 Restart the demo after editing the file.
 
+## Several Saras on one server (optional)
+
+For a family, a small team or a hosting provider: several separate Saras on one Linux server, each
+with her own owner, data, settings, port, service and admin command. Nothing is shared between them
+except the server itself (and, if you use them, Tailscale, Caddy, local voice and the subscription
+programs). One install, as described above, is still the normal case and works exactly as before.
+
+Give each extra Sara a name (2 to 32 lowercase letters, digits or dashes, starting with a letter,
+for example `work`):
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/farena-ai/sara/main/deploy/get-sara.sh | sudo bash -s -- --instance work
+# or, from the copy you already have:
+sudo /opt/sara-src/deploy/install.sh --instance work            # add --port N to choose the port
+/opt/sara-src/deploy/install.sh --dry-run --instance work       # only shows what it would create
+```
+
+Everything follows from the name:
+
+| | First Sara | Sara called `work` |
+|---|---|---|
+| Admin command | `sudo sara …` | `sudo work …` |
+| Service | `sara` | `work` |
+| Program | `/opt/sara` | `/opt/work` |
+| Data and backups | `/var/lib/sara` | `/var/lib/work` |
+| Settings | `/etc/sara/sara.env` | `/etc/work/work.env` |
+| Port | 7860 | the next free one (7861, 7862, …) |
+
+The installer refuses a name that is already someone's account or a program on the server, and a
+port that is in use or belongs to another Sara. `sudo sara instances` lists every Sara with her port
+and whether she's running. Running the installer again for a name that exists keeps her data,
+settings and port.
+
+**Reaching each one.** Each Sara has her own `sudo <name> access`:
+
+- **Your own web address:** give each her own address (`sara.example.com`, `work.example.com`). Each
+  gets her own block in the Caddyfile; changing one never touches the others. With Apache or nginx,
+  add one site per address and point it at that Sara's port.
+- **Tailscale:** the server has one Tailscale name, so the first Sara uses `https://<name>` and the
+  others get their own HTTPS port on it (`https://<name>:8443` and up; `sudo work access` shows it).
+- **Just this computer / home network:** each on her own port.
+
+**Updates and backups.** `sudo work update` backs up, updates and restarts only `work`; the other Saras keep running and get their update when you update them. Each
+Sara makes her own daily backups in her own data folder; `sudo work backup` backs up now. The source
+copy in `/opt/sara-src` is shared. Local voice and the subscription programs are downloaded once for
+the whole server; to turn them on for another Sara, run their installer for her (it reuses what is
+already there): `sudo /opt/sara-src/deploy/install-voice.sh --instance work` or
+`sudo /opt/sara-src/deploy/install-agents.sh --instance work`.
+
+**Ollama on a shared server.** Every Sara here talks to the same Ollama. If that Ollama is signed in
+to ollama.com, its cloud models run on that account and are billed to it, so they are **off** for
+every Sara except the first one (Settings → Models → the Ollama provider → *Use Ollama Cloud
+models*). Leave it off for Saras you host for other people, and give them their own models (their own
+Ollama, or a cloud key of their own).
+
+**Removing one.** `sudo work uninstall` removes only that Sara (her data stays in `/var/lib/work`
+unless you add `--delete-data`). The other Saras are left as they are.
+
 ## 5. Keeping her healthy
 
 ```sh
@@ -544,6 +602,7 @@ of it; `node_modules` and similar rebuildable folders in workspaces are left out
 | `SARA_CLAUDE_BIN` / `SARA_GROK_BIN` | (found on the PATH) | Where the Claude Code / Grok program is, if not in `SARA_AGENTS_DIR` or on the PATH |
 | `SARA_BROWSER` | (found by itself) | Path to a Chromium-family browser for testing previews |
 | `SARA_REPORT_TO` | the developer's report inbox | Where a reply you report with ⚑ is also sent (`https://sara.backstagecoding.com/api/public/report`). `off` = never send reports anywhere; they stay on your server |
+| `SARA_PRIVATE_LOCAL` | unset | Phase 67: `1` = *Nothing leaves this computer* is always on (can't be turned off in the app); `start` = on until the owner turns it off in Settings → Models → On this computer. Only this computer (`127.0.0.1`, `::1`, `localhost`) is reached. See [PRIVATE_LOCAL.md](PRIVATE_LOCAL.md) |
 | `SARA_PERSONA` | `persona/sara.json` | The character file a new install starts from |
 | `SARA_BACKUP_PASSPHRASE` | (none) | Passphrase for restoring an encrypted `.enc` off-server copy without being asked (Docker, Mac) |
 | `SARA_TOOLS_USER` | (none; `sara-tools` in Docker) | A separate user her commands run as when there's no bubblewrap (set by the Docker image) |

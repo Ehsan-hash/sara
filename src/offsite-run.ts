@@ -1,4 +1,5 @@
 // Glue between Sara's settings/vault and off-server copies (used by the daily backup and the API).
+import { netFetch } from './net-guard.ts';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
@@ -43,7 +44,7 @@ export const OFFSITE_TEST_DAYS = 7;
  * with the backup passphrase, restores it into a temporary folder (never the live data), checks
  * the database and counts what's in it, then deletes the temporary copy. Records the result.
  */
-export async function testOffsite(app: AppContext, fetchImpl: typeof fetch = fetch): Promise<OffsiteTest> {
+export async function testOffsite(app: AppContext, fetchImpl: typeof fetch = netFetch): Promise<OffsiteTest> {
   const cfg = offsiteSettings(app);
   const at = app.now().toISOString();
   // Inside Sara's own (private) data folder, not the system temp folder: the copy holds her keys.

@@ -10,6 +10,7 @@ import { createServer, request as httpRequest, type IncomingMessage, type Server
 import { connect, isIP, type AddressInfo, type Socket } from 'node:net';
 import type { Duplex } from 'node:stream';
 import { isPrivateAddress } from './tools/builtin.ts';
+import { outboundAllowed } from './net-guard.ts';
 
 /** The host name previews have inside the testing browser. */
 export const PREVIEW_HOST = 'sara-preview.test';
@@ -88,7 +89,8 @@ export class BrowserGuard {
       if (!path.startsWith('/preview/')) return refuse(res, 404, 'Not a preview.');
       return this.#opts.preview(req, res, path);
     }
-    if (!this.#opts.webAllowed()) {
+    // Phase 67: private local mode keeps the testing browser on her previews too.
+    if (!this.#opts.webAllowed() || !outboundAllowed(raw)) {
       this.#note(authority);
       return refuse(res, 403, 'This testing browser only opens previews of your apps (web access is off).');
     }
@@ -122,7 +124,7 @@ export class BrowserGuard {
     const target = req.url ?? '';
     const m = /^([^:]+|\[[^\]]+\]):(\d+)$/.exec(target);
     const port = m ? Number(m[2]) : 0;
-    const addr = m && this.#opts.webAllowed() && (port === 443 || port === 80) ? await publicAddress(m[1]) : undefined;
+    const addr = m && this.#opts.webAllowed() && outboundAllowed(`https://${m[1]}`) && (port === 443 || port === 80) ? await publicAddress(m[1]) : undefined;
     if (!addr) {
       this.#note(target);
       return void socket.end('HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\n\r\n');

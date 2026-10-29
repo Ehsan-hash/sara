@@ -5,20 +5,33 @@
 # Nothing is installed system-wide; no system packages are touched. ~520 MB in /opt/sara-agents.
 #
 #   sudo ./deploy/install-agents.sh
+#   sudo ./deploy/install-agents.sh --instance work   # another Sara on this server (programs shared)
 #
 # Then sign in from Settings → Subscriptions (Claude: paste a `claude setup-token` token;
 # Grok: "Sign in to Grok" shows a code to confirm at accounts.x.ai).
 set -euo pipefail
 
 AGENTS_DIR="${SARA_AGENTS_DIR:-/opt/sara-agents}"
-ENV_FILE=/etc/sara/sara.env
+# Several Saras on one server: --instance NAME (or SARA_INSTANCE) picks whose settings to update.
+INSTANCE="${SARA_INSTANCE:-sara}"
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --instance) INSTANCE="${2:-}"; shift 2 ;;
+    --instance=*) INSTANCE="${1#*=}"; shift ;;
+    *) printf 'Unknown option: %s\n' "$1" >&2; exit 2 ;;
+  esac
+done
+# shellcheck source=deploy/lib-instance.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib-instance.sh"
+si_valid_name "$INSTANCE" || { printf 'Not an instance name: %s\n' "$INSTANCE" >&2; exit 2; }
+ENV_FILE="/etc/$INSTANCE/$INSTANCE.env"
 SRC_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 log() { printf '\033[1;35m[sara]\033[0m %s\n' "$*"; }
 die() { printf '\033[1;31m[sara]\033[0m %s\n' "$*" >&2; exit 1; }
 
 [[ $EUID -eq 0 ]] || die "Run as root (sudo ./deploy/install-agents.sh)."
-NODE_BIN="$(sed -n 's#^ExecStart=\([^ ]*\) .*#\1#p' /etc/systemd/system/sara.service 2>/dev/null | head -1)"
+NODE_BIN="$(sed -n 's#^ExecStart=\([^ ]*\) .*#\1#p' /etc/systemd/system/$INSTANCE.service 2>/dev/null | head -1)"
 [[ -x "${NODE_BIN:-}" ]] || die "Install Sara first (deploy/install.sh)."
 NPM_BIN="$(dirname "$NODE_BIN")/npm"
 
@@ -45,14 +58,14 @@ fs.renameSync(dst + ".tmp", dst);
 ln -sf "$AGENTS_DIR/node_modules/@anthropic-ai/claude-code/bin/claude.exe" "$AGENTS_DIR/bin/claude"
 CLAUDE="$AGENTS_DIR/bin/claude"
 GROK="$AGENTS_DIR/bin/grok"
-log "Checking they run on this system as the sara user..."
-runuser -u sara -- env HOME=/tmp "$CLAUDE" --version || die "Claude Code does not run on this system."
-runuser -u sara -- env HOME=/tmp "$GROK" --version || die "Grok CLI does not run on this system."
+log "Checking they run on this system as the $INSTANCE user..."
+runuser -u "$INSTANCE" -- env HOME=/tmp "$CLAUDE" --version || die "Claude Code does not run on this system."
+runuser -u "$INSTANCE" -- env HOME=/tmp "$GROK" --version || die "Grok CLI does not run on this system."
 
 if grep -q '^SARA_AGENTS_DIR=' "$ENV_FILE" 2>/dev/null; then
   sed -i "s#^SARA_AGENTS_DIR=.*#SARA_AGENTS_DIR=$AGENTS_DIR#" "$ENV_FILE"
 else
   echo "SARA_AGENTS_DIR=$AGENTS_DIR" >> "$ENV_FILE"
 fi
-systemctl restart sara
+systemctl restart "$INSTANCE"
 log "Done. Sign in under Settings → Subscriptions."

@@ -2,6 +2,7 @@
 // Route rules (preview): store:false + stream:true, system text in `instructions` (later system
 // notes as developer messages), function tools grouped in a namespace, no temperature /
 // max_output_tokens, full history in `input`. Bearer tokens go only to api.openai.com.
+import { netFetch } from '../net-guard.ts';
 import { sseEvents } from '../sse.ts';
 import { USAGE_URL, type ChatGptAuth } from '../subscriptions/chatgpt.ts';
 import { parseToolArguments, ProviderError, type ChatMessage, type ChatRequest, type Provider, type ProviderConfig, type StreamEvent } from './types.ts';
@@ -62,7 +63,7 @@ export class ChatGptProvider implements Provider {
   }
 
   async listModels(signal?: AbortSignal): Promise<string[]> {
-    const res = await fetch(`${this.#api}/models`, { headers: { authorization: `Bearer ${await this.#auth.accessToken()}` }, signal });
+    const res = await netFetch(`${this.#api}/models`, { headers: { authorization: `Bearer ${await this.#auth.accessToken()}` }, signal });
     if (!res.ok) throw new ProviderError(`ChatGPT models: HTTP ${res.status}`, res.status);
     const body = (await res.json()) as { models?: { slug: string; visibility?: string }[]; data?: { id: string }[] };
     if (body.models) return body.models.filter((m) => !m.visibility || m.visibility === 'list').map((m) => m.slug);
@@ -76,7 +77,7 @@ export class ChatGptProvider implements Provider {
       body.tools = [{ type: 'namespace', name: NS, description: "Sara's tools on the owner's server.", tools: req.tools.map((t) => ({ type: 'function', name: t.name, description: t.description, parameters: t.parameters })) }];
     }
     if (req.reasoning && req.reasoning !== 'none') body.reasoning = { effort: req.reasoning };
-    const res = await fetch(`${this.#api}/responses`, {
+    const res = await netFetch(`${this.#api}/responses`, {
       method: 'POST',
       headers: { authorization: `Bearer ${await this.#auth.accessToken()}`, 'content-type': 'application/json', accept: 'text/event-stream' },
       body: JSON.stringify(body),

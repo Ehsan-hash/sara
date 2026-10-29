@@ -3,6 +3,7 @@
 // hearing engine that reads them: Grok voice (xAI speech-to-text) or a speech API; the on-server
 // engine reads WAV only.
 
+import { netFetch } from './net-guard.ts';
 import { localVoiceMissing, localVoiceSupported } from './platform.ts';
 import { speechLanguage } from './i18n.ts';
 import type { AppContext } from './chat.ts';
@@ -28,7 +29,7 @@ export async function xaiTranscribe(key: string, audio: Buffer, opts: { language
   if (opts.language && opts.language !== 'auto') form.append('language', opts.language.split('-')[0]);
   for (const k of opts.keyterms ?? []) form.append('keyterm', k);
   form.append('file', new Blob([new Uint8Array(audio)]), 'audio');
-  const res = await (opts.fetchImpl ?? fetch)(XAI_STT, { method: 'POST', headers: { authorization: `Bearer ${key}` }, body: form, signal: AbortSignal.timeout(60_000) });
+  const res = await (opts.fetchImpl ?? netFetch)(XAI_STT, { method: 'POST', headers: { authorization: `Bearer ${key}` }, body: form, signal: AbortSignal.timeout(60_000) });
   const j = (await res.json().catch(() => ({}))) as { text?: string; error?: string; code?: string };
   if (!res.ok) throw new VoiceError(`Grok speech-to-text: ${j.error ?? j.code ?? `HTTP ${res.status}`}`);
   return String(j.text ?? '').trim();
@@ -157,7 +158,7 @@ export class Speech {
   /** Downloads a voice note (size-limited) and transcribes it. */
   async hearNote(url: string, headers: Record<string, string> = {}, maxBytes = 20 * 1024 * 1024): Promise<string> {
     if (!this.canHearNotes()) throw new VoiceError('voice notes need Grok voice or a speech API (Settings → Voice).');
-    const res = await fetch(url, { headers, signal: AbortSignal.timeout(60_000) });
+    const res = await netFetch(url, { headers, signal: AbortSignal.timeout(60_000) });
     if (!res.ok) throw new VoiceError(`download failed (HTTP ${res.status})`);
     if (Number(res.headers.get('content-length') ?? 0) > maxBytes) throw new VoiceError('that voice note is too long for me.');
     const audio = Buffer.from(await res.arrayBuffer());

@@ -84,19 +84,30 @@ export const DESCRIBE_TOOLS = [
   {
     "name": "search_memory",
     "title": "Search her memory",
-    "description": "Search Sara's long-term memory about the owner (facts, summaries of past conversations, decisions, promises, dates). Use it for context about the owner's life, preferences and projects.",
+    "description": "Search Sara's long-term memory about the owner (facts, summaries of past conversations, decisions, promises, dates) by words and meaning. Use it for context about the owner's life, preferences and projects; use list_facts to browse all facts, search_library for documents, and list_recent_conversations for what was talked about lately. Returns plain text, one note per line: \"- [kind, YYYY-MM-DD] text\", best match first, or a line saying nothing was found. Read-only. Never includes other people's chats, private conversations or (while Adult mode is off) anything explicit.",
     "inputSchema": {
       "type": "object",
       "properties": {
         "query": {
           "type": "string",
-          "description": "Words to look for, e.g. \"sister\" or \"deploy server\"."
+          "minLength": 1,
+          "maxLength": 200,
+          "description": "Words to look for in her memory. Up to 200 characters.",
+          "examples": [
+            "sister",
+            "deploy server",
+            "favourite food"
+          ]
         },
         "limit": {
           "type": "integer",
           "minimum": 1,
           "maximum": 50,
-          "description": "Up to how many notes (default 10)."
+          "default": 10,
+          "description": "Most notes to return, 1 to 50 (default 10).",
+          "examples": [
+            10
+          ]
         }
       },
       "required": [
@@ -114,8 +125,8 @@ export const DESCRIBE_TOOLS = [
   },
   {
     "name": "list_facts",
-    "title": "What she knows about the owner",
-    "description": "List the facts Sara has learned about the owner, newest first.",
+    "title": "List facts about the owner",
+    "description": "List the facts Sara has learned about the owner (name, people, likes, habits, work), newest first. Use it to get a general picture of the owner; use search_memory to find something specific, and remember_fact to add a fact. Returns plain text, one fact per line: \"- [fact, YYYY-MM-DD] text\", or \"No notes yet.\" Read-only; facts from other people's chats and private conversations are never included.",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -123,13 +134,17 @@ export const DESCRIBE_TOOLS = [
           "type": "integer",
           "minimum": 1,
           "maximum": 100,
-          "description": "Up to how many (default 30)."
+          "default": 30,
+          "description": "Most facts to return, 1 to 100 (default 30).",
+          "examples": [
+            30
+          ]
         }
       },
       "additionalProperties": false
     },
     "annotations": {
-      "title": "What she knows about the owner",
+      "title": "List facts about the owner",
       "readOnlyHint": true,
       "destructiveHint": false,
       "idempotentHint": true,
@@ -137,9 +152,9 @@ export const DESCRIBE_TOOLS = [
     }
   },
   {
-    "name": "recent_conversations",
-    "title": "Recent conversations",
-    "description": "Titles and short summaries of the owner's recent conversations with Sara (never other people's chats or private conversations).",
+    "name": "list_recent_conversations",
+    "title": "List recent conversations",
+    "description": "List the owner's most recent conversations with Sara, newest first, each with its title, when it was last active and a short summary when she has one. Use it to see what the owner has been talking about lately; use search_memory to look for a topic across all of her memory. Returns plain text, one conversation per line: \"- Title (last <date and time>): summary\", or \"No conversations yet.\" Read-only. Never lists other people's chats, private, archived or imported conversations.",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -147,13 +162,17 @@ export const DESCRIBE_TOOLS = [
           "type": "integer",
           "minimum": 1,
           "maximum": 30,
-          "description": "Up to how many (default 10)."
+          "default": 10,
+          "description": "Most conversations to return, 1 to 30 (default 10).",
+          "examples": [
+            10
+          ]
         }
       },
       "additionalProperties": false
     },
     "annotations": {
-      "title": "Recent conversations",
+      "title": "List recent conversations",
       "readOnlyHint": true,
       "destructiveHint": false,
       "idempotentHint": true,
@@ -162,15 +181,15 @@ export const DESCRIBE_TOOLS = [
   },
   {
     "name": "get_today",
-    "title": "Today",
-    "description": "Today's agenda from Sara's planner: to-dos due today or overdue, reminders in the next 24 hours, calendar events (when connected) and dates that matter coming up.",
+    "title": "Get today's agenda",
+    "description": "Get the owner's agenda for today in one view: to-dos due today or overdue (and high-priority ones without a date), reminders in the next 24 hours, calendar events when a calendar is connected, and birthdays or other dates that matter coming up. Use it for \"what's on today\"; use list_tasks for the whole to-do list with filters. Returns plain text: the date, then sections \"To-dos:\" (\"- #id title (due …)\"), \"Reminders:\", \"Calendar:\" and \"Coming up:\". The #ids work with complete_task, update_task and delete_task. Read-only; takes no input.",
     "inputSchema": {
       "type": "object",
       "properties": {},
       "additionalProperties": false
     },
     "annotations": {
-      "title": "Today",
+      "title": "Get today's agenda",
       "readOnlyHint": true,
       "destructiveHint": false,
       "idempotentHint": true,
@@ -179,8 +198,8 @@ export const DESCRIBE_TOOLS = [
   },
   {
     "name": "list_tasks",
-    "title": "To-dos",
-    "description": "The owner's to-do list in Sara's planner.",
+    "title": "List to-dos",
+    "description": "List the to-dos in the owner's planner in Sara, optionally only open or done ones, or one project. Use it to see the whole to-do list or find a to-do's id; use get_today for just what's due today. Returns plain text, up to 100 lines, open ones first by priority and due date: \"- #id [ ] title (priority) due <date> [project]\" ([x] when done), or \"Nothing open.\" The #id is what complete_task, update_task and delete_task take. Read-only.",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -191,17 +210,25 @@ export const DESCRIBE_TOOLS = [
             "done",
             "all"
           ],
-          "description": "Which ones (default open)."
+          "default": "open",
+          "description": "Which to-dos: \"open\" (default), \"done\", or \"all\".",
+          "examples": [
+            "open"
+          ]
         },
         "project": {
           "type": "string",
-          "description": "Only this project (name)."
+          "maxLength": 80,
+          "description": "Only to-dos in this planner project (name, any case). Leave out for all projects.",
+          "examples": [
+            "Garden"
+          ]
         }
       },
       "additionalProperties": false
     },
     "annotations": {
-      "title": "To-dos",
+      "title": "List to-dos",
       "readOnlyHint": true,
       "destructiveHint": false,
       "idempotentHint": true,
@@ -211,13 +238,19 @@ export const DESCRIBE_TOOLS = [
   {
     "name": "search_library",
     "title": "Search her library",
-    "description": "Search the documents the owner keeps in Sara's library (PDFs, Word, spreadsheets, books, web pages) by words and meaning. Answers quote the passages with where they are.",
+    "description": "Search the documents the owner keeps in Sara's library (PDFs, Word files, spreadsheets, books, saved web pages) by words and meaning. Use it for questions answered by the owner's documents; use search_memory for what Sara remembers from conversations. Returns up to 6 passages (each up to 1,400 characters), each headed by \"[document title, place]\" (page or section), or a line saying nothing was found. Read-only; documents shared in a single chat only are left out.",
     "inputSchema": {
       "type": "object",
       "properties": {
         "query": {
           "type": "string",
-          "description": "What to look for, e.g. \"when does the lease end\"."
+          "minLength": 1,
+          "maxLength": 300,
+          "description": "What to look for, as words or a question. Up to 300 characters.",
+          "examples": [
+            "when does the lease end",
+            "warranty period"
+          ]
         }
       },
       "required": [
@@ -235,20 +268,25 @@ export const DESCRIBE_TOOLS = [
   },
   {
     "name": "list_notes",
-    "title": "Notes",
-    "description": "The owner's notes in Sara's planner (title and id). Read one with read_note.",
+    "title": "List notes",
+    "description": "List the notes in the owner's planner in Sara (titles only), newest first, or the ones matching some words. Use it to find a note's id; then read it with read_note, change it with update_note or remove it with delete_note. Returns plain text, up to 100 lines: \"- #id title [project] (updated YYYY-MM-DD)\", or \"No notes.\" Read-only.",
     "inputSchema": {
       "type": "object",
       "properties": {
         "query": {
           "type": "string",
-          "description": "Only notes with these words."
+          "maxLength": 200,
+          "description": "Only notes containing these words (title or text). Leave out to list the newest notes.",
+          "examples": [
+            "deploy",
+            "recipe"
+          ]
         }
       },
       "additionalProperties": false
     },
     "annotations": {
-      "title": "Notes",
+      "title": "List notes",
       "readOnlyHint": true,
       "destructiveHint": false,
       "idempotentHint": true,
@@ -258,13 +296,17 @@ export const DESCRIBE_TOOLS = [
   {
     "name": "read_note",
     "title": "Read a note",
-    "description": "Read one of the owner's notes by its id (from list_notes).",
+    "description": "Read one note from the owner's planner in Sara, in full, by its id. Use list_notes first to find the id. Returns the note as Markdown: \"# Title\", a blank line, then the text. An unknown id returns an error. Read-only.",
     "inputSchema": {
       "type": "object",
       "properties": {
         "id": {
           "type": "integer",
-          "description": "The note id."
+          "minimum": 1,
+          "description": "The note id: the number after # in list_notes's results (e.g. 12 for #12). An unknown id is refused with an error and nothing changes.",
+          "examples": [
+            12
+          ]
         }
       },
       "required": [
@@ -283,13 +325,18 @@ export const DESCRIBE_TOOLS = [
   {
     "name": "ask_sara",
     "title": "Ask Sara",
-    "description": "Send Sara a message and get her reply. She answers in her own conversation for this app (the owner can read it in Sara), with her memory and personality. Use it to ask her something or tell her something worth remembering.",
+    "description": "Send Sara a message and get her reply, as in a chat: she answers with her memory and personality in a conversation kept for this app, which the owner can read in Sara. Use it for questions, opinions or anything conversational; to store a fact on purpose use remember_fact, and to change the planner use the to-do and note tools. Returns her reply as plain text (with the AI notice when a new session starts). If her own tools are allowed for other apps and one needs the owner's OK, it returns a note that it is waiting for approval in Sara. Can take up to a few minutes; one key can have two replies running at once.",
     "inputSchema": {
       "type": "object",
       "properties": {
         "message": {
           "type": "string",
-          "description": "What to say to her."
+          "minLength": 1,
+          "maxLength": 20000,
+          "description": "What to say to her, in plain words. Up to 20,000 characters.",
+          "examples": [
+            "What did we decide about the garden fence?"
+          ]
         }
       },
       "required": [
@@ -308,25 +355,47 @@ export const DESCRIBE_TOOLS = [
   {
     "name": "add_task",
     "title": "Add a to-do",
-    "description": "Add a to-do to the owner's planner in Sara.",
+    "description": "Add a new to-do to the owner's planner in Sara, with an optional due time, project and priority. Use update_task to change an existing one. Returns \"Added to-do #id: title\" (the #id works with complete_task, update_task and delete_task). A due time without an hour means 9:00 in the owner's time zone. Only listed when the owner turns on \"Let other apps change things\" in Sara. Follows the owner's approval setting for her todo tool (allowed, ask first, or off): when it asks first, it returns \"Waiting for approval in Sara\" and nothing changes until the owner presses Allow there; when it is off, it returns that it's turned off.",
     "inputSchema": {
       "type": "object",
       "properties": {
         "title": {
-          "type": "string"
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "description": "What to do, short. Up to 200 characters.",
+          "examples": [
+            "Call the vet"
+          ]
         },
         "due": {
           "type": "string",
-          "description": "When, in words: \"tomorrow 9am\", \"friday\", \"2026-11-03\"."
+          "maxLength": 80,
+          "description": "When it is due, in words or as a date, read in the owner's time zone. Leave out for no due date.",
+          "examples": [
+            "tomorrow 9am",
+            "friday",
+            "2026-11-03"
+          ]
         },
         "project": {
-          "type": "string"
+          "type": "string",
+          "maxLength": 80,
+          "description": "Planner project name to file it under, e.g. \"Garden\" or \"Sara\". Created if it doesn't exist. Up to 80 characters.",
+          "examples": [
+            "Garden"
+          ]
         },
         "priority": {
           "type": "string",
           "enum": [
             "low",
             "normal",
+            "high"
+          ],
+          "default": "normal",
+          "description": "How important: \"low\", \"normal\" (default) or \"high\".",
+          "examples": [
             "high"
           ]
         }
@@ -345,20 +414,182 @@ export const DESCRIBE_TOOLS = [
     }
   },
   {
+    "name": "complete_task",
+    "title": "Complete a to-do",
+    "description": "Mark one of the owner's to-dos in Sara as done, by its id (from list_tasks or get_today). Use update_task with status \"open\" to reopen one. Returns \"Done: to-do #id title\". Marking a to-do that is already done changes nothing. Only listed when the owner turns on \"Let other apps change things\" in Sara. Follows the owner's approval setting for her todo tool (allowed, ask first, or off): when it asks first, it returns \"Waiting for approval in Sara\" and nothing changes until the owner presses Allow there; when it is off, it returns that it's turned off.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "The to-do id: the number after # in list_tasks or get_today's results (e.g. 12 for #12). An unknown id is refused with an error and nothing changes.",
+          "examples": [
+            12
+          ]
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "additionalProperties": false
+    },
+    "annotations": {
+      "title": "Complete a to-do",
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    }
+  },
+  {
+    "name": "update_task",
+    "title": "Change a to-do",
+    "description": "Change one of the owner's to-dos in Sara by its id (from list_tasks or get_today): its title, due time, project, priority, details or status. Only the fields you give change; the rest stay as they are. Use complete_task to simply tick one off. Returns \"Changed to-do #id: title\" with the new due time. Only listed when the owner turns on \"Let other apps change things\" in Sara. Follows the owner's approval setting for her todo tool (allowed, ask first, or off): when it asks first, it returns \"Waiting for approval in Sara\" and nothing changes until the owner presses Allow there; when it is off, it returns that it's turned off.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "The to-do id: the number after # in list_tasks or get_today's results (e.g. 12 for #12). An unknown id is refused with an error and nothing changes.",
+          "examples": [
+            12
+          ]
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "description": "New title. Up to 200 characters.",
+          "examples": [
+            "Call the vet about Biscuit"
+          ]
+        },
+        "due": {
+          "type": "string",
+          "maxLength": 80,
+          "description": "New due time in words or as a date, read in the owner's time zone; \"none\" removes the due date.",
+          "examples": [
+            "next monday 10am",
+            "2026-11-03",
+            "none"
+          ]
+        },
+        "project": {
+          "type": "string",
+          "maxLength": 80,
+          "description": "Move it to this planner project (created if new); an empty string takes it out of any project.",
+          "examples": [
+            "Garden",
+            ""
+          ]
+        },
+        "priority": {
+          "type": "string",
+          "enum": [
+            "low",
+            "normal",
+            "high"
+          ],
+          "description": "New priority: \"low\", \"normal\" or \"high\".",
+          "examples": [
+            "high"
+          ]
+        },
+        "notes": {
+          "type": "string",
+          "maxLength": 2000,
+          "description": "New details for the to-do (replaces the old ones). Up to 2,000 characters.",
+          "examples": [
+            "Ask about the booster shot."
+          ]
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "open",
+            "done"
+          ],
+          "description": "\"done\" ticks it off; \"open\" reopens a done to-do.",
+          "examples": [
+            "open"
+          ]
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "additionalProperties": false
+    },
+    "annotations": {
+      "title": "Change a to-do",
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": true,
+      "openWorldHint": false
+    }
+  },
+  {
+    "name": "delete_task",
+    "title": "Delete a to-do",
+    "description": "Delete one of the owner's to-dos from Sara's planner for good, by its id (from list_tasks or get_today). This can't be undone; to tick a to-do off instead, use complete_task. Returns \"Deleted to-do #id: title\". Only listed when the owner turns on \"Let other apps change things\" in Sara. Deleting always waits for the owner: it returns \"Waiting for approval in Sara\" and nothing changes until the owner presses Allow there (even when her todo tool is set to allowed); when that tool is off, it returns that it's turned off.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "The to-do id: the number after # in list_tasks or get_today's results (e.g. 12 for #12). An unknown id is refused with an error and nothing changes.",
+          "examples": [
+            12
+          ]
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "additionalProperties": false
+    },
+    "annotations": {
+      "title": "Delete a to-do",
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": true,
+      "openWorldHint": false
+    }
+  },
+  {
     "name": "add_note",
     "title": "Add a note",
-    "description": "Save a note in the owner's planner in Sara.",
+    "description": "Save a new note (a title and free text, Markdown welcome) in the owner's planner in Sara, optionally in a project. Use update_note to change an existing note and remember_fact for a single fact about the owner. Returns \"Saved note #id: title\" (the #id works with read_note, update_note and delete_note). Only listed when the owner turns on \"Let other apps change things\" in Sara. Follows the owner's approval setting for her note tool (allowed, ask first, or off): when it asks first, it returns \"Waiting for approval in Sara\" and nothing changes until the owner presses Allow there; when it is off, it returns that it's turned off.",
     "inputSchema": {
       "type": "object",
       "properties": {
         "title": {
-          "type": "string"
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "description": "The note's title. Up to 200 characters.",
+          "examples": [
+            "Deploy steps"
+          ]
         },
         "body": {
-          "type": "string"
+          "type": "string",
+          "maxLength": 20000,
+          "description": "The note's text (Markdown is fine). Up to 20,000 characters.",
+          "examples": [
+            "ssh in, git pull, restart the service"
+          ]
         },
         "project": {
-          "type": "string"
+          "type": "string",
+          "maxLength": 80,
+          "description": "Planner project name to file it under, e.g. \"Garden\" or \"Sara\". Created if it doesn't exist. Up to 80 characters.",
+          "examples": [
+            "Garden"
+          ]
         }
       },
       "required": [
@@ -376,15 +607,105 @@ export const DESCRIBE_TOOLS = [
     }
   },
   {
+    "name": "update_note",
+    "title": "Change a note",
+    "description": "Change one of the owner's notes in Sara by its id (from list_notes): its title, its text (replaced as a whole) or its project. Only the fields you give change. Read the note with read_note first if you mean to edit part of the text. Returns \"Changed note #id: title\". Only listed when the owner turns on \"Let other apps change things\" in Sara. Follows the owner's approval setting for her note tool (allowed, ask first, or off): when it asks first, it returns \"Waiting for approval in Sara\" and nothing changes until the owner presses Allow there; when it is off, it returns that it's turned off.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "The note id: the number after # in list_notes's results (e.g. 12 for #12). An unknown id is refused with an error and nothing changes.",
+          "examples": [
+            12
+          ]
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "description": "New title. Up to 200 characters.",
+          "examples": [
+            "Deploy steps (server 2)"
+          ]
+        },
+        "body": {
+          "type": "string",
+          "maxLength": 20000,
+          "description": "New text for the whole note; it replaces the old text. Up to 20,000 characters.",
+          "examples": [
+            "ssh in, git pull, npm ci, restart the service"
+          ]
+        },
+        "project": {
+          "type": "string",
+          "maxLength": 80,
+          "description": "Move it to this planner project (created if new); an empty string takes it out of any project.",
+          "examples": [
+            "Sara",
+            ""
+          ]
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "additionalProperties": false
+    },
+    "annotations": {
+      "title": "Change a note",
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": true,
+      "openWorldHint": false
+    }
+  },
+  {
+    "name": "delete_note",
+    "title": "Delete a note",
+    "description": "Delete one of the owner's notes from Sara's planner for good, by its id (from list_notes). This can't be undone. Returns \"Deleted note #id: title\". Only listed when the owner turns on \"Let other apps change things\" in Sara. Deleting always waits for the owner: it returns \"Waiting for approval in Sara\" and nothing changes until the owner presses Allow there (even when her note tool is set to allowed); when that tool is off, it returns that it's turned off.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "The note id: the number after # in list_notes's results (e.g. 12 for #12). An unknown id is refused with an error and nothing changes.",
+          "examples": [
+            12
+          ]
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "additionalProperties": false
+    },
+    "annotations": {
+      "title": "Delete a note",
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": true,
+      "openWorldHint": false
+    }
+  },
+  {
     "name": "remember_fact",
-    "title": "Tell her something to remember",
-    "description": "Ask Sara to remember a fact about the owner. The owner always approves it in Sara first.",
+    "title": "Remember a fact",
+    "description": "Ask Sara to remember one fact about the owner in her long-term memory, marked as told by this app. Use it to store something on purpose (ask_sara is for conversation, and she may or may not keep what is said there); use add_note for longer text. Returns \"Remembered (#id): fact\" once the owner allows it. Only listed when the owner turns on \"Let other apps change things\" in Sara, and it always asks first: it returns \"Waiting for approval in Sara\" and nothing is stored until the owner presses Allow there.",
     "inputSchema": {
       "type": "object",
       "properties": {
         "fact": {
           "type": "string",
-          "description": "One short fact, e.g. \"Prefers tabs over spaces\"."
+          "minLength": 1,
+          "maxLength": 400,
+          "description": "One short fact about the owner, as a sentence. Up to 400 characters.",
+          "examples": [
+            "Prefers tabs over spaces",
+            "Works from home on Fridays"
+          ]
         }
       },
       "required": [
@@ -393,7 +714,7 @@ export const DESCRIBE_TOOLS = [
       "additionalProperties": false
     },
     "annotations": {
-      "title": "Tell her something to remember",
+      "title": "Remember a fact",
       "readOnlyHint": false,
       "destructiveHint": false,
       "idempotentHint": false,
@@ -403,6 +724,20 @@ export const DESCRIBE_TOOLS = [
 ];
 
 const DESCRIBE_VERSIONS = ['2025-11-25', '2025-06-18', '2025-03-26'];
+
+/** Sara's version, for --describe when no package.json is next to this file. Kept equal to package.json by a test. */
+export const SARA_VERSION = '1.7.1';
+
+/** Sara's real version: package.json next to the repo when this runs from a checkout, else SARA_VERSION. */
+export function describeVersion(): string {
+  try {
+    const p = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')) as { name?: unknown; version?: unknown };
+    if (p.name === 'sara' && typeof p.version === 'string' && /^\d+\.\d+\.\d+/.test(p.version)) return p.version;
+  } catch {
+    // a downloaded copy on its own: no package.json beside it
+  }
+  return SARA_VERSION;
+}
 const CONNECT_HINT = 'This is the Sara MCP bridge in --describe mode, with no Sara server behind it. Run your own Sara (https://github.com/farena-ai/sara), make an API key in Settings → Connections → Other apps, and start the bridge with --server https://<her address> and SARA_API_KEY.';
 
 /** --describe: answers locally, never contacts anything. */
@@ -412,7 +747,7 @@ export function describeAnswer(msg: { id?: unknown; method?: unknown; params?: R
   switch (msg.method) {
     case 'initialize': {
       const want = String(msg.params?.protocolVersion ?? '');
-      return ok({ protocolVersion: DESCRIBE_VERSIONS.includes(want) ? want : DESCRIBE_VERSIONS[0], capabilities: { tools: { listChanged: false } }, serverInfo: { name: 'sara', title: 'Sara', version: 'describe' }, instructions: CONNECT_HINT });
+      return ok({ protocolVersion: DESCRIBE_VERSIONS.includes(want) ? want : DESCRIBE_VERSIONS[0], capabilities: { tools: { listChanged: false } }, serverInfo: { name: 'sara', title: 'Sara', version: describeVersion() }, instructions: CONNECT_HINT });
     }
     case 'ping':
       return ok({});

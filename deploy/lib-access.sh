@@ -10,13 +10,19 @@
 #
 # Callers set SA_INTERACTIVE=1 when a person can answer questions on /dev/tty.
 
-: "${ENV_FILE:=/etc/sara/sara.env}"
+# Several Saras on one server (deploy/lib-instance.sh): SI_NAME is this instance ("sara" by
+# default). Each one gets her own settings file, her own Caddy block (# BEGIN <name>), her own
+# Tailscale HTTPS port (443 for the default, another port for the others: one machine has one
+# Tailscale name) and her own proxy secret; nothing here touches another instance's.
+: "${SI_NAME:=sara}"
+: "${ENV_FILE:=/etc/$SI_NAME/$SI_NAME.env}"
 : "${SA_INTERACTIVE:=0}"
+SA_CMD="$SI_NAME"
 SA_CADDYFILE="${SARA_CADDYFILE:-/etc/caddy/Caddyfile}"
 # Security review (L7): Caddy adds this per-install secret header; Sara trusts X-Forwarded-For
 # only on requests that carry it (any local program can connect to 127.0.0.1 and send its own).
 # Kept in her data folder, which sandboxed commands can't read.
-SA_DATA_DIR="${SARA_DATA_DIR:-/var/lib/sara}"
+SA_DATA_DIR="${SARA_DATA_DIR:-/var/lib/$SI_NAME}"
 SA_PROXY_SECRET_FILE="$SA_DATA_DIR/proxy-secret"
 SA_MODES="local tailscale domain lan"
 
@@ -103,7 +109,11 @@ sa_pkg_hint() {
 sa_port_busy() {
   local hex
   hex="$(printf '%04X' "$1")"
-  awk -v p=":$hex" '$4 == "0A" && toupper(substr($2, length($2) - 4)) == p { found = 1 } END { exit !found }' /proc/net/tcp /proc/net/tcp6 2>/dev/null
+  local f files=()
+  # (only files that exist: awk fails on a missing one, e.g. tcp6 with IPv6 off)
+  for f in /proc/net/tcp /proc/net/tcp6; do [[ -r $f ]] && files+=("$f"); done
+  [[ ${#files[@]} -gt 0 ]] || return 1
+  awk -v p=":$hex" '$4 == "0A" && toupper(substr($2, length($2) - 4)) == p { found = 1 } END { exit !found }' "${files[@]}" 2>/dev/null
 }
 sa_valid_port() { [[ $1 =~ ^[0-9]+$ ]] && (( 10#$1 >= 1024 && 10#$1 <= 65535 )); }
 
@@ -151,20 +161,38 @@ sa_ts_new_cli() {
   h="$(tailscale serve --help 2>&1 || true)"
   [[ $h == *--bg* ]]
 }
+# This instance's HTTPS port on the machine's Tailscale name: SARA_TS_HTTPS_PORT when set, else
+# 443 for the default instance and 8443 + (her port - 7860) for any other (ports are unique, so
+# these are too).
+sa_ts_https_port() {
+  local p port=${1:-}
+  p="$(sa_env_get SARA_TS_HTTPS_PORT)"
+  if [[ $p =~ ^[0-9]+$ ]]; then echo "$p"; return; fi
+  if [[ $SI_NAME == sara ]]; then echo 443; return; fi
+  [[ $port =~ ^[0-9]+$ ]] || port="$(sa_env_get SARA_PORT)"
+  [[ $port =~ ^[0-9]+$ ]] || port=7860
+  if (( port >= 7860 && port < 8860 )); then echo $((8443 + port - 7860)); else echo $((port + 1000)); fi
+}
+sa_ts_url() {
+  local hp=$1
+  if [[ $hp == 443 ]]; then echo "https://$(sa_ts_dnsname)"; else echo "https://$(sa_ts_dnsname):$hp"; fi
+}
 sa_ts_serve_on() {
-  local target="http://127.0.0.1:$1" out
+  local target="http://127.0.0.1:$1" hp=${2:-443} out
   if sa_ts_new_cli; then
-    out="$(timeout 90 tailscale serve --bg --https=443 "$target" </dev/null 2>&1)" || { printf '%s\n' "$out" >&2; return 1; }
+    out="$(timeout 90 tailscale serve --bg --https="$hp" "$target" </dev/null 2>&1)" || { printf '%s\n' "$out" >&2; return 1; }
   else
-    out="$(timeout 90 tailscale serve https:443 / "$target" </dev/null 2>&1)" || { printf '%s\n' "$out" >&2; return 1; }
+    out="$(timeout 90 tailscale serve "https:$hp" / "$target" </dev/null 2>&1)" || { printf '%s\n' "$out" >&2; return 1; }
   fi
 }
 sa_ts_serve_off() {
+  local hp
   sa_ts_installed || return 0
+  hp="$(sa_ts_https_port)"
   if sa_ts_new_cli; then
-    timeout 60 tailscale serve --https=443 off </dev/null >/dev/null 2>&1 || true
+    timeout 60 tailscale serve --https="$hp" off </dev/null >/dev/null 2>&1 || true
   else
-    timeout 60 tailscale serve https:443 / off </dev/null >/dev/null 2>&1 || true
+    timeout 60 tailscale serve "https:$hp" / off </dev/null >/dev/null 2>&1 || true
   fi
 }
 sa_ts_explain_certs() {
@@ -176,8 +204,8 @@ sa_ts_explain_certs() {
 }
 
 # ---- Caddy (own web address) -------------------------------------------------
-SA_CADDY_BEGIN='# BEGIN sara (managed by "sara access"; this block is replaced when it changes)'
-SA_CADDY_END='# END sara'
+SA_CADDY_BEGIN="# BEGIN $SI_NAME (managed by \"$SA_CMD access\"; this block is replaced when it changes)"
+SA_CADDY_END="# END $SI_NAME"
 sa_valid_domain() { [[ ${#1} -le 253 && $1 =~ ^([A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z][A-Za-z0-9-]{0,61}[A-Za-z0-9]$ ]]; }
 sa_valid_email() { [[ -z $1 || $1 =~ ^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$ ]]; }
 sa_resolve() { getent ahosts "$1" 2>/dev/null | awk '{print $1}' | sort -u || true; }
@@ -196,7 +224,7 @@ sa_dns_check() {
 }
 sa_caddy_remove_block() {
   [[ -f $SA_CADDYFILE ]] || return 0
-  sed -i '/^# BEGIN sara /,/^# END sara$/d' "$SA_CADDYFILE"
+  sed -i "/^# BEGIN $SI_NAME /,/^# END $SI_NAME\$/d" "$SA_CADDYFILE"
 }
 # Is the Caddyfile just the placeholder page the distribution ships (":80 { root … file_server }")?
 sa_caddy_is_stock() {
@@ -214,7 +242,7 @@ sa_proxy_secret() {
     mkdir -p "$SA_DATA_DIR"
     rm -f "$SA_PROXY_SECRET_FILE"
     ( umask 077; printf '%s\n' "$secret" > "$SA_PROXY_SECRET_FILE" )
-    if id sara >/dev/null 2>&1; then chown sara:sara "$SA_PROXY_SECRET_FILE"; fi
+    if id "$SI_NAME" >/dev/null 2>&1; then chown "$SI_NAME:$SI_NAME" "$SA_PROXY_SECRET_FILE"; fi
     chmod 600 "$SA_PROXY_SECRET_FILE"
   fi
   printf '%s' "$secret"
@@ -223,7 +251,7 @@ sa_caddy_add() {
   local domain=$1 email=$2 port=$3 backup err secret
   secret="$(sa_proxy_secret)"
   mkdir -p "$(dirname "$SA_CADDYFILE")"
-  backup="$SA_CADDYFILE.before-sara"
+  backup="$SA_CADDYFILE.before-$SI_NAME"
   [[ -f $SA_CADDYFILE ]] && cp -p "$SA_CADDYFILE" "$backup"
   if sa_caddy_is_stock; then
     # Replace the placeholder page (kept in $backup): its catch-all :80 site would also stop the
@@ -260,7 +288,7 @@ sa_caddy_add() {
   systemctl reload-or-restart caddy || die "Caddy didn't start. Check: journalctl -u caddy -n 30"
 }
 sa_caddy_remove() {
-  [[ -f $SA_CADDYFILE ]] && grep -q '^# BEGIN sara ' "$SA_CADDYFILE" || return 0
+  [[ -f $SA_CADDYFILE ]] && grep -q "^# BEGIN $SI_NAME " "$SA_CADDYFILE" || return 0
   sa_caddy_remove_block
   if command -v caddy >/dev/null && systemctl is-active --quiet caddy; then
     systemctl reload caddy >/dev/null 2>&1 || warn "Caddy didn't reload; check: journalctl -u caddy -n 30"
@@ -379,7 +407,7 @@ sa_check() {
 sa_prepare() {
   if [[ $1 == domain && ${SA_NEED_CADDY:-0} == 1 ]]; then
     log "Installing Caddy from your distribution's packages..."
-    sa_pkg_install caddy || die "Couldn't install Caddy with $(sa_pkg_mgr). Install it from the official instructions (https://caddyserver.com/docs/install), then run: sudo sara access domain. Nothing else was changed."
+    sa_pkg_install caddy || die "Couldn't install Caddy with $(sa_pkg_mgr). Install it from the official instructions (https://caddyserver.com/docs/install), then run: sudo $SA_CMD access domain. Nothing else was changed."
     SA_NEED_CADDY=0
   fi
 }
@@ -395,7 +423,7 @@ sa_unconfigure() {
 # sa_apply MODE PORT: set up MODE (Tailscale serve / Caddy site) and write sara.env. Does not
 # restart Sara. Run sa_check (and sa_prepare) first.
 sa_apply() {
-  local mode=$1 port=$2 old host secure url name
+  local mode=$1 port=$2 old host secure url name tshp=""
   old="$(sa_current_mode)"
   case "$mode" in
     local) host=127.0.0.1; secure=0; url="http://127.0.0.1:$port" ;;
@@ -406,8 +434,11 @@ sa_apply() {
     tailscale)
       name="$(sa_ts_dnsname)"
       [[ -n $name ]] || die "Couldn't read this machine's Tailscale name."
-      sa_ts_serve_on "$port" || die "'tailscale serve' didn't work (see above). Nothing else was changed."
-      host=127.0.0.1; secure=1; url="https://$name" ;;
+      tshp="$(sa_ts_https_port "$port")"
+      # Another instance whose HTTPS port moves (her port changed): take the old one down first.
+      if [[ $old == tailscale && "$(sa_ts_https_port)" != "$tshp" ]]; then sa_ts_serve_off; fi
+      sa_ts_serve_on "$port" "$tshp" || die "'tailscale serve' didn't work (see above). Nothing else was changed."
+      host=127.0.0.1; secure=1; url="$(sa_ts_url "$tshp")" ;;
     domain)
       [[ -n ${SARA_DOMAIN:-} ]] || die "No web address given."
       sa_caddy_add "$SARA_DOMAIN" "${SARA_EMAIL:-}" "$port"
@@ -423,8 +454,10 @@ sa_apply() {
   sa_env_set SARA_ACCESS "$mode"
   sa_env_set SARA_PUBLIC_URL "$url"
   if [[ $old != "$mode" ]]; then sa_unconfigure "$old"; fi
+  # Other instances remember their Tailscale port (so it's the same one to take down later).
+  if [[ -n $tshp && $SI_NAME != sara ]]; then sa_env_set SARA_TS_HTTPS_PORT "$tshp"; fi
   if [[ $old == proxy && $mode != proxy ]]; then
-    warn "Sara no longer trusts a hand-made reverse proxy. If you still use one, take its site out (or run: sudo SARA_BEHIND_PROXY=1 /opt/sara-src/deploy/install.sh to go back)."
+    warn "Sara no longer trusts a hand-made reverse proxy. If you still use one, take its site out (or run: sudo SARA_BEHIND_PROXY=1 /opt/sara-src/deploy/install.sh$([[ $SI_NAME == sara ]] || echo " --instance $SI_NAME") to go back)."
   fi
 }
 
@@ -459,7 +492,7 @@ sa_print_next() {
       log "Reach her through the HTTPS reverse proxy you set up (docs/INSTALL.md, section 2)."
       ;;
   esac
-  log "Change how you reach her any time: sudo sara access"
+  log "Change how you reach her any time: sudo $SA_CMD access"
 }
 
 sa_show() {
@@ -468,5 +501,5 @@ sa_show() {
   log "How you reach her: $(sa_mode_label "$mode")"
   [[ -n $url ]] && log "Address: $url"
   log "Listening on: $(sa_env_get SARA_HOST):$(sa_env_get SARA_PORT)"
-  log "Change it: sudo sara access tailscale | local | domain --domain <name> [--email <you@…>] | lan"
+  log "Change it: sudo $SA_CMD access tailscale | local | domain --domain <name> [--email <you@…>] | lan"
 }

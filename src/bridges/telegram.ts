@@ -5,6 +5,7 @@
 // disclosure. Groups: Sara answers when mentioned or replied to.
 // Phase 43: more owners by user ID; owners can work with her (tools) in groups when allowed; she
 // can also answer to her name without the @ and to @all / @everyone; adult groups by ID.
+import { netFetch, privateLocalOn } from '../net-guard.ts';
 import { randomInt } from 'node:crypto';
 import { appLanguage, en, tr } from '../i18n.ts';
 import type { AppContext, ChatEvent } from '../chat.ts';
@@ -123,7 +124,7 @@ export class TelegramBridge {
   async #call<T>(method: string, body: Record<string, unknown> = {}, signal?: AbortSignal): Promise<T> {
     const token = this.#token;
     if (!token) throw new Error('No Telegram bot token');
-    const res = await fetch(`${this.#apiBase}/bot${token}/${method}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body), signal: signal ?? AbortSignal.timeout(30_000) });
+    const res = await netFetch(`${this.#apiBase}/bot${token}/${method}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body), signal: signal ?? AbortSignal.timeout(30_000) });
     const j = (await res.json().catch(() => ({}))) as { ok?: boolean; result?: T; description?: string };
     if (!j.ok) throw new Error(`Telegram ${method}: ${j.description ?? `HTTP ${res.status}`}`);
     return j.result as T;
@@ -134,6 +135,11 @@ export class TelegramBridge {
     this.stop();
     const cfg = telegramSettings(this.#app);
     if (!cfg.enabled || !this.#token) return;
+    // Phase 67: Telegram is on the internet: paused while nothing may leave this computer.
+    if (privateLocalOn()) {
+      this.#error = 'Paused in private local mode.';
+      return;
+    }
     try {
       this.#bot = await this.#call<TgUser>('getMe');
       this.#error = undefined;
@@ -309,7 +315,7 @@ export class TelegramBridge {
     if ((f.file_size ?? 0) > MAX_NOTE_BYTES) throw new Error('Telegram only lets me download files up to 20 MB. Add it on the Library page instead.');
     const file = await this.#call<{ file_path?: string }>('getFile', { file_id: f.file_id });
     if (!file.file_path) throw new Error('Telegram did not give me the file.');
-    const res = await fetch(`${this.#apiBase}/file/bot${this.#token}/${file.file_path}`, { signal: AbortSignal.timeout(120_000) });
+    const res = await netFetch(`${this.#apiBase}/file/bot${this.#token}/${file.file_path}`, { signal: AbortSignal.timeout(120_000) });
     if (!res.ok) throw new Error(`download failed (${res.status})`);
     return Buffer.from(await res.arrayBuffer());
   }
@@ -331,7 +337,7 @@ export class TelegramBridge {
       const form = new FormData();
       form.append('chat_id', String(chatId));
       form.append('voice', new Blob([new Uint8Array(audio.data)], { type: audio.type }), audio.type.includes('mpeg') ? 'voice.mp3' : 'voice.ogg');
-      const res = await fetch(`${this.#apiBase}/bot${this.#token}/sendVoice`, { method: 'POST', body: form, signal: AbortSignal.timeout(60_000) });
+      const res = await netFetch(`${this.#apiBase}/bot${this.#token}/sendVoice`, { method: 'POST', body: form, signal: AbortSignal.timeout(60_000) });
       const j = (await res.json().catch(() => ({}))) as { ok?: boolean; description?: string };
       if (!j.ok) throw new Error(j.description ?? `HTTP ${res.status}`);
       return true;

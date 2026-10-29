@@ -12,6 +12,7 @@
 // JSON events), and how her fixed refusal is spoken. Everything else (instructions, transcripts,
 // the safety layer, timers) is shared and identical for both.
 
+import { openWebSocket } from './net-guard.ts';
 import type { AppContext } from './chat.ts';
 import { appLanguage, languageLine, speechLanguage, talkLanguage } from './i18n.ts';
 import { dayStartUtc } from './planner.ts';
@@ -80,7 +81,7 @@ export type ConnectUpstream = (url: string, key: string) => Upstream;
 /** Both voice services take a Bearer key in the WebSocket handshake. */
 export const connectXai: ConnectUpstream = (url, key) => {
   // Node 24's WebSocket (undici) accepts headers.
-  const ws = new WebSocket(url, { headers: { Authorization: `Bearer ${key}` } } as unknown as string[]);
+  const ws = openWebSocket(url, { headers: { Authorization: `Bearer ${key}` } } as unknown as string[]);
   ws.binaryType = 'arraybuffer';
   return ws as unknown as Upstream;
 };

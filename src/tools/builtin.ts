@@ -6,6 +6,7 @@ import { lstat, mkdir, readdir, readFile, stat, writeFile } from 'node:fs/promis
 import { BlockList, isIP } from 'node:net';
 import { dirname, join } from 'node:path';
 import { runCommand } from './sandbox.ts';
+import { checkOutbound } from '../net-guard.ts';
 import { clip, num, str, ToolError, type Tool } from './types.ts';
 import { assertWritable, displayPath, resolveInside } from './workspace.ts';
 
@@ -274,6 +275,8 @@ export function pinnedGet(url: URL, address: string, signal: AbortSignal): Promi
     if (typeof opts === 'object' && opts?.all) cb(null, [{ address, family }]);
     else cb(null, address, family);
   };
+  // Phase 67: every hop (redirects too) passes the private-local-mode check before connecting.
+  checkOutbound(url);
   const doRequest = url.protocol === 'https:' ? httpsRequest : httpRequest;
   return new Promise((resolve, reject) => {
     const req = doRequest(

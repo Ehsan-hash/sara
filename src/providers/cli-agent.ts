@@ -6,6 +6,7 @@
 // normal turn loop runs the tool (approvals, sandbox, receipts); the next stream() call with the
 // tool results resumes the same process.
 import { agentInstallHint } from '../platform.ts';
+import { assertOnline } from '../net-guard.ts';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { closeSync, mkdirSync, openSync, readFileSync, readSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs';
@@ -265,6 +266,8 @@ export class CliAgentProvider implements Provider {
   }
 
   async listModels(): Promise<string[]> {
+    // Phase 67: these programs talk to their vendor directly: never in private local mode.
+    assertOnline(this.config.label);
     if (this.#rt.kind === 'claude') return claudeModels(this.#rt.bin);
     const out = await this.#run(['models'], 30_000);
     if (/not authenticated/i.test(out)) throw new ProviderError('Grok is not signed in. Settings → Subscriptions → Sign in to Grok.', 401);
@@ -312,6 +315,7 @@ export class CliAgentProvider implements Provider {
   }
 
   async *stream(req: ChatRequest): AsyncIterable<StreamEvent> {
+    assertOnline(this.config.label);
     // Resume a paused session when this call carries results for its pending tool calls.
     const results = trailingToolResults(req.messages);
     let session = [...sessions.values()].find((s) => !s.ended && s.pending.size && [...s.pending.keys()].every((id) => results.has(id)));

@@ -3,6 +3,7 @@
 // public OSRM routers for the time, both free, no key) and texts the owner when it's time to go:
 // travel time + a buffer before the start. Online meetings and events without an address are
 // skipped. Travel times don't include traffic, so the buffer matters.
+import { netFetch } from './net-guard.ts';
 import type { AppContext } from './chat.ts';
 import { appLanguage } from './i18n.ts';
 import { targetConversation } from './life.ts';
@@ -36,7 +37,7 @@ export function leaveBySettings(app: AppContext): LeaveBySettings {
 
 /** Finds a street address (OpenStreetMap Nominatim; at most one lookup a second, per their rules). */
 let lastLookup = 0;
-export async function findAddress(q: string, fetchImpl: FetchLike = fetch): Promise<Place | undefined> {
+export async function findAddress(q: string, fetchImpl: FetchLike = netFetch): Promise<Place | undefined> {
   const wait = lastLookup + 1100 - Date.now();
   if (wait > 0) await new Promise((r) => setTimeout(r, wait));
   lastLookup = Date.now();
@@ -47,7 +48,7 @@ export async function findAddress(q: string, fetchImpl: FetchLike = fetch): Prom
 }
 
 /** Travel minutes between two places (no traffic). */
-export async function travelMinutes(from: Place, to: Place, mode: TravelMode, fetchImpl: FetchLike = fetch): Promise<number | undefined> {
+export async function travelMinutes(from: Place, to: Place, mode: TravelMode, fetchImpl: FetchLike = netFetch): Promise<number | undefined> {
   const res = await fetchImpl(`https://routing.openstreetmap.de/routed-${mode}/route/v1/driving/${from.lon},${from.lat};${to.lon},${to.lat}?overview=false`, { headers: { 'user-agent': UA }, signal: AbortSignal.timeout(15_000) });
   if (!res.ok) throw new Error(`route lookup failed (HTTP ${res.status})`);
   const r = (await res.json()) as { code?: string; routes?: { duration: number }[] };
@@ -73,7 +74,7 @@ export class LeaveByWorker {
   /** Event id → travel minutes, refreshed when the location changes. */
   readonly #routes = new Map<string, { location: string; minutes: number | null }>();
 
-  constructor(app: AppContext, fetchImpl: FetchLike = fetch) {
+  constructor(app: AppContext, fetchImpl: FetchLike = netFetch) {
     this.#app = app;
     this.#fetch = fetchImpl;
   }

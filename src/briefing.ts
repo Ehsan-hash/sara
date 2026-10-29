@@ -2,6 +2,7 @@
 // the day's weather, what's due and upcoming reminders, written in her voice by the background
 // model from facts gathered in code (so nothing is invented). If the model fails, the plain facts
 // are sent instead. Delivered like her other messages: chat, push, Telegram/Discord mirrors.
+import { netFetch } from './net-guard.ts';
 import { guard } from './log.ts';
 import { appLanguage, languageLine, talkLanguage } from './i18n.ts';
 import type { AppContext } from './chat.ts';
@@ -44,7 +45,7 @@ export function defaultUnits(timeZone?: string): 'F' | 'C' {
 }
 
 /** Finds a place by name (Open-Meteo geocoding; free, no key). */
-export async function geocode(name: string, fetchImpl: FetchLike = fetch): Promise<BriefingPlace> {
+export async function geocode(name: string, fetchImpl: FetchLike = netFetch): Promise<BriefingPlace> {
   const q = name.trim();
   if (!q) throw new Error('Type a city or town.');
   // "Kansas City, MO" style: search the city, prefer a result whose region/country matches the rest.
@@ -70,7 +71,7 @@ const WEATHER: Record<number, string> = {
 };
 
 /** Today's weather in one line (Open-Meteo; free, no key). */
-export async function weatherLine(place: BriefingPlace, units: 'F' | 'C', fetchImpl: FetchLike = fetch): Promise<string> {
+export async function weatherLine(place: BriefingPlace, units: 'F' | 'C', fetchImpl: FetchLike = netFetch): Promise<string> {
   const url =
     `https://api.open-meteo.com/v1/forecast?latitude=${place.lat}&longitude=${place.lon}` +
     '&current=temperature_2m,weather_code&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max,weather_code' +
@@ -96,7 +97,7 @@ export interface BriefingFacts {
   mail?: string;
 }
 
-export async function gatherFacts(app: AppContext, now: Date, fetchImpl: FetchLike = fetch): Promise<BriefingFacts> {
+export async function gatherFacts(app: AppContext, now: Date, fetchImpl: FetchLike = netFetch): Promise<BriefingFacts> {
   const tz = app.settings.get().timeZone;
   const cfg = briefingSettings(app);
   const date = new Intl.DateTimeFormat('en-US', { timeZone: tz, weekday: 'long', month: 'long', day: 'numeric' }).format(now);
@@ -136,7 +137,7 @@ export class BriefingWorker {
   #timer: NodeJS.Timeout | undefined;
   #running = false;
 
-  constructor(app: AppContext, fetchImpl: FetchLike = fetch) {
+  constructor(app: AppContext, fetchImpl: FetchLike = netFetch) {
     this.#app = app;
     this.#fetch = fetchImpl;
   }

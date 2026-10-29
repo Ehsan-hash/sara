@@ -27,7 +27,7 @@ prueba software en un entorno aislado, en tu propio servidor y con los modelos q
   <sub>Una sesión real y sin editar con un modelo local (qwen3.8 27B en Ollama, una RTX 5090) en un servidor de pruebas desechable: charla con su personalidad, escribe la app, pide permiso antes de arrancar un servidor, abre la vista previa y la prueba en su propio navegador. El último fotograma es la app con números ya escritos.</sub>
 </p>
 
-> **Estado:** 1.6, licencia MIT, con seis versiones con novedades desde la 1.0 (todas abajo). La
+> **Estado:** 1.7, licencia MIT, con siete versiones con novedades desde la 1.0 (todas abajo). La
 > [app de Android](https://play.google.com/store/apps/details?id=com.backstagecoding.sara) está en Google
 > Play; la app de iPhone y la versión del Mac App Store llegarán en cuanto Apple las apruebe. Lee
 > [docs/DISCLOSURES.md](docs/DISCLOSURES.md) antes de usar o compartir Sara.
@@ -36,6 +36,7 @@ prueba software en un entorno aislado, en tu propio servidor y con los modelos q
 
 | Versión | Qué te trae |
 |---|---|
+| **1.7** · Modo local privado | Un interruptor, **Nada sale de este ordenador**, aplicado en el código en un único punto: solo se puede llegar a este ordenador, los modelos en la nube y las herramientas en línea se pausan, y sus chats, su memoria y su biblioteca siguen funcionando. Las apps de Windows y Mac encuentran Ollama (o te ayudan a instalarlo), sugieren un modelo que cabe en tu tarjeta gráfica y lo descargan con barra de progreso. [Qué garantiza](docs/PRIVATE_LOCAL.md) |
 | **1.6** · Chats de grupo | Reúne a **de dos a cuatro de tus compañeras en una conversación**: cada una responde con su propia personalidad, voz y color; elige quién contesta (quien encaje, todas, por turnos o solo a quien menciones con @) y cuánto charlan entre ellas. La seguridad, los avisos de IA y el ajuste adulto más estricto valen para toda la sala. [Cómo funciona](docs/GROUP_CHATS.md) |
 | **1.5** · Tráela desde otra app | Múdate desde **ChatGPT, Claude, Character.AI, SillyTavern, Replika, Nomi o Kindroid**. Lee la exportación en tu propio servidor, luego te enseña lo que ha aprendido (datos con tus propias palabras, vuestra historia juntos, su estilo) y solo guarda lo que tú apruebes. [Cómo exportar desde cada app](docs/IMPORT.md) |
 | **1.4** · Más fluidez | Mira cómo cada archivo que escribe **crece en directo en el chat** mientras el modelo lo transmite (OpenAI, Anthropic, xAI, OpenRouter y planes de ChatGPT; Ollama lo envía de una vez); un retrato que habla con sincronización labial de nueve formas de boca; registros en texto plano o JSON |
@@ -49,11 +50,13 @@ Todas las versiones: [CHANGELOG.md](CHANGELOG.md) · [versiones](https://github.
 
 | Versión | Función |
 |---|---|
-| 1.7 | **Modo local privado** en las apps de Windows y Mac: un modelo en ese ordenador y un interruptor que garantiza que nada sale de él |
-| 1.8 | **Videollamadas** con su avatar en movimiento y con sincronización labial |
-| 1.9 | **Nuestros momentos:** un álbum de fotos compartido con sus pies de foto |
+| 1.8 | **Varios servidores en una app:** las apps de escritorio, del móvil y las demás guardan una lista de tus Saras y cambian entre ellas sin cerrar sesión |
+| 1.9 | **Videollamadas** con su avatar en movimiento y con sincronización labial |
+| 1.10 | **Nuestros momentos:** un álbum de fotos compartido con sus pies de foto |
 | 2.0 | **Modo hogar:** varias personas en un servidor, cada una con sus propias compañeras y sus datos privados |
 | 2.1 | **Su voz en tu casa:** Alexa ("Alexa, pregúntale a Sara…"), el asistente de Android y Google Home, Atajos de Siri, y reacciones según quién está en casa a través de Home Assistant |
+| 2.2 | **Tus otros servidores por SSH:** con contraseña o con clave; tras entrar con contraseña crea su propia clave, te dice dónde está y solo guarda la contraseña si se lo pides (con un aviso) |
+| 2.3 | **Documentos grandes:** PDF y libros de 500 a 1.000 páginas en su biblioteca, todas las páginas escaneadas leídas y respuestas con el número de página |
 
 El plan completo: [docs/ROADMAP.md](docs/ROADMAP.md).
 
@@ -88,6 +91,7 @@ de silencio) y una línea de tiempo de vuestra historia juntos.
 ¿Vienes de otra app? Trae tus chats de ChatGPT, Claude, Character.AI, SillyTavern, Replika, Nomi o
 Kindroid y aprueba antes lo que aprende de ellos ([docs/IMPORT.md](docs/IMPORT.md)).
 O reúne a dos, tres o cuatro de tus compañeras en un chat de grupo ([docs/GROUP_CHATS.md](docs/GROUP_CHATS.md)).
+¿Lo quieres todo en una sola máquina? Activa **Nada sale de este ordenador** ([docs/PRIVATE_LOCAL.md](docs/PRIVATE_LOCAL.md)).
 
 ### Compañera de programación
 

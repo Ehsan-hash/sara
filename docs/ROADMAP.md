@@ -72,11 +72,14 @@ version's details are in the [changelog](../CHANGELOG.md).
 | 64 | Be found: app stores, NAS catalogs, Home Assistant's store and directories | ongoing |
 | 65 | Bring her from another app: import chats and characters from other companion apps | ✅ 1.5 |
 | 66 | Group chats with two or more of your companions | ✅ 1.6 |
-| 67 | A private local mode in the desktop apps: the model runs on that computer, nothing leaves it | 1.7 |
-| 68 | Video calls with her moving avatar | 1.8 |
-| 69 | Our moments: a shared photo album with her captions | 1.9 |
-| 70 | Household mode: several people on one server, each with their own companions | 2.0 |
-| 71 | Her voice in the home: Alexa, Android's assistant and Google Home, Siri Shortcuts, smart-home presence | 2.1 |
+| 67 | A private local mode in the desktop apps: the model runs on that computer, nothing leaves it | ✅ 1.7 |
+| 68 | Several servers in one app: the desktop, phone and other apps switch between your Saras without signing out | 1.8 |
+| 69 | Video calls with her moving avatar | 1.9 |
+| 70 | Our moments: a shared photo album with her captions | 1.10 |
+| 71 | Household mode: several people on one server, each with their own companions | 2.0 |
+| 72 | Her voice in the home: Alexa, Android's assistant and Google Home, Siri Shortcuts, smart-home presence | 2.1 |
+| 73 | Work on your other servers over SSH: password or key; after a password login she makes and uses her own key and keeps the password only if you insist | 2.2 |
+| 74 | Big documents: 500–1,000-page PDFs and books in her library, every scanned page read, answers with page numbers | 2.3 |
 
 Ideas and requests are welcome in [Discussions](https://github.com/farena-ai/sara/discussions)
 and [issues](https://github.com/farena-ai/sara/issues). See [CONTRIBUTING.md](../CONTRIBUTING.md).

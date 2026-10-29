@@ -16,6 +16,7 @@
   <a href="#start">Getting started</a>
   <a href="#gethelp">Getting help</a>
   <a href="#brain">Choosing a brain</a>
+  <a href="#private-local">Nothing leaves this computer</a>
   <a href="#phone">Phone and notifications</a>
   <a href="#voice">Voice and calls</a>
   <a href="#memory">Memory and privacy</a>
@@ -95,6 +96,16 @@
   <li><strong>Meaning search</strong> (under More jobs): with an embedding model (on Ollama: <code>ollama pull nomic-embed-text</code>), her memory also finds things you said in other words. Without it she searches by words.</li>
   <li>With several companions, each can have her own model (<em>Her model</em> at the top).</li>
   <li><strong>Double-check her claims</strong> (optional, off by default): a small model, best a local one, asked only when the built-in check can't tell whether she says she did something (saved a file, sent an email, ran the tests) that no tool did. It can only add a correction, never remove one, and waits a few seconds at most.</li>
+</ul>
+
+<h2 id="private-local">Nothing leaves this computer</h2>
+<p>In <em>Settings → Models → On this computer</em> Sara finds Ollama on this computer (or shows where to get it), looks at your graphics card or memory and suggests a model that fits. <strong>Download this model</strong> shows its progress; when it's done she uses it for talking and background work.</p>
+<p>The switch <strong>Nothing leaves this computer</strong> makes Sara connect only to this computer. It's checked in her code at one place every request goes through, so a setting you forgot can't send anything out. Turning it on needs a model on this computer; turning it off asks first. A 🔒 in the top bar shows when it's on.</p>
+<ul>
+  <li>Paused while it's on: cloud models and subscriptions, web search, Telegram and Discord, Gmail and Calendar, GitHub, notifications to phones, off-server backups, pictures of her, cloud voices and calls, update checks, and sending reports to the developer (reports are still kept here).</li>
+  <li>Downloading a model needs the internet: turn it off for the download, then on again.</li>
+  <li>Phones on your home network or Tailscale can still open Sara here: they connect in, she doesn't reach out.</li>
+  <li>On Windows, programs she runs for coding can't be fully cut off from the internet; they are told not to use it. Your browser and the system itself are outside Sara.</li>
 </ul>
 
 <h2 id="phone">Phone and notifications</h2>

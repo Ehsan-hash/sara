@@ -1,13 +1,14 @@
 // Model Context Protocol client: connects to MCP servers (stdio or streamable HTTP), lists their
 // tools and exposes them through the tool registry as mcp_<server>_<tool>. Stdio servers run in the
 // same bubblewrap sandbox as shell commands, with their own home directory.
+import { netFetch, privateLocalOn } from '../net-guard.ts';
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { sseEvents } from '../sse.ts';
 import type { ToolRegistry } from './registry.ts';
-import { bwrapArgs, commandPath, prepareForToolsUser, RUNTIME_MOUNT, runtimeMountArgs, SANDBOX_EXEC, seatbeltProfile, type SandboxInfo } from './sandbox.ts';
+import { bwrapArgs, commandPath, prepareForToolsUser, PRIVATE_LOCAL_ENV, RUNTIME_MOUNT, runtimeMountArgs, SANDBOX_EXEC, seatbeltProfile, type SandboxInfo } from './sandbox.ts';
 import { clip, ToolError, type Tool } from './types.ts';
 
 export const MCP_PROTOCOL_VERSION = '2025-06-18';
@@ -168,7 +169,7 @@ class HttpTransport implements Transport {
   }
 
   #post(body: unknown, signal: AbortSignal): Promise<Response> {
-    return fetch(this.#url, {
+    return netFetch(this.#url, {
       method: 'POST',
       signal,
       headers: {
@@ -218,7 +219,7 @@ class HttpTransport implements Transport {
 
   close(): void {
     if (!this.#session) return;
-    fetch(this.#url, { method: 'DELETE', headers: { ...this.#headers, 'mcp-session-id': this.#session } }).catch(() => {});
+    netFetch(this.#url, { method: 'DELETE', headers: { ...this.#headers, 'mcp-session-id': this.#session } }).catch(() => {});
   }
 }
 
@@ -279,13 +280,17 @@ export class McpConnection {
       LANG: 'C.UTF-8',
       ...(process.platform === 'win32' ? { PATH: process.env.PATH, SYSTEMROOT: process.env.SYSTEMROOT } : {}),
       ...secrets.env,
+      // Phase 67: private local mode: the add-on gets no network where the sandbox can enforce it
+      // (bubblewrap, macOS) and the no-network settings everywhere else (best effort).
+      ...(privateLocalOn() ? PRIVATE_LOCAL_ENV : {}),
     };
+    const net = !privateLocalOn();
     if (opts.sandbox.mode === 'bwrap') {
-      return new StdioTransport('bwrap', [...bwrapArgs(home, true), c.command, ...(c.args ?? [])], { ...baseEnv, HOME: '/workspace' }, home);
+      return new StdioTransport('bwrap', [...bwrapArgs(home, net), c.command, ...(c.args ?? [])], { ...baseEnv, HOME: '/workspace' }, home);
     }
     if (opts.sandbox.mode === 'seatbelt') {
       // macOS: the add-on runs inside the sandbox too, with its own folder as home (network on).
-      const profile = seatbeltProfile({ workspace: home, tmp: tmpdir(), ...(opts.sandbox.dataDir ? { dataDir: opts.sandbox.dataDir } : {}) }, true);
+      const profile = seatbeltProfile({ workspace: home, tmp: tmpdir(), ...(opts.sandbox.dataDir ? { dataDir: opts.sandbox.dataDir } : {}) }, net);
       return new StdioTransport(SANDBOX_EXEC, ['-p', profile, c.command, ...(c.args ?? [])], { ...baseEnv, HOME: home }, home);
     }
     if (opts.sandbox.mode === 'user') {

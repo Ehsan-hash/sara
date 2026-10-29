@@ -28,7 +28,7 @@ modèles que vous choisissez.
   <sub>Une vraie session, non montée, avec un modèle local (qwen3.8 27B sur Ollama, une RTX 5090) sur un serveur de test jetable : elle discute avec sa personnalité, écrit l'application, demande avant de lancer un serveur, ouvre l'aperçu et le teste dans son propre navigateur. La dernière image montre l'application avec des nombres saisis.</sub>
 </p>
 
-> **État :** 1.6, licence MIT, avec six versions riches en nouveautés depuis la 1.0 (toutes
+> **État :** 1.7, licence MIT, avec sept versions riches en nouveautés depuis la 1.0 (toutes
 > ci-dessous). L'[app Android](https://play.google.com/store/apps/details?id=com.backstagecoding.sara) est sur Google Play ;
 > l'app iPhone et la version Mac App Store arrivent dès qu'Apple les aura approuvées. Lisez
 > [docs/DISCLOSURES.md](docs/DISCLOSURES.md) avant d'utiliser ou de partager Sara.
@@ -37,6 +37,7 @@ modèles que vous choisissez.
 
 | Version | Ce que vous y gagnez |
 |---|---|
+| **1.7** · Mode local privé | Un interrupteur, **Rien ne quitte cet ordinateur**, appliqué dans le code en un seul point : seul cet ordinateur est joignable, les modèles cloud et les outils en ligne sont en pause, et ses conversations, sa mémoire et sa bibliothèque continuent de fonctionner. Les applications Windows et Mac trouvent Ollama (ou vous aident à l'installer), proposent un modèle adapté à votre carte graphique et le téléchargent avec une barre de progression. [Ce qu'il garantit](docs/PRIVATE_LOCAL.md) |
 | **1.6** · Discussions de groupe | Réunissez **deux à quatre de vos compagnes dans une même conversation** : chacune répond avec sa personnalité, sa voix et sa couleur ; choisissez qui répond (celle qui convient, toutes, à tour de rôle, ou seulement celle que vous mentionnez avec @) et combien elles bavardent entre elles. La sécurité, les avis d'IA et le réglage adulte le plus strict valent pour tout le salon. [Comment ça marche](docs/GROUP_CHATS.md) |
 | **1.5** · Faites-la venir d'une autre app | Quittez **ChatGPT, Claude, Character.AI, SillyTavern, Replika, Nomi ou Kindroid** pour elle. Elle lit l'export sur votre propre serveur, puis vous montre ce qu'elle a appris (des faits avec vos propres mots, votre histoire commune, son style) et n'enregistre que ce que vous approuvez. [Comment exporter depuis chaque app](docs/IMPORT.md) |
 | **1.4** · Plus de fluidité | Regardez chaque fichier qu'elle écrit **grandir en direct dans le chat** pendant que le modèle le diffuse (OpenAI, Anthropic, xAI, OpenRouter et offres ChatGPT ; Ollama l'envoie d'un seul bloc) ; un portrait qui parle, synchronisé sur les lèvres avec neuf formes de bouche ; des journaux en texte brut ou en JSON |
@@ -50,11 +51,13 @@ Toutes les versions : [CHANGELOG.md](CHANGELOG.md) · [versions](https://github.
 
 | Version | Fonctionnalité |
 |---|---|
-| 1.7 | **Mode local privé** dans les applications Windows et Mac : un modèle sur cet ordinateur et un interrupteur qui garantit que rien n'en sort |
-| 1.8 | **Appels vidéo** avec son avatar animé, synchronisé sur les lèvres |
-| 1.9 | **Nos moments :** un album photo partagé avec ses légendes |
+| 1.8 | **Plusieurs serveurs dans une app :** les applications de bureau, mobiles et les autres gardent une liste de vos Sara et passent de l'une à l'autre sans vous déconnecter |
+| 1.9 | **Appels vidéo** avec son avatar animé, synchronisé sur les lèvres |
+| 1.10 | **Nos moments :** un album photo partagé avec ses légendes |
 | 2.0 | **Mode foyer :** plusieurs personnes sur un même serveur, chacune avec ses propres compagnes et ses données privées |
 | 2.1 | **Sa voix chez vous :** Alexa (« Alexa, demande à Sara… »), l'assistant d'Android et Google Home, les raccourcis Siri, et des réactions selon qui est à la maison grâce à Home Assistant |
+| 2.2 | **Vos autres serveurs en SSH :** avec un mot de passe ou une clé ; après une connexion par mot de passe, elle crée sa propre clé, vous dit où elle se trouve et ne garde le mot de passe que si vous le demandez (avec un avertissement) |
+| 2.3 | **Gros documents :** des PDF et des livres de 500 à 1 000 pages dans sa bibliothèque, chaque page scannée lue, des réponses avec les numéros de page |
 
 Le plan complet : [docs/ROADMAP.md](docs/ROADMAP.md).
 
@@ -89,6 +92,7 @@ part si vous le souhaitez (avec des heures calmes) et une frise de votre histoir
 Vous venez d'une autre app ? Importez vos conversations depuis ChatGPT, Claude, Character.AI,
 SillyTavern, Replika, Nomi ou Kindroid, et validez d'abord ce qu'elle en retient
 ([docs/IMPORT.md](docs/IMPORT.md)). Ou réunissez deux à quatre de vos compagnes dans une discussion de groupe ([docs/GROUP_CHATS.md](docs/GROUP_CHATS.md)).
+Vous voulez tout sur une seule machine ? Activez **Rien ne quitte cet ordinateur** ([docs/PRIVATE_LOCAL.md](docs/PRIVATE_LOCAL.md)).
 
 ### Partenaire de programmation
 

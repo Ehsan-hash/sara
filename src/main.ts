@@ -1,6 +1,7 @@
 // Entry point: `node src/main.ts`. Admin flags (the `sara` command on each system wraps them):
 //   --version · --status · --doctor · --backup [file] · --restore <file> · --reset-token
 //   --tailscale-status (JSON, for the installers' "How will you reach her?" question)
+import { netFetch } from './net-guard.ts';
 import { DatabaseSync } from 'node:sqlite';
 import { StoryWorker } from './story.ts';
 import { JobManager } from './jobs.ts';
@@ -72,6 +73,8 @@ import { migrateProviderLabels, SettingsStore, StartupError } from './settings.t
 import { Store } from './store.ts';
 import { Vault } from './vault.ts';
 import { guard, Log, logOptions } from './log.ts';
+import { PrivateLocalStore } from './private-local.ts';
+import { ModelPuller } from './local-models.ts';
 import { ModelCatalog } from './model-catalog.ts';
 import { createProvider } from './providers/registry.ts';
 import { HealthHistory } from './health-history.ts';
@@ -132,7 +135,7 @@ if (process.argv.includes('--tailscale-status')) {
 }
 if (process.argv.includes('--status')) {
   const i = appInfo(root);
-  const running = await fetch(`http://${host === '0.0.0.0' ? '127.0.0.1' : host}:${port}/api/health`, { signal: AbortSignal.timeout(2000) }).then((r) => r.status < 500, () => false);
+  const running = await netFetch(`http://${host === '0.0.0.0' ? '127.0.0.1' : host}:${port}/api/health`, { signal: AbortSignal.timeout(2000) }).then((r) => r.status < 500, () => false);
   console.log(statusReport({ version: i.version, dataDir, port, running, access: accessInfo() }));
   process.exit(0);
 }
@@ -182,7 +185,7 @@ if (process.argv.includes('--restore')) {
     console.error('Usage: node src/main.ts --restore <backup.tar.gz>');
     process.exit(2);
   }
-  const running = await fetch(`http://${host === '0.0.0.0' ? '127.0.0.1' : host}:${port}/api/health`, { signal: AbortSignal.timeout(2000) }).then(() => true, () => false);
+  const running = await netFetch(`http://${host === '0.0.0.0' ? '127.0.0.1' : host}:${port}/api/health`, { signal: AbortSignal.timeout(2000) }).then(() => true, () => false);
   if (running) {
     console.error(`Sara is running on port ${port}. Stop her first (${process.platform === 'linux' && existsSync('/usr/local/bin/sara') ? 'sudo systemctl stop sara' : adminHint('stop')}), then restore.`);
     process.exit(1);
@@ -243,6 +246,10 @@ if (process.argv.includes('--doctor')) {
   console.log(`\n${fails ? `${fails} problem(s)` : 'No problems'}${warns ? `, ${warns} thing(s) to look at` : ''}.`);
   process.exit(fails ? 1 : 0);
 }
+// Phase 67: "Nothing leaves this computer" is applied before anything can reach out (the saved
+// switch, or SARA_PRIVATE_LOCAL=1 / start). The guard itself is src/net-guard.ts.
+const privateLocal = new PrivateLocalStore(dataDir);
+const modelPuller = new ModelPuller();
 const sandbox = detectSandbox(sandboxPref, true, { dataDir });
 if (sandbox.mode === 'user') {
   // New files are private to the server (and the tools group inside workspaces); existing ones too.
@@ -444,6 +451,8 @@ function buildCompanion(id: string, dir: string): Companion {
     push.apns = new ApnsSender(store.db, vault);
   }
   app.push = push;
+  app.privateLocal = privateLocal;
+  app.modelPuller = modelPuller;
   // Phase 52: the cost and token meter (the owner's prices win over the shipped ones).
   if (modelCatalog) app.modelCatalog = modelCatalog;
   app.usage = new UsageStore(store.db);
@@ -630,6 +639,7 @@ server.listen(port, host, () => {
     console.warn(`Warning: Sara is listening on ${host}:${port} without HTTPS. Anyone on that network can read the sign-in token and cookies. Put an HTTPS reverse proxy in front (docs/INSTALL.md, section 2) and set SARA_SECURE_COOKIES=1, or listen on 127.0.0.1.`);
   }
   console.log(`Sara is listening on http://${host}:${port} (data: ${dataDir})${isDemo ? ' [DEMO]' : ''}`);
+  if (privateLocal.get().on) console.log(`Private local mode is on: nothing leaves this computer (only 127.0.0.1 / ::1 / localhost)${privateLocal.get().locked ? ' [SARA_PRIVATE_LOCAL=1]' : ''}.`);
   for (const c of companions.all()) c.start();
   codemaps.start();
   modelCatalog?.start(guard);

@@ -3,6 +3,7 @@
 // CI, just a GitHub API call), puts each new one on the planner and tells the owner. Any open
 // issue can start a coding workflow: she clones the repository into its own workspace and her
 // team works it through to a reviewed pull request.
+import { netFetch } from './net-guard.ts';
 import { guard } from './log.ts';
 import type { AppContext } from './chat.ts';
 import { git, GITHUB_VAULT } from './tools/coding.ts';
@@ -49,7 +50,7 @@ export function cleanWatch(v: Record<string, unknown>, cur: GitHubWatch): GitHub
 async function gh<T>(app: AppContext, path: string, signal?: AbortSignal): Promise<T> {
   const t = app.vault.get(GITHUB_VAULT);
   if (!t) throw new ToolError('GitHub is not connected (Settings → Abilities → GitHub).');
-  const res = await fetch(`https://api.github.com${path}`, { headers: { authorization: `Bearer ${t}`, accept: 'application/vnd.github+json', 'x-github-api-version': '2022-11-28', 'user-agent': 'Sara' }, signal: signal ?? AbortSignal.timeout(20_000) });
+  const res = await netFetch(`https://api.github.com${path}`, { headers: { authorization: `Bearer ${t}`, accept: 'application/vnd.github+json', 'x-github-api-version': '2022-11-28', 'user-agent': 'Sara' }, signal: signal ?? AbortSignal.timeout(20_000) });
   if (!res.ok) throw new ToolError(`GitHub said ${res.status} for ${path.split('?')[0]}`);
   return (await res.json()) as T;
 }

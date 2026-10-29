@@ -5,6 +5,7 @@
 // - elevenlabs: ElevenLabs text-to-speech, owner key.
 // - xai: xAI Grok voices (POST /v1/tts), owner xAI key; expressive, fast, custom cloned voices too.
 // Sara stays dependency-free: the local engine runs the CLI tools as child processes.
+import { netFetch } from './net-guard.ts';
 import { localVoiceMissing, localVoiceSupported } from './platform.ts';
 import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
@@ -264,7 +265,7 @@ export async function openaiTranscribe(cfg: VoiceSettings['openai'], key: string
   form.append('model', cfg.sttModel);
   // Phase 53: a language hint (ISO 639-1, e.g. "de") helps short clips; 'auto' lets the service guess.
   if (language && language !== 'auto') form.append('language', language.split('-')[0]);
-  const res = await fetch(`${cfg.baseUrl.replace(/\/+$/, '')}/audio/transcriptions`, { method: 'POST', headers: { authorization: `Bearer ${key}` }, body: form, signal: AbortSignal.timeout(60_000) });
+  const res = await netFetch(`${cfg.baseUrl.replace(/\/+$/, '')}/audio/transcriptions`, { method: 'POST', headers: { authorization: `Bearer ${key}` }, body: form, signal: AbortSignal.timeout(60_000) });
   if (!res.ok) throw new VoiceError(`Speech-to-text API error ${res.status}: ${(await res.text()).slice(0, 200)}`);
   const j = (await res.json()) as { text?: string };
   return String(j.text ?? '').trim();
@@ -272,7 +273,7 @@ export async function openaiTranscribe(cfg: VoiceSettings['openai'], key: string
 
 export async function openaiSpeak(cfg: VoiceSettings['openai'], key: string | undefined, text: string, speed: number, instructions?: string): Promise<Audio> {
   if (!key) throw new VoiceError('Add the speech API key in Settings → Voice.');
-  const res = await fetch(`${cfg.baseUrl.replace(/\/+$/, '')}/audio/speech`, {
+  const res = await netFetch(`${cfg.baseUrl.replace(/\/+$/, '')}/audio/speech`, {
     method: 'POST',
     headers: { authorization: `Bearer ${key}`, 'content-type': 'application/json' },
     // gpt-4o-mini-tts takes delivery instructions (Phase 37: tone and mood); older models don't.
@@ -286,7 +287,7 @@ export async function openaiSpeak(cfg: VoiceSettings['openai'], key: string | un
 export async function elevenlabsSpeak(cfg: VoiceSettings['elevenlabs'], key: string | undefined, text: string): Promise<Audio> {
   if (!key) throw new VoiceError('Add the ElevenLabs key in Settings → Voice.');
   if (!cfg.voiceId) throw new VoiceError('Choose an ElevenLabs voice id in Settings → Voice.');
-  const res = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(cfg.voiceId)}?output_format=mp3_44100_128`, {
+  const res = await netFetch(`https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(cfg.voiceId)}?output_format=mp3_44100_128`, {
     method: 'POST',
     headers: { 'xi-api-key': key, 'content-type': 'application/json' },
     body: JSON.stringify({ text, model_id: cfg.model }),
@@ -298,7 +299,7 @@ export async function elevenlabsSpeak(cfg: VoiceSettings['elevenlabs'], key: str
 
 const XAI = 'https://api.x.ai/v1';
 
-export async function xaiSpeak(cfg: VoiceSettings['xai'], key: string | undefined, text: string, speed: number, fetchImpl: typeof fetch = fetch): Promise<Audio> {
+export async function xaiSpeak(cfg: VoiceSettings['xai'], key: string | undefined, text: string, speed: number, fetchImpl: typeof fetch = netFetch): Promise<Audio> {
   if (!key) throw new VoiceError('Add your xAI key in Settings → Voice (or Abilities → Pictures).');
   const res = await fetchImpl(`${XAI}/tts`, {
     method: 'POST',
@@ -311,7 +312,7 @@ export async function xaiSpeak(cfg: VoiceSettings['xai'], key: string | undefine
 }
 
 /** Built-in and custom Grok voices on the owner's xAI account. */
-export async function xaiVoices(key: string, fetchImpl: typeof fetch = fetch): Promise<{ id: string; label: string }[]> {
+export async function xaiVoices(key: string, fetchImpl: typeof fetch = netFetch): Promise<{ id: string; label: string }[]> {
   const get = async (path: string) => {
     const res = await fetchImpl(`${XAI}${path}`, { headers: { authorization: `Bearer ${key}` }, signal: AbortSignal.timeout(20_000) });
     if (!res.ok) return [];

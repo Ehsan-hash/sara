@@ -4,13 +4,27 @@
 # (default /opt/sara-voice) and points Sara at them. Does not install system packages.
 #
 #   sudo ./deploy/install-voice.sh            # ~650 MB download, ~1.3 GB on disk
+#   sudo ./deploy/install-voice.sh --instance work   # another Sara on this server: the voice files
+#                                             # are shared, only that instance's settings change
 #
 # Engines: Parakeet 110M (English speech-to-text), Kokoro v0.19 (natural voices, ~0.7x real time
 # on an 8-core Xeon), Piper "hfc_female" (fast fallback voice, ~15x real time).
 set -euo pipefail
 
 VOICE_DIR="${SARA_VOICE_DIR:-/opt/sara-voice}"
-ENV_FILE=/etc/sara/sara.env
+# Several Saras on one server: --instance NAME (or SARA_INSTANCE) picks whose settings to update.
+INSTANCE="${SARA_INSTANCE:-sara}"
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --instance) INSTANCE="${2:-}"; shift 2 ;;
+    --instance=*) INSTANCE="${1#*=}"; shift ;;
+    *) printf 'Unknown option: %s\n' "$1" >&2; exit 2 ;;
+  esac
+done
+# shellcheck source=deploy/lib-instance.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib-instance.sh"
+si_valid_name "$INSTANCE" || { printf 'Not an instance name: %s\n' "$INSTANCE" >&2; exit 2; }
+ENV_FILE="/etc/$INSTANCE/$INSTANCE.env"
 R=https://github.com/k2-fsa/sherpa-onnx/releases/download
 SHERPA=sherpa-onnx-v1.13.8-linux-x64-shared
 
@@ -65,15 +79,15 @@ EOF
 chown -R root:root "$VOICE_DIR"
 chmod -R a+rX "$VOICE_DIR"
 
-# Smoke test as the sara user: speak a sentence, then transcribe it back.
-if id sara >/dev/null 2>&1; then
-  T="$(runuser -u sara -- mktemp -d /var/lib/sara/voice-check.XXXXXX 2>/dev/null || mktemp -d)"
-  chown sara:sara "$T" 2>/dev/null || true
+# Smoke test as that instance's user: speak a sentence, then transcribe it back.
+if id "$INSTANCE" >/dev/null 2>&1; then
+  T="$(runuser -u "$INSTANCE" -- mktemp -d "/var/lib/$INSTANCE/voice-check.XXXXXX" 2>/dev/null || mktemp -d)"
+  chown "$INSTANCE:$INSTANCE" "$T" 2>/dev/null || true
   export LD_LIBRARY_PATH="$VOICE_DIR/$SHERPA/lib"
   K="$VOICE_DIR/kokoro-en-v0_19"
-  runuser -u sara -- env LD_LIBRARY_PATH="$LD_LIBRARY_PATH" "$VOICE_DIR/$SHERPA/bin/sherpa-onnx-offline-tts" --kokoro-model="$K/model.onnx" --kokoro-voices="$K/voices.bin" --kokoro-tokens="$K/tokens.txt" --kokoro-data-dir="$K/espeak-ng-data" --sid=1 --num-threads=2 --output-filename="$T/check.wav" "Voice check for Sara." >/dev/null 2>&1 || die "Text-to-speech check failed."
+  runuser -u "$INSTANCE" -- env LD_LIBRARY_PATH="$LD_LIBRARY_PATH" "$VOICE_DIR/$SHERPA/bin/sherpa-onnx-offline-tts" --kokoro-model="$K/model.onnx" --kokoro-voices="$K/voices.bin" --kokoro-tokens="$K/tokens.txt" --kokoro-data-dir="$K/espeak-ng-data" --sid=1 --num-threads=2 --output-filename="$T/check.wav" "Voice check for Sara." >/dev/null 2>&1 || die "Text-to-speech check failed."
   P="$VOICE_DIR/sherpa-onnx-nemo-parakeet_tdt_ctc_110m-en-36000-int8"
-  OUT="$(runuser -u sara -- env LD_LIBRARY_PATH="$LD_LIBRARY_PATH" "$VOICE_DIR/$SHERPA/bin/sherpa-onnx-offline" --nemo-ctc-model="$P/model.int8.onnx" --tokens="$P/tokens.txt" --num-threads=2 "$T/check.wav" 2>/dev/null | grep -o '"text": "[^"]*"' || true)"
+  OUT="$(runuser -u "$INSTANCE" -- env LD_LIBRARY_PATH="$LD_LIBRARY_PATH" "$VOICE_DIR/$SHERPA/bin/sherpa-onnx-offline" --nemo-ctc-model="$P/model.int8.onnx" --tokens="$P/tokens.txt" --num-threads=2 "$T/check.wav" 2>/dev/null | grep -o '"text": "[^"]*"' || true)"
   rm -rf "$T"
   [[ -n "$OUT" ]] || die "Speech-to-text check failed."
   log "Voice check heard: $OUT"
@@ -87,5 +101,5 @@ if [[ -f "$ENV_FILE" ]]; then
     log "Added SARA_VOICE_DIR to $ENV_FILE"
   fi
 fi
-if systemctl is-active --quiet sara 2>/dev/null; then systemctl restart sara; log "Restarted Sara."; fi
+if systemctl is-active --quiet "$INSTANCE" 2>/dev/null; then systemctl restart "$INSTANCE"; log "Restarted $INSTANCE."; fi
 log "Done. Pick her voice in Settings → Voice."

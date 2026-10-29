@@ -3,6 +3,7 @@
 // notes said in other words ("the lake cabin" ↔ "our Pine Lake trip"). Vectors live next to the
 // notes in her own database, made in the background a few at a time. Anything failing (no job set,
 // the model unreachable, slow) quietly falls back to word search, which always runs.
+import { netFetch } from './net-guard.ts';
 import { createHash } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import type { AppContext } from './chat.ts';
@@ -46,7 +47,7 @@ function prefixed(model: string, kind: 'query' | 'doc', text: string): string {
 /** Calls an OpenAI-compatible /embeddings endpoint (Ollama, LM Studio, OpenAI, …). */
 export async function embedTexts(t: EmbedTarget, texts: string[], signal?: AbortSignal): Promise<Float32Array[]> {
   if (t.config.kind !== 'openai-compatible' || !t.config.baseUrl) throw new Error(`${t.config.label} can't make embeddings; pick an OpenAI-compatible provider such as Ollama.`);
-  const res = await fetch(`${t.config.baseUrl.replace(/\/+$/, '')}/embeddings`, {
+  const res = await netFetch(`${t.config.baseUrl.replace(/\/+$/, '')}/embeddings`, {
     method: 'POST',
     headers: { 'content-type': 'application/json', ...(t.key ? { authorization: `Bearer ${t.key}` } : {}) },
     body: JSON.stringify({ model: t.model, input: texts }),

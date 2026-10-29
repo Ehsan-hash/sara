@@ -126,6 +126,7 @@ var
   AccessPage: TInputOptionWizardPage;
   DomainPage: TInputQueryWizardPage;
   PortPage: TInputQueryWizardPage;
+  PrivacyPage: TInputOptionWizardPage;
   DonePage: TWizardPage;
   TsLabel: TNewStaticText;
   DoneIntro, DoneAddress, DoneTokenLabel, DoneKeep, DoneAsks: TNewStaticText;
@@ -469,6 +470,15 @@ begin
   if IsRemote then Result := '' else Result := '--server http://127.0.0.1:' + PortStr('');
 end;
 
+/// Phase 67: 'start' (private: nothing leaves this computer) or 'off'. Silent: /PRIVATE=1.
+function ChosenPrivate: String;
+begin
+  if WizardSilent then begin
+    if ExpandConstant('{param:PRIVATE|0}') = '1' then Result := 'start' else Result := 'off';
+  end else if PrivacyPage.SelectedValueIndex = 0 then Result := 'start'
+  else Result := 'off';
+end;
+
 function ChosenDomain: String;
 begin
   if WizardSilent then Result := ExpandConstant('{param:DOMAIN|}') else Result := Trim(DomainPage.Values[0]);
@@ -677,6 +687,15 @@ begin
   while (Free < 7900) and not PortFree(Free) do Free := Free + 1;
   PortPage.Values[0] := IntToStr(Free);
 
+  // Phase 67: may her AI use the internet? Private passes SARA_PRIVATE_LOCAL=start to sara.env:
+  // "Nothing leaves this computer" is on from the first start until the owner turns it off.
+  PrivacyPage := CreateInputOptionPage(PortPage.ID, 'Where may Sara''s AI run?',
+    'Choose whether Sara may use the internet.',
+    'You can change this later in Settings → Models → On this computer.', True, False);
+  PrivacyPage.Add('Private: everything on this computer (an AI model runs here, nothing goes to the internet)');
+  PrivacyPage.Add('Use cloud models too (for example OpenAI, Anthropic or Ollama Cloud, and web search)');
+  PrivacyPage.SelectedValueIndex := 1;
+
   DonePage := CreateCustomPage(wpInfoAfter, 'Sara is ready', 'Two things to keep, then open her.');
   DoneIntro := TNewStaticText.Create(DonePage);
   DoneIntro.Parent := DonePage.Surface;
@@ -743,6 +762,7 @@ begin
   if IsRemote and ((PageID = AccessPage.ID) or (PageID = DomainPage.ID) or (PageID = PortPage.ID) or (PageID = DonePage.ID)) then Result := True;
   if IsUpgrade and ((PageID = AccessPage.ID) or (PageID = DomainPage.ID) or (PageID = PortPage.ID)) then Result := True;
   if (PageID = DomainPage.ID) and (AccessPage.SelectedValueIndex <> 3) then Result := True;
+  if (PageID = PrivacyPage.ID) and (IsRemote or IsUpgrade) then Result := True;
 end;
 
 /// Start Setup again as administrator for the service, and close this one.
@@ -1045,7 +1065,7 @@ begin
   Args := '--disable-warning=ExperimentalWarning ' + Cli + ' setup --mode ' + ModeWord + ' --data ' + Q(DataDir) +
     ' --port ' + IntToStr(ChosenPort) + ' --access ' + ChosenAccess;
   if ChosenAccess = 'domain' then Args := Args + ' --domain ' + Q(ChosenDomain);
-  if IsUpgrade then Args := Args + ' --keep';
+  if IsUpgrade then Args := Args + ' --keep' else Args := Args + ' --private ' + ChosenPrivate;
   Run(Node, Args, App + '\server', O);
   P := Pos('ACCESS=', O);
   if P > 0 then O := Copy(O, 1, P - 1);

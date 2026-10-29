@@ -2,6 +2,7 @@
 // own Google OAuth client (made once in Google Cloud Console; Settings → Abilities walks through
 // it). Nothing goes through anyone else's servers. Tokens live in the encrypted vault and are
 // renewed automatically. Reading is allowed; drafting, sending and adding events ask first.
+import { netFetch } from './net-guard.ts';
 import { createHash, randomBytes } from 'node:crypto';
 import type { Vault } from './vault.ts';
 
@@ -46,7 +47,7 @@ export class GoogleAccount {
 
   constructor(vault: Vault, opts: { fetch?: Fetch; now?: () => number } = {}) {
     this.#vault = vault;
-    this.#fetch = opts.fetch ?? fetch;
+    this.#fetch = opts.fetch ?? netFetch;
     this.#now = opts.now ?? Date.now;
   }
 

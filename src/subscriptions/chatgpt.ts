@@ -10,6 +10,7 @@
 //   after approving, the owner's browser lands on a page that can't load; the owner pastes that
 //   address back into Sara (the code is single-use, bound to our PKCE verifier and state).
 // - Tokens live only in the encrypted vault; refresh is serialized (rotating refresh tokens).
+import { netFetch } from '../net-guard.ts';
 import { createHash, createPublicKey, type JsonWebKey as NodeJwk, randomBytes, randomUUID, verify } from 'node:crypto';
 import type { Vault } from '../vault.ts';
 
@@ -75,7 +76,7 @@ export class ChatGptAuth {
     this.#vault = vault;
     this.#issuer = opts.issuer ?? 'https://auth.openai.com';
     this.#now = opts.now ?? Date.now;
-    this.#fetch = opts.fetch ?? fetch;
+    this.#fetch = opts.fetch ?? netFetch;
   }
 
   #read(): Stored {

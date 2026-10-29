@@ -2,6 +2,66 @@
 
 Format: newest first. Versions follow `0.<phase>.<patch>` until 1.0.0.
 
+## 1.7.1 (2026-10-28)
+
+- **Fixed (phones, Safari):** the conversation list opened with ☰ had no way to close it: it covered
+  the ☰ button, had no close button, and tapping beside it did nothing. It now has a ✕, the chat
+  beside it is dimmed and a tap there closes it, and Escape closes it on a keyboard.
+- **Fixed:** after making a new look (the 30-some pictures), she said "New look ready" but kept
+  showing the old one. The finished look is now announced to every open window, which fetches the
+  new pictures instead of the copies it already had; and a single picture uploaded earlier no longer
+  keeps showing in place of a new look (the new look replaces it).
+
+## 1.7.0 (2026-10-28): private local mode
+
+- **Nothing leaves this computer** (Settings → Models → On this computer; a 🔒 badge in the header
+  while it's on): one switch, enforced in code at a single gate that every outgoing request goes
+  through. Only this computer (127.0.0.1, ::1, localhost) is reachable; cloud models, Ollama Cloud
+  models, web search and fetch, Telegram/Discord, Gmail/Calendar, push, off-server backups, cloud
+  voices, update checks and remote MCP servers pause, with a list of what is paused and why. Her
+  chats, memory, library, local voice and previews keep working. Turning it on needs a model on this
+  computer; turning it off asks first. `SARA_PRIVATE_LOCAL=1` keeps it on for good.
+- **A model on this computer:** Sara finds Ollama (or links to its download, and on Windows can
+  install it with winget after you confirm), reads your graphics card or memory, suggests a model
+  that fits and downloads it with a progress bar and Cancel, then uses it.
+- **Desktop apps:** the Windows installer and the Mac app's first start ask "Private: everything on
+  this computer" or "Use cloud models too".
+- Honest limits (docs/PRIVATE_LOCAL.md): on Windows her shell commands are only kept offline by
+  settings, not a sandbox; Tailscale, the operating system, Ollama itself and your browser are
+  outside Sara's switch.
+
+## 1.6.2 (2026-10-28)
+
+- **Security fix: Ollama Cloud models on a shared server.** An Ollama that is signed in to ollama.com
+  offers that account's cloud models to every program on the computer. A second Sara on the same
+  server found the server's Ollama during setup and could use (and pull) the first owner's Ollama
+  Cloud models, billed to that account. Now Ollama Cloud models through an Ollama are **off by
+  default for every Sara except the server's first one**: they are hidden from her model lists and
+  refused before any request is sent, with a message that says why. The owner can still turn them
+  on (Settings → Models → the Ollama provider → *Use Ollama Cloud models*), e.g. when it is her own
+  account. No key was ever copied between Saras: the sign-in belongs to the Ollama program itself.
+
+## 1.6.1 (2026-10-28)
+
+- **Several Saras on one server** (for families, teams, shared hosting and hosting providers):
+  `get-sara.sh --instance NAME` or `install.sh --instance NAME` installs another, fully separate Sara
+  with her own system user, `/opt/NAME`, `/var/lib/NAME`, `/etc/NAME/NAME.env`, service, updater and
+  admin command (`sudo NAME update`, `sudo NAME backup`, …), on the next free port (or `--port N`).
+  Updating one never pulls or restarts another; `sudo sara instances` lists them; `install.sh
+  --dry-run` shows what would be created. Single installs are unchanged. Re-running the installer on
+  a hand-built instance keeps its data, settings and port. Web address and Tailscale access are per
+  instance, and local voice / subscription programs can be turned on per instance
+  (`install-voice.sh --instance NAME`). Settings → Updates follows the instance. INSTALL.md →
+  "Several Saras on one server".
+- **Fixed:** the installer's "is this port free?" check failed on servers with IPv6 turned off.
+- **Better MCP tools** for Claude Code, Cursor and other apps: every tool now says what it does, when
+  to use it instead of its neighbours and exactly what it returns, and every input is described
+  with limits and examples. New planner tools: `complete_task`, `update_task`, `delete_task`,
+  `update_note` and `delete_note` (listed only when "Let other apps change things" is on; they
+  follow her approval settings, and deleting always waits for your OK). `recent_conversations` is
+  now `list_recent_conversations` (the old name still works). The bridge's `--describe` mode reports
+  Sara's real version. A test keeps every tool definition at this standard.
+
 ## 1.6.0 (2026-10-28): group chats
 
 - **Group chats** (👥 Group in the sidebar): two to four of your companions in one conversation, each

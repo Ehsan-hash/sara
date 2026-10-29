@@ -102,7 +102,7 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); ou
   border-bottom: 1px solid var(--border);
 }
 #chat-head h2 { margin: 0; font-size: 16px; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-#toggle-sidebar { display: none; }
+#toggle-sidebar, #close-sidebar, #sidebar-scrim { display: none; }
 .ai-badge {
   font-size: 12px;
   color: var(--muted);
@@ -342,7 +342,9 @@ textarea { resize: vertical; }
   #main { grid-template-columns: 1fr; }
   #sidebar { position: fixed; inset: 0 30% 0 0; z-index: 10; transform: translateX(-100%); transition: transform .2s; }
   #main.show-sidebar #sidebar { transform: none; }
-  #toggle-sidebar { display: inline-block; }
+  #toggle-sidebar, #main.show-sidebar #close-sidebar { display: inline-block; }
+  /* The strip beside the open list: a tap there closes it (a real button, so Safari sends the tap). */
+  #main.show-sidebar #sidebar-scrim { display: block; position: fixed; inset: 0 0 0 70%; z-index: 9; border: 0; border-radius: 0; padding: 0; margin: 0; background: rgb(0 0 0 / .35); cursor: pointer; }
   .msg { max-width: 92%; }
 }
 
@@ -1272,3 +1274,23 @@ button.file-btn { background: none; border: 0; padding: 0; color: inherit; font:
 .gc-members .pick-card:disabled { cursor: default; opacity: 0.85; }
 /* Her own mood line is about one companion: not shown above a group chat. */
 #main.in-group #attach, #main.in-group #call, #main.in-group #sara-status { display: none; }
+
+/* ---------- Phase 67: private local mode and a model on this computer ---------- */
+.pl-badge { font-size: 12px; padding: 2px 10px; border-radius: 999px; background: transparent; color: var(--accent-2); border: 1px solid var(--accent); white-space: nowrap; }
+.pl-badge:hover { background: var(--panel-2); }
+@media (max-width: 520px) {
+  .pl-badge span { display: none; }
+  .pl-badge { padding: 2px 7px; }
+}
+.pl-card, .lm-card { border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; margin: 8px 0; }
+body.private-local .pl-card { border-color: var(--accent); }
+.pl-leave { list-style: none; padding: 0; margin: 8px 0; display: grid; gap: 4px; }
+.pl-item { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px; color: var(--muted); }
+.pl-item.active { color: var(--text); }
+.pl-chip { margin-left: auto; font-size: 11px; padding: 1px 8px; border-radius: 999px; border: 1px solid var(--border); color: var(--muted); white-space: nowrap; }
+.pl-chip.paused { border-color: var(--accent); color: var(--accent-2); }
+.lm-progress { width: 100%; accent-color: var(--accent); }
+.lm-installed { list-style: none; padding: 0; margin: 4px 0; display: grid; gap: 4px; }
+.lm-installed li { display: flex; align-items: center; gap: 8px; }
+.lm-installed .lm-name { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.pl-switch { font-weight: 600; color: var(--accent-2); }

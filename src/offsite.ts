@@ -2,6 +2,7 @@
 // leaves the server is encrypted with the owner's passphrase (scrypt + AES-256-GCM). Destinations:
 // a folder (e.g. a mounted drive) or S3-compatible storage (AWS S3, Backblaze B2, Cloudflare R2,
 // Wasabi, MinIO) using a small zero-dependency AWS Signature V4 client. Keeps the newest N copies.
+import { netFetch } from './net-guard.ts';
 import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes, scryptSync } from 'node:crypto';
 import { existsSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
@@ -103,7 +104,7 @@ type FetchLike = (url: string, init?: RequestInit) => Promise<Response>;
 export class S3Client {
   readonly #cfg: { endpoint: string; bucket: string; region: string; accessKeyId: string; secret: string };
   readonly #fetch: FetchLike;
-  constructor(cfg: { endpoint: string; bucket: string; region: string; accessKeyId: string; secret: string }, fetchImpl: FetchLike = fetch) {
+  constructor(cfg: { endpoint: string; bucket: string; region: string; accessKeyId: string; secret: string }, fetchImpl: FetchLike = netFetch) {
     this.#cfg = cfg;
     this.#fetch = fetchImpl;
   }
@@ -152,7 +153,7 @@ export class S3Client {
 }
 
 /** Encrypts one local backup and copies it off the server; prunes old copies. Returns the stored name. */
-export async function uploadOffsite(file: string, cfg: OffsiteSettings, secrets: { passphrase?: string; s3Secret?: string }, fetchImpl: FetchLike = fetch): Promise<string> {
+export async function uploadOffsite(file: string, cfg: OffsiteSettings, secrets: { passphrase?: string; s3Secret?: string }, fetchImpl: FetchLike = netFetch): Promise<string> {
   if (cfg.kind === 'off') throw new Error('Off-server copies are turned off.');
   if (!secrets.passphrase) throw new Error('Set a backup passphrase first.');
   const name = `${basename(file)}.enc`;
@@ -178,7 +179,7 @@ export async function uploadOffsite(file: string, cfg: OffsiteSettings, secrets:
 }
 
 /** Phase 30: the newest off-server copy (still encrypted) and its name. */
-export async function downloadNewestOffsite(cfg: OffsiteSettings, secrets: { s3Secret?: string }, fetchImpl: FetchLike = fetch): Promise<{ name: string; data: Buffer }> {
+export async function downloadNewestOffsite(cfg: OffsiteSettings, secrets: { s3Secret?: string }, fetchImpl: FetchLike = netFetch): Promise<{ name: string; data: Buffer }> {
   const prefix = (cfg.prefix ?? 'sara/').replace(/^\/+/, '');
   if (cfg.kind === 'folder') {
     if (!cfg.path || !existsSync(cfg.path)) throw new Error(`Folder ${cfg.path ?? '(none)'} doesn't exist on the server.`);

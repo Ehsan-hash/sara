@@ -11,7 +11,9 @@ it any time, and you can use a different model for each job.
 | **In the cloud with an API key** (OpenAI, Anthropic, xAI, OpenRouter, Ollama Cloud) | You pay the provider per use | The strongest models, no GPU needed | Per token: see [COSTS.md](COSTS.md) |
 | **A subscription you already pay for** (ChatGPT plan, Claude Pro/Max, SuperGrok / X Premium+) | Sara signs in with your plan | Using what you already pay for | Counts toward your plan's limits |
 
-The setup guide finds Ollama on the same computer by itself. Everything else is in **Settings →
+The setup guide finds Ollama on the same computer by itself. **Settings → Models → On this
+computer** suggests a model from the table below for that computer's graphics card (or Mac memory)
+and downloads it, and holds the switch **Nothing leaves this computer** ([PRIVATE_LOCAL.md](PRIVATE_LOCAL.md)). Everything else is in **Settings →
 Models**: *Default model*, *Which model does what*, *Subscriptions* and *Model providers*.
 
 ## Running models yourself: how much GPU memory?

@@ -9,6 +9,7 @@
 // (no tools, nothing private, the full safety layer), its lines are tagged "(bot)", and a loop guard
 // per channel keeps two bots from talking forever: after botTurnLimit bot-triggered replies she
 // waits for a person to write there, and botHourlyCap caps bot-triggered replies per hour.
+import { netFetch, openWebSocket, privateLocalOn } from '../net-guard.ts';
 import { randomInt } from 'node:crypto';
 import { appLanguage, en, tr } from '../i18n.ts';
 import type { AppContext, ChatEvent } from '../chat.ts';
@@ -98,7 +99,7 @@ export interface GatewaySocket {
 export type GatewayConnect = (url: string) => GatewaySocket;
 
 const nodeConnect: GatewayConnect = (url) => {
-  const ws = new WebSocket(url);
+  const ws = openWebSocket(url);
   const sock: GatewaySocket = {
     send: (d) => ws.send(d),
     close: () => ws.close(),
@@ -182,7 +183,7 @@ export class DiscordBridge {
   }
 
   async #rest<T>(method: string, path: string, body?: unknown): Promise<T> {
-    const res = await fetch(`${this.#api}${path}`, {
+    const res = await netFetch(`${this.#api}${path}`, {
       method,
       headers: { authorization: `Bot ${this.#token}`, 'content-type': 'application/json' },
       ...(body ? { body: JSON.stringify(body) } : {}),
@@ -197,6 +198,11 @@ export class DiscordBridge {
   async restart(): Promise<void> {
     this.stop();
     if (!discordSettings(this.#app).enabled || !this.#token) return;
+    // Phase 67: Discord is on the internet: paused while nothing may leave this computer.
+    if (privateLocalOn()) {
+      this.#error = 'Paused in private local mode.';
+      return;
+    }
     try {
       this.#me = await this.#rest<DUser>('GET', '/users/@me');
       this.#error = undefined;
@@ -344,7 +350,7 @@ export class DiscordBridge {
       for (const f of files.slice(0, 5)) {
         try {
           if ((f.size ?? 0) > MAX_DOC_BYTES) throw new Error(`it's over ${MAX_DOC_BYTES / 1024 / 1024} MB`);
-          const res = await fetch(f.url, { signal: AbortSignal.timeout(120_000) });
+          const res = await netFetch(f.url, { signal: AbortSignal.timeout(120_000) });
           if (!res.ok) throw new Error(`download failed (${res.status})`);
           const r = await takeChatDocument(this.#app, conv, { name: f.filename ?? decodeURIComponent(new URL(f.url).pathname.split('/').pop() ?? 'document'), bytes: Buffer.from(await res.arrayBuffer()) }, text);
           if (r.problem) await this.send(msg.channel_id, r.problem);
@@ -440,7 +446,7 @@ export class DiscordBridge {
       const form = new FormData();
       form.append('payload_json', JSON.stringify({ content: text.slice(0, MAX_LEN), allowed_mentions: { parse: [] }, attachments: [{ id: 0, filename: 'voice.mp3' }] }));
       form.append('files[0]', new Blob([new Uint8Array(audio.data)], { type: audio.type }), 'voice.mp3');
-      const res = await fetch(`${this.#api}/channels/${channelId}/messages`, { method: 'POST', headers: { authorization: `Bot ${this.#token}` }, body: form, signal: AbortSignal.timeout(60_000) });
+      const res = await netFetch(`${this.#api}/channels/${channelId}/messages`, { method: 'POST', headers: { authorization: `Bot ${this.#token}` }, body: form, signal: AbortSignal.timeout(60_000) });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       return true;
     } catch (err) {

@@ -4,6 +4,7 @@
 // in only when every picture succeeded, so a failure never leaves a half-made look.
 // Files live in <data>/look/ with the same relative paths as the built-in art in web/, and the
 // server serves them in place of the built-in art for the signed-in owner.
+import { netFetch } from './net-guard.ts';
 import { createHash, randomBytes } from 'node:crypto';
 import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -216,7 +217,7 @@ export class LookBuilder {
   async #call(path: '/images/generations' | '/images/edits', body: Record<string, unknown>): Promise<Buffer> {
     const key = await this.#d.key();
     if (!key) throw new Error('Sign in to Grok (Settings → Models → Subscriptions) or add an xAI key (Abilities → Pictures) to make a look.');
-    const res = await (this.#d.fetch ?? fetch)(`https://api.x.ai/v1${path}`, {
+    const res = await (this.#d.fetch ?? netFetch)(`https://api.x.ai/v1${path}`, {
       method: 'POST',
       headers: { authorization: `Bearer ${key}`, 'content-type': 'application/json' },
       body: JSON.stringify({ model: this.#d.model?.() || 'grok-imagine-image-quality', response_format: 'b64_json', aspect_ratio: '1:1', ...body }),

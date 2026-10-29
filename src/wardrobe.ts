@@ -3,6 +3,7 @@
 // changes into the look for the scenario that applies right now (time, day, weather), or the one
 // you or she picked ("we're going to the beach"). She knows what she's wearing.
 // Adults-only looks are worn and listed only while Adult mode is on.
+import { netFetch } from './net-guard.ts';
 import type { AppContext } from './chat.ts';
 import { PLACES, type LookMeta, type SavedLook } from './look.ts';
 import { adultModeOn } from './settings.ts';
@@ -136,7 +137,7 @@ export class WardrobeWorker {
   /** Last automatic change, for the Closet page. */
   last: { at: string; scenario: string; look: string } | undefined;
 
-  constructor(app: AppContext, fetchImpl: FetchLike = fetch) {
+  constructor(app: AppContext, fetchImpl: FetchLike = netFetch) {
     this.#app = app;
     this.#fetch = fetchImpl;
   }

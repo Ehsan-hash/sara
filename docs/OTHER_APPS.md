@@ -141,28 +141,45 @@ Read-only by default:
 
 | Tool | What it returns |
 |---|---|
-| `search_memory` | Her memory notes about you matching the words (facts, summaries, decisions, promises, dates) |
+| `search_memory` | Her memory notes about you matching the words (facts, summaries, decisions, promises, dates), one per line with kind and date |
 | `list_facts` | The facts she learned about you, newest first |
-| `recent_conversations` | Titles and short summaries of your recent conversations |
-| `get_today` | Today's to-dos, reminders, calendar (if connected) and dates coming up |
-| `list_tasks` | To-dos (open, done or all; one project) |
-| `search_library` | Passages from documents in her library, with where they are |
-| `list_notes`, `read_note` | Your planner notes |
+| `list_recent_conversations` | Titles, last time and short summaries of your recent conversations (the old name `recent_conversations` still works) |
+| `get_today` | Today in one view: to-dos due or overdue (with `#id`), reminders, calendar (if connected) and dates coming up |
+| `list_tasks` | The whole to-do list (open, done or all; one project), up to 100, with `#id` |
+| `search_library` | Up to 6 passages from documents in her library, with where they are |
+| `list_notes`, `read_note` | Your planner notes (titles with `#id`), and one note in full |
 | `ask_sara` | Sends her a message and returns her reply, in a conversation kept for that app (*"<key name> (MCP)"*) |
 
 Resources: `sara://today`, `sara://tasks`, `sara://facts`, `sara://conversations`.
+
+Every tool's description says when to use it instead of its neighbours, what it returns and its
+limits, and every input has a description, limits and examples (`test/mcp-quality.test.ts` keeps it
+that way for MCP directories).
 
 **Never shared:** secrets or the vault, chats with other people (Telegram/Discord partners),
 private conversations, adult-channel conversations, raw lines of imported ChatGPT/Claude
 history, documents shared in one chat only, and, while Adult mode is off, anything explicit
 (left out with a note).
 
-**Write tools** (`add_task`, `add_note`, `remember_fact`) appear only when you turn on **Let
-other apps change things**. They follow her approval rules: `add_task` and `add_note` use the
-setting of her `todo` and `note` tools (Settings → Abilities → Tools and approvals: allowed, ask
-first, or off); `remember_fact` always asks. When something asks first, the tool answers
-*"Waiting for approval in Sara"* and an approval card waits in the conversation *"<key name>:
-changes (MCP)"*; nothing changes until you press Allow.
+**Write tools** appear only when you turn on **Let other apps change things**:
+
+| Tool | What it does | Follows the setting of |
+|---|---|---|
+| `add_task` | Adds a to-do (title, due, project, priority) | `todo` |
+| `complete_task` | Ticks a to-do off by `#id` | `todo` |
+| `update_task` | Changes a to-do's title, due time (`none` clears it), project, priority, details or status | `todo` |
+| `delete_task` | Deletes a to-do for good | `todo` |
+| `add_note` | Saves a note (title, text, project) | `note` |
+| `update_note` | Changes a note's title, whole text or project | `note` |
+| `delete_note` | Deletes a note for good | `note` |
+| `remember_fact` | Adds a fact about you to her memory | always asks |
+
+They follow her approval rules: the to-do and note tools use the setting of her `todo` and `note`
+tools (Settings → Abilities → Tools and approvals: allowed, ask first, or off); `remember_fact`
+always asks. When something asks first, the tool answers *"Waiting for approval in Sara"* and an
+approval card waits in the conversation *"<key name>: changes (MCP)"*; nothing changes until you
+press Allow. An unknown `#id` is refused straight away, without asking. Changes show up in the
+planner at once (the app updates live).
 
 ### Claude Code
 
@@ -210,10 +227,11 @@ answers back. The key comes from `SARA_API_KEY` (or `--key-file`), never the com
 
 The same bridge works for any MCP app that only starts programs (`node sara-mcp.ts --server …`).
 
-`node sara-mcp.ts --describe` starts the bridge with no server: it answers `initialize` and
-`tools/list` with her tools and nothing else (every tool call says how to connect). It exists for MCP
-directories such as [Glama](https://glama.ai/mcp/servers) that check a server by starting it with no
-setup (`packaging/glama/Dockerfile`); it never contacts anything.
+`node sara-mcp.ts --describe` starts the bridge with no server: it answers `initialize` (with
+Sara's version) and `tools/list` with all her tools, write tools included, and nothing else
+(every tool call says how to connect). It exists for MCP directories such as
+[Glama](https://glama.ai/mcp/servers) that check a server by starting it with no setup
+(`packaging/glama/Dockerfile`); it never contacts anything.
 
 ## Character cards
 

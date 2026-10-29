@@ -305,7 +305,7 @@ test('MCP 2026-07-28: per-request version, server/discover, resultType, header m
 test('MCP tools: read-only by default; results; write tools hidden until allowed', async () => {
   const list = await rpc('tools/list', {}, { 'mcp-protocol-version': '2025-06-18' });
   const names = list.json.result!.tools!.map((t) => t.name);
-  for (const n of ['search_memory', 'list_facts', 'recent_conversations', 'get_today', 'list_tasks', 'list_notes', 'read_note', 'ask_sara']) assert.ok(names.includes(n), n);
+  for (const n of ['search_memory', 'list_facts', 'list_recent_conversations', 'get_today', 'list_tasks', 'list_notes', 'read_note', 'ask_sara']) assert.ok(names.includes(n), n);
   for (const n of ['add_task', 'add_note', 'remember_fact']) assert.ok(!names.includes(n), `${n} is off by default`);
   assert.ok(list.json.result!.tools!.find((t) => t.name === 'search_memory')!.annotations.readOnlyHint);
 

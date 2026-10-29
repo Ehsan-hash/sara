@@ -101,6 +101,7 @@
         <button id="companion-switch" type="button" class="ghost small" hidden aria-haspopup="menu" aria-expanded="false" title="Talk to another companion">⇄</button>
         <div id="companion-menu" class="companion-menu" role="menu" hidden></div>
         <button id="new-chat" title="New conversation (not in a project)">+ New</button>
+        <button id="close-sidebar" type="button" class="ghost small" aria-label="Close the list">✕</button>
       </div>
       <div class="side-tools">
         <button id="new-project" type="button" class="ghost small" title="Group conversations, to-dos and notes for one project">+ Project</button>
@@ -123,6 +124,7 @@
         <button id="open-help" type="button" title="Help: tours, the guide, and asking her"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.3a2.6 2.6 0 0 1 5 .9c0 1.7-2.5 2.3-2.5 3.8M12 17.2v.1"/></svg><span>Help</span></button>
       </nav>
     </aside>
+    <button id="sidebar-scrim" type="button" tabindex="-1" aria-label="Close the list"></button>
     <main id="chat">
       <header id="chat-head">
         <button id="toggle-sidebar" class="ghost" aria-label="Conversations">☰</button>
@@ -132,6 +134,7 @@
         </div>
         <button id="conv-settings-btn" class="ghost small" type="button" title="Model, workspace and mode for this conversation"><span id="conv-summary">…</span></button>
         <button id="speak-toggle" class="ghost small icon" type="button" title="Read her replies aloud" aria-pressed="false" hidden>🔈</button>
+        <button id="pl-badge" class="pl-badge" type="button" title="Nothing leaves this computer: private local mode is on" hidden>🔒 <span>Only this computer</span></button>
         <span class="ai-badge" title="Sara is an AI companion">AI companion</span>
       </header>
       <dialog id="ring" class="ring" aria-labelledby="ring-title" data-required="1">
@@ -1277,6 +1280,36 @@
         <p id="ph-status" class="muted small"></p>
       </div>
       <div id="ph-taken" class="ph-taken"></div>
+        </section>
+        <section class="settings-page" data-page="models-local" data-group="Models" data-title="On this computer" hidden>
+      <p class="muted small">Run her model on this computer, and if you like, keep everything here: nothing goes to the internet.</p>
+      <div class="pl-card" id="pl-card" data-noauto data-nodirty>
+        <label class="row pl-switch"><input id="pl-on" type="checkbox"> <span>Nothing leaves this computer</span> <button type="button" class="tip" data-tip="On: Sara only connects to this computer (127.0.0.1, ::1, localhost). Cloud models, web search, bridges, phone notifications, updates and reports pause until you turn it off. Your model must run here.">?</button></label>
+        <p id="pl-status" class="muted small" role="status"></p>
+        <p id="pl-need" class="small" hidden>First get a model on this computer (below). Then turn this on.</p>
+        <details id="pl-leave-box" class="pl-leave-box">
+          <summary>What would leave this computer (paused while it's on)</summary>
+          <ul id="pl-leave" class="pl-leave"></ul>
+          <p class="muted small">Phones and computers on your home network or Tailscale can still open Sara here, if you set it up that way: they connect in, Sara doesn't reach out. On Windows her commands can't be fully cut off from the internet; see the guide.</p>
+        </details>
+      </div>
+      <h3>A model on this computer <button type="button" class="tip" data-tip="Sara uses Ollama, a free program that runs AI models on your own computer. She finds it by herself, suggests a model that fits your graphics card or memory, and downloads it when you press the button.">?</button></h3>
+      <div id="lm-ollama" class="lm-card" aria-live="polite"></div>
+      <div id="lm-pick" class="lm-card" data-noauto data-nodirty hidden>
+        <p id="lm-hw" class="small"></p>
+        <label>Model to download <button type="button" class="tip" data-tip="The suggestion fits your graphics card's memory (or, on a Mac, part of its memory). Bigger models are smarter but need more memory and download longer. You can change her model any time.">?</button>
+          <select id="lm-model"></select>
+        </label>
+        <p id="lm-note" class="muted small"></p>
+        <p class="actions-left"><button id="lm-download" type="button">Download this model</button> <button id="lm-cancel" type="button" class="ghost" hidden>Cancel</button></p>
+        <p id="lm-offline" class="muted small" hidden></p>
+        <progress id="lm-progress" class="lm-progress" max="100" hidden></progress>
+        <p id="lm-pull-status" class="muted small" role="status"></p>
+      </div>
+      <div id="lm-installed-box" class="lm-card" hidden>
+        <p class="small"><strong>Models on this computer</strong></p>
+        <ul id="lm-installed" class="lm-installed"></ul>
+      </div>
         </section>
         <section class="settings-page" data-page="models-default" data-group="Models" data-title="Default model" hidden>
       <label>Provider <select id="default-provider"></select></label>

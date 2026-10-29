@@ -52,6 +52,23 @@ HTTP (the Windows installer, the Windows app and the Mac app use the same rule).
   `~/Library/Application Support/Sara` until `sara uninstall --delete-data`, and *Set up Sara on this
   Mac…* brings her back as she was).
 
+## Private: everything on this computer (Phase 67)
+
+In *Run Sara on this computer* mode both installers ask one more thing: **Private: everything on
+this computer** or **Use cloud models too** (Windows: the page *Where may Sara's AI run?*, after the
+port; Mac: the *Where her AI runs* tick box in the setup sheet; not asked on updates or in *Connect to
+a Sara somewhere else*). Private writes `SARA_PRIVATE_LOCAL=start` to her settings file (`sara.env`
+on Windows, `service/server.env` on a Mac): *Nothing leaves this computer* is then on from her first
+start until the owner turns it off. Silent Windows install: `/PRIVATE=1`. The installer passes it on
+as `sara setup … --private start|off`.
+
+The apps themselves need nothing more: Settings → Models → **On this computer** (part of the web
+app) finds Ollama, suggests a model for the computer's graphics card or memory and downloads it, and
+holds the switch. A **🔒 Only this computer** badge shows in the top bar while it's on. What the
+switch guarantees and what it can't (her commands on Windows, the web view's own updates, the system
+itself): [PRIVATE_LOCAL.md](PRIVATE_LOCAL.md). Servers can set `SARA_PRIVATE_LOCAL=1` (always on) or
+`SARA_PRIVATE_LOCAL=start` themselves.
+
 ## Sara on this Mac (Phase 46d)
 
 On first launch the Mac app asks *Run Sara on this Mac* (how you reach her, the port) or *Connect to
