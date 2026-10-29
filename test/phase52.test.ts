@@ -383,9 +383,9 @@ test('VS Code: the .vsix has a manifest and the extension; the panel CSP is stri
   assert.doesNotMatch(files.get('extension/media/panel.js')!.toString(), /fetch\(|XMLHttpRequest|WebSocket/, 'the page has no network of its own');
 });
 
-test('starters: four tested templates; copying fills the name and never overwrites; each template passes its own tests', async () => {
+test('starters: five tested templates; copying fills the name and never overwrites; each template passes its own tests', async () => {
   const names = listStarters().map((s) => s.name);
-  assert.deepEqual(names, ['cli-tool', 'landing-page', 'rest-api', 'telegram-bot']);
+  assert.deepEqual(names, ['cli-tool', 'landing-page', 'python-cli', 'rest-api', 'telegram-bot']);
   const ws = join(dir, 'starter-ws');
   mkdirSync(ws, { recursive: true });
   const { folder } = copyStarter(ws, 'rest-api', 'My_API');
@@ -396,12 +396,15 @@ test('starters: four tested templates; copying fills the name and never overwrit
   assert.throws(() => copyStarter(ws, 'nope', 'x'), /No starter called "nope"/);
   assert.throws(() => copyStarter(ws, 'cli-tool', '../escape'), /folder/);
   assert.equal(packageName('Weather Bot!'), 'weather-bot-');
-  for (const n of names) {
-    const { NODE_TEST_CONTEXT: _ctx, ...env } = process.env;
+  const { NODE_TEST_CONTEXT: _ctx, ...env } = process.env;
+  for (const n of ['cli-tool', 'landing-page', 'rest-api', 'telegram-bot']) {
     const r = spawnSync(process.execPath, ['--test'], { cwd: join(STARTERS_DIR, n), encoding: 'utf8', timeout: 120_000, env });
     assert.equal(r.status, 0, `${n}: ${r.stdout}\n${r.stderr}`);
     assert.match(r.stdout, /ℹ fail 0/);
   }
+  const python = spawnSync(process.platform === 'win32' ? 'python' : 'python3', ['-B', '-m', 'unittest'], { cwd: join(STARTERS_DIR, 'python-cli'), encoding: 'utf8', timeout: 120_000, env });
+  assert.equal(python.status, 0, `python-cli: ${python.stdout}\n${python.stderr}`);
+  assert.match(`${python.stdout}\n${python.stderr}`, /OK/);
 });
 
 test('starters: "New project from a starter" copies into the workspace and its tests pass as a job; the tool is in her coding prompt', async () => {
@@ -416,6 +419,14 @@ test('starters: "New project from a starter" copies into the workspace and its t
   assert.equal(job.status, 'ok', job.tail);
   assert.match(job.tail, /fail 0/);
   assert.equal(app.store.getConversation(r.conversationId)?.mode, 'coding');
+  const pythonRes = await api('/api/starters', 'POST', { name: 'python-cli', projectName: 'python-counts', workspace: 'main' });
+  assert.equal(pythonRes.status, 201, await pythonRes.clone().text());
+  const pythonStarter = (await pythonRes.json()) as { jobId: number; message: string };
+  assert.match(pythonStarter.message, /Python command-line tool/);
+  await until(() => app.jobs!.get(pythonStarter.jobId)?.status !== 'running', 120_000);
+  const pythonJob = app.jobs!.get(pythonStarter.jobId)!;
+  assert.equal(pythonJob.status, 'ok', pythonJob.tail);
+  assert.match(pythonJob.tail, /OK/);
   assert.equal((await api('/api/starters', 'POST', { name: 'telegram-bot', projectName: 'weather-bot', workspace: 'main' })).status, 400, 'never overwrites');
 });
 

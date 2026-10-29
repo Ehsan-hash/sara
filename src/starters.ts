@@ -25,16 +25,17 @@ const NAME_RE = /^[a-z0-9][a-z0-9-]{0,40}$/;
 /** Project folder names: letters, digits, dot, dash, underscore; no leading dot. */
 const PROJECT_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 
-export function listStarters(dir = STARTERS_DIR): Starter[] {
+export function listStarters(dir = STARTERS_DIR, platform = process.platform): Starter[] {
   if (!existsSync(dir)) return [];
   const out: Starter[] = [];
+  const nativePython = (command: string) => platform === 'win32' ? command.replace(/^python3(?=\s|$)/, 'python') : command;
   for (const name of readdirSync(dir).sort()) {
     if (!NAME_RE.test(name)) continue;
     const meta = join(dir, name, 'starter.json');
     if (!existsSync(meta)) continue;
     try {
       const m = JSON.parse(readFileSync(meta, 'utf8')) as Partial<Starter>;
-      out.push({ name, title: String(m.title ?? name), description: String(m.description ?? ''), language: String(m.language ?? ''), test: String(m.test ?? 'node --test'), run: String(m.run ?? '') });
+      out.push({ name, title: String(m.title ?? name), description: String(m.description ?? ''), language: String(m.language ?? ''), test: nativePython(String(m.test ?? 'node --test')), run: nativePython(String(m.run ?? '')) });
     } catch {
       /* a broken template is left out */
     }

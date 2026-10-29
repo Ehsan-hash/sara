@@ -2,6 +2,11 @@
 
 Format: newest first. Versions follow `0.<phase>.<patch>` until 1.0.0.
 
+## Unreleased
+
+- Added a dependency-free Python command-line starter with `argparse`, JSON and standard-input
+  support, pure functions in `lib.py`, and `unittest` coverage.
+
 ## 2.2.0 (2026-10-29): your other servers over SSH
 
 Phase 73. See [docs/SSH.md](docs/SSH.md).
