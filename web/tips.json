@@ -121,6 +121,14 @@
       "Live: instant back-and-forth, you can interrupt (Grok voice). Classic: slower turns, but she can use her tools during the call.",
       "voice"
     ],
+    "v-look-every": [
+      "On a video call with your camera on, how often she gets a still picture from it. Only when I press Look at this sends nothing by itself. Fewer pictures cost less with paid models.",
+      "voice"
+    ],
+    "v-look-cap": [
+      "The most camera pictures she gets in one call, so a long call can't run up a big bill. Pictures are never saved; when the limit is reached the camera stays a self-view.",
+      "voice"
+    ],
     "v-live": [
       "Which realtime voice answers live calls. Whichever is set up uses Grok voice when you have it, else OpenAI. Picking one keeps it: calls won't switch to the other.",
       "voice"

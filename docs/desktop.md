@@ -16,6 +16,7 @@ What they add over a browser tab:
 | A call brings the window to the front | ✓ | ✓ |
 | Start when you sign in | Login Items | Start with Windows |
 | Microphone for calls and voice messages | ✓ (asks once) | ✓ |
+| Camera on video calls, if you turn it on (Phase 69; [VIDEO_CALLS.md](VIDEO_CALLS.md)) | ✓ (asks once) | ✓ |
 | Settings → Connections → This computer | ✓ | ✓ |
 | Several Sara servers, each signed in, switched from a menu (Phase 68) | ✓ (macOS 14+) | ✓ |
 

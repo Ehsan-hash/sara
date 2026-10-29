@@ -14,6 +14,7 @@
   <key>LSApplicationCategoryType</key><string>public.app-category.social-networking</string>
   <key>NSHighResolutionCapable</key><true/>
   <key>NSMicrophoneUsageDescription</key><string>Sara uses the microphone for calls and voice messages with her.</string>
+  <key>NSCameraUsageDescription</key><string>Sara uses the camera only on video calls, when you turn it on, so your companion can see what you show her.</string>
   <key>NSAppTransportSecurity</key><dict><key>NSAllowsArbitraryLoads</key><true/></dict>
   <key>NSHumanReadableCopyright</key><string>Backstage Coding</string>
 </dict>

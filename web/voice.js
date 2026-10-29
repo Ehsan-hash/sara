@@ -214,6 +214,8 @@ export class Call {
     this.silenceMs = 0;
     this.inUtterance = false;
     this.busy = false;
+    /** Phase 69: muted: the microphone is ignored until unmuted. */
+    this.muted = false;
   }
 
   async start() {
@@ -233,6 +235,11 @@ export class Call {
 
   #frame(f, level) {
     if (!this.active || this.busy) return;
+    if (this.muted) {
+      this.speechMs = 0;
+      this.mic.trim(400);
+      return;
+    }
     const ms = (f.length / this.mic.ctx.sampleRate) * 1000;
     // Track background noise when quiet.
     if (!this.inUtterance && level < this.floor * 2) this.floor = this.floor * 0.995 + level * 0.005;

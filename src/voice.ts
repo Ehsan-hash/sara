@@ -40,6 +40,8 @@ export interface VoiceSettings {
   tone?: import('./expressive.ts').VoiceTone;
   /** Phase 37: her voice follows her mood (softer when you're down, slower late at night). */
   followMood?: boolean;
+  /** Phase 69: video calls: how often she looks at your camera (seconds, 0 = when you ask) and pictures per call. */
+  video?: Partial<import('./video.ts').VideoSettings>;
 }
 
 /**
@@ -64,6 +66,7 @@ export const DEFAULT_VOICE: VoiceSettings = {
   expressive: 'subtle',
   tone: 'natural',
   followMood: true,
+  video: { lookEvery: 10, perCall: 60 },
 };
 
 export const VOICE_VAULT = { openai: 'voice:openai', elevenlabs: 'voice:elevenlabs', xai: 'voice:xai' } as const;

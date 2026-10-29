@@ -2,6 +2,28 @@
 
 Format: newest first. Versions follow `0.<phase>.<patch>` until 1.0.0.
 
+## 1.9.0 (2026-10-29): video calls
+
+Phase 69. See [docs/VIDEO_CALLS.md](docs/VIDEO_CALLS.md).
+
+- **Video calls:** 🎥 next to 📞 (and "🎥 Video" when she rings you). Her moving portrait fills the
+  screen over a soft copy of her current look and place: lips follow her voice (nine mouth shapes),
+  she blinks, breathes and sways, and her face follows her mood and what she says. Timer, mute,
+  sound, captions, "voice only" and end; works at phone size and with reduced motion. The AI notice
+  and crisis help are on the call screen.
+- **Your camera (optional, off by default):** a self-view with a red "Camera on" label that says
+  whether she can see it or only you can. She looks every 10 seconds by default (Settings → Her →
+  Voice: every 5/10/20/30 seconds or only when you press **Look at this**; at most 20–120 pictures
+  per call). Pictures are never saved: on a classic call the server keeps only the newest one in
+  memory for 30 seconds; on an OpenAI live call it goes straight into the call. Grok live calls get
+  no pictures (self-view only), and models that can't see pictures say so instead of pretending.
+- **Refused where it shouldn't go:** the demo server, group and partner chats, a private conversation
+  with a cloud model, "Nothing leaves this computer" with a cloud model, and for an hour after a
+  safety block in that conversation.
+- **Apps:** the Windows and Mac apps allow the camera for your own Sara only; the phone apps run
+  video calls inside the app (voice calls keep the phone's call screen).
+- The server now allows the camera for its own page (Permissions-Policy `camera=(self)`).
+
 ## 1.8.0 (2026-10-29): several servers in one app
 
 Phase 68. Every Sara app keeps a list of your Saras (home and work, or several on one host) and

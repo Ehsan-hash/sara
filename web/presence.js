@@ -249,7 +249,11 @@ export class Presence {
       const an = ctx.createAnalyser();
       an.fftSize = 512;
       src.connect(an);
-      an.connect(ctx.destination);
+      // Phase 69: her volume after the analyser (sound off on a video call keeps her lips moving).
+      const vol = ctx.createGain();
+      an.connect(vol);
+      vol.connect(ctx.destination);
+      this.vol = vol;
       this.ctx = ctx;
       this.analyser = an;
       this.data = new Uint8Array(an.fftSize);

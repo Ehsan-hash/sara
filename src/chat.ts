@@ -71,6 +71,7 @@ import { workspaceDir } from './tools/workspace.ts';
 import type { Vault } from './vault.ts';
 import { personalize } from './identity.ts';
 import { ownerFocused } from './traits.ts';
+import { frameNote, noFrameNote } from './video.ts';
 import { metered } from './usage.ts';
 import { cutOtherSpeakers, GROUP_TOOLS, isGroupChannel, otherLine, ownerLine, stripLeadTag } from './group.ts';
 
@@ -658,6 +659,13 @@ export interface TurnOptions {
   images?: string[];
   /** Phase 44: documents shared with this message (kept in her library or read once here). */
   docs?: import('./library/intake.ts').SharedDoc[];
+  /**
+   * Phase 69: a still picture from the owner's camera on a classic video call. It goes to the model
+   * with this message only (to a model that can look at pictures) and is never saved.
+   */
+  liveFrame?: { image: ImageData; ask: boolean };
+  /** Phase 69: this message was said on a video call (classic): she is told, and whether she can see them. */
+  videoCall?: boolean;
   /** Phase 57: turns from other apps run without her tools unless the owner allowed them. */
   noTools?: boolean;
   /**
@@ -809,7 +817,7 @@ export async function* runTurn(app: AppContext, conversationId: string, userText
   // asks to the research model; the next plain message is back on the talking model.
   const jobRoutes = app.settings.get().routes ?? {};
   const visionSet = Boolean(jobRoutes.vision && app.settings.get().providers.some((p) => p.id === jobRoutes.vision!.providerId));
-  const photosNow = Array.isArray(userMsg?.meta?.images) && (userMsg.meta.images as unknown[]).length > 0;
+  const photosNow = (Array.isArray(userMsg?.meta?.images) && (userMsg.meta.images as unknown[]).length > 0) || Boolean(opts.liveFrame);
   let job: Job = 'turn';
   try {
     // Adult turns (this message or any of the last few) go to the owner's adult route, if set.
@@ -984,6 +992,20 @@ export async function* runTurn(app: AppContext, conversationId: string, userText
       // Older parts didn't fit: say so, with this conversation's own summary if there is one.
       const summary = app.memory?.list({ kind: 'summary', limit: 20 }).find((m) => m.conversationId === conv.id && (m.sourceMessageId ?? 0) < hist.firstKeptId);
       messages.push({ role: 'user', content: `[Note from the app: this conversation is long, so its earliest part is left out here.${summary ? ` Summary of it: ${summary.content}` : ''}]` });
+    }
+    // Phase 69: the camera picture of a classic video call rides on this message (never stored).
+    if (opts.liveFrame && sees(provider, model)) {
+      const i = hist.messages.findLastIndex((m) => m.role === 'user');
+      if (i >= 0) {
+        const m = hist.messages[i] as Extract<ChatMessage, { role: 'user' }>;
+        hist.messages[i] = { ...m, content: `${m.content}\n\n${frameNote(s.ownerName?.trim() || 'the owner', opts.liveFrame.ask)}`, images: [...(m.images ?? []), opts.liveFrame.image] };
+      }
+    } else if (opts.videoCall) {
+      const i = hist.messages.findLastIndex((m) => m.role === 'user');
+      if (i >= 0) {
+        const m = hist.messages[i] as Extract<ChatMessage, { role: 'user' }>;
+        hist.messages[i] = { ...m, content: `${m.content}\n\n${noFrameNote(s.ownerName?.trim() || 'the owner')}` };
+      }
     }
     messages.push(...hist.messages);
     if (correction) {

@@ -53,7 +53,10 @@ provider on hardware the owner controls.
   are one-time and have their own allowance for sign-in and for adding a key.
 - The session cookie is `HttpOnly; SameSite=Strict`, and `Secure` on https (automatically behind a
   trusted proxy). Responses send a strict CSP (no inline scripts or styles), `frame-ancestors
-  'none'`, `nosniff`, `Permissions-Policy`, `COOP`/`CORP same-origin`, and HSTS on https.
+  'none'`, `nosniff`, `Permissions-Policy` (microphone and, since Phase 69's video calls, the
+  camera for the app's own page only; nothing for previews), `COOP`/`CORP same-origin`, and HSTS on
+  https. Camera stills from a video call are size-checked JPEGs, rate-limited per call, kept in
+  memory only and refused in the demo (docs/VIDEO_CALLS.md).
 - Requests that change things must be JSON and must come from the same site. Sign-out and the demo
   start check this too, so a cross-site form can't sign the owner out or plant a session.
 

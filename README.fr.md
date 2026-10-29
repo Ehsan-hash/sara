@@ -14,7 +14,7 @@ modèles que vous choisissez.
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="License: MIT"></a>
   <img src="https://img.shields.io/badge/node-%E2%89%A5%2024-339933" alt="Node 24 or newer">
   <img src="https://img.shields.io/badge/runtime%20dependencies-0-brightgreen" alt="Zero runtime dependencies">
-  <img src="https://img.shields.io/badge/tests-719%20passing-brightgreen" alt="719 tests passing">
+  <img src="https://img.shields.io/badge/tests-732%20passing-brightgreen" alt="732 tests passing">
   <a href="docs/RESULTS.md"><img src="https://img.shields.io/badge/HumanEval%20pass%401-96.3%25-informational" alt="HumanEval pass@1 96.3%"></a>
   <a href="https://github.com/farena-ai/sara/releases/latest"><img src="https://img.shields.io/github/v/release/farena-ai/sara?label=release" alt="Latest release"></a>
   <a href="https://github.com/farena-ai/sara/pkgs/container/sara"><img src="https://img.shields.io/badge/docker-amd64%20%7C%20arm64-2496ED" alt="Docker image for amd64 and arm64"></a>
@@ -28,7 +28,7 @@ modèles que vous choisissez.
   <sub>Une vraie session, non montée, avec un modèle local (qwen3.8 27B sur Ollama, une RTX 5090) sur un serveur de test jetable : elle discute avec sa personnalité, écrit l'application, demande avant de lancer un serveur, ouvre l'aperçu et le teste dans son propre navigateur. La dernière image montre l'application avec des nombres saisis.</sub>
 </p>
 
-> **État :** 1.8, licence MIT, avec huit versions riches en nouveautés depuis la 1.0 (toutes
+> **État :** 1.9, licence MIT, avec neuf versions riches en nouveautés depuis la 1.0 (toutes
 > ci-dessous). L'[app Android](https://play.google.com/store/apps/details?id=com.backstagecoding.sara) est sur Google Play ;
 > l'app iPhone et la version Mac App Store arrivent dès qu'Apple les aura approuvées. Lisez
 > [docs/DISCLOSURES.md](docs/DISCLOSURES.md) avant d'utiliser ou de partager Sara.
@@ -37,6 +37,7 @@ modèles que vous choisissez.
 
 | Version | Ce que vous y gagnez |
 |---|---|
+| **1.9** · Appels vidéo | **Voyez-la pendant que vous parlez :** un appel vidéo affiche son portrait animé en grand, les lèvres synchronisées sur sa voix, le visage qui suit son humeur, dans sa tenue et son lieu du moment. Allumez votre caméra si vous voulez : elle regarde toutes les quelques secondes (ou quand vous appuyez sur *Regarde ça*) ; rien n'est enregistré. [Comment ça marche](docs/VIDEO_CALLS.md) |
 | **1.8** · Plusieurs serveurs dans une app | Gardez **toutes vos Sara dans une seule app** (maison et travail, ou plusieurs sur un serveur) et passez de l'une à l'autre depuis un menu sans vous déconnecter : apps Windows et Mac, Android et iPhone, VS Code, `sara-chat` et le pont MCP. Chacune garde sa propre connexion ; les fichiers, le micro et la caméra ne vont qu'à celle en cours. [Comment ça marche](docs/SERVERS.md) |
 | **1.7** · Mode local privé | Un interrupteur, **Rien ne quitte cet ordinateur**, appliqué dans le code en un seul point : seul cet ordinateur est joignable, les modèles cloud et les outils en ligne sont en pause, et ses conversations, sa mémoire et sa bibliothèque continuent de fonctionner. Les applications Windows et Mac trouvent Ollama (ou vous aident à l'installer), proposent un modèle adapté à votre carte graphique et le téléchargent avec une barre de progression. [Ce qu'il garantit](docs/PRIVATE_LOCAL.md) |
 | **1.6** · Discussions de groupe | Réunissez **deux à quatre de vos compagnes dans une même conversation** : chacune répond avec sa personnalité, sa voix et sa couleur ; choisissez qui répond (celle qui convient, toutes, à tour de rôle, ou seulement celle que vous mentionnez avec @) et combien elles bavardent entre elles. La sécurité, les avis d'IA et le réglage adulte le plus strict valent pour tout le salon. [Comment ça marche](docs/GROUP_CHATS.md) |
@@ -52,7 +53,6 @@ Toutes les versions : [CHANGELOG.md](CHANGELOG.md) · [versions](https://github.
 
 | Version | Fonctionnalité |
 |---|---|
-| 1.9 | **Appels vidéo** avec son avatar animé, synchronisé sur les lèvres |
 | 1.10 | **Nos moments :** un album photo partagé avec ses légendes |
 | 2.0 | **Mode foyer :** plusieurs personnes sur un même serveur, chacune avec ses propres compagnes et ses données privées |
 | 2.1 | **Sa voix chez vous :** Alexa (« Alexa, demande à Sara… »), l'assistant d'Android et Google Home, les raccourcis Siri, et des réactions selon qui est à la maison grâce à Home Assistant |
@@ -206,8 +206,8 @@ qu'aucun test ne vérifiait. Ce qu'elle apporte aujourd'hui, c'est la manière d
 lance les tests, demande avant les étapes risquées, montre ce qui a tourné), pas un meilleur score
 sur ces jeux. Détails, résultats par tâche et comment relancer : [docs/RESULTS.md](docs/RESULTS.md).
 
-En plus, `npm run check` : une vérification des types et 727 tests automatiques avec un faux modèle
-scripté (sans réseau, sans GPU) : 719 passent sous Windows, et les 8 autres sont des tests
+En plus, `npm run check` : une vérification des types et 740 tests automatiques avec un faux modèle
+scripté (sans réseau, sans GPU) : 732 passent sous Windows, et les 8 autres sont des tests
 d'isolation propres à Linux, exécutés sur un serveur Linux.
 
 ## Comparaison

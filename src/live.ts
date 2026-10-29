@@ -30,6 +30,7 @@ import { CONFLICT } from './bond.ts';
 import { stripTags } from './expressive.ts';
 import { personalize } from './identity.ts';
 import type { WsConnection } from './ws.ts';
+import { frameNote, videoCallNote } from './video.ts';
 
 export const LIVE_URL = 'wss://api.x.ai/v1/realtime';
 export const LIVE_MODEL = 'grok-voice-latest';
@@ -109,6 +110,10 @@ export interface LiveEngine {
   cancel(): unknown;
   /** After cancel: make her say exactly this fixed text instead. */
   refuse(text: string): unknown[];
+  /** Phase 69: whether pictures from the owner's camera can be given to her on this service. */
+  readonly seesImages: boolean;
+  /** Phase 69: the events that give her one still picture (JPEG) with a short note. */
+  image?(jpeg: Buffer, note: string): unknown[];
 }
 
 interface EngineContext {
@@ -122,6 +127,8 @@ interface EngineContext {
 export class GrokEngine implements LiveEngine {
   readonly id = 'grok' as const;
   readonly url = `${LIVE_URL}?model=${LIVE_MODEL}`;
+  /** xAI's realtime voice documents no picture input: on a video call the camera is a self-view. */
+  readonly seesImages = false;
   readonly voice: string;
   #ctx: EngineContext;
 
@@ -180,6 +187,8 @@ export class GrokEngine implements LiveEngine {
 export class OpenAiEngine implements LiveEngine {
   readonly id = 'openai' as const;
   readonly url: string;
+  /** OpenAI's Realtime API takes pictures in a call (a user message with an input_image part). */
+  readonly seesImages = true;
   readonly voice: string;
   #ctx: EngineContext;
   /** Interim transcript so far, per owner utterance (OpenAI sends pieces; the call wants the whole). */
@@ -297,6 +306,10 @@ export class OpenAiEngine implements LiveEngine {
     return out;
   }
 
+  image(jpeg: Buffer, note: string): unknown[] {
+    return [{ type: 'conversation.item.create', item: { type: 'message', role: 'user', content: [{ type: 'input_text', text: note }, { type: 'input_image', image_url: `data:image/jpeg;base64,${jpeg.toString('base64')}` }] } }];
+  }
+
   #quietId(): string {
     return `sara_quiet_${++this.#quiet}`;
   }
@@ -346,6 +359,8 @@ interface Opts {
   maxReason?: string;
   /** Called once when the call ends, with how long it lasted. */
   onEnd?: (ms: number) => void;
+  /** Phase 69: a video call (the owner sees her moving portrait; their camera may send pictures). */
+  video?: boolean;
 }
 
 export class LiveCall {
@@ -384,6 +399,9 @@ export class LiveCall {
   #onEnd?: (ms: number) => void;
   /** The conversation as it was when the call started (typed messages, earlier calls). */
   #before = '';
+  #video: boolean;
+  /** Phase 69: after a safety block on this call, no more camera pictures. */
+  #framesBlocked = false;
 
   constructor(app: AppContext, conversationId: string, client: WsConnection, key: string, opts: Opts = {}) {
     this.#app = app;
@@ -398,6 +416,7 @@ export class LiveCall {
     this.#maxMs = opts.maxMs ?? LIVE_MAX_MS;
     this.#maxReason = opts.maxReason ?? 'Calls last up to an hour; call again any time.';
     this.#onEnd = opts.onEnd;
+    this.#video = Boolean(opts.video);
     this.#before = this.#earlier();
   }
 
@@ -431,6 +450,34 @@ export class LiveCall {
   /** Which voice service this call uses. */
   get engine(): LiveEngineId {
     return this.#engine.id;
+  }
+
+  get conversationId(): string {
+    return this.#convId;
+  }
+
+  /** Phase 69: a video call. */
+  get video(): boolean {
+    return this.#video;
+  }
+
+  /** Phase 69: pictures from the owner's camera can reach her on this call. */
+  get seesFrames(): boolean {
+    return this.#video && this.#engine.seesImages && !this.#framesBlocked && !this.#ended;
+  }
+
+  /**
+   * Phase 69: one still picture from the owner's camera (already checked and rate-limited by the
+   * server). Asked ("Look at this"): she answers now, unless she is already talking. Returns false
+   * when it can't reach her (not a video call, a voice service without pictures, a safety block).
+   */
+  frame(jpeg: Buffer, ask: boolean): boolean {
+    if (!this.seesFrames || !this.#ready || !this.#engine.image) return false;
+    const owner = this.#app.settings.get().ownerName?.trim() || 'the owner';
+    for (const ev of this.#engine.image(jpeg, frameNote(owner, ask))) this.#send(ev);
+    this.#lastActivity = this.#now();
+    if (ask && !this.#replying) this.#send({ type: 'response.create' });
+    return true;
   }
 
   start(): void {
@@ -516,7 +563,8 @@ export class LiveCall {
     // Phase 37: expressive voice on a live call: she may laugh, sigh or whisper with her voice.
     const level = s.voice?.expressive ?? 'subtle';
     const expressive = level === 'off' ? '' : `\n${level === 'lively' ? 'Let your voice be expressive: laugh when something is funny, sigh, take a breath, drop to a whisper for something private, the way you would with someone close.' : 'Your voice can show feeling now and then: a small laugh at something funny, a sigh, a softer voice for something tender. Keep it natural and occasional.'} Never say the names of these sounds out loud and never write them as words.`;
-    const live = `${system}${this.#before ? `\n\n${this.#before}` : ''}\n\n${personalize(LIVE_NOTE, identityOf(app.persona)).replaceAll('{owner}', owner)}${expressive}`;
+    const video = this.#video ? `\n\n${videoCallNote(owner, this.#engine.seesImages && !this.#framesBlocked)}` : '';
+    const live = `${system}${this.#before ? `\n\n${this.#before}` : ''}\n\n${personalize(LIVE_NOTE, identityOf(app.persona)).replaceAll('{owner}', owner)}${expressive}${video}`;
     // Phase 26: until she has said why she called, that's the first thing on her mind.
     return this.#opening ? `${live}\n\n${this.#opening}` : live;
   }
@@ -547,6 +595,11 @@ export class LiveCall {
       return;
     }
     if (msg.type === 'hangup') this.end('You hung up.');
+    // Phase 69: a voice call switched to video: her instructions say so from her next turn.
+    else if (msg.type === 'video' && !this.#video) {
+      this.#video = true;
+      if (this.#ready) this.#send({ type: 'session.update', session: this.#engine.update(this.instructions()) });
+    }
   }
 
   #fromUpstream(data: unknown): void {
@@ -701,6 +754,8 @@ export class LiveCall {
     const { store } = this.#app;
     store.recordSafetyEvent('minor_sexual_block', this.#convId);
     this.#blocked = true;
+    // Phase 69: no more camera pictures on this call.
+    this.#framesBlocked = true;
     this.#reply = '';
     this.#tell({ type: 'interrupt' });
     this.#send(this.#engine.cancel());

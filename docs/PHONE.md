@@ -69,6 +69,9 @@ signs the phone out of that server only. [SERVERS.md](SERVERS.md)
   notifications* on your phone and allow location "all the time". The phone only tells your server
   "arrived at" or "left" a saved place, never your live location.
 - **Voice:** the microphone button and live calls work on the phone too (Settings → Her → Voice).
+- **Video calls** (🎥): her moving picture full screen while you talk, and your camera if you turn it
+  on (off by default; the phone asks for the camera the first time). A video call runs inside the
+  app, so keep it open; voice calls keep going with the screen off. [VIDEO_CALLS.md](VIDEO_CALLS.md)
 
 ## When something doesn't work
 

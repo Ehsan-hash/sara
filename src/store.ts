@@ -424,6 +424,12 @@ export class Store {
     this.db.prepare('INSERT INTO safety_events (kind, conversation_id, created_at) VALUES (?, ?, ?)').run(kind, conversationId ?? null, this.#now().toISOString());
   }
 
+  /** Phase 69: when this kind of safety event last happened in a conversation (the camera pauses after a block). */
+  lastSafetyEventAt(kind: string, conversationId: string): Date | undefined {
+    const r = this.db.prepare('SELECT created_at FROM safety_events WHERE kind = ? AND conversation_id = ? ORDER BY id DESC LIMIT 1').get(kind, conversationId) as Row | undefined;
+    return r ? new Date(String(r.created_at)) : undefined;
+  }
+
   safetyEventCounts(): Record<string, number> {
     const rows = this.db.prepare('SELECT kind, COUNT(*) AS n FROM safety_events GROUP BY kind').all() as Row[];
     return Object.fromEntries(rows.map((r) => [String(r.kind), Number(r.n)]));

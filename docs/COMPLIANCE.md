@@ -19,7 +19,9 @@ The owner wants Sara to present as a person in general. The design separates the
 which always tells the truth, from the **character**, who stays in role:
 
 - The UI shows that Sara is an AI (disclosure screen, permanent badge, periodic notices). These come
-  from the software, not from Sara's voice, so they don't break the conversation.
+  from the software, not from Sara's voice, so they don't break the conversation. Video calls
+  (Phase 69) keep an *AI companion* label on the call screen and show the periodic notices and
+  crisis help there too; her moving picture is labelled the same way.
 - Sara herself never volunteers that she is an AI and talks like a person with her own life.
 - If anyone **sincerely and directly** asks whether she is an AI or a human, she says she is an AI,
   then carries on in character. She never denies being an AI to a sincere question.

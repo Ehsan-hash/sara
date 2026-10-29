@@ -494,10 +494,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
     return nil
   }
 
-  // Microphone (calls, voice messages): allowed for the owner's server only.
+  // Microphone (calls, voice messages) and, Phase 69, the camera on video calls (only after the
+  // owner turns it on in the call; macOS asks once): allowed for the owner's server only.
   func webView(_ webView: WKWebView, requestMediaCapturePermissionFor origin: WKSecurityOrigin, initiatedByFrame frame: WKFrameInfo, type: WKMediaCaptureType, decisionHandler: @escaping (WKPermissionDecision) -> Void) {
     let o = "\(origin.protocol)://\(origin.host)" + (origin.port > 0 ? ":\(origin.port)" : "")
-    decisionHandler(server != nil && originOf(o) == server && type == .microphone ? .grant : .deny)
+    let media = type == .microphone || type == .camera || type == .cameraAndMicrophone
+    decisionHandler(server != nil && originOf(o) == server && media ? .grant : .deny)
   }
 
   // alert / confirm / prompt and file pickers, as a browser would.

@@ -1,6 +1,7 @@
 // Sara web client (no build step).
 import { Call, Mic, Speaker } from './voice.js';
 import { LiveCall } from './live.js';
+import { VideoCallView } from './video-call.js';
 import { parse as parseMd, toDom } from './markdown.js';
 import { Presence, setLookVersion } from './presence.js';
 import { openLightbox } from './lightbox.js';
@@ -1190,7 +1191,12 @@ async function send(text) {
   }
   const userBubble = bubble('user', text, undefined, undefined, photos, docs);
   append(userBubble);
-  const body = { content: text, ...(photos.length ? { images: photos } : {}), ...(docs.length ? { docs: docs.map((d) => d.id) } : {}) };
+  // Phase 69: on a classic video call with the camera on, her answer may look at the newest picture.
+  const onVideo = videoView.active && voice.call?.active && !voice.liveCall;
+  const frame = onVideo ? { videoCall: true, ...(videoView.sendsFrames ? { liveFrame: true, ...(videoView.lookAsk ? { liveFrameAsk: true } : {}) } : {}) } : {};
+  videoView.lookAsk = false;
+  const body = { content: text, ...(photos.length ? { images: photos } : {}), ...(docs.length ? { docs: docs.map((d) => d.id) } : {}), ...frame };
+  if (videoView.active && voice.call?.active) videoView.you(text, true);
   return runStream(`/conversations/${state.currentId}/messages`, body, userBubble);
 }
 
@@ -1376,6 +1382,8 @@ async function runStream(path, body, userBubble) {
         }
         if (ev.type === 'group_done') continue;
         if (ev.type === 'notice') {
+          // Phase 69: the AI notice and crisis help show on the video call screen too.
+          if (videoView.active) videoView.notice(ev.kind, ev.key ? serverText(ev, ev.text) : ev.text);
           const n = bubble('notice', ev.key ? serverText(ev, ev.text) : ev.text, ev.kind);
           if (ev.kind === 'disclosure' && userBubble) userBubble.before(n);
           else append(n);
@@ -1439,6 +1447,7 @@ async function runStream(path, body, userBubble) {
           }
           queueReply(reply, (reply._raw ?? '') + ev.text);
           if (voiceOn()) speaker.feed(ev.text);
+          if (videoView.active && voice.call?.active) videoView.her(ev.text);
           $('#messages').scrollTop = $('#messages').scrollHeight;
         } else if (ev.type === 'claim_check') {
           if (voiceOn() && ev.correcting) speaker.stop();
@@ -1465,6 +1474,7 @@ async function runStream(path, body, userBubble) {
             r.classList.remove('typing');
             setReply(r, ev.text);
           }
+          if (videoView.active && voice.call?.active) videoView.herDone(ev.text);
           reply = null;
           pendingTyped = null;
         } else if (ev.type === 'proof') {
@@ -1486,6 +1496,7 @@ async function runStream(path, body, userBubble) {
   } finally {
     dropBuilding();
     if (voiceOn()) speaker.flush();
+    if (videoView.active && voice.call?.active) videoView.herDone();
     // A typed reply finishes typing before the chat is redrawn (stopping shows it all at once).
     if (!controller.signal.aborted) await Promise.all([typedOut(reply), typedOut(pendingTyped)]);
     else finishTyping(pendingTyped);
@@ -1881,6 +1892,8 @@ async function saveTools() {
 /** Security review: live calls go through a cloud voice service, so private conversations show no call button. */
 function syncCallButton() {
   $('#call').hidden = !voice.callShown || (voice.live && Boolean(state.conv?.private));
+  // Phase 69: a video call is the same call with her picture full size (not in group chats: CSS).
+  $('#video-call-btn').hidden = $('#call').hidden;
 }
 function renderConvSummary() {
   const c = state.conv;
@@ -2027,6 +2040,7 @@ function setFace(st) {
   state.expression = x ?? 'default';
   state.customAvatar = custom ? avatar : null;
   for (const pr of [sdPresence, callPresence]) pr.setExpression(state.expression, state.customAvatar);
+  if (videoView.open) videoView.backdrop();
   $('#avatar-reset').hidden = !custom;
 }
 // M10: "Add documents", "Import a file"… are buttons that open their hidden file picker.
@@ -2585,19 +2599,70 @@ function timeOfDayLight() {
 timeOfDayLight();
 setInterval(timeOfDayLight, 5 * 60_000);
 const callPresence = new Presence($('#call-presence'));
+// Phase 69: video calls: the call's portrait full size, your camera optional (web/video-call.js).
+const videoView = new VideoCallView({
+  presence: callPresence,
+  home: $('#call-panel'),
+  onEnd: () => {
+    if (voice.liveCall || voice.call?.active) $('#call').click();
+    else videoView.hide();
+  },
+  onMute: (on) => {
+    if (voice.liveCall && 'muted' in voice.liveCall) voice.liveCall.muted = on;
+    else if (voice.call) voice.call.muted = on;
+    else return false;
+    return on;
+  },
+  onSound: (on) => {
+    if (voice.liveCall?.setSound) return voice.liveCall.setSound(on);
+    if (callPresence.vol) callPresence.vol.gain.value = on ? 1 : 0;
+    else speaker.audio.muted = !on;
+    return on;
+  },
+  onMinimize: () => {
+    videoView.hide({ keepCall: true });
+    $('#call-panel').hidden = false;
+  },
+  onLook: async () => {
+    // Classic calls: the picture goes with a short question from you (live calls answer by themselves).
+    videoView.lookAsk = !voice.liveCall;
+    const went = await videoView.sendFrame(true);
+    if (!went || voice.liveCall || !voice.call?.active) return void (videoView.lookAsk = false);
+    if (state.streaming) await fetch(`/api/conversations/${state.currentId}/stop`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' });
+    while (state.streaming) await new Promise((r) => setTimeout(r, 100));
+    speaker.stop();
+    await send(t('What do you think of this?'));
+  },
+  onCue: (x) => callPresence.setExpression(x ?? state.expression, state.customAvatar),
+});
+/** Opens the video call screen for the call going on (or about to). */
+function openVideo() {
+  if (!state.currentId) return;
+  $('#call-panel').hidden = true;
+  voice.liveCall?.setVideo?.(true);
+  void videoView.show({ conversationId: state.currentId, demo: document.body.classList.contains('demo'), name: currentIdentity().name || t('Sara'), status: $('#call-status').textContent });
+}
 new MutationObserver(() => ($('#sara-dialog')?.open ? sdPresence.start() : sdPresence.stop())).observe(document.body, { subtree: true, attributes: true, attributeFilter: ['open'] });
 speaker.onState = ((prev) => (on) => {
   prev?.(on);
   if (on) callPresence.ctx?.resume?.();
   if (voice.call?.active && !state.streaming) $('#call-status').textContent = on ? t('Speaking…') : t('Listening…');
+  if (voice.call?.active && videoView.active) videoView.status(on ? t('Speaking…') : t('Listening…'));
 })(speaker.onState);
-function showCallPanel(on) {
-  $('#call-panel').hidden = !on;
+function showCallPanel(on, video = false) {
+  $('#call-panel').hidden = !on || video;
+  // A call the phone app runs natively can't move its voice into the page: no video switch there.
+  $('#call-to-video').hidden = Boolean(voice.liveCall?.native);
   if (on) {
     callPresence.attach(speaker.audio);
     callPresence.start();
-  } else callPresence.stop();
+    if (video) openVideo();
+  } else {
+    callPresence.stop();
+    videoView.hide();
+  }
 }
+$('#call-to-video').addEventListener('click', () => openVideo());
 $('#call-end').addEventListener('click', () => $('#call').click());
 
 // Hands-free call.
@@ -2605,7 +2670,7 @@ const CALL_LABEL = { listening: 'Call: listening', hearing: 'Call: hearing you',
 const CALL_STATUS = { listening: 'Listening…', hearing: 'Hearing you…', thinking: 'Thinking…', off: '' };
 // Live call (Phase 11): Grok realtime voice through the server; transcripts go into the chat.
 const LIVE_STATUS = { connecting: 'Connecting…', listening: 'Listening…', hearing: 'Hearing you…', speaking: 'Speaking…' };
-async function startLiveCall(ringId) {
+async function startLiveCall(ringId, { video = false } = {}) {
   if (!state.currentId) {
     const conv = await api('/conversations', { method: 'POST', body: {} });
     state.conversations.unshift(conv);
@@ -2621,6 +2686,7 @@ async function startLiveCall(ringId) {
   const end = (reason) => {
     if (!voice.liveCall) return;
     voice.liveCall = null;
+    videoView.hide();
     callPresence.listen(null);
     $('#call').classList.remove('active');
     showCallPanel(false);
@@ -2629,6 +2695,14 @@ async function startLiveCall(ringId) {
     if (state.currentId === convId) void openConversation(convId);
   };
   const onEvent = (ev) => {
+      // Phase 69: the video call screen shows the same call: status, notices, captions.
+      if (videoView.active) {
+        if (ev.type === 'status') videoView.status(t(LIVE_STATUS[ev.state] ?? ''));
+        else if (ev.type === 'notice') videoView.notice(ev.kind, ev.text);
+        else if (ev.type === 'you') videoView.you(ev.text, ev.final);
+        else if (ev.type === 'caption') videoView.her(ev.text.replace(/\[(?:laugh|chuckle|sigh|breath|pause|long-pause|giggle|exhale|inhale|cough|gasp)\]|<\/?(?:whisper|soft|laugh-speak|emphasis|sing|slow|fast|loud|quiet)>/gi, ''));
+        else if (ev.type === 'said') videoView.herDone(ev.text + (ev.interrupted ? ' …' : ''));
+      }
       if (state.currentId !== convId) return;
       if (ev.type === 'status') {
         $('#call-status').textContent = LIVE_STATUS[ev.state] ?? '';
@@ -2661,9 +2735,10 @@ async function startLiveCall(ringId) {
       else if (ev.type === 'ended') end(ev.reason);
   };
   // Phase 18: in the phone apps the call runs natively, so it keeps going with the screen off.
-  if (window.SaraPhone?.startCall) {
+  // Phase 69: a video call runs in the page instead (the screen is on anyway), so her lips follow her voice.
+  if (window.SaraPhone?.startCall && !video) {
     window.saraCallEvent = (ev) => onEvent(ev);
-    voice.liveCall = { analyser: null, hangUp: () => window.SaraPhone.hangUp() };
+    voice.liveCall = { analyser: null, native: true, hangUp: () => window.SaraPhone.hangUp() };
     if (ringId && window.SaraPhone.answerCall) window.SaraPhone.answerCall(convId, ringId);
     else {
       if (ringId) void api(`/calls/${encodeURIComponent(ringId)}/cancel`, { method: 'POST', body: {} }).catch(() => {});
@@ -2674,14 +2749,14 @@ async function startLiveCall(ringId) {
     showCallPanel(true);
     return;
   }
-  const call = new LiveCall({ conversationId: convId, onEvent, ringId });
+  const call = new LiveCall({ conversationId: convId, onEvent, ringId, video });
   voice.liveCall = call;
   try {
     await call.start();
     callPresence.listen(call.analyser);
     $('#call').classList.add('active');
     $('#call-status').textContent = t('Connecting…');
-    showCallPanel(true);
+    showCallPanel(true, video);
   } catch (err) {
     call.hangUp();
     voice.liveCall = null;
@@ -2713,6 +2788,11 @@ $('#call').addEventListener('click', async () => {
     setActivity(null);
     return;
   }
+  await startClassicCall(false);
+});
+
+/** A classic (hands-free) call: her voice and hearing from Settings → Voice; Phase 69: optionally as a video call. */
+async function startClassicCall(video) {
   voice.call = new Call({
     mic: new Mic(),
     speaker,
@@ -2727,17 +2807,30 @@ $('#call').addEventListener('click', async () => {
     },
     onStatus: (s) => {
       if (!state.streaming && s !== 'off') setActivity(s === 'hearing' ? 'hearing' : 'listening', CALL_LABEL[s]);
-      if (!speaker.speaking || s === 'hearing') $('#call-status').textContent = CALL_STATUS[s] ?? '';
+      if (!speaker.speaking || s === 'hearing') {
+        $('#call-status').textContent = t(CALL_STATUS[s] ?? '');
+        if (videoView.active) videoView.status(t(CALL_STATUS[s] ?? ''));
+      }
     },
   });
   try {
     await voice.call.start();
     $('#call').classList.add('active');
-    showCallPanel(true);
+    showCallPanel(true, video);
   } catch (err) {
     voice.call = null;
     append(bubble('error', t('Microphone: {message}', { message: err.message })));
   }
+}
+
+// Phase 69: the video call button: a new call shown full size, or the call going on switched to video.
+$('#video-call-btn').addEventListener('click', async () => {
+  if (voice.liveCall || voice.call?.active) return voice.liveCall?.native ? undefined : openVideo();
+  if (voice.live) {
+    if (!(await demoCallUnlocked())) return;
+    return startLiveCall(undefined, { video: true });
+  }
+  await startClassicCall(true);
 });
 
 async function loadVoice() {
@@ -2754,6 +2847,8 @@ async function loadVoice() {
   $('#v-mood').checked = v.followMood !== false;
   voice.sample = d.expressiveSample;
   $('#v-calls').value = v.calls ?? 'live';
+  $('#v-look-every').value = String(v.video?.lookEvery ?? 10);
+  $('#v-look-cap').value = String(v.video?.perCall ?? 60);
   renderOpenAiLive(d);
   $('#v-notes').value = v.noteReplies ?? 'voice';
   $('#v-notes-note').textContent = [
@@ -2933,6 +3028,7 @@ async function saveVoice() {
     xai: { voiceId: $('#v-xai-voice').value || 'eve', language: $('#v-xai-lang').value },
     calls: $('#v-calls').value,
     live: $('#v-live').value,
+    video: { lookEvery: Number($('#v-look-every').value), perCall: Number($('#v-look-cap').value) },
     openaiRealtime: { voiceId: $('#v-oalive-voice').value || 'marin', model: $('#v-oalive-model').value || 'gpt-realtime-1.5' },
     noteReplies: $('#v-notes').value,
   };
@@ -3850,6 +3946,14 @@ $('#ring-answer').addEventListener('click', async () => {
   if (!ring) return;
   if (state.currentId !== ring.conversationId) await openConversation(ring.conversationId);
   await startLiveCall(ring.id);
+});
+// Phase 69: answer with video (her picture full size; your camera stays off until you turn it on).
+$('#ring-video').addEventListener('click', async () => {
+  const ring = ringer.ring;
+  closeRing();
+  if (!ring) return;
+  if (state.currentId !== ring.conversationId) await openConversation(ring.conversationId);
+  await startLiveCall(ring.id, { video: true });
 });
 $('#ring-decline').addEventListener('click', async () => {
   const ring = ringer.ring;

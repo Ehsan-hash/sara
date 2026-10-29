@@ -902,7 +902,8 @@ static void createController() {
             }
             return S_OK;
           }).Get(), nullptr);
-          // Microphone (calls, voice messages) and notifications: allowed for the owner's server only.
+          // Microphone (calls, voice messages), the camera (video calls, Phase 69: only after the owner
+          // turns it on in the call) and notifications: allowed for the owner's server only.
           g_web->add_PermissionRequested(Callback<ICoreWebView2PermissionRequestedEventHandler>([](ICoreWebView2*, ICoreWebView2PermissionRequestedEventArgs* a) -> HRESULT {
             LPWSTR uri = nullptr;
             a->get_Uri(&uri);
@@ -910,7 +911,7 @@ static void createController() {
             CoTaskMemFree(uri);
             COREWEBVIEW2_PERMISSION_KIND k;
             a->get_PermissionKind(&k);
-            bool wanted = k == COREWEBVIEW2_PERMISSION_KIND_MICROPHONE || k == COREWEBVIEW2_PERMISSION_KIND_NOTIFICATIONS || k == COREWEBVIEW2_PERMISSION_KIND_CLIPBOARD_READ;
+            bool wanted = k == COREWEBVIEW2_PERMISSION_KIND_MICROPHONE || k == COREWEBVIEW2_PERMISSION_KIND_CAMERA || k == COREWEBVIEW2_PERMISSION_KIND_NOTIFICATIONS || k == COREWEBVIEW2_PERMISSION_KIND_CLIPBOARD_READ;
             a->put_State(sameOrigin(u) && wanted ? COREWEBVIEW2_PERMISSION_STATE_ALLOW : COREWEBVIEW2_PERMISSION_STATE_DEFAULT);
             return S_OK;
           }).Get(), nullptr);

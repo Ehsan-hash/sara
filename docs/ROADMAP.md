@@ -74,7 +74,7 @@ version's details are in the [changelog](../CHANGELOG.md).
 | 66 | Group chats with two or more of your companions | ✅ 1.6 |
 | 67 | A private local mode in the desktop apps: the model runs on that computer, nothing leaves it | ✅ 1.7 |
 | 68 | Several servers in one app: the desktop, phone and other apps switch between your Saras without signing out | ✅ 1.8 |
-| 69 | Video calls with her moving avatar | 1.9 |
+| 69 | Video calls with her moving avatar | ✅ 1.9 |
 | 70 | Our moments: a shared photo album with her captions | 1.10 |
 | 71 | Household mode: several people on one server, each with their own companions | 2.0 |
 | 72 | Her voice in the home: Alexa, Android's assistant and Google Home, Siri Shortcuts, smart-home presence | 2.1 |

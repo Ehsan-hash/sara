@@ -12,8 +12,12 @@ export class LiveCall {
    * @param {{ conversationId: string, onEvent: (ev: object) => void }} opts
    *   onEvent gets the server's events (status, notice, you, caption, said, error, ended).
    */
-  constructor({ conversationId, onEvent, ringId }) {
+  constructor({ conversationId, onEvent, ringId, video = false }) {
     this.conversationId = conversationId;
+    /** Phase 69: a video call (the server adds the video note to her instructions). */
+    this.video = video;
+    /** Phase 69: mute (your microphone sends silence) and her sound on/off. */
+    this.muted = false;
     /** Phase 26: answering a call from her. */
     this.ringId = ringId;
     this.onEvent = onEvent;
@@ -43,14 +47,20 @@ export class LiveCall {
     this.analyser = this.ctx.createAnalyser();
     this.analyser.fftSize = 512;
     this.out.connect(this.analyser);
-    this.analyser.connect(this.ctx.destination);
+    // Her volume sits after the analyser, so her lips keep moving with the sound off.
+    this.vol = this.ctx.createGain();
+    this.analyser.connect(this.vol);
+    this.vol.connect(this.ctx.destination);
     const src = this.ctx.createMediaStreamSource(this.stream);
     this.node = new AudioWorkletNode(this.ctx, 'sara-recorder');
     this.node.port.onmessage = (e) => this.#mic(e.data);
     src.connect(this.node);
 
     const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-    const ws = (this.ws = new WebSocket(`${proto}://${location.host}/api/live/${encodeURIComponent(this.conversationId)}${this.ringId ? `?ring=${encodeURIComponent(this.ringId)}` : ''}`));
+    const q = new URLSearchParams();
+    if (this.ringId) q.set('ring', this.ringId);
+    if (this.video) q.set('video', '1');
+    const ws = (this.ws = new WebSocket(`${proto}://${location.host}/api/live/${encodeURIComponent(this.conversationId)}${q.size ? `?${q}` : ''}`));
     ws.binaryType = 'arraybuffer';
     this.active = true;
     ws.onmessage = (m) => {
@@ -68,6 +78,19 @@ export class LiveCall {
       ws.addEventListener('open', resolve, { once: true });
       ws.addEventListener('error', () => reject(new Error(t('Could not connect the call.'))), { once: true });
     });
+  }
+
+  /** Phase 69: a voice call switched to video: the server tells her (and lets camera pictures through). */
+  setVideo(on) {
+    if (!on || this.video) return;
+    this.video = true;
+    if (this.ws?.readyState === WebSocket.OPEN) this.ws.send(JSON.stringify({ type: 'video' }));
+  }
+
+  /** Her voice on or off (the call goes on). */
+  setSound(on) {
+    if (this.vol) this.vol.gain.value = on ? 1 : 0;
+    return on;
   }
 
   hangUp() {
@@ -97,8 +120,9 @@ export class LiveCall {
     const ms = (frame.length / RATE) * 1000;
     // While she talks, the mic can still hear her through the speakers despite echo cancellation.
     // Send silence then, unless the owner is clearly talking over her (louder, for a moment).
-    let open = true;
-    if (this.speaking) {
+    let open = !this.muted;
+    if (this.muted) this.loudMs = 0;
+    else if (this.speaking) {
       this.loudMs = level > Math.max(0.035, this.floor * 6) ? this.loudMs + ms : Math.max(0, this.loudMs - ms);
       open = this.loudMs >= 160;
     } else {

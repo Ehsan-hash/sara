@@ -58,6 +58,8 @@ import { HUMOURS, LIFE_FIELDS, QUIET_FOCUS, TRAITS } from './traits.ts';
 import { AWAY, CONFLICT, INTIMACY_LEVELS, intimacyLevel, OTHERS, RELATIONSHIP_INFO } from './bond.ts';
 import { OFFSITE_PASS_VAULT, OFFSITE_S3_VAULT } from './offsite.ts';
 import { bondContext, HISTORY_BUDGET_CHARS, resolveChain, runTurn, type TurnOptions, vaultKeyFor, type AppContext, type ChatEvent } from './chat.ts';
+import { cameraState, checkFrame, FRAME_MAX_BYTES, modelSees, SAFETY_PAUSE_MS, parseVideoSettings, VideoError, VideoSessions, videoSettings, type CameraTarget } from './video.ts';
+import type { Conversation as VideoConv } from './store.ts';
 import { createProvider, PROVIDER_PRESETS, validateProviderConfig } from './providers/registry.ts';
 import { DISCLOSURE_TEXT, detectMinorSexualContent, disclosureText } from './safety.ts';
 import { personalize } from './identity.ts';
@@ -273,7 +275,8 @@ const SECURITY_HEADERS: Record<string, string> = {
   'referrer-policy': 'no-referrer',
   'x-frame-options': 'DENY',
   // Phase 24: only the microphone (voice notes, calls) and clipboard are used; nothing else.
-  'permissions-policy': 'camera=(), geolocation=(), payment=(), usb=(), serial=(), bluetooth=(), microphone=(self), clipboard-write=(self)',
+  // Phase 69: the camera for video calls (the page asks only after the owner turns it on in a call).
+  'permissions-policy': 'camera=(self), geolocation=(), payment=(), usb=(), serial=(), bluetooth=(), microphone=(self), clipboard-write=(self)',
   'cross-origin-opener-policy': 'same-origin',
   'cross-origin-resource-policy': 'same-origin',
 };
@@ -441,6 +444,39 @@ export function createSaraServer(opts: ServerOptions): Server {
   // Phase 26: Sara calls you (rings every signed-in app; the first to answer gets the call).
   app.calls ??= new CallBroker(app, { canCall: () => speech.hasXai(), canSpeak: () => speech.canSendNotes() || ((app.settings.get().voice?.tts ?? 'local') === 'local' && Boolean(app.voice)) });
   app.calls.setInCall(() => Boolean(liveCall && !liveCall.ended));
+  // Phase 69: video calls (the owner's optional camera): limits and, for classic calls, the newest
+  // picture, in memory only (src/video.ts).
+  const videos = new VideoSessions();
+  const videoErr = (err: unknown): never => {
+    if (err instanceof VideoError) throw new HttpError(err.status, err.message, err.params ? { params: err.params } : undefined);
+    throw err;
+  };
+  /** Where this conversation's camera pictures would go: the live call's voice service, or the model that answers. */
+  const cameraTarget = async (cx: AppContext, conv: VideoConv): Promise<CameraTarget> => {
+    if (liveCall && !liveCall.ended && liveCall.conversationId === conv.id) return { kind: 'live', engine: liveCall.engine };
+    const choice = speech.liveChoice();
+    // A live call about to start (live calls chosen and set up; private ones never go to a live service).
+    if ((speech.settings().calls ?? 'live') === 'live' && choice.engine && !conv.private && !privateLocalOn()) return { kind: 'live', engine: choice.engine };
+    const s = cx.settings.get();
+    const visionSet = Boolean(s.routes?.vision && s.providers.some((p) => p.id === s.routes!.vision!.providerId));
+    try {
+      const first = resolveChain(cx, conv, visionSet ? 'vision' : 'turn')[0];
+      if (!first) return { kind: 'classic', error: 'Pick a model first (Settings → Models).' };
+      return { kind: 'classic', provider: first.provider.config, model: first.model, sees: await modelSees(first.provider.config, first.model, Date.now()) };
+    } catch (err) {
+      return { kind: 'classic', error: (err as Error).message };
+    }
+  };
+  const cameraFor = async (cx: AppContext, conv: VideoConv) =>
+    cameraState({
+      group: isGroupChannel(conv.channel),
+      partner: Boolean(conv.partner),
+      privateConv: Boolean(conv.private),
+      privateLocal: privateLocalOn(),
+      lastBlockAt: cx.store.lastSafetyEventAt('minor_sexual_block', conv.id)?.getTime(),
+      now: app.now().getTime(),
+      target: await cameraTarget(cx, conv),
+    });
   // identity.ts is shared with the browser: served with its types stripped (no build step).
   let identityJs: string | undefined;
 
@@ -1379,6 +1415,14 @@ export function createSaraServer(opts: ServerOptions): Server {
     {
       const devId = deviceTokenOf(req);
       if (devId && auth.deviceKind(devId) === 'home-assistant') return homeAssistantApi(req, res, method, parts, devId);
+    }
+    // Phase 69: the camera is off on the demo server (video calls show her picture only).
+    if (opts.demo && a === 'video') {
+      if (method !== 'GET') {
+        await readRaw(req, FRAME_MAX_BYTES + 1).catch(() => undefined);
+        throw new HttpError(403, 'The camera is off on the demo server.');
+      }
+      return send(res, 200, { camera: cameraState({ demo: true, privateLocal: privateLocalOn(), now: Date.now(), target: { kind: 'none' } }), settings: videoSettings(), session: null });
     }
     if (opts.demo && method !== 'GET' && !DEMO_WRITES.has(a)) throw new HttpError(403, 'Not available in the demo.');
     if (opts.demo && method === 'GET' && !DEMO_READS.has(a)) throw new HttpError(403, 'Not available in the demo.');
@@ -2325,6 +2369,14 @@ export function createSaraServer(opts: ServerOptions): Server {
           expressive: pick(body.expressive, ['off', 'subtle', 'lively'] as const, cur.expressive ?? 'subtle'),
           tone: pick(body.tone, ['natural', 'warm', 'bright', 'calm'] as const, cur.tone ?? 'natural'),
           followMood: body.followMood === undefined ? cur.followMood !== false : Boolean(body.followMood),
+          // Phase 69: how often she looks at your camera on video calls, and how many pictures per call.
+          video: (() => {
+            try {
+              return parseVideoSettings(body.video, videoSettings(cur.video));
+            } catch (err) {
+              return videoErr(err);
+            }
+          })(),
           openai: { baseUrl: str(o.baseUrl, cur.openai.baseUrl, 300), sttModel: str(o.sttModel, cur.openai.sttModel), ttsModel: str(o.ttsModel, cur.openai.ttsModel), ttsVoice: str(o.ttsVoice, cur.openai.ttsVoice) },
           elevenlabs: { voiceId: str(e.voiceId, cur.elevenlabs.voiceId), model: str(e.model, cur.elevenlabs.model) },
           xai: { voiceId: str(x.voiceId, cur.xai.voiceId, 100) || 'eve', language: str(x.language, cur.xai.language, 20) || 'en' },
@@ -3405,6 +3457,60 @@ export function createSaraServer(opts: ServerOptions): Server {
       const body = await readJson(req);
       if (!app.approvals.decide(b, body.approved === true)) throw new HttpError(404, 'That request is no longer waiting.');
       return send(res, 200, { ok: true });
+    }
+
+    // Phase 69: video calls: GET /api/video/<conversation> (can her camera pictures reach her?),
+    // POST …/start and …/end (one video call's limits), POST …/frame (one JPEG; ?ask=1 = "Look at this").
+    if (a === 'video' && b) {
+      // The picture is read first (bounded), so a refusal never leaves an unread body on the socket.
+      const raw = c === 'frame' && method === 'POST' ? await readRaw(req, FRAME_MAX_BYTES + 1) : undefined;
+      const cx = ctxOf(b);
+      const conv = cx.store.getConversation(b);
+      if (!conv) throw new HttpError(404, 'Conversation not found');
+      const now = app.now().getTime();
+      const view = async () => {
+        const sess = videos.get(conv.id, now);
+        return { camera: await cameraFor(cx, conv), settings: videoSettings(speech.settings().video), session: sess ? { used: sess.gate.used, perCall: sess.gate.settings.perCall, lookEvery: sess.gate.settings.lookEvery } : null };
+      };
+      if (!c && method === 'GET') return send(res, 200, await view());
+      if (c === 'start' && method === 'POST') {
+        await readJson(req).catch(() => ({}));
+        if (isGroupChannel(conv.channel)) throw new HttpError(400, 'Video calls aren’t available in group chats.');
+        if (conv.partner) throw new HttpError(404, 'Conversation not found');
+        videos.start(conv.id, videoSettings(speech.settings().video), now);
+        return send(res, 200, await view());
+      }
+      if (c === 'end' && method === 'POST') {
+        await readJson(req).catch(() => ({}));
+        return send(res, 200, { ended: videos.end(conv.id) });
+      }
+      if (c === 'frame' && method === 'POST') {
+        const st = await cameraFor(cx, conv);
+        if (!st.allowed) throw new HttpError(403, st.message ?? 'The camera can’t be used here.', st.params ? { params: st.params } : undefined);
+        const sess = videos.get(conv.id, now);
+        if (!sess) throw new HttpError(409, 'Start the video call first.');
+        try {
+          checkFrame(raw!);
+        } catch (err) {
+          videoErr(err);
+        }
+        const ask = new URL(req.url ?? '/', 'http://x').searchParams.get('ask') === '1';
+        let count: { used: number; left: number } = { used: 0, left: 0 };
+        try {
+          count = sess.gate.take(now, ask);
+        } catch (err) {
+          videoErr(err);
+        }
+        sess.lastAt = now;
+        if (liveCall && !liveCall.ended && liveCall.conversationId === conv.id) {
+          if (!liveCall.frame(raw!, ask)) throw new HttpError(409, 'She can’t see pictures on this call.');
+          return send(res, 200, { ok: true, via: 'live', ...count });
+        }
+        // Classic calls: kept in memory for the next thing you say (or "Look at this"), then dropped.
+        videos.keep(conv.id, raw!, now, ask);
+        return send(res, 200, { ok: true, via: 'next-reply', ...count });
+      }
+      throw new HttpError(404, 'Not found');
     }
 
     if (a === 'live' && !b && method === 'GET') {
@@ -4899,6 +5005,11 @@ export function createSaraServer(opts: ServerOptions): Server {
           if (!content) throw new HttpError(400, 'Message is empty');
           if (content.length > 100_000) throw new HttpError(413, 'Message too long');
           demoTurnAllowed(req);
+          // Phase 69: a classic video call: the newest camera picture goes with this message (in memory
+          // only, never saved), unless the camera was paused by a safety block meanwhile.
+          const blockedAt = cx.store.lastSafetyEventAt('minor_sexual_block', b)?.getTime();
+          const frameBuf = body.liveFrame === true && !(blockedAt !== undefined && app.now().getTime() - blockedAt < SAFETY_PAUSE_MS) ? videos.take(b, app.now().getTime()) : undefined;
+          const liveFrame = frameBuf ? { liveFrame: { image: { mime: 'image/jpeg', data: frameBuf.toString('base64') }, ask: body.liveFrameAsk === true } } : body.videoCall === true ? { videoCall: true } : {};
           // Phase 18: from a notification's Reply box or the share sheet, the phone doesn't wait.
           // The reply arrives like her other messages: as an event, so as a notification too.
           if (body.background === true) {
@@ -4906,7 +5017,7 @@ export function createSaraServer(opts: ServerOptions): Server {
             void runBackground(b, content, { ...(images.length ? { images } : {}), ...(docs.length ? { docs } : {}) });
             return send(res, 202, { ok: true });
           }
-          return streamChat(req, res, b, content, { ...(images.length ? { images } : {}), ...(docs.length ? { docs } : {}) });
+          return streamChat(req, res, b, content, { ...(images.length ? { images } : {}), ...(docs.length ? { docs } : {}), ...liveFrame });
         }
         // Regenerate the last reply, or edit the last owner message and answer it again.
         if (c === 'retry' && method === 'POST') {
@@ -5032,6 +5143,7 @@ export function createSaraServer(opts: ServerOptions): Server {
         try {
           liveCall = new LiveCall(offApp, convId, ws, key, {
             engine: choice.engine,
+            video: url.searchParams.get('video') === '1',
             ...(opts.liveConnect ? { connect: opts.liveConnect } : {}),
             maxMs: go.maxMs,
             maxReason: go.byBudget ? 'That’s all the demo calling for today. Try again tomorrow.' : `Demo calls last up to ${minutes} minute${minutes === 1 ? '' : 's'}.`,
@@ -5105,7 +5217,7 @@ export function createSaraServer(opts: ServerOptions): Server {
         opening = openingNote(ring, app.settings.get().ownerName?.trim() || 'the owner');
       }
       liveCall?.end('A new call started on another device.');
-      liveCall = new LiveCall(app, conv.id, ws, key, { engine: choice.engine, ...(opts.liveConnect ? { connect: opts.liveConnect } : {}), ...(opening ? { opening } : {}) });
+      liveCall = new LiveCall(app, conv.id, ws, key, { engine: choice.engine, video: url.searchParams.get('video') === '1', onEnd: () => videos.drop(conv.id), ...(opts.liveConnect ? { connect: opts.liveConnect } : {}), ...(opening ? { opening } : {}) });
       liveCall.start();
     })().catch((err) => {
       console.error('live call failed:', err);

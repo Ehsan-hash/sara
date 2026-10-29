@@ -355,7 +355,7 @@
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationPortrait;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "For voice notes and live calls with your companion.";
-				INFOPLIST_KEY_NSCameraUsageDescription = "To take photos to share with your companion.";
+				INFOPLIST_KEY_NSCameraUsageDescription = "To take photos to share with your companion, and to show her your camera on video calls when you turn it on.";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "To choose photos to share with your companion.";
 				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "To save her pictures to your photos.";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
@@ -384,7 +384,7 @@
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationPortrait;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "For voice notes and live calls with your companion.";
-				INFOPLIST_KEY_NSCameraUsageDescription = "To take photos to share with your companion.";
+				INFOPLIST_KEY_NSCameraUsageDescription = "To take photos to share with your companion, and to show her your camera on video calls when you turn it on.";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "To choose photos to share with your companion.";
 				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "To save her pictures to your photos.";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";

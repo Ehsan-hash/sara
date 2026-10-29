@@ -293,6 +293,20 @@
   "The name was shortened to 40 characters.",
   "This server already has an owner. Sign in with the owner token.",
   "Setup in the browser only works from this machine or your home network. Sign in with the owner token from her log instead.",
-  "That setup code is wrong. It is in her log, next to the words \"setup code\"."
+  "That setup code is wrong. It is in her log, next to the words \"setup code\".",
+  "The camera only works in your own conversations with her.",
+  "The camera is paused in this conversation after a safety block.",
+  "Start the call first.",
+  "“Nothing leaves this computer” is on, so camera pictures can only go to a model on this computer.",
+  "The camera is off in private conversations with a model that isn’t on your own hardware.",
+  "Grok voice can’t look at pictures on calls, so your camera is only shown to you.",
+  "{model} can’t look at pictures (or the app can’t tell that it can), so your camera is only shown to you. Pick a model that can for “Looking at pictures” in Settings → Models → Which model does what.",
+  "Send a JPEG picture.",
+  "The picture is too big: send at most {side} pixels on a side.",
+  "She only looks when you ask (Settings → Voice).",
+  "She already looked {n} times on this call (the limit in Settings → Voice).",
+  "Too soon: she looks at most every {seconds} seconds.",
+  "Pick a model first (Settings → Models).",
+  "The camera can’t be used here."
  ]
 }
