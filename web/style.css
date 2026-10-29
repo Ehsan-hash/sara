@@ -1,16 +1,15 @@
+/* Phase 75: the colours come from the design tokens in theme.css (Night by default, Day light). */
 :root {
-  --bg: #121016;
-  --panel: #1b1820;
-  --panel-2: #241f2b;
-  --text: #eee9f3;
-  --muted: #a49cae;
-  --accent: #e0789a;
-  --accent-2: #f3a6bf;
-  --border: #322b3a;
-  --error: #ff8080;
-  --radius: 14px;
-  --on-accent: #1a0f14;
-  color-scheme: dark;
+  --bg: var(--surface-0);
+  --panel: var(--surface-1);
+  --panel-2: var(--surface-2);
+  --text: var(--text-1);
+  --muted: var(--text-2);
+  --accent: var(--accent-solid);
+  --accent-2: var(--accent-text);
+  --border: var(--line);
+  --error: var(--danger);
+  --radius: var(--r-card);
 }
 
 * { box-sizing: border-box; }
@@ -18,7 +17,7 @@ html, body { height: 100%; margin: 0; }
 body {
   background: var(--bg);
   color: var(--text);
-  font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font: var(--fs-body)/1.5 var(--font-ui);
 }
 [hidden] { display: none !important; }
 
@@ -223,7 +222,7 @@ summary { cursor: pointer; color: var(--accent-2); }
 .pop-label { font-size: 11px; color: var(--muted); padding: 4px 10px; text-transform: uppercase; }
 .pop-item { display: block; width: 100%; text-align: left; background: none; border: 0; color: var(--text); padding: 7px 10px; border-radius: 6px; font-size: 14px; }
 .pop-item:hover { background: var(--panel); }
-.danger-text { color: #ff8a8a !important; }
+.danger-text { color: var(--danger) !important; }
 button.danger { background: #b3383d; color: #fff; }
 
 /* Settings tabs */
@@ -379,22 +378,8 @@ textarea { resize: vertical; }
 .hit-title { display: block; color: var(--text); font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .hit-snippet { display: block; font-size: 12px; color: var(--muted); }
 
-/* Light theme */
-:root[data-theme="light"] {
-  --bg: #faf7fb;
-  --panel: #f1ecf4;
-  --panel-2: #e8e1ed;
-  --text: #241c2b;
-  --muted: #6b6274;
-  --accent: #c94f78;
-  --accent-2: #a83d61;
-  --border: #d9d0e0;
-  --error: #c0303a;
-  --on-accent: #fff;
-  color-scheme: light;
-}
+/* Light theme (Day): its colours are the Day tokens in theme.css. */
 :root[data-theme="light"] .pop-menu { box-shadow: 0 8px 28px rgba(60,30,70,.18); }
-:root[data-theme="light"] .danger-text { color: #c0303a !important; }
 
 /* Buttons that aren't filled must not take the accent's text colour. */
 .group-toggle, .group-btn, .conv-more, .pop-item, .sara-status { color: var(--muted); }
@@ -715,7 +700,7 @@ body.in-app .web-only { display: none; }
 
 .ap-swatches { display: flex; gap: 8px; margin: 4px 0 8px; }
 .ap-swatch { width: 28px; height: 28px; padding: 0; border-radius: 50%; border: 2px solid var(--border); }
-.ap-swatch[data-accent="rose"] { background: #e0789a; }
+.ap-swatch[data-accent="rose"] { background: var(--accent-grad); }
 .ap-swatch[data-accent="lavender"] { background: #a78bfa; }
 .ap-swatch[data-accent="ocean"] { background: #4fb3d9; }
 .ap-swatch[data-accent="forest"] { background: #5fbf8a; }

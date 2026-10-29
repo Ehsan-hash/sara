@@ -19,7 +19,7 @@ list(GET SARA_VERSION_PARTS 2 SARA_V3)
 set(SARA_VERSION_DEFS SARA_APP_VERSION="${SARA_APP_VERSION}" SARA_VERSION_COMMAS=${SARA_V1},${SARA_V2},${SARA_V3},0)
 add_executable(Sara WIN32 src/main.cpp src/sara.rc)
 target_include_directories(Sara PRIVATE "${WV2}/include" src)
-target_link_libraries(Sara PRIVATE "${WV2}/x64/WebView2LoaderStatic.lib" shlwapi shell32 ole32 version advapi32 user32)
+target_link_libraries(Sara PRIVATE "${WV2}/x64/WebView2LoaderStatic.lib" shlwapi shell32 ole32 version advapi32 user32 dwmapi uxtheme gdi32)
 target_compile_definitions(Sara PRIVATE UNICODE _UNICODE ${SARA_VERSION_DEFS})
 target_compile_options(Sara PRIVATE /W4 /permissive- /utf-8)
 # Phase 68: test hooks (a separate data folder via SARA_DESKTOP_TEST_DIR), only when asked for.

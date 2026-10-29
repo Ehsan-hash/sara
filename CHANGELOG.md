@@ -5,6 +5,28 @@ Format: newest first. Semantic versions since 1.0.0 (before that `0.<phase>.<pat
 
 ## Unreleased
 
+## 2.5.0 (2026-10-29): the new look, part 1: her work on screen
+
+- **Night by default:** a new dark look (deep plum, frosted panels, a rose-to-violet accent) on every
+  screen, with **Day** and **Follow the system** in Settings → Look. No flash of the wrong colours on load.
+- **See what she did:** one quiet line under each reply ("Remembered 3 things · Checked the weather 0.4 s
+  · Added a to-do"), live while she works; tap it for the details (command, output, Undo). It replaces
+  the grey command boxes.
+- **Result cards:** weather, to-dos, reminders, notes, calendar, files changed, test runs, background
+  tasks, smart-home actions, photos and web searches with sources show as cards in the chat, built from
+  what the tool really returned.
+- **Lighter chat:** her messages without heavy bubbles, with her face at the start of a run (each
+  companion's own face in group chats); the Copy / pin / heart buttons appear on hover, or with a long
+  press on phones. One floating message bar with a **+** menu. The token footnote became a small ring
+  ("this conversation is 46% full").
+- **Phones get the same look**, with the chips folded behind ⋯ and the message bar above the keyboard.
+- **Windows app:** the page is drawn into the title bar (Windows 11 dark title bar, optional Mica glass,
+  real snap layouts), and no white flash on start. Windows 10 or an old WebView2 keeps a normal title bar.
+- **Mac app:** see-through title bar with the window buttons set into the page header, dark or light with
+  the theme.
+- **Fix:** the morning briefing could arrive twice when "Send one now" was pressed while the scheduled
+  one was due; now at most one scheduled briefing a day, also across restarts.
+
 ## 2.4.0 (2026-10-29): neat and tidy
 
 A whole-project cleanup: everything is still there, easier to find.

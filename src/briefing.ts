@@ -136,6 +136,7 @@ export class BriefingWorker {
   readonly #fetch: FetchLike;
   #timer: NodeJS.Timeout | undefined;
   #running = false;
+  #inflight: Promise<string> | undefined;
 
   constructor(app: AppContext, fetchImpl: FetchLike = netFetch) {
     this.#app = app;
@@ -155,7 +156,8 @@ export class BriefingWorker {
   async tick(): Promise<string | undefined> {
     const app = this.#app;
     const cfg = briefingSettings(app);
-    if (!cfg.enabled || this.#running) return undefined;
+    // One briefing at a time: "Send one now" (or an earlier tick) is already writing it.
+    if (!cfg.enabled || this.#running || this.#inflight) return undefined;
     const tz = app.settings.get().timeZone;
     const now = app.now();
     const today = localDate(now.toISOString(), tz);
@@ -164,8 +166,10 @@ export class BriefingWorker {
     const p = zonedParts(now, tz);
     const minsLate = p.h * 60 + p.mi - (hh * 60 + mm);
     if (minsLate < 0) return undefined;
-    if (minsLate > LATE_LIMIT_MIN) {
-      app.settings.update({ briefing: { ...cfg, lastDay: today } });
+    // The day's briefing is already in the conversations (the "sent today" mark in settings was
+    // lost: an older settings save, a restore): mend the mark, send nothing.
+    if (minsLate > LATE_LIMIT_MIN || this.sentOn(today)) {
+      app.settings.update({ briefing: { ...briefingSettings(app), lastDay: today } });
       return undefined;
     }
     this.#running = true;
@@ -177,13 +181,54 @@ export class BriefingWorker {
     }
   }
 
-  /** Builds and delivers a briefing now (also used by "Send one now"). */
-  async send(): Promise<string> {
+  /** Whether a briefing for this local day is already saved (the database is the record). */
+  sentOn(day: string): boolean {
+    const row = this.#app.store.db
+      .prepare("SELECT 1 FROM messages WHERE role = 'assistant' AND meta LIKE '%\"briefing\"%' AND (CASE WHEN json_valid(meta) THEN json_extract(meta, '$.briefing.day') END) = ? LIMIT 1")
+      .get(day);
+    return Boolean(row);
+  }
+
+  /**
+   * Builds and delivers a briefing now (also used by "Send one now"). While one is being written,
+   * a second call gets that same briefing instead of starting another (the 2026-10-29 double).
+   */
+  send(): Promise<string> {
+    if (this.#inflight) return this.#inflight;
+    const run = this.#deliver().finally(() => {
+      if (this.#inflight === run) this.#inflight = undefined;
+    });
+    this.#inflight = run;
+    return run;
+  }
+
+  async #deliver(): Promise<string> {
     const app = this.#app;
     const s = app.settings.get();
     const tz = s.timeZone;
     const now = app.now();
     const today = localDate(now.toISOString(), tz);
+    // Mark the day BEFORE the slow part (facts, model), so a tick, a restart or another server
+    // process reading the settings meanwhile doesn't start a second one. Put back if nothing went out.
+    const before = briefingSettings(app).lastDay;
+    app.settings.update({ briefing: { ...briefingSettings(app), lastDay: today } });
+    let saved = false;
+    try {
+      const out = await this.#write(today, now);
+      saved = true;
+      return out;
+    } finally {
+      if (!saved && before !== today && briefingSettings(app).lastDay === today && !this.sentOn(today)) {
+        const { lastDay: _drop, ...rest } = briefingSettings(app);
+        app.settings.update({ briefing: before ? { ...rest, lastDay: before } : rest });
+      }
+    }
+  }
+
+  async #write(today: string, now: Date): Promise<string> {
+    const app = this.#app;
+    const s = app.settings.get();
+    const tz = s.timeZone;
     const conv = targetConversation(app) ?? app.store.listConversations().find((c) => !c.partner) ?? app.store.createConversation({ title: 'Mornings' });
     const facts = await gatherFacts(app, now, this.#fetch);
     let text = '';

@@ -67,6 +67,8 @@ Every module in `src/`, roughly in the order they were added (the phase is noted
 | `src/routes/models.ts` | providers, model-jobs, subscriptions, local-models, private-local, usage |
 | `src/routes/her.ts` | persona, character, look, sara, together, gallery, adult, companions, phone |
 | `src/routes/voice.ts` · `src/routes/live.ts` | voice, calls, video, push, live status · the WebSocket upgrade for `/api/live/<conversation>` |
+| `src/cards.ts` | `cardFor()`: turns a tool result (weather, to-do, reminder, note, calendar, files changed, test run, task, smart home, photo, web search) into a small `card` on the `tool_result` event and the tool message's meta; the page draws it (`web/result-cards.js`) beside the step line (`web/steps.js`) |
+| `web/theme.css` · `web/theme-boot.js` · `web/look.css` / `look.js` | Phase 75 design tokens (Night default, Day); the head script that sets the theme before paint and talks to the desktop apps (`window.saraShell`, docs/desktop.md); the new chat, header and composer |
 | `src/fs-util.ts` · `src/spoken.ts` · `src/model-names.ts` | `writeFileAtomic` (every store; `owner.json` also keeps a `.bak`) · the one cleaner for spoken text (app voice, Alexa, Home Assistant) · the one rule for Ollama Cloud model names (net-guard keeps an identical, tested copy) |
 | `src/auth.ts` | Owner token (hash only stored), HMAC-signed session cookies, login rate limit; `setupPending` until the first owner sign-in (Phase 59) |
 | `src/claim.ts` | Phase 59: first sign-in in the browser on a new server (`/api/claim`): setup code from the log or, behind a login proxy (`SARA_SETUP=browser`, Umbrel), one click; time window, private addresses only, one-time; see THREAT_MODEL.md |

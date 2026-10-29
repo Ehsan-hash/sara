@@ -62,6 +62,77 @@ test('briefing goes out once, at the chosen time, with weather and the list', as
   assert.equal(await w.tick(), undefined, '7 hours late: skipped');
 });
 
+// Bug (2026-10-29, owner's server): he switched the briefing on at 09:07 with the time set to
+// 07:00 and pressed "Send one now" the same second. The minute tick (07:00 already passed, under
+// 3 hours late) sent the day's briefing too: two "Morning, Frank" messages 91 ms apart.
+test('the scheduled briefing and "Send one now" never make two briefings at once', async (t) => {
+  const { dir, cleanup } = tempDir();
+  const clock = { now: new Date('2026-10-29T14:07:56Z') }; // 09:07 in Chicago, briefing time 07:00
+  const app = makeApp(dir, clock);
+  t.after(() => {
+    app.store.close();
+    cleanup();
+  });
+  app.settings.update({
+    providers: [{ id: 'p', label: 'P', kind: 'openai-compatible', baseUrl: 'http://x' }],
+    defaultProviderId: 'p',
+    defaultModel: 'm',
+    ownerName: 'Frank',
+    timeZone: 'America/Chicago',
+    briefing: { enabled: true, time: '07:00', place: { name: 'Kansas City, Missouri, US', lat: 39.09, lon: -94.58 } },
+  });
+  const conv = app.store.createConversation({});
+  app.store.addMessage(conv.id, 'user', 'hi');
+  const briefings = () => app.store.messages(conv.id).filter((m) => m.role === 'assistant' && m.meta?.briefing);
+  app.script.push([{ type: 'text', text: 'Morning, Frank! First one.' }]);
+  const w = new BriefingWorker(app, fakeFetch as never);
+  // Owner's button and the minute tick at the same moment, in both orders.
+  const [now1, tick1] = await Promise.all([w.send(), w.tick()]);
+  assert.equal(briefings().length, 1, 'one briefing, not two');
+  assert.equal(tick1, undefined, 'the tick left it to the one already being written');
+  assert.match(now1, /First one/);
+  assert.equal(app.requests.length, 1, 'one model call');
+
+  // Next day: the tick starts first and the owner presses the button while it is writing.
+  clock.now = new Date('2026-10-30T12:05:00Z');
+  app.script.push([{ type: 'text', text: 'Morning again!' }]);
+  const [tick2, now2] = await Promise.all([w.tick(), w.send()]);
+  assert.equal(briefings().length, 2);
+  assert.match(tick2!, /Morning again/);
+  assert.equal(now2, tick2, 'the button gets the briefing that was already on its way');
+
+  // Asked for again later that day: an explicit request still sends one.
+  app.script.push([{ type: 'text', text: 'Here it is again.' }]);
+  assert.match(await w.send(), /again/);
+  assert.equal(briefings().length, 3);
+});
+
+test('a restart or a lost "sent today" mark never re-sends the day\'s briefing', async (t) => {
+  const { dir, cleanup } = tempDir();
+  const clock = { now: new Date('2026-10-29T12:10:00Z') }; // 07:10 in Chicago
+  const app = makeApp(dir, clock);
+  t.after(() => {
+    app.store.close();
+    cleanup();
+  });
+  const briefing = { enabled: true, time: '07:00' };
+  app.settings.update({ providers: [{ id: 'p', label: 'P', kind: 'openai-compatible', baseUrl: 'http://x' }], defaultProviderId: 'p', defaultModel: 'm', timeZone: 'America/Chicago', briefing });
+  const conv = app.store.createConversation({});
+  app.store.addMessage(conv.id, 'user', 'hi');
+  app.script.push([{ type: 'text', text: 'Morning!' }]);
+  assert.match((await new BriefingWorker(app, fakeFetch as never).tick())!, /Morning/);
+  // The settings write that saved "sent today" is lost (a save from the Settings window that read
+  // the old settings, a restore, a crash): a new worker after a restart must still not send again.
+  app.settings.update({ briefing });
+  clock.now = new Date('2026-10-29T12:30:00Z');
+  assert.equal(await new BriefingWorker(app, fakeFetch as never).tick(), undefined);
+  assert.equal(app.store.messages(conv.id).filter((m) => m.meta?.briefing).length, 1);
+  assert.equal(app.requests.length, 1, 'no second model call');
+  // The next day goes out as usual.
+  clock.now = new Date('2026-10-30T12:01:00Z');
+  assert.ok(await new BriefingWorker(app, fakeFetch as never).tick());
+});
+
 test('plain briefing reads well', () => {
   const t = plainBriefing({ date: 'Monday, October 26', weather: 'KC: clear', agenda: '- task #3 "Pay rent": due today Mon 5:00 PM\n- 2 other open tasks (use the todo tool to list them)' });
   assert.equal(t, `Good morning! It's Monday, October 26.\nWeather: KC: clear.\nOn your list:\n- "Pay rent": due today Mon 5:00 PM\n- 2 other open tasks`);

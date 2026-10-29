@@ -2,9 +2,9 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
   <title>Sara</title>
-  <meta name="theme-color" content="#121016">
+  <meta name="theme-color" content="#0f0d17">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="Sara">
@@ -12,11 +12,15 @@
   <link rel="manifest" href="/manifest.webmanifest" crossorigin="use-credentials">
   <link rel="icon" href="/icon-192.png">
   <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+  <script src="/theme-boot.js"></script>
+  <link rel="stylesheet" href="/theme.css">
   <link rel="stylesheet" href="/style.css">
   <link rel="stylesheet" href="/ui-tidy.css">
+  <link rel="stylesheet" href="/look.css">
   <script type="module" src="/app.js"></script>
 </head>
 <body>
+  <div id="shell-drag" class="shell-drag" aria-hidden="true"></div>
   <!-- Sign in -->
   <section id="login" class="screen card-screen" hidden>
     <form id="login-form" class="card">
@@ -175,14 +179,26 @@
     <main id="chat">
       <header id="chat-head">
         <button id="toggle-sidebar" class="ghost" aria-label="Conversations">☰</button>
+        <img class="avatar head-face" src="/sara-avatar.jpg" alt="">
         <div class="title-wrap">
           <h2 id="chat-title">Sara</h2>
           <button id="sara-status" class="sara-status" type="button" title="How Sara is doing (open Sara's page)" hidden></button>
         </div>
-        <button id="conv-settings-btn" class="ghost small" type="button" title="Model, workspace and mode for this conversation"><span id="conv-summary">…</span></button>
-        <button id="speak-toggle" class="ghost small icon" type="button" title="Read her replies aloud" aria-pressed="false" hidden>🔈</button>
+        <div class="ctx-wrap">
+          <button id="ctx-ring" class="ctx-ring" type="button" aria-label="How full this conversation is" aria-expanded="false" aria-controls="ctx-sheet" hidden><span class="ctx-dial" aria-hidden="true"></span><span id="ctx-pct" class="ctx-pct"></span></button>
+          <div id="ctx-sheet" class="ctx-sheet head-pop" role="dialog" aria-label="How full this conversation is" hidden>
+            <p id="ctx-full" class="ctx-full"></p>
+            <p id="ctx-how" class="muted small"></p>
+            <p id="conv-usage" class="conv-usage muted small" hidden></p>
+          </div>
+        </div>
+        <button id="head-more" class="ghost icon head-more" type="button" aria-label="This conversation: model, voice and server" aria-expanded="false" aria-controls="head-chips">⋯</button>
+        <div id="head-chips" class="head-chips">
+          <button id="conv-settings-btn" class="ghost small" type="button" title="Model, workspace and mode for this conversation"><span id="conv-summary">…</span></button>
+          <button id="speak-toggle" class="ghost small icon" type="button" title="Read her replies aloud" aria-pressed="false" hidden>🔈</button>
+          <button id="server-btn" class="server-btn" type="button" title="Which server this app shows. Switch to another one" hidden>⇄ <span id="server-btn-name">Sara</span></button>
+        </div>
         <button id="pl-badge" class="pl-badge" type="button" title="Nothing leaves this computer: private local mode is on" hidden>🔒 <span>Only this computer</span></button>
-        <button id="server-btn" class="server-btn" type="button" title="Which server this app shows. Switch to another one" hidden>⇄ <span id="server-btn-name">Sara</span></button>
         <span class="ai-badge" title="Sara is an AI companion">AI companion</span>
       </header>
       <dialog id="ring" class="ring" aria-labelledby="ring-title" data-required="1">
@@ -243,18 +259,24 @@
       <div id="demo-bar" class="offrecord-bar" hidden>👋 <strong>Demo.</strong> Conversations here aren't saved and disappear after a few hours; please don't share personal information. On your own server Sara also remembers, plans, codes and connects to your mail, calendar and phone.</div>
       <div id="offrecord-bar" class="offrecord-bar" hidden>🕶 <strong>Off the record.</strong> Nothing here is saved: she won't remember it, it isn't in backups, and it's gone when you close it or the server restarts. No tools or photos here. <button id="offrecord-end" type="button" class="ghost small">Close it now</button></div>
       <div id="jobs-strip" class="jobs-strip" hidden></div>
-      <p id="conv-usage" class="conv-usage muted small" hidden></p>
       <div id="together-bar" class="offrecord-bar" hidden><span id="together-now"></span> <button id="together-end" type="button" class="ghost small">End</button></div>
       <div id="attachments" class="attachments" hidden></div>
       <form id="composer">
-        <button id="mic" class="ghost icon" type="button" title="Talk (click to start, click again to send)" hidden>🎙</button>
+        <textarea id="input" rows="1" placeholder="Message Sara…" autocomplete="off" aria-label="Message Sara…"></textarea>
+        <div class="plus-wrap">
+          <button id="composer-plus" class="ghost icon" type="button" aria-label="Add: a file, a photo or something to do together" aria-haspopup="menu" aria-expanded="false" aria-controls="composer-menu">+</button>
+          <div id="composer-menu" class="composer-menu head-pop" role="menu" hidden>
+            <button id="attach" class="pop-item" type="button" role="menuitem" title="Send a photo or a document (or paste / drop one)"><span aria-hidden="true">📎</span> Attach a file</button>
+            <button id="attach-photo" class="pop-item" type="button" role="menuitem" title="Send a photo from this device"><span aria-hidden="true">🖼</span> Photo</button>
+            <button id="together" class="pop-item" type="button" role="menuitem" title="Do something together: games, journaling, watching along, your shared lists"><span aria-hidden="true">🎲</span> Something together</button>
+          </div>
+        </div>
+        <input id="attach-file" type="file" multiple hidden>
+        <input id="attach-photo-file" type="file" accept="image/*" multiple hidden>
         <button id="call" class="ghost icon" type="button" title="Hands-free call: just talk, interrupt her any time" hidden>📞</button>
         <button id="video-call-btn" class="ghost icon" type="button" title="Video call: see her full size as you talk" hidden>🎥</button>
-        <button id="attach" class="ghost icon" type="button" title="Send a photo or a document (or paste / drop one)">📎</button>
-        <input id="attach-file" type="file" multiple hidden>
-        <button id="together" class="ghost icon" type="button" title="Do something together: games, journaling, watching along, your shared lists">🎲</button>
-        <textarea id="input" rows="1" placeholder="Message Sara…" autocomplete="off"></textarea>
-        <button id="send" type="submit">Send</button>
+        <button id="mic" class="ghost icon" type="button" title="Talk (click to start, click again to send)" hidden>🎙</button>
+        <button id="send" type="submit" aria-label="Send"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5.5 11.5 12 5l6.5 6.5"/></svg></button>
         <button id="stop" type="button" class="ghost" hidden>Stop</button>
       </form>
     </main>
@@ -1615,7 +1637,7 @@
       <h3>Appearance (this device)</h3>
       <div class="row-grid">
         <label>Theme
-          <select id="ap-theme"><option value="system">Match this device</option><option value="dark">Dark</option><option value="light">Light</option></select>
+          <select id="ap-theme"><option value="dark">Night (default)</option><option value="light">Day</option><option value="system">Follow the system</option></select>
         </label>
         <label>Her replies appear
           <select id="ap-typing"><option value="instant">As fast as they arrive</option><option value="human">Typed, like a person</option></select>

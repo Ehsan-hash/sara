@@ -221,7 +221,8 @@ test('wave 2: the offline page matches the app and the old sidebar CSS is gone',
   assert.match(offline, /Can't reach your Sara/);
   assert.doesNotMatch(offlineCss, /#c76b98/i, 'no old pink');
   for (const v of ['--bg: #121016', '--accent: #e0789a', '--bg: #faf7fb', '--accent: #c94f78']) assert.ok(offlineCss.includes(v), v);
-  assert.match(readFileSync(join(ROOT, 'web', 'sw.js'), 'utf8'), /sara-shell-v3/, 'the service worker caches the new offline page');
+  // v3 cached the new offline page; later versions (Phase 75: v4) only bump it.
+  assert.ok(Number(/sara-shell-v(\d+)/.exec(readFileSync(join(ROOT, 'web', 'sw.js'), 'utf8'))?.[1]) >= 3, 'the service worker caches the new offline page');
   // Removed with the wave 1 sidebar: no rules for classes the page no longer has.
   for (const gone of ['.side-bar', '.side-foot ', '.help-box', '.help-btn', '.route-help', 'section.settings-tab']) assert.ok(!css.includes(gone), gone);
 });

@@ -10,9 +10,17 @@
 // WebView2 profile (cookies, storage, cache: kept apart, encrypted by WebView2 with this Windows
 // user's DPAPI key); the first one is the profile used before 1.8, so an update keeps its sign-in.
 // The tray menu and the page's ⇄ menu switch between them without signing out.
+// Phase 75 (the new look): a dark or light title bar that follows the page's theme (Night / Day),
+// Mica behind it on Windows 11 22H2+, the page drawn into the title area (WebView2's non-client
+// region support: CSS app-region: drag) with the native minimize / maximize / close buttons kept
+// (DWM draws them; snap layouts on the maximize button keep working), and the theme colour from the
+// first frame so there is never a white flash. Older Windows or an older WebView2: the normal title
+// bar, dark or light. The page learns all of it from window.saraShell (kShellScript below).
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
 #include <windows.h>
+#include <dwmapi.h>
+#include <uxtheme.h>
 #include <shellapi.h>
 #include <shlobj.h>
 #include <shlwapi.h>
@@ -22,6 +30,7 @@
 #include <map>
 #include <vector>
 #include <ctime>
+#include <windowsx.h>
 #include "WebView2.h"
 #include "resource.h"
 #include "page-logo.h"
@@ -521,6 +530,207 @@ static void showWindow() {
 }
 static bool windowInFront() { return g_wnd && IsWindowVisible(g_wnd) && !IsIconic(g_wnd) && GetForegroundWindow() == g_wnd; }
 
+// ---------- Phase 75: theme, title bar, Mica ----------
+// The page's theme is Night (dark, the default) or Day. The page tells the app when it changes
+// ({type:'theme', theme:'night'|'day'|'system'}); the app remembers it in desktop.ini so the next
+// start opens in the right colours before the page has loaded.
+static const COLORREF kNight = RGB(0x0f, 0x0d, 0x17);
+static const COLORREF kDay = RGB(0xfa, 0xf7, 0xf5);
+static std::wstring g_themePref = L"night";  // night | day | system (as the page said)
+static bool g_day = false;                    // what is shown now
+static bool g_customFrame = false;            // the page draws into the title area
+static bool g_wantCustomFrame = false;        // Windows 11 + a WebView2 that has app-region support
+static bool g_mica = false;                   // DWMSBT_MAINWINDOW is set (Windows 11 22H2+)
+static bool g_wantMica = false;               // the page asked for Mica (its background is see-through)
+// The page said it draws its header in the title strip ({type:'shell', titlebar:true}); until then
+// (an older Sara server, a page still loading) the app keeps a plain title strip of its own above it.
+static bool g_pageTitle = false;
+static std::wstring g_pageTitleOrigin;
+static HBRUSH g_bgBrush = nullptr;
+static const int kTitlebarDip = 40;           // the page's header strip (CSS px)
+
+static DWORD windowsBuild() {
+  static DWORD build = 0;
+  if (build) return build;
+  using RtlGetVersionFn = LONG(WINAPI*)(OSVERSIONINFOW*);
+  if (HMODULE nt = GetModuleHandleW(L"ntdll.dll")) {
+    if (auto fn = reinterpret_cast<RtlGetVersionFn>(reinterpret_cast<void*>(GetProcAddress(nt, "RtlGetVersion")))) {
+      OSVERSIONINFOW v{sizeof(v)};
+      if (fn(&v) == 0) build = v.dwBuildNumber;
+    }
+  }
+  return build;
+}
+static bool systemUsesLight() {
+  DWORD v = 0, n = sizeof(v);
+  if (RegGetValueW(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize", L"AppsUseLightTheme", RRF_RT_REG_DWORD, nullptr, &v, &n) != ERROR_SUCCESS) return false;
+  return v != 0;
+}
+static bool resolveDay(const std::wstring& pref) { return pref == L"day" || (pref == L"system" && systemUsesLight()); }
+static COLORREF themeColor() { return g_day ? kDay : kNight; }
+static UINT windowDpi() { return g_wnd ? GetDpiForWindow(g_wnd) : 96; }
+/** The resize border at the top while the page draws into the title area (not when maximized). */
+static int topResizeBand() {
+  if (!g_customFrame || !g_wnd || IsZoomed(g_wnd)) return 0;
+  UINT dpi = windowDpi();
+  return GetSystemMetricsForDpi(SM_CYSIZEFRAME, dpi) + GetSystemMetricsForDpi(SM_CXPADDEDBORDER, dpi);
+}
+static int titlebarPx() { return MulDiv(kTitlebarDip, (int)windowDpi(), 96); }
+/** Where DWM draws minimize / maximize / close, in client coordinates (empty without the custom frame). */
+static RECT captionButtons() {
+  RECT r{};
+  if (!g_customFrame || FAILED(DwmGetWindowAttribute(g_wnd, DWMWA_CAPTION_BUTTON_BOUNDS, &r, sizeof(r)))) return RECT{};
+  // The bounds are relative to the window; the client area starts after the left border.
+  RECT wr;
+  GetWindowRect(g_wnd, &wr);
+  POINT origin{0, 0};
+  ClientToScreen(g_wnd, &origin);
+  OffsetRect(&r, wr.left - origin.x, wr.top - origin.y);
+  return r;
+}
+
+/** The web view fills the window below the top resize band (or below the app's own title strip
+ *  while the page doesn't draw one); with the custom frame its window is cut out under the caption
+ *  buttons, so DWM's own buttons show (and take the clicks) there. */
+static void layoutWebView() {
+  if (!g_controller || !g_wnd) return;
+  RECT rc;
+  GetClientRect(g_wnd, &rc);
+  rc.top += g_customFrame && !g_pageTitle ? titlebarPx() : topResizeBand();
+  g_controller->put_Bounds(rc);
+  RECT btn = captionButtons();
+  for (HWND c = GetWindow(g_wnd, GW_CHILD); c; c = GetWindow(c, GW_HWNDNEXT)) {
+    if (!g_customFrame || IsRectEmpty(&btn)) {
+      SetWindowRgn(c, nullptr, TRUE);
+      continue;
+    }
+    HRGN all = CreateRectRgn(0, 0, rc.right - rc.left, rc.bottom - rc.top);
+    HRGN hole = CreateRectRgn(btn.left - rc.left, btn.top - rc.top, btn.right - rc.left, btn.bottom - rc.top);
+    CombineRgn(all, all, hole, RGN_DIFF);
+    DeleteObject(hole);
+    SetWindowRgn(c, all, TRUE);  // the window owns the region now
+  }
+}
+
+static void extendFrame() {
+  if (!g_wnd) return;
+  // Mica: the whole window is "frame", so it shows behind every see-through part of the page.
+  MARGINS m = g_mica ? MARGINS{-1, -1, -1, -1} : MARGINS{0, 0, g_customFrame ? titlebarPx() : 0, 0};
+  DwmExtendFrameIntoClientArea(g_wnd, &m);
+}
+
+/** Title bar colours, Mica and the web view's background for the theme shown now. */
+static void applyTheme() {
+  if (!g_wnd) return;
+  BOOL dark = g_day ? FALSE : TRUE;
+  // 20 = DWMWA_USE_IMMERSIVE_DARK_MODE (Windows 10 20H1+ and 11); 19 was its number before that.
+  if (FAILED(DwmSetWindowAttribute(g_wnd, DWMWA_USE_IMMERSIVE_DARK_MODE, &dark, sizeof(dark)))) DwmSetWindowAttribute(g_wnd, 19, &dark, sizeof(dark));
+  DWORD build = windowsBuild();
+  // Mica only when the page asked for it (it then leaves its background see-through, so Mica shows
+  // behind the whole header). Otherwise the frame and the place under the caption buttons are the
+  // theme colour, the same as the page's own background, so nothing shows as a box.
+  g_mica = false;
+  if (build >= 22621) {
+    DWM_SYSTEMBACKDROP_TYPE type = g_wantMica ? DWMSBT_MAINWINDOW : DWMSBT_NONE;
+    g_mica = SUCCEEDED(DwmSetWindowAttribute(g_wnd, DWMWA_SYSTEMBACKDROP_TYPE, &type, sizeof(type))) && g_wantMica;
+  }
+  if (build >= 22000) {
+    // Windows 11: the caption (and the frame DWM draws its buttons on) in the theme colour.
+    // With Mica: the default (DWMWA_COLOR_DEFAULT), or DWM paints the caption strip over Mica.
+    COLORREF caption = g_mica ? DWMWA_COLOR_DEFAULT : themeColor();
+    COLORREF text = g_mica ? DWMWA_COLOR_DEFAULT : g_day ? RGB(0x24, 0x1c, 0x2b) : RGB(0xee, 0xe9, 0xf3);
+    DwmSetWindowAttribute(g_wnd, DWMWA_CAPTION_COLOR, &caption, sizeof(caption));
+    DwmSetWindowAttribute(g_wnd, DWMWA_TEXT_COLOR, &text, sizeof(text));
+  }
+  HBRUSH old = g_bgBrush;
+  g_bgBrush = CreateSolidBrush(themeColor());
+  SetClassLongPtrW(g_wnd, GCLP_HBRBACKGROUND, (LONG_PTR)g_bgBrush);
+  if (old) DeleteObject(old);
+  ComPtr<ICoreWebView2Controller2> c2;
+  COLORREF c = themeColor();
+  if (g_controller && SUCCEEDED(g_controller.As(&c2))) c2->put_DefaultBackgroundColor({(BYTE)(g_mica ? 0 : 255), GetRValue(c), GetGValue(c), GetBValue(c)});
+  // Windows 10 repaints the caption only when the frame changes.
+  extendFrame();
+  SetWindowPos(g_wnd, nullptr, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+  InvalidateRect(g_wnd, nullptr, TRUE);
+}
+
+/** The page said which theme it shows (or the system's light/dark changed while it follows it). */
+static void setTheme(std::wstring pref) {
+  if (pref == L"dark") pref = L"night";  // the page's own words for them (localStorage sara.theme)
+  if (pref == L"light") pref = L"day";
+  if (pref != L"night" && pref != L"day" && pref != L"system") return;
+  bool day = resolveDay(pref);
+  bool changed = pref != g_themePref || day != g_day;
+  g_themePref = pref;
+  g_day = day;
+  if (getPref(L"theme") != pref) setPref(L"theme", pref);
+  if (changed) applyTheme();
+}
+
+/** The page draws its header in the title strip (or a new page from another place hasn't said so). */
+static void setPageTitle(bool on, const std::wstring& origin) {
+  g_pageTitleOrigin = on ? origin : L"";
+  if (g_pageTitle == on) return;
+  g_pageTitle = on;
+  layoutWebView();
+  if (g_wnd) InvalidateRect(g_wnd, nullptr, TRUE);
+}
+/** "https://host" for server pages, "local" for the app's own pages (data: / about:). */
+static std::wstring pageOrigin(const std::wstring& uri) {
+  if (uri.rfind(L"data:", 0) == 0 || uri.rfind(L"about:", 0) == 0) return L"local";
+  return originOf(uri);
+}
+
+/** The page asks for Mica behind it ('mica') or its own solid background ('solid'). */
+static void setBackdrop(const std::wstring& b) {
+  if (b != L"mica" && b != L"solid") return;
+  bool want = b == L"mica" && windowsBuild() >= 22621;
+  if (getPref(L"backdrop") != b) setPref(L"backdrop", b);
+  if (want == g_wantMica) return;
+  g_wantMica = want;
+  applyTheme();
+}
+
+/** Switches the page-in-the-title-area frame on or off (off: the normal title bar). */
+static void setCustomFrame(bool on) {
+  if (g_customFrame == on || !g_wnd) return;
+  g_customFrame = on;
+  extendFrame();
+  SetWindowPos(g_wnd, nullptr, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+  layoutWebView();
+}
+
+/** The page's view of the window (window.saraShell and <html class="shell-windows">), set before
+ *  any page script runs. titlebar: the height in CSS px of the strip the page draws its header in
+ *  and marks app-region: drag (0 = Windows draws a normal title bar above the page). controls: the
+ *  part of that strip the native caption buttons cover, so the page keeps it free. */
+static std::wstring shellScript() {
+  int title = g_wantCustomFrame ? kTitlebarDip : 0;
+  // Windows 11's caption buttons: 3 × 46 px wide at 100%; the real width is measured once the
+  // frame is on, this is the start value.
+  int controls = g_wantCustomFrame ? 138 : 0;
+  RECT b = captionButtons();
+  if (!IsRectEmpty(&b)) controls = MulDiv(b.right - b.left, 96, (int)windowDpi()) + 8;
+  // backdrops: what this Windows can show behind a see-through page; backdrop: what it shows now.
+  std::wstring backdrops = windowsBuild() >= 22621 ? L"['solid', 'mica']" : L"['solid']";
+  std::wstring backdrop = g_wantMica ? L"mica" : L"solid";
+  return L"(() => {\n"
+         L"  if (window.top !== window) return;\n"
+         L"  window.saraShell = { platform: 'windows', titlebar: " + std::to_wstring(title) + L", controls: { side: 'right', width: " + std::to_wstring(controls) +
+         L" }, theme: '" + g_themePref + L"', backdrop: '" + backdrop + L"', backdrops: " + backdrops + L", version: '" + kVersion + L"' };\n"
+         L"  const mark = () => {\n"
+         L"    const d = document.documentElement;\n"
+         L"    if (!d) return false;\n"
+         L"    d.classList.add('shell-windows');\n"
+         L"    d.style.setProperty('--shell-titlebar', window.saraShell.titlebar + 'px');\n"
+         L"    d.style.setProperty('--shell-controls-right', window.saraShell.controls.width + 'px');\n"
+         L"    return true;\n"
+         L"  };\n"
+         L"  if (!mark()) new MutationObserver((_, o) => { if (mark()) o.disconnect(); }).observe(document, { childList: true });\n"
+         L"})();\n";
+}
+
 static void logLine(const std::wstring& line) {
   FILE* f = nullptr;
   if (_wfopen_s(&f, (dataDir() + L"\\desktop.log").c_str(), L"a, ccs=UTF-8") == 0 && f) {
@@ -601,27 +811,35 @@ static void trayMenu() {
 }
 
 // ---------- pages shown before the server is known or when it can't be reached ----------
-// The app's own pages (welcome, add a Sara, can't reach): the web app's colours (web/style.css),
-// light or dark like Windows. The same look as the Mac app's pages (desktop/mac/Sources/main.swift).
+// The app's own pages (welcome, add a Sara, can't reach): the new look's tokens (docs/design/
+// NEW_LOOK.md, web/theme.css), Night or Day as the page last said, with a drag strip where the
+// title bar would be. The same look as the Mac app's pages (desktop/mac/Sources/main.swift).
 static const wchar_t* kPageStyle = LR"CSS(<meta name=viewport content='width=device-width'><style>
-:root{--bg:#121016;--panel:#1b1820;--panel-2:#241f2b;--text:#eee9f3;--muted:#a49cae;--accent:#e0789a;--accent-2:#f3a6bf;--border:#322b3a;--error:#ff8080;--on-accent:#1a0f14;color-scheme:dark}
-@media (prefers-color-scheme:light){:root{--bg:#faf7fb;--panel:#f1ecf4;--panel-2:#e8e1ed;--text:#241c2b;--muted:#6b6274;--accent:#c94f78;--accent-2:#a83d61;--border:#d9d0e0;--error:#c0303a;--on-accent:#fff;color-scheme:light}}
+:root{--bg:#0f0d17;--panel:#17141f;--panel-2:#1e1a29;--text:#eee9f3;--muted:#a9a0b8;--accent:#f08aa5;--grad:linear-gradient(135deg,#e0607e,#9b6bff);--border:rgba(255,255,255,.08);--border-2:rgba(255,255,255,.16);--error:#ff6b7d;--on-accent:#160c14;--glow:0 0 0 1px rgba(224,96,126,.18),0 18px 50px rgba(155,107,255,.14);color-scheme:dark}
+html.day{--bg:#faf7f5;--panel:#ffffff;--panel-2:#f6eff2;--text:#241c2b;--muted:#665d70;--accent:#b8436a;--border:rgba(36,28,43,.10);--border-2:rgba(36,28,43,.22);--error:#c0303a;--glow:0 12px 40px rgba(60,30,60,.10);color-scheme:light}
 *{box-sizing:border-box}html,body{height:100%;margin:0}
-body{background:var(--bg);color:var(--text);font:15px/1.5 'Segoe UI Variable Text','Segoe UI',system-ui,sans-serif;display:grid;place-items:center;padding:24px;-webkit-user-select:none;user-select:none}
-.c{width:100%;max-width:440px;background:var(--panel);border:1px solid var(--border);border-radius:16px;padding:30px 30px 26px;box-shadow:0 12px 40px #0003}
-.logo{display:block;width:64px;height:64px;border-radius:50%;margin:0 0 18px;background:var(--panel-2)}
-h1{font-size:22px;line-height:1.25;margin:0 0 8px;font-weight:650}
+body{background:var(--bg);color:var(--text);font:15px/1.5 Inter,'Segoe UI Variable Text','Segoe UI',system-ui,sans-serif;display:grid;place-items:center;padding:24px;-webkit-user-select:none;user-select:none}
+body::before{content:'';position:fixed;left:0;right:0;top:0;height:var(--tb,0px);app-region:drag;-webkit-app-region:drag}
+.c{width:100%;max-width:440px;background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:30px 30px 26px;box-shadow:var(--glow)}
+.logo{display:block;width:64px;height:64px;border-radius:50%;margin:0 0 18px;background:var(--panel-2);box-shadow:0 0 0 2px rgba(240,138,165,.35),0 0 24px rgba(155,107,255,.35)}
+h1{font-size:22px;line-height:1.25;margin:0 0 8px;font-weight:600;letter-spacing:-.01em}
 p{color:var(--muted);margin:0 0 12px}b{color:var(--text);font-weight:600}
 label{display:block;font-weight:600;font-size:14px;margin:18px 0 6px}
-input{width:100%;font:inherit;padding:10px 12px;border-radius:10px;border:1px solid var(--border);background:var(--panel-2);color:var(--text);-webkit-user-select:text;user-select:text}
+input{width:100%;font:inherit;padding:10px 12px;border-radius:10px;border:1px solid var(--border-2);background:var(--panel-2);color:var(--text);-webkit-user-select:text;user-select:text}
 input:focus{outline:2px solid var(--accent);outline-offset:-1px}
 .row{display:flex;flex-wrap:wrap;gap:8px;margin-top:18px}
-button{font:inherit;font-weight:600;padding:9px 18px;border:0;border-radius:10px;background:var(--accent);color:var(--on-accent);cursor:pointer}
-button:hover{background:var(--accent-2)}button:focus-visible{outline:2px solid var(--text);outline-offset:2px}
-button.g{background:transparent;color:var(--text);border:1px solid var(--border);font-weight:500}button.g:hover{border-color:var(--muted)}
+button{font:inherit;font-weight:600;padding:9px 18px;min-height:40px;border:0;border-radius:10px;background:var(--grad);color:var(--on-accent);cursor:pointer;transition:filter .15s ease-out}
+button:hover{filter:brightness(1.08)}button:focus-visible{outline:2px solid var(--text);outline-offset:2px}
+button.g{background:transparent;color:var(--text);border:1px solid var(--border-2);font-weight:500}button.g:hover{border-color:var(--accent);filter:none}
 .e{color:var(--error);font-size:14px;margin:8px 0 0}.e:empty{display:none}
 .small{font-size:13px}.sep{border-top:1px solid var(--border);margin:22px 0 0;padding-top:14px}.sep p{margin:0 0 8px}
+@media (prefers-reduced-motion:reduce){button{transition:none}}
 </style>)CSS";
+/** <!doctype html><html …><head> with the style: Day or Night, and the drag strip's height. */
+static std::wstring pageHead() {
+  return std::wstring(L"<!doctype html><html class='") + (g_day ? L"day" : L"night") + L"' style='--tb:" + std::to_wstring(g_customFrame ? kTitlebarDip : 0) + L"px'><head>" + kPageStyle +
+         L"<script>chrome.webview.postMessage({type:'shell',titlebar:true})</script></head>";
+}
 /** Her picture at the top of these pages (page-logo.h is made by scripts/make-app-icons.py). */
 static std::wstring logoHtml() { return std::wstring(L"<img class=logo alt='' src='") + kLogoDataUrl + L"'>"; }
 
@@ -643,7 +861,7 @@ static void showSetup(const std::wstring& error = L"", const std::wstring& typed
   // Phase 68: with a Sara already here, this page adds another one; Back returns to her.
   Profile here = g_profile.empty() ? Profile{} : loadProfile(g_profile);
   bool adding = !here.url.empty();
-  std::wstring html = std::wstring(L"<!doctype html><html><head>") + kPageStyle + L"</head><body><div class=c>" + logoHtml() + L"<h1>" +
+  std::wstring html = pageHead() + L"<body><div class=c>" + logoHtml() + L"<h1>" +
                       (adding ? L"Add a Sara" : L"Connect to your Sara") + L"</h1><p>" +
                       (adding ? L"Type the address of another Sara. Your other Saras stay signed in."
                               : L"Type the address you open Sara at in a web browser.") +
@@ -675,7 +893,7 @@ static void showOffline() {
   std::wstring others;
   for (auto& p : profiles())
     if (p.id != g_profile) others += L"<button class=g data-id='" + htmlEscape(p.id) + L"'>" + htmlEscape(p.name) + L"</button>";
-  std::wstring html = std::wstring(L"<!doctype html><html><head>") + kPageStyle + L"</head><body><div class=c>" + logoHtml() +
+  std::wstring html = pageHead() + L"<body><div class=c>" + logoHtml() +
                       L"<h1>Can't reach your Sara</h1><p><b>" + htmlEscape(g_server) + L"</b> isn't answering.</p><p>" + why +
                       L"</p><div class=row><button id=r>Try again</button><button class=g id=s>Add a Sara</button></div>" +
                       (others.empty() ? L"" : L"<div class=sep><p class=small>Your other Saras</p><div class=row style='margin-top:0'>" + others + L"</div></div>") +
@@ -753,7 +971,7 @@ static void finishRemove() {
   ComPtr<ICoreWebView2Profile> profile;
   ComPtr<ICoreWebView2Profile2> p2;
   if (g_web && SUCCEEDED(g_web.As(&w13)) && SUCCEEDED(w13->get_Profile(&profile)) && SUCCEEDED(profile.As(&p2))) {
-    g_web->NavigateToString(L"<!doctype html><html><body style='background:#121016'></body></html>");
+    g_web->NavigateToString((pageHead() + L"<body></body></html>").c_str());
     HRESULT hr = p2->ClearBrowsingDataAll(Callback<ICoreWebView2ClearBrowsingDataCompletedHandler>([done](HRESULT) -> HRESULT {
                     done();
                     return S_OK;
@@ -814,7 +1032,7 @@ static void reply(const std::wstring& id, const std::wstring& resultJson, const 
 static std::wstring prefsJson() {
   return std::wstring(L"{\"platform\":\"windows\",\"version\":\"") + kVersion + L"\",\"startAtLogin\":" + (startAtLogin() ? L"true" : L"false") +
          L",\"keepRunning\":" + (prefOn(L"keepRunning", true) ? L"true" : L"false") + L",\"notifications\":" + (prefOn(L"notifications", true) ? L"true" : L"false") +
-         L",\"server\":\"" + jsonEscape(g_server) + L"\"}";
+         L",\"server\":\"" + jsonEscape(g_server) + L"\",\"theme\":\"" + g_themePref + L"\",\"titlebar\":" + std::to_wstring(g_customFrame ? kTitlebarDip : 0) + L"}";
 }
 
 static void onMessage(const std::wstring& json, const std::wstring& source) {
@@ -830,6 +1048,11 @@ static void onMessage(const std::wstring& json, const std::wstring& source) {
     // Phase 68: a saved server again, or a new one next to the others (nobody is signed out).
     return postSwitch(profileFor(o), L"/pair");
   }
+  // Phase 75: the page draws its header in the title strip (any page: it only moves the web view up).
+  if (m[L"type"] == L"shell" || kind == L"shell") {
+    setPageTitle(m[L"titlebar"] == L"true", pageOrigin(source));
+    return reply(id, L"true");
+  }
   if (kind == L"retry") return openServer();
   if (kind == L"changeServer") return changeServerFromMenu();
   if (kind == L"useServer" && !fromServer) return postSwitch(m[L"id"]);
@@ -841,6 +1064,18 @@ static void onMessage(const std::wstring& json, const std::wstring& source) {
     return postSwitch(profileFor(o));
   }
   if (!fromServer) return;  // everything else only from the owner's own server
+  // Phase 75: the page's theme (Night / Day / follow the system): the title bar, Mica and the
+  // background before the next page paints follow it. {type:'theme', theme} or SaraDesktop.call('theme', {theme}).
+  if (m[L"type"] == L"theme" || kind == L"theme") {
+    setTheme(m[L"theme"]);
+    if (!m[L"backdrop"].empty()) setBackdrop(m[L"backdrop"]);
+    return reply(id, L"true");
+  }
+  // {type:'backdrop', backdrop:'mica'|'solid'}: 'mica' once the page's background is see-through.
+  if (m[L"type"] == L"backdrop" || kind == L"backdrop") {
+    setBackdrop(m[L"backdrop"]);
+    return reply(id, g_mica ? L"\"mica\"" : L"\"solid\"");
+  }
   if (kind == L"getPrefs") return reply(id, prefsJson());
   // Phase 68: the page's ⇄ menu. Names and hosts only: no sign-in ever goes to a page.
   if (kind == L"servers") return reply(id, serversJson());
@@ -905,16 +1140,25 @@ static void createController() {
           if (FAILED(r2) || !ctl) return S_OK;
           g_controller = ctl;
           g_controller->get_CoreWebView2(&g_web);
-          RECT rc;
-          GetClientRect(g_wnd, &rc);
-          g_controller->put_Bounds(rc);
+          // Phase 75: the theme colour behind every page (no white flash on start, navigation or resize).
           ComPtr<ICoreWebView2Controller2> c2;
-          if (SUCCEEDED(g_controller.As(&c2))) c2->put_DefaultBackgroundColor({255, 0x12, 0x10, 0x16});
+          COLORREF bg = themeColor();
+          if (SUCCEEDED(g_controller.As(&c2))) c2->put_DefaultBackgroundColor({(BYTE)(g_mica ? 0 : 255), GetRValue(bg), GetGValue(bg), GetBValue(bg)});
 
           ComPtr<ICoreWebView2Settings> settings;
           g_web->get_Settings(&settings);
           settings->put_AreDevToolsEnabled(FALSE);
           settings->put_IsStatusBarEnabled(FALSE);
+          // Phase 75: CSS app-region: drag in the page's header moves the window (double-click
+          // maximizes). A WebView2 without it keeps the normal title bar.
+          ComPtr<ICoreWebView2Settings9> s9;
+          bool regions = SUCCEEDED(settings.As(&s9)) && SUCCEEDED(s9->put_IsNonClientRegionSupportEnabled(TRUE));
+          if (!regions && g_wantCustomFrame) {
+            logLine(L"this WebView2 has no app-region support: the normal title bar is used");
+            g_wantCustomFrame = false;
+            setCustomFrame(false);
+          }
+          layoutWebView();
           ComPtr<ICoreWebView2Settings2> s2;
           if (SUCCEEDED(settings.As(&s2))) {
             LPWSTR ua = nullptr;
@@ -930,7 +1174,11 @@ static void createController() {
             a->get_Uri(&uri);
             std::wstring u = uri ? uri : L"";
             CoTaskMemFree(uri);
-            if (u.rfind(L"data:", 0) == 0 || u.rfind(L"about:", 0) == 0 || sameOrigin(u)) return S_OK;
+            if (u.rfind(L"data:", 0) == 0 || u.rfind(L"about:", 0) == 0 || sameOrigin(u)) {
+              // Another place (a server, the app's own page): its page says again whether it draws the strip.
+              if (g_pageTitle && pageOrigin(u) != g_pageTitleOrigin) setPageTitle(false, L"");
+              return S_OK;
+            }
             a->put_Cancel(TRUE);
             if (u.rfind(L"http", 0) == 0) ShellExecuteW(nullptr, L"open", u.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
             return S_OK;
@@ -985,6 +1233,8 @@ static void createController() {
             onMessage(j, s);
             return S_OK;
           }).Get(), nullptr);
+          // Phase 75: window.saraShell and <html class="shell-windows"> before any page script.
+          g_web->AddScriptToExecuteOnDocumentCreated(shellScript().c_str(), nullptr);
           // Open the server only once the bridge script is registered, or the first page misses it.
           g_web->AddScriptToExecuteOnDocumentCreated(kShim, Callback<ICoreWebView2AddScriptToExecuteOnDocumentCreatedCompletedHandler>([](HRESULT, LPCWSTR) -> HRESULT {
             // Phase 55: the installer set the address of a Sara elsewhere: the first start goes
@@ -1043,14 +1293,130 @@ static void saveWindowPlace() {
   setPref(L"window", std::to_wstring(r.left) + L"," + std::to_wstring(r.top) + L"," + std::to_wstring(r.right) + L"," + std::to_wstring(r.bottom) + L"," + (wp.showCmd == SW_SHOWMAXIMIZED ? L"1" : L"0"));
 }
 
+/** Phase 75: the window's own hit test while the page draws into the title area. DWM answers for
+ *  its caption buttons first (hover, clicks and the snap layouts flyout on maximize). */
+static LRESULT customFrameHitTest(HWND h, WPARAM wp, LPARAM lp) {
+  LRESULT hit = DefWindowProcW(h, WM_NCHITTEST, wp, lp);
+  if (hit != HTCLIENT) return hit;  // the side and bottom borders stay Windows' own
+  POINT pt{GET_X_LPARAM(lp), GET_Y_LPARAM(lp)};
+  ScreenToClient(h, &pt);
+  RECT rc;
+  GetClientRect(h, &rc);
+  // DWM doesn't always answer for its buttons (maximized, the window hangs over the screen edge):
+  // the same three buttons by position, so clicks, the restore button and snap layouts still work.
+  RECT btn = captionButtons();
+  if (!IsRectEmpty(&btn) && PtInRect(&btn, pt)) {
+    int third = (btn.right - btn.left) / 3;
+    if (pt.x < btn.left + third) return HTMINBUTTON;
+    if (pt.x < btn.left + 2 * third) return HTMAXBUTTON;
+    return HTCLOSE;
+  }
+  int band = topResizeBand();
+  if (band > 0 && pt.y < band) {
+    UINT dpi = windowDpi();
+    int corner = GetSystemMetricsForDpi(SM_CXSIZEFRAME, dpi) + GetSystemMetricsForDpi(SM_CXPADDEDBORDER, dpi) + GetSystemMetricsForDpi(SM_CXSIZE, dpi) / 2;
+    if (pt.x < corner) return HTTOPLEFT;
+    if (pt.x >= rc.right - corner) return HTTOPRIGHT;
+    return HTTOP;
+  }
+  // The strip beside the caption buttons (the page covers the rest and answers with app-region).
+  if (pt.y < titlebarPx()) return HTCAPTION;
+  return HTCLIENT;
+}
+
 static LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
+  if (g_customFrame) {
+    LRESULT r = 0;
+    if (DwmDefWindowProc(h, msg, wp, lp, &r)) return r;  // the caption buttons
+  }
   switch (msg) {
-    case WM_SIZE:
-      if (g_controller) {
-        RECT rc;
-        GetClientRect(h, &rc);
-        g_controller->put_Bounds(rc);
+    case WM_NCCALCSIZE:
+      if (g_customFrame && wp) {
+        // Keep Windows' left, right and bottom borders; take the title bar away (the page draws
+        // there). Maximized, the window hangs over the screen edge by the border: keep it visible.
+        auto* p = reinterpret_cast<NCCALCSIZE_PARAMS*>(lp);
+        LONG top = p->rgrc[0].top;
+        DefWindowProcW(h, msg, wp, lp);
+        p->rgrc[0].top = top;
+        if (IsZoomed(h)) {
+          UINT dpi = GetDpiForWindow(h);
+          p->rgrc[0].top += GetSystemMetricsForDpi(SM_CYSIZEFRAME, dpi) + GetSystemMetricsForDpi(SM_CXPADDEDBORDER, dpi);
+        }
+        return 0;
       }
+      break;
+    case WM_NCHITTEST:
+      if (g_customFrame) return customFrameHitTest(h, wp, lp);
+      break;
+    case WM_ACTIVATE:
+      extendFrame();
+      break;
+    case WM_ERASEBKGND:
+      return 1;  // WM_PAINT fills it (no flash of the old colour)
+    case WM_PAINT: {
+      // The top resize band and the place under the caption buttons: the theme colour, fully
+      // opaque (plain GDI leaves alpha 0, which DWM shows see-through in the extended frame).
+      PAINTSTRUCT ps;
+      HDC dc = BeginPaint(h, &ps);
+      HDC buf = nullptr;
+      HPAINTBUFFER pb = BeginBufferedPaint(dc, &ps.rcPaint, BPBF_TOPDOWNDIB, nullptr, &buf);
+      // With Mica all of it is see-through (black, alpha 0) and Mica shows.
+      HBRUSH b = g_mica ? (HBRUSH)GetStockObject(BLACK_BRUSH) : CreateSolidBrush(themeColor());
+      FillRect(pb ? buf : dc, &ps.rcPaint, b);
+      if (!g_mica) DeleteObject(b);
+      if (pb && g_customFrame && !g_pageTitle && !g_mica) {
+        // The app's own title strip (the page doesn't draw one): her icon and "Sara".
+        HDC t = buf;
+        UINT dpi = windowDpi();
+        int strip = titlebarPx(), icon = GetSystemMetricsForDpi(SM_CXSMICON, dpi), pad = MulDiv(14, (int)dpi, 96);
+        int top = topResizeBand();
+        int mid = top + (strip - top) / 2;
+        if (HICON ic = (HICON)LoadImageW(g_inst, MAKEINTRESOURCEW(IDI_SARA), IMAGE_ICON, icon, icon, 0)) {
+          DrawIconEx(t, pad, mid - icon / 2, ic, icon, icon, 0, nullptr, DI_NORMAL);
+          DestroyIcon(ic);
+        }
+        NONCLIENTMETRICSW ncm{sizeof(ncm)};
+        SystemParametersInfoForDpi(SPI_GETNONCLIENTMETRICS, sizeof(ncm), &ncm, 0, dpi);
+        HFONT f = CreateFontIndirectW(&ncm.lfCaptionFont);
+        HGDIOBJ oldFont = SelectObject(t, f);
+        SetBkMode(t, TRANSPARENT);
+        SetTextColor(t, g_day ? RGB(0x24, 0x1c, 0x2b) : RGB(0xee, 0xe9, 0xf3));
+        RECT tr{pad + icon + MulDiv(10, (int)dpi, 96), top, MulDiv(400, (int)dpi, 96), strip};
+        DrawTextW(t, L"Sara", -1, &tr, DT_SINGLELINE | DT_VCENTER | DT_NOPREFIX);
+        SelectObject(t, oldFont);
+        DeleteObject(f);
+      }
+      if (pb) {
+        BufferedPaintSetAlpha(pb, &ps.rcPaint, g_mica ? 0 : 255);
+        // Under DWM's caption buttons: see-through (the frame there is the theme colour), or the
+        // paint hides them.
+        RECT btn = captionButtons();
+        if (!IsRectEmpty(&btn)) {
+          FillRect(buf, &btn, (HBRUSH)GetStockObject(BLACK_BRUSH));
+          BufferedPaintSetAlpha(pb, &btn, 0);
+        }
+        EndBufferedPaint(pb, TRUE);
+      }
+      EndPaint(h, &ps);
+      return 0;
+    }
+    case WM_DPICHANGED: {
+      const RECT* r = reinterpret_cast<const RECT*>(lp);
+      SetWindowPos(h, nullptr, r->left, r->top, r->right - r->left, r->bottom - r->top, SWP_NOZORDER | SWP_NOACTIVATE);
+      extendFrame();
+      layoutWebView();
+      return 0;
+    }
+    case WM_SETTINGCHANGE:
+      // Windows switched light/dark while the page follows the system.
+      if (g_themePref == L"system" && lp && wcscmp(reinterpret_cast<const wchar_t*>(lp), L"ImmersiveColorSet") == 0 && resolveDay(L"system") != g_day) {
+        g_day = !g_day;
+        applyTheme();
+      }
+      break;
+    case WM_SIZE:
+      extendFrame();
+      layoutWebView();
       return 0;
     case WM_CLOSE:
       saveWindowPlace();
@@ -1195,13 +1561,36 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR cmd, int show) {
     if (!act.empty() && !loadProfile(act).url.empty()) activate(act);
   }
 
+  // Phase 75: the last theme the page showed, and whether the page can draw into the title area:
+  // Windows 11 (DWM draws the caption buttons over the page) and a WebView2 runtime with CSS
+  // app-region support (ICoreWebView2Settings9, runtime 123+); otherwise the normal title bar.
+  g_themePref = getPref(L"theme", L"night");
+  if (g_themePref != L"day" && g_themePref != L"system") g_themePref = L"night";
+  g_day = resolveDay(g_themePref);
+  g_wantMica = getPref(L"backdrop") == L"mica" && windowsBuild() >= 22621;
+  {
+    LPWSTR rt = nullptr;
+    int cmp = -1;
+    if (SUCCEEDED(GetAvailableCoreWebView2BrowserVersionString(nullptr, &rt)) && rt) CompareBrowserVersions(rt, L"123.0.2420.47", &cmp);
+    logLine(std::wstring(L"WebView2 runtime ") + (rt ? rt : L"(none)") + L", Windows build " + std::to_wstring(windowsBuild()));
+    CoTaskMemFree(rt);
+    g_wantCustomFrame = windowsBuild() >= 22000 && cmp >= 0;
+#ifdef SARA_TEST_HOOKS
+    wchar_t f[32];
+    if (GetEnvironmentVariableW(L"SARA_DESKTOP_FRAME", f, 32) > 0 && wcscmp(f, L"classic") == 0) g_wantCustomFrame = false;
+#endif
+    g_customFrame = g_wantCustomFrame;
+  }
+  BufferedPaintInit();
+
   WNDCLASSEXW wc{sizeof(wc)};
   wc.lpfnWndProc = WndProc;
   wc.hInstance = inst;
   wc.hIcon = LoadIconW(inst, MAKEINTRESOURCEW(IDI_SARA));
   wc.hIconSm = (HICON)LoadImageW(inst, MAKEINTRESOURCEW(IDI_SARA), IMAGE_ICON, GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON), 0);
   wc.hCursor = LoadCursorW(nullptr, IDC_ARROW);
-  wc.hbrBackground = CreateSolidBrush(RGB(0x12, 0x10, 0x16));
+  g_bgBrush = CreateSolidBrush(themeColor());
+  wc.hbrBackground = g_bgBrush;
   wc.lpszClassName = kWindowClass;
   RegisterClassExW(&wc);
 
@@ -1213,6 +1602,11 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR cmd, int show) {
     x = l; y = t; w = r - l; hgt = b - t; maximized = mx == 1;
   }
   g_wnd = CreateWindowExW(0, kWindowClass, L"Sara", WS_OVERLAPPEDWINDOW, x, y, w, hgt, nullptr, nullptr, inst, nullptr);
+  applyTheme();
+  if (g_customFrame) {
+    extendFrame();
+    SetWindowPos(g_wnd, nullptr, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+  }
   addTray();
   if (!background) ShowWindow(g_wnd, maximized ? SW_SHOWMAXIMIZED : show);
   createWebView();
@@ -1222,6 +1616,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR cmd, int show) {
     TranslateMessage(&msg);
     DispatchMessageW(&msg);
   }
+  BufferedPaintUnInit();
   CoUninitialize();
   CloseHandle(single);
   return (int)msg.wParam;

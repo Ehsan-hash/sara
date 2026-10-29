@@ -354,11 +354,15 @@ export function createPlannerRoutes(ctx: RouteCtx): RouteHandler {
         const body = await readJson(req);
         const cur = briefingSettings(app);
         const next = { ...cur };
+        let timeChanged = false;
         if (body.enabled !== undefined) next.enabled = Boolean(body.enabled);
         if (body.time !== undefined) {
           const t = String(body.time);
           if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(t)) throw new HttpError(400, 'Time must look like 07:30.');
-          if (t !== cur.time) delete next.lastDay;
+          if (t !== cur.time) {
+            delete next.lastDay;
+            timeChanged = true;
+          }
           next.time = t;
         }
         if (body.units !== undefined) next.units = body.units === 'C' ? 'C' : 'F';
@@ -373,7 +377,14 @@ export function createPlannerRoutes(ctx: RouteCtx): RouteHandler {
             }
           }
         }
-        app.settings.update({ briefing: next });
+        // Merge onto the settings as they are NOW: the place lookup above can take seconds, and a
+        // briefing sent meanwhile writes its "sent today" mark, which a stale copy would wipe.
+        const fresh = briefingSettings(app);
+        const merged = { ...fresh, enabled: next.enabled, time: next.time, ...(next.units ? { units: next.units } : {}) };
+        if (next.place) merged.place = next.place;
+        else delete merged.place;
+        if (timeChanged) delete merged.lastDay;
+        app.settings.update({ briefing: merged });
         return send(res, 200, await view());
       }
       if (b === 'send' && method === 'POST') {

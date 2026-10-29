@@ -77,6 +77,7 @@ import { ownerFocused } from './traits.ts';
 import { frameNote, noFrameNote } from './video.ts';
 import { metered } from './usage.ts';
 import { cutOtherSpeakers, GROUP_TOOLS, isGroupChannel, otherLine, ownerLine, stripLeadTag } from './group.ts';
+import { cardFor, type Card } from './cards.ts';
 
 export interface AppContext {
   store: Store;
@@ -227,7 +228,8 @@ export type ChatEvent =
   | { type: 'approval'; approvalId: string; id: string; name: string; summary: string; args: Record<string, unknown> }
   /** An approved tool has started running. */
   | { type: 'tool_running'; id: string; name: string; summary: string }
-  | { type: 'tool_result'; id: string; name: string; status: 'ok' | 'error' | 'denied'; output: string; ms: number; snapshotId?: string }
+  /** Phase 75: `card` is a small structured result (src/cards.ts) the app draws as a result card. */
+  | { type: 'tool_result'; id: string; name: string; status: 'ok' | 'error' | 'denied'; output: string; ms: number; snapshotId?: string; card?: Card }
   /** Receipt check: claims in a reply that the tool log does not support. */
   | { type: 'claim_check'; messageId: number; claims: Claim[]; correcting: boolean }
   /** Phase 28: her reply failed a safety check and was replaced (show `text` instead). */
@@ -1253,9 +1255,11 @@ async function* runTurnInner(app: AppContext, conversationId: string, userText: 
       // Scrub before it is stored, shown or sent back to the model.
       output = app.redactor.redact(output + snapshotNote);
       const stored = clip(output, TOOL_RESULT_LIMIT);
-      store.addMessage(conv.id, 'tool', stored, { toolCallId: call.id, name: call.name, args: shownArgs, summary, status, ms, ...(snapshotId ? { snapshotId } : {}), ...(shown.length ? { images: shown } : {}) });
+      // Phase 75: a result card from the (scrubbed) result and arguments, kept with the message.
+      const card = cardFor({ name: call.name, args: shownArgs, status, output });
+      store.addMessage(conv.id, 'tool', stored, { toolCallId: call.id, name: call.name, args: shownArgs, summary, status, ms, ...(snapshotId ? { snapshotId } : {}), ...(shown.length ? { images: shown } : {}), ...(card ? { card } : {}) });
       receipts.push({ name: call.name, status, args: call.arguments, output });
-      yield { type: 'tool_result', id: call.id, name: call.name, status, output: clip(output, UI_OUTPUT_LIMIT), ms, ...(snapshotId ? { snapshotId } : {}) };
+      yield { type: 'tool_result', id: call.id, name: call.name, status, output: clip(output, UI_OUTPUT_LIMIT), ms, ...(snapshotId ? { snapshotId } : {}), ...(card ? { card } : {}) };
       for (const img of pendingImages) yield { type: 'image', id: img };
       for (const img of newProof) yield { type: 'proof', id: img };
       if (signal.aborted) {

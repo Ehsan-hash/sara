@@ -258,3 +258,22 @@ release) also honours `SARA_DESKTOP_TEST_DIR=<folder>` (its own settings, web vi
 single-instance lock), so it runs next to the real app without touching its sign-ins. Phase 55 was checked that way: the installer in remote mode
 (`/VERYSILENT /CURRENTUSER /MODE=remote /SERVER=http://127.0.0.1:<port>` against a scratch server),
 then pairing with a code, *Connect to a different Sara…*, the unreachable page and the uninstall.
+
+## The page in the title bar (2.5)
+
+The apps tell the page they can host its header in the title bar; the page answers when it draws there.
+
+- Before page scripts run the app sets `<html class="shell-windows">` or `shell-mac`, the CSS variables
+  `--shell-titlebar` and `--shell-controls-right` (Windows) / `--shell-controls-left` (Mac), and
+  `window.saraShell = { platform, titlebar, controls: { side, width }, theme, backdrop, backdrops, version }`
+  (Windows: titlebar 40, controls right 154; Mac: 38, left 90).
+- The page posts `{type:'shell', titlebar:true}` once it draws its header in the strip (Windows:
+  `window.chrome.webview.postMessage`, Mac: `window.webkit.messageHandlers.sara.postMessage`). Until then,
+  for example with an older server, the app draws its own 40 px strip and starts the page below it.
+- `{type:'theme', theme:'night'|'day'|'system'}` and `{type:'backdrop', backdrop:'mica'|'vibrancy'|'solid'}`
+  are accepted only from the owner's own server.
+- Windows: dark title bar (DWM immersive dark mode), optional Mica, WebView2 non-client regions for CSS
+  `app-region: drag`, native caption buttons with snap layouts. Falls back to the normal title bar on
+  Windows 10 or a WebView2 runtime older than 123. Mac: full-size content view, transparent title bar,
+  traffic lights inset; WebKit has no `app-region`, so a press on the strip calls `performDrag`.
+- Test in a browser with `?shell=windows&titlebar=32` or `?shell=mac` (stand-in window buttons).

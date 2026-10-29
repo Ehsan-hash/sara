@@ -80,6 +80,7 @@ version's details are in the [changelog](../CHANGELOG.md).
 | 72 | Her voice in the home: Alexa, Android's assistant and Google Home, Siri Shortcuts, smart-home presence | ✅ 2.1 |
 | 73 | Work on your other servers over SSH: password or key; after a password login she makes and uses her own key and keeps the password only if you insist | ✅ 2.2 |
 | 74 | Big documents: 500–1,000-page PDFs and books in her library, every scanned page read, answers with page numbers | ✅ 2.3 |
+| 75 | The new look: her work and results on screen, a presence panel, Today as tiles, dark by default; the same on phones; Windows and Mac apps with native glass, a quick-ask window and richer tray menus | 🚧 2.5 done; 2.6–2.7 next |
 
 Ideas and requests are welcome in [Discussions](https://github.com/farena-ai/sara/discussions)
 and [issues](https://github.com/farena-ai/sara/issues). See [CONTRIBUTING.md](../CONTRIBUTING.md).

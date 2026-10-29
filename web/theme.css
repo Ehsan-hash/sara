@@ -1,0 +1,127 @@
+/* Phase 75: the design tokens of the new look (docs/design/NEW_LOOK.md → Visual language).
+   One place for colours, shapes, spacing and motion. Night is the default; Day is the light theme
+   (html[data-theme="light"], set before anything draws by web/theme-boot.js). style.css and
+   ui-tidy.css map their older variables (--bg, --panel, --text, --accent…) onto these, so every
+   screen follows the theme. Contrast: every text pair below meets WCAG AA (4.5:1) on the
+   surfaces it is used on; muted text is checked against the raised surfaces too. */
+
+:root,
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  /* Surfaces: deep plum-navy, raised panels, frosted glass. */
+  --surface-0: #0f0d17;
+  --surface-1: #17141f;
+  --surface-2: #1e1a29;
+  --surface-3: #282236;
+  --glass: rgb(30 26 41 / .72);
+  --glass-strong: rgb(30 26 41 / .9);
+  --glass-filter: blur(18px) saturate(140%);
+  --hairline: rgb(255 255 255 / .08);
+  --hairline-strong: rgb(255 255 255 / .14);
+  --line: #2f2939;
+  /* Text: primary 15.9:1, secondary 7.6:1 and tertiary 4.9:1 on --surface-0 (4.5:1+ on --surface-2). */
+  --text-1: #f1edf7;
+  --text-2: #aea6bd;
+  --text-3: #8e86a0;
+  /* Accent: rose → violet, used sparingly (send, her glow, the active place, progress). */
+  --accent-from: #e0607e;
+  --accent-to: #9b6bff;
+  --accent-grad: linear-gradient(135deg, var(--accent-from), var(--accent-to));
+  --accent-solid: #e0607e;
+  --accent-text: #f08aa5;
+  --accent-soft: rgb(224 96 126 / .14);
+  --accent-glow: rgb(224 96 126 / .45);
+  --violet-glow: rgb(155 107 255 / .35);
+  /* Your messages: a compact deep gradient so white text stays at 5:1+. */
+  --mine-grad: linear-gradient(135deg, #a8456d, #6d48c4);
+  --on-mine: #ffffff;
+  --on-accent: #1a0f14;
+  --success: #4fd1a5;
+  --warn: #f5b452;
+  --danger: #ff6b7d;
+  --success-soft: rgb(79 209 165 / .13);
+  --warn-soft: rgb(245 180 82 / .13);
+  --danger-soft: rgb(255 107 125 / .13);
+  /* Depth: glow edges in the dark. */
+  --shadow-1: 0 1px 0 rgb(255 255 255 / .04) inset, 0 6px 24px rgb(0 0 0 / .35);
+  --shadow-2: 0 1px 0 rgb(255 255 255 / .05) inset, 0 18px 48px rgb(0 0 0 / .5);
+  --glow-edge: 0 1px 0 rgb(255 255 255 / .05) inset, 0 14px 36px -22px var(--accent-glow), 0 8px 24px -16px rgb(0 0 0 / .6);
+  --page-glow: radial-gradient(1200px 600px at 70% -10%, rgb(155 107 255 / .10), transparent 60%), radial-gradient(900px 500px at 0% 110%, rgb(224 96 126 / .08), transparent 60%);
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+  --surface-0: #faf7f5;
+  --surface-1: #ffffff;
+  --surface-2: #f4eef1;
+  --surface-3: #ebe2ea;
+  --glass: rgb(255 255 255 / .74);
+  --glass-strong: rgb(255 255 255 / .92);
+  --hairline: rgb(46 22 54 / .09);
+  --hairline-strong: rgb(46 22 54 / .16);
+  --line: #e2d8e0;
+  /* Primary 15.6:1, secondary 6.6:1, tertiary 4.7:1 on --surface-0. */
+  --text-1: #221a2a;
+  --text-2: #5e5469;
+  --text-3: #736a7e;
+  --accent-solid: #c24c74;
+  --accent-text: #b8436a;
+  --accent-soft: rgb(194 76 116 / .10);
+  --accent-glow: rgb(224 96 126 / .32);
+  --violet-glow: rgb(155 107 255 / .22);
+  --mine-grad: linear-gradient(135deg, #b8436a, #7a50d2);
+  --on-accent: #ffffff;
+  --success: #17805d;
+  --warn: #92600c;
+  --danger: #c0303a;
+  --success-soft: rgb(23 128 93 / .10);
+  --warn-soft: rgb(146 96 12 / .10);
+  --danger-soft: rgb(192 48 58 / .09);
+  /* Depth: soft shadows in the light. */
+  --shadow-1: 0 1px 2px rgb(60 30 70 / .06), 0 6px 20px rgb(60 30 70 / .07);
+  --shadow-2: 0 2px 6px rgb(60 30 70 / .08), 0 18px 44px rgb(60 30 70 / .14);
+  --glow-edge: 0 1px 2px rgb(60 30 70 / .05), 0 12px 30px -18px var(--accent-glow);
+  --page-glow: radial-gradient(1200px 600px at 70% -10%, rgb(155 107 255 / .07), transparent 60%), radial-gradient(900px 500px at 0% 110%, rgb(224 96 126 / .06), transparent 60%);
+}
+
+:root {
+  /* Type */
+  --font-ui: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --fs-body: 15px;
+  --fs-meta: 13px;
+  --fs-small: 12px;
+  --tracking-tight: -0.011em;
+  /* Shape */
+  --r-card: 14px;
+  --r-control: 10px;
+  --r-pill: 999px;
+  /* Spacing: a 4 px grid */
+  --s-1: 4px;
+  --s-2: 8px;
+  --s-3: 12px;
+  --s-4: 16px;
+  --s-5: 20px;
+  --s-6: 24px;
+  --s-8: 32px;
+  --tap: 44px;
+  /* Motion: 150-250 ms ease-out; her glow breathes slowly */
+  --dur-fast: 150ms;
+  --dur: 200ms;
+  --dur-slow: 250ms;
+  --ease-out: cubic-bezier(.2, .8, .2, 1);
+  --breathe: 4.8s;
+  /* The native apps' title strip (web/theme-boot.js sets it from window.saraShell). */
+  --titlebar: 0px;
+}
+
+/* Reduced motion: no glow breathing, no step fade-ins, no slides. */
+@media (prefers-reduced-motion: reduce) {
+  :root { --dur-fast: 0ms; --dur: 0ms; --dur-slow: 0ms; }
+  *, *::before, *::after {
+    animation-duration: .001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .001ms !important;
+    scroll-behavior: auto !important;
+  }
+}

@@ -2,15 +2,11 @@
    photos, and small tidying in the chat header and composer. Wave 2 (below): every other window. Loaded right after style.css, so these
    rules win where they overlap. Colours come from the theme variables (dark and light). */
 
+/* Phase 75: from the design tokens (theme.css). */
 :root {
-  --ok: #49b578;
-  --wait: #e0a23a;
-  --tidy-shadow: 0 10px 32px rgb(0 0 0 / .45);
-}
-:root[data-theme="light"] {
-  --ok: #23824b;
-  --wait: #9a6510;
-  --tidy-shadow: 0 10px 32px rgb(60 30 70 / .18);
+  --ok: var(--success);
+  --wait: var(--warn);
+  --tidy-shadow: var(--shadow-2);
 }
 
 /* ---------- Sidebar: pinned places, More, her and Settings/Help ---------- */
@@ -241,7 +237,7 @@ body.demo .side-dest:is([data-dest="planner"], [data-dest="memory"], [data-dest=
   --radius-card: 12px;
   --radius-pill: 999px;
   --card-bg: color-mix(in srgb, var(--panel-2) 55%, var(--panel));
-  --danger: #b3383d;
+  --danger-fill: #b3383d;
 }
 
 /* ---------- Shared pieces ---------- */
@@ -260,8 +256,8 @@ body.demo .side-dest:is([data-dest="planner"], [data-dest="memory"], [data-dest=
   background: color-mix(in srgb, var(--accent) 15%, transparent); color: var(--accent-2);
   font-size: 11px; font-weight: 650; letter-spacing: .03em; line-height: 1.6; text-transform: uppercase; white-space: nowrap;
 }
-button.danger { background: var(--danger); color: #fff; border: 1px solid var(--danger); }
-button.danger:hover { background: color-mix(in srgb, var(--danger) 82%, #000); }
+button.danger { background: var(--danger-fill); color: #fff; border: 1px solid var(--danger-fill); }
+button.danger:hover { background: color-mix(in srgb, var(--danger-fill) 82%, #000); }
 button.ghost.danger-text:hover { border-color: currentColor; }
 .empty-state {
   display: grid; justify-items: center; gap: var(--space-1); margin: 0; padding: 22px 16px; list-style: none;

@@ -24,6 +24,9 @@ import { addToMomentsButton, initMoments, loadMoments, openMoments, renderTodayM
 import { initHousehold, joinFromLink, loadAccount, loadHousehold, showPaused } from './household.js';
 import { initNav, relabelNav, revealNav, setMore } from './nav.js';
 import { emptyState, initTidy, overflowMenu } from './tidy.js';
+import { addStep, finishStep, hasSteps, memoryStep, runStep, stepLine, waitStep } from './steps.js';
+import { renderCard, renderCards } from './result-cards.js';
+import { initLook, setContextRing, setLookBusy, showHeadChips } from './look.js';
 /** Phase 71: a household member (their own space; owner-only pages and loaders are left out). */
 const isMember = () => document.body.classList.contains('member');
 const $ = (sel) => document.querySelector(sel);
@@ -793,6 +796,7 @@ function setActivity(status, detail = '', startedAt) {
     activity.timer = null;
     activity.status = '';
     document.title = t('Sara');
+    setLookBusy(null);
     return;
   }
   if (!activity.timer) activity.startedAt = startedAt ?? Date.now();
@@ -802,6 +806,7 @@ function setActivity(status, detail = '', startedAt) {
   activity.detail = detail;
   bar.hidden = false;
   bar.dataset.status = status;
+  setLookBusy(status);
   renderActivity();
   if (!activity.timer) activity.timer = setInterval(renderActivity, 1000);
   document.title = (status === 'waiting' ? t('(!) Sara needs your OK') : t('Sara is working…'));
@@ -830,6 +835,7 @@ $('#toggle-sidebar').addEventListener('click', () => $('#main').classList.toggle
 // The sidebar's places: pinned ones, the rest under More (web/nav.js).
 initNav();
 initTidy();
+initLook();
 // On a phone the list slides over the chat: ✕, a tap beside it, or Escape closes it.
 const closeSidebar = () => $('#main').classList.remove('show-sidebar');
 $('#close-sidebar').addEventListener('click', closeSidebar);
@@ -948,6 +954,10 @@ function bubble(role, text, kind, id, images = [], docs = []) {
 
 function msgActions(div, m, { last, lastUser, other = false }) {
   const bar = el('div', 'msg-actions');
+  // Phase 75: who and when, shown with the actions (on hover, long-press or the ⋯ button).
+  const when = msgTime(m.createdAt);
+  if (m.role === 'assistant' && !m.meta?.speaker) bar.append(el('span', 'msg-meta', when ? `${currentIdentity().name || t('Sara')} · ${when}` : currentIdentity().name || t('Sara')));
+  else if (when) bar.append(el('span', 'msg-meta', when));
   if (m.role === 'assistant') {
     const copy = el('button', 'ghost small', t('Copy'));
     copy.type = 'button';
@@ -1018,9 +1028,52 @@ function msgActions(div, m, { last, lastUser, other = false }) {
     edit.addEventListener('click', () => startEdit(m.content));
     bar.append(edit);
   }
-  if (bar.childElementCount) div.after(bar);
+  if (bar.querySelector('button')) {
+    // Phase 75: the row lives inside the message and shows on hover, focus, long-press or ⋯.
+    const more = el('button', 'ghost small msg-more', '⋯');
+    more.type = 'button';
+    more.setAttribute('aria-label', t('Message actions'));
+    more.setAttribute('aria-expanded', 'false');
+    more.addEventListener('click', (e) => {
+      e.stopPropagation();
+      toggleMsgActions(div);
+    });
+    div.append(more, bar);
+  }
   return bar;
 }
+
+/** Opens or closes one message's actions (touch: long-press or ⋯); only one is open at a time. */
+function toggleMsgActions(div, open = !div.classList.contains('show-actions')) {
+  for (const o of document.querySelectorAll('#messages .msg.show-actions')) {
+    if (o === div) continue;
+    o.classList.remove('show-actions');
+    o.querySelector(':scope > .msg-more')?.setAttribute('aria-expanded', 'false');
+  }
+  div.classList.toggle('show-actions', open);
+  div.querySelector(':scope > .msg-more')?.setAttribute('aria-expanded', String(open));
+}
+
+const msgTime = (iso) => {
+  const d = iso ? new Date(String(iso).replace(' ', 'T') + (/Z|[+-]\d\d:?\d\d$/.test(String(iso)) ? '' : 'Z')) : null;
+  return d && !Number.isNaN(d.getTime()) ? d.toLocaleTimeString(locale(), { hour: 'numeric', minute: '2-digit' }) : '';
+};
+
+// ---------- Phase 75: her messages, step lines and result cards ----------
+const toolNamed = (name) => (TOOL_NAME[name] ? t(TOOL_NAME[name]) : '');
+const newSteps = () => stepLine({ named: toolNamed, undo: addUndo });
+/** Her small face at the start of a run of her messages (one companion; groups show the speaker). */
+function herFace(div, start) {
+  div.classList.add('her');
+  if (!start || div.querySelector(':scope > .msg-face')) return;
+  div.classList.add('run-start');
+  const img = document.createElement('img');
+  img.className = 'avatar msg-face';
+  img.alt = '';
+  img.src = document.querySelector('#chat-head .head-face')?.getAttribute('src') || '/sara-avatar.jpg';
+  div.prepend(img);
+}
+const isHerBubble = (n) => n?.classList?.contains('msg') && n.classList.contains('assistant');
 
 /** True when the conversation ends without Sara's answer (restart, error, Stop). */
 function unfinished(messages) {
@@ -1044,13 +1097,41 @@ function renderMessages(messages, opts = {}) {
   const els = [];
   const lastAssistant = messages.findLast((m) => m.role === 'assistant' && m.content.trim());
   const lastUser = messages.findLast((m) => m.role === 'user');
+  // Phase 75: what she did in a turn (tools, memories) becomes one step line under the reply that
+  // ends it; result cards sit where the result came; the files she changed form one card.
+  let turn = null;
+  const newTurn = () => ({ steps: null, files: [], filesSlot: null, mem: new Set() });
+  const flush = () => {
+    if (!turn) return;
+    if (turn.mem.size) memoryStep((turn.steps ??= newSteps()), turn.mem.size);
+    if (turn.filesSlot) {
+      const card = renderCards(turn.files)[0];
+      const at = els.indexOf(turn.filesSlot);
+      if (card) els[at] = card;
+      else els.splice(at, 1);
+    }
+    if (hasSteps(turn.steps)) els.push(turn.steps);
+    turn = null;
+  };
+  let prevBubble = null;
   for (const m of messages) {
+    if (m.role === 'user') flush();
+    turn ??= newTurn();
+    if (m.role === 'assistant' && Array.isArray(m.meta?.memoryIds)) for (const id of m.meta.memoryIds) turn.mem.add(id);
     if (m.role === 'tool') {
-      els.push(toolBlock({ name: m.meta?.name, summary: m.meta?.summary ?? m.meta?.name, status: m.meta?.status ?? 'ok', output: m.content, ms: m.meta?.ms, snapshotId: m.meta?.snapshotId }));
+      addStep((turn.steps ??= newSteps()), { id: m.meta?.toolCallId, name: m.meta?.name, summary: m.meta?.summary ?? m.meta?.name, args: m.meta?.args, status: m.meta?.status ?? 'ok', output: m.content, ms: m.meta?.ms, snapshotId: m.meta?.snapshotId });
+      const card = (m.meta?.status ?? 'ok') === 'ok' ? m.meta?.card : null;
+      if (card?.kind === 'file') {
+        turn.files.push(card);
+        if (!turn.filesSlot) els.push((turn.filesSlot = { slot: true }));
+      } else if (card) {
+        const c = renderCard(card);
+        if (c) els.push(c);
+      }
       // Phase 49: a preview link she opened gets a card that opens it beside the chat.
       if (m.meta?.name === 'preview_start' && (m.meta?.status ?? 'ok') === 'ok') {
-        const card = previewCard(m.content);
-        if (card) els.push(card);
+        const pc = previewCard(m.content);
+        if (pc) els.push(pc);
       }
     } else if (m.role === 'notice' && m.kind === 'job') {
       els.push(jobCard(m.content, m.meta?.status, m.meta));
@@ -1083,10 +1164,19 @@ function renderMessages(messages, opts = {}) {
       if (m.meta?.reminder) b.classList.add('reminder');
       if (m.meta?.proactive) b.classList.add('proactive');
       if (m.meta?.call) b.classList.add('missed-call');
+      if (m.role === 'assistant') {
+        const sameRun = prevBubble?.role === 'assistant' && (prevBubble.meta?.speaker?.id ?? null) === (m.meta?.speaker?.id ?? null);
+        if (!m.meta?.speaker) herFace(b, !sameRun);
+        else b.classList.add('her', ...(sameRun ? [] : ['run-start']));
+      }
+      prevBubble = m;
       els.push(b);
       b._msg = m;
+      // The reply that ends a turn (no tool calls after it) carries the turn's step line.
+      if (m.role === 'assistant' && !m.meta?.toolCalls?.length) flush();
     }
   }
+  flush();
   box.replaceChildren(...els);
   for (const b of els) {
     if (!b._msg) continue;
@@ -1102,6 +1192,7 @@ function renderMessages(messages, opts = {}) {
     box.prepend(more);
   }
   if (!opts.keepScroll) box.scrollTop = box.scrollHeight;
+  updateContextRing();
 }
 
 function continueBar() {
@@ -1320,6 +1411,13 @@ function renderAttachments() {
   );
 }
 $('#attach').addEventListener('click', () => $('#attach-file').click());
+// Phase 75: the + menu's Photo (a picker for pictures only; on phones it offers the camera too).
+$('#attach-photo').addEventListener('click', () => $('#attach-photo-file').click());
+$('#attach-photo-file').addEventListener('change', () => {
+  addFiles($('#attach-photo-file').files);
+  $('#attach-photo-file').value = '';
+  $('#input').focus();
+});
 $('#attach-file').addEventListener('change', async () => {
   addFiles($('#attach-file').files);
   $('#attach-file').value = '';
@@ -1342,10 +1440,28 @@ for (const ev of ['dragover', 'drop']) {
 
 /** Posts to a turn endpoint and shows the streamed reply, tools and approvals as they arrive. */
 async function runStream(path, body, userBubble) {
-  for (const bar of document.querySelectorAll('#messages .msg-actions')) bar.remove();
+  for (const bar of document.querySelectorAll('#messages .msg-actions, #messages .msg-more')) bar.remove();
   let reply = null;
   let pendingTyped = null;
-  const toolBlocks = new Map();
+  // Phase 75: this turn's step line (last in the turn: replies and cards go above it).
+  let steps = null;
+  const liveFiles = [];
+  let filesEl = null;
+  const place = (node) => {
+    if (!node) return;
+    if (steps?.isConnected) {
+      steps.before(node);
+      const box = $('#messages');
+      box.scrollTop = box.scrollHeight;
+    } else append(node);
+  };
+  const ensureSteps = () => {
+    if (!steps) {
+      steps = newSteps();
+      append(steps);
+    }
+    return steps;
+  };
   // Phase 63: tool calls still being written, by their place in the model step.
   const building = new Map();
   const dropBuilding = () => {
@@ -1420,7 +1536,7 @@ async function runStream(path, body, userBubble) {
           if (!card) {
             card = buildingCard();
             building.set(ev.index, card);
-            append(card);
+            place(card);
           }
           fillBuildingCard(card, ev);
           if (near) box.scrollTop = box.scrollHeight;
@@ -1428,30 +1544,40 @@ async function runStream(path, body, userBubble) {
         } else if (ev.type === 'tool_call') {
           if (voiceOn()) speaker.flush();
           endReply();
-          const block = toolBlock({ name: ev.name, summary: ev.summary, status: 'running' });
-          toolBlocks.set(ev.id, block);
-          // The live card of this call (same id, else the oldest one) makes way for the real one.
+          // The live card of this call (same id, else the oldest one) makes way for its step.
           const live = [...building.entries()].find(([, c]) => c.dataset.call === ev.id) ?? [...building.entries()].sort((x, y) => x[0] - y[0])[0];
           if (live) {
             building.delete(live[0]);
-            live[1].replaceWith(block);
-          } else append(block);
+            live[1].remove();
+          }
+          addStep(ensureSteps(), { id: ev.id, name: ev.name, summary: ev.summary, args: ev.args, status: 'running' });
           setActivity('running', ev.summary);
         } else if (ev.type === 'approval') {
-          const card = approvalCard(ev, toolBlocks.get(ev.id));
-          append(card);
+          if (steps) waitStep(steps, ev.id);
+          const card = approvalCard(ev);
+          place(card);
           card.scrollIntoView({ block: 'nearest' });
           setActivity('waiting', ev.summary);
         } else if (ev.type === 'tool_running') {
           document.querySelector(`.approval[data-call="${CSS.escape(ev.id)}"]`)?.remove();
+          if (steps) runStep(steps, ev.id);
           setActivity('running', ev.summary);
         } else if (ev.type === 'tool_result') {
-          const block = toolBlocks.get(ev.id);
-          if (block) fillToolBlock(block, ev);
+          if (steps) finishStep(steps, ev);
+          // Phase 75: a result card from the tool's own result (the server's `card`).
+          if (ev.card && ev.status === 'ok') {
+            if (ev.card.kind === 'file') {
+              liveFiles.push(ev.card);
+              const fresh = renderCards(liveFiles)[0];
+              if (filesEl?.isConnected) filesEl.replaceWith(fresh);
+              else place(fresh);
+              filesEl = fresh;
+            } else place(renderCard(ev.card));
+          }
           if (ev.name === 'preview_start' && ev.status === 'ok') {
             const card = previewCard(ev.output);
             if (card) {
-              append(card);
+              place(card);
               // The first preview of a conversation opens by itself (on wide screens).
               if (!state.previewUrl && matchMedia('(min-width: 761px)').matches) openPreview(card.dataset.url);
             }
@@ -1464,7 +1590,10 @@ async function runStream(path, body, userBubble) {
           if (!reply) {
             reply = bubble('assistant', '', 'typing');
             speakerHeader(reply, groupSpeaker);
-            append(reply);
+            const before = steps?.isConnected ? steps.previousElementSibling : $('#messages').lastElementChild;
+            if (!groupSpeaker) herFace(reply, !isHerBubble(before));
+            else reply.classList.add('her', ...(isHerBubble(before) ? [] : ['run-start']));
+            place(reply);
           }
           queueReply(reply, (reply._raw ?? '') + ev.text);
           if (voiceOn()) speaker.feed(ev.text);
@@ -1500,10 +1629,10 @@ async function runStream(path, body, userBubble) {
           pendingTyped = null;
         } else if (ev.type === 'proof') {
           // Phase 49: a screenshot she took; the strip lands on her reply when it's done.
-          append(proofStrip([ev.id], true));
+          place(proofStrip([ev.id], true));
         } else if (ev.type === 'image') {
           endReply();
-          append(bubble('assistant', '', 'photo', undefined, [`/api/uploads/${ev.id}`]));
+          place(bubble('assistant', '', 'photo', undefined, [`/api/uploads/${ev.id}`]));
         } else if (ev.type === 'error') {
           dropBuilding();
           append(bubble('error', ev.speaker ? `${ev.speaker.name}: ${serverText(ev, ev.message)}` : ev.message));
@@ -5951,6 +6080,20 @@ async function updateConvUsage() {
   box.textContent = u?.calls ? `${t('This conversation')}: ${usageWords(u)}` : '';
 }
 
+/**
+ * Phase 75: the small ring in the chat header. She keeps the last HISTORY_LIMIT (60) messages of
+ * a conversation word for word (src/chat.ts); older ones live on as her notes and summaries. The
+ * ring shows how much of that this conversation fills; the token numbers sit inside its sheet.
+ */
+const KEPT_MESSAGES = 60;
+function updateContextRing() {
+  const msgs = state.messages ?? [];
+  const said = msgs.filter((m) => (m.role === 'user' || m.role === 'assistant') && String(m.content ?? '').trim() && !m.meta?.forgotten).length;
+  const share = msgs.length ? said / msgs.length : 0;
+  const total = said + Math.round((state.conv?.earlier ?? 0) * share);
+  setContextRing(state.currentId && !state.conv?.offRecord && total ? Math.min(100, Math.round((total / KEPT_MESSAGES) * 100)) : null, KEPT_MESSAGES);
+}
+
 // ---------- Report this reply (Phase 19) ----------
 let reporting = null;
 function openReport(m, button) {
@@ -6244,8 +6387,8 @@ const navStep = (sel) => () => {
 const TOURS = {
   first: [
     { sel: '#new-chat', title: t('New conversation'), text: t('Start a fresh chat any time. Old ones stay in the list below, with search.'), before: sidebar(true) },
-    { before: sidebar(false), sel: '#input', title: t('Talk to her'), text: t('Type here, or use the microphone. Attach a photo or a file with 📎. 🎲 starts something to do together.') },
-    { before: sidebar(false), sel: '#conv-settings-btn', title: t('This conversation'), text: t('The model, workspace and mode (chat or coding) for this conversation only. Private keeps everything on your server.') },
+    { before: sidebar(false), sel: '#input', title: t('Talk to her'), text: t('Type here, or use the microphone. The + button attaches a photo or a file, or starts something to do together.') },
+    { before: async () => { sidebar(false)(); await showHeadChips(); }, sel: '#conv-settings-btn', title: t('This conversation'), text: t('The model, workspace and mode (chat or coding) for this conversation only. Private keeps everything on your server.') },
     { before: navStep('#open-today'), sel: '#open-today', title: t('Today'), text: t('Your day at a glance: reminders, to-dos, the weather and what she has been up to.') },
     { before: navStep('#open-planner'), sel: '#open-planner', title: t('Planner'), text: t('To-dos, reminders and notes. You can also just ask her: "remind me to call Mom at 5".') },
     { before: navStep('#open-memory'), sel: '#open-memory', title: t('Memory'), text: t('What she remembers about you. Look through it, correct it or make her forget something.') },
@@ -6436,18 +6579,28 @@ $('#conv-search').addEventListener('keydown', (e) => {
 // ---------- appearance (per device) ----------
 // Phase 21: colour, chat background and layout too.
 const AP_DEFAULTS = { accent: 'rose', chatbg: 'none', density: 'comfy' };
+// Phase 75: Night is the default for everyone who hasn't picked Day (or "Follow the system") on
+// this device; web/theme-boot.js applies the same rule before the first paint.
+const themePick = () => {
+  const v = localStorage.getItem('sara.theme');
+  return v === 'light' || v === 'system' ? v : 'dark';
+};
 function applyAppearance() {
-  const theme = localStorage.getItem('sara.theme') ?? 'system';
+  const theme = themePick();
   const light = theme === 'light' || (theme === 'system' && matchMedia('(prefers-color-scheme: light)').matches);
   const root = document.documentElement;
   root.dataset.theme = light ? 'light' : 'dark';
+  root.classList.toggle('theme-day', light);
+  root.classList.toggle('theme-night', !light);
+  // The Windows/Mac app follows: its title bar, backdrop and first paint (web/theme-boot.js).
+  if (root.classList.contains('shell') && !root.classList.contains('shell-test')) window.saraShellSay?.({ type: 'theme', theme: theme === 'light' ? 'day' : theme === 'system' ? 'system' : 'night' });
   for (const k of Object.keys(AP_DEFAULTS)) root.dataset[k] = localStorage.getItem(`sara.${k}`) ?? AP_DEFAULTS[k];
-  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', getComputedStyle(root).getPropertyValue('--bg').trim() || (light ? '#faf7fb' : '#121016'));
+  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', getComputedStyle(root).getPropertyValue('--surface-0').trim() || (light ? '#faf7f5' : '#0f0d17'));
   root.style.setProperty('--chat-size', `${localStorage.getItem('sara.textSize') ?? '15'}px`);
 }
 applyAppearance();
 matchMedia('(prefers-color-scheme: light)').addEventListener('change', applyAppearance);
-$('#ap-theme').value = localStorage.getItem('sara.theme') ?? 'system';
+$('#ap-theme').value = themePick();
 $('#ap-size').value = localStorage.getItem('sara.textSize') ?? '15';
 $('#ap-typing').value = localStorage.getItem('sara.typing') ?? 'instant';
 $('#ap-typing').addEventListener('change', () => localStorage.setItem('sara.typing', $('#ap-typing').value));

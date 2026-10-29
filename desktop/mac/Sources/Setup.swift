@@ -46,6 +46,9 @@ final class SetupSheet: NSObject, NSTextFieldDelegate {
     self.local = local
     self.changing = changing
     window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 520, height: 560), styleMask: [.titled], backing: .buffered, defer: false)
+    // Phase 75: the page's theme (Night / Day) and its background colour, like the main window.
+    window.appearance = Shell.appearance
+    window.backgroundColor = Shell.color
     super.init()
     build()
     DispatchQueue.global().async {

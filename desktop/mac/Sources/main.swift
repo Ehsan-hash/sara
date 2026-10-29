@@ -8,6 +8,9 @@
 // Phase 55: the first launch asks "Run Sara on this Mac" or "Connect to a Sara somewhere else"; the
 // menu switches both ways later, and an unreachable server shows "Can't reach your Sara".
 // Phase 68: several Sara servers, each with its own sign-in (Servers.swift).
+// Phase 75: the new look's window (Shell.swift): the page drawn under a transparent title bar with
+// the traffic lights inset into its header, dark or light following the page's theme, optional
+// vibrancy, and the theme colour from the first frame (no white flash).
 import AppKit
 import ServiceManagement
 import UserNotifications
@@ -44,31 +47,37 @@ func htmlEscape(_ s: String) -> String {
     .replacingOccurrences(of: ">", with: "&gt;").replacingOccurrences(of: "'", with: "&#39;").replacingOccurrences(of: "\"", with: "&quot;")
 }
 
-/// The app's own pages (choose, connect, can't reach, starting): the web app's colours
-/// (web/style.css), light or dark like macOS. The same look as the Windows app's pages.
-let pageStyle = """
+/// The app's own pages (choose, connect, can't reach, starting): the new look's tokens
+/// (docs/design/NEW_LOOK.md, web/theme.css), Night or Day as the page last said (Shell.swift adds
+/// the theme and tells the window these pages draw the title strip). The same look as the Windows
+/// app's pages.
+let pageCSS = """
 <meta name=viewport content='width=device-width'><style>
-:root{--bg:#121016;--panel:#1b1820;--panel-2:#241f2b;--text:#eee9f3;--muted:#a49cae;--accent:#e0789a;--accent-2:#f3a6bf;--border:#322b3a;--error:#ff8080;--on-accent:#1a0f14;color-scheme:dark}
-@media (prefers-color-scheme:light){:root{--bg:#faf7fb;--panel:#f1ecf4;--panel-2:#e8e1ed;--text:#241c2b;--muted:#6b6274;--accent:#c94f78;--accent-2:#a83d61;--border:#d9d0e0;--error:#c0303a;--on-accent:#fff;color-scheme:light}}
+:root{--bg:#0f0d17;--panel:#17141f;--panel-2:#1e1a29;--text:#eee9f3;--muted:#a9a0b8;--accent:#f08aa5;--grad:linear-gradient(135deg,#e0607e,#9b6bff);--border:rgba(255,255,255,.08);--border-2:rgba(255,255,255,.16);--error:#ff6b7d;--on-accent:#160c14;--glow:0 0 0 1px rgba(224,96,126,.18),0 18px 50px rgba(155,107,255,.14);color-scheme:dark}
+html.day{--bg:#faf7f5;--panel:#ffffff;--panel-2:#f6eff2;--text:#241c2b;--muted:#665d70;--accent:#b8436a;--border:rgba(36,28,43,.10);--border-2:rgba(36,28,43,.22);--error:#c0303a;--glow:0 12px 40px rgba(60,30,60,.10);color-scheme:light}
 *{box-sizing:border-box}html,body{height:100%;margin:0}
 body{background:var(--bg);color:var(--text);font:15px/1.5 -apple-system,system-ui,sans-serif;display:grid;place-items:center;padding:24px;-webkit-user-select:none;user-select:none}
-.c{width:100%;max-width:440px;background:var(--panel);border:1px solid var(--border);border-radius:16px;padding:30px 30px 26px;box-shadow:0 12px 40px #0003}
-.logo{display:block;width:64px;height:64px;border-radius:50%;margin:0 0 18px;background:var(--panel-2)}
-h1{font-size:22px;line-height:1.25;margin:0 0 8px;font-weight:650}
+.c{width:100%;max-width:440px;background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:30px 30px 26px;box-shadow:var(--glow)}
+.logo{display:block;width:64px;height:64px;border-radius:50%;margin:0 0 18px;background:var(--panel-2);box-shadow:0 0 0 2px rgba(240,138,165,.35),0 0 24px rgba(155,107,255,.35)}
+h1{font-size:22px;line-height:1.25;margin:0 0 8px;font-weight:600;letter-spacing:-.01em}
 p{color:var(--muted);margin:0 0 12px}b{color:var(--text);font-weight:600}
 label{display:block;font-weight:600;font-size:14px;margin:18px 0 6px}
-input{width:100%;font:inherit;padding:10px 12px;border-radius:10px;border:1px solid var(--border);background:var(--panel-2);color:var(--text);-webkit-user-select:text;user-select:text}
+input{width:100%;font:inherit;padding:10px 12px;border-radius:10px;border:1px solid var(--border-2);background:var(--panel-2);color:var(--text);-webkit-user-select:text;user-select:text}
 input:focus{outline:2px solid var(--accent);outline-offset:-1px}
 .row{display:flex;flex-wrap:wrap;gap:8px;margin-top:18px}
-button{font:inherit;font-weight:600;padding:9px 18px;border:0;border-radius:10px;background:var(--accent);color:var(--on-accent);cursor:pointer}
-button:hover{background:var(--accent-2)}button:focus-visible{outline:2px solid var(--text);outline-offset:2px}
-button.g{background:transparent;color:var(--text);border:1px solid var(--border);font-weight:500}button.g:hover{border-color:var(--muted)}
-button.choice{display:block;width:100%;text-align:left;margin:12px 0 0;padding:16px 18px;border-radius:12px;border:1px solid var(--border);background:var(--panel-2);color:var(--text);font-size:16px}
-button.choice:hover{border-color:var(--accent);background:var(--panel-2)}button.choice span{display:block;font-weight:400;font-size:13px;color:var(--muted);margin-top:4px}
+button{font:inherit;font-weight:600;padding:9px 18px;min-height:40px;border:0;border-radius:10px;background:var(--grad);color:var(--on-accent);cursor:pointer;transition:filter .15s ease-out}
+button:hover{filter:brightness(1.08)}button:focus-visible{outline:2px solid var(--text);outline-offset:2px}
+button.g{background:transparent;color:var(--text);border:1px solid var(--border-2);font-weight:500}button.g:hover{border-color:var(--accent);filter:none}
+button.choice{display:block;width:100%;text-align:left;margin:12px 0 0;padding:16px 18px;border-radius:12px;border:1px solid var(--border-2);background:var(--panel-2);color:var(--text);font-size:16px}
+button.choice:hover{border-color:var(--accent);background:var(--panel-2);filter:none}button.choice span{display:block;font-weight:400;font-size:13px;color:var(--muted);margin-top:4px}
 .e{color:var(--error);font-size:14px;margin:8px 0 0}.e:empty{display:none}
 .small{font-size:13px}.sep{border-top:1px solid var(--border);margin:22px 0 0;padding-top:14px}.sep p{margin:0 0 8px}
+@media (prefers-reduced-motion:reduce){button{transition:none}}
 </style>
 """
+
+/// The style plus the theme the page last said and the note that these pages draw the title strip.
+var pageStyle: String { pageCSS + Shell.localPageScript }
 
 /// Her picture at the top of these pages (PageLogo.swift is made by scripts/make-app-icons.py).
 let pageLogo = "<img class=logo alt='' src='\(pageLogoDataURL)'>"
@@ -107,6 +116,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
   /// Phase 68: the saved server the web view's data store belongs to, and one being removed.
   var webServerId: String?
   var pendingRemove: String?
+  /// Phase 75 (Shell.swift): the window's content (web view, optional vibrancy), whether the page
+  /// draws the title strip (and for which place), the last press for moving the window.
+  var chromeRoot: NSView?
+  var vibrancyView: NSVisualEffectView?
+  var pageDrawsTitlebar = false
+  var pageTitleOrigin = ""
+  var lastMouseDown: NSEvent?
+  var mouseDownMonitor: Any?
 
   // MARK: start-up
   /// The web view, on the data store of the server it shows (Phase 68: one store per server).
@@ -117,7 +134,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
     config.mediaTypesRequiringUserActionForPlayback = []
     config.userContentController.addScriptMessageHandler(self, contentWorld: .page, name: "sara")
     config.userContentController.addUserScript(WKUserScript(source: shim, injectionTime: .atDocumentStart, forMainFrameOnly: true))
-    if let old = web {
+    // Phase 75: window.saraShell and <html class="shell-mac"> before any page script (Shell.swift).
+    config.userContentController.addUserScript(WKUserScript(source: shellScript(), injectionTime: .atDocumentStart, forMainFrameOnly: true))
+    let old = web
+    if let old {
       old.stopLoading()
       old.configuration.userContentController.removeAllScriptMessageHandlers()
     }
@@ -128,26 +148,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
     web.allowsBackForwardNavigationGestures = true
     if let z = prefs.object(forKey: "zoom") as? Double { web.pageZoom = z }
     webServerId = id
-    window?.contentView = web
+    attachWebView(old: old)
   }
 
   func applicationDidFinishLaunching(_ note: Notification) {
     buildMenu()
-    // Phase 68: the saved servers (the one from before 1.8 becomes the first, as it was).
-    let current = Servers.active
-    makeWebView(store: Servers.dataStore(current), for: current?.id)
-
     let frame = NSRect(x: 0, y: 0, width: 1100, height: 780)
     window = NSWindow(contentRect: frame, styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView], backing: .buffered, defer: false)
     window.title = "Sara"
     window.titlebarAppearsTransparent = true
-    window.backgroundColor = NSColor(red: 0x12 / 255, green: 0x10 / 255, blue: 0x16 / 255, alpha: 1)
     window.minSize = NSSize(width: 380, height: 500)
-    window.contentView = web
     window.delegate = self
     window.isReleasedWhenClosed = false
     window.center()
     window.setFrameAutosaveName("SaraMain")
+    // Phase 75: the theme colour, appearance and title bar before anything is shown (Shell.swift).
+    setUpWindowChrome()
+    // Phase 68: the saved servers (the one from before 1.8 becomes the first, as it was).
+    let current = Servers.active
+    makeWebView(store: Servers.dataStore(current), for: current?.id)
 
     statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
     if let img = NSImage(systemSymbolName: "heart.circle", accessibilityDescription: "Sara") {
@@ -411,7 +430,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
 
   // MARK: the bridge
   func userContentController(_ ucc: WKUserContentController, didReceive message: WKScriptMessage, replyHandler: @escaping (Any?, String?) -> Void) {
-    guard let body = message.body as? [String: Any], let kind = body["m"] as? String else { return replyHandler(nil, "Bad message") }
+    // Phase 75: the page's shell messages use {type: …} (theme, backdrop, shell); the bridge uses {m: …}.
+    guard let body = message.body as? [String: Any], let kind = (body["m"] ?? body["type"]) as? String else { return replyHandler(nil, "Bad message") }
     let origin = message.frameInfo.securityOrigin
     let fromServer = server.map { s in originOf("\(origin.protocol)://\(origin.host)" + (origin.port > 0 ? ":\(origin.port)" : "")) == s } ?? false
     switch kind {
@@ -444,11 +464,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
     case "useServer" where !fromServer:
       useServer(body["id"] as? String ?? "")
       return replyHandler(true, nil)
+    // Phase 75: any page may say it draws the title strip, and move or zoom the window from it.
+    case "shell", "dragWindow", "zoomWindow":
+      handleShellMessage(kind, body, origin: pageOrigin(message.frameInfo))
+      return replyHandler(true, nil)
+    #if DEBUG
+    case "testShot", "testClick", "testQuit":
+      testShellHook(kind, body)
+      return replyHandler(true, nil)
+    #endif
     default: break
     }
     guard fromServer else { return replyHandler(nil, "Not allowed") }  // everything else only from the owner's own server
     switch kind {
     case "getPrefs": replyHandler(prefsDict(), nil)
+    // Phase 75: the page's theme (night | day | system) and backdrop (solid | vibrancy).
+    case "theme", "backdrop":
+      handleShellMessage(kind, body, origin: pageOrigin(message.frameInfo))
+      replyHandler(true, nil)
     case "setPref":
       let on = body["value"] as? Bool ?? false
       switch body["key"] as? String {
@@ -498,7 +531,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
   }
 
   func prefsDict() -> [String: Any] {
-    ["platform": "mac", "version": appVersion, "startAtLogin": startAtLogin, "keepRunning": keepRunning, "notifications": notificationsOn, "server": server ?? ""]
+    ["platform": "mac", "version": appVersion, "startAtLogin": startAtLogin, "keepRunning": keepRunning, "notifications": notificationsOn, "server": server ?? "",
+     "theme": Shell.themePref, "titlebar": Int(macTitlebar)]
   }
 
   // MARK: notifications
@@ -529,6 +563,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
     let url = action.request.url
     if action.shouldPerformDownload { return decisionHandler(.download, preferences) }
     if url?.scheme == "about" || url?.scheme == "blob" || url?.scheme == "data" || isServer(url) || (url?.absoluteString == "about:blank") {
+      // Phase 75: a page from another place says again whether it draws the title strip.
+      if action.targetFrame?.isMainFrame ?? false, url?.scheme != "blob" { pageWillLoad(url) }
       return decisionHandler(.allow, preferences)
     }
     decisionHandler(.cancel, preferences)

@@ -14,7 +14,7 @@ modèles que vous choisissez.
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="License: MIT"></a>
   <img src="https://img.shields.io/badge/node-%E2%89%A5%2024-339933" alt="Node 24 or newer">
   <img src="https://img.shields.io/badge/runtime%20dependencies-0-brightgreen" alt="Zero runtime dependencies">
-  <img src="https://img.shields.io/badge/tests-841%20passing-brightgreen" alt="841 tests passing">
+  <img src="https://img.shields.io/badge/tests-858%20passing-brightgreen" alt="858 tests passing">
   <a href="docs/RESULTS.md"><img src="https://img.shields.io/badge/HumanEval%20pass%401-96.3%25-informational" alt="HumanEval pass@1 96.3%"></a>
   <a href="https://github.com/farena-ai/sara/releases/latest"><img src="https://img.shields.io/github/v/release/farena-ai/sara?label=release" alt="Latest release"></a>
   <a href="https://github.com/farena-ai/sara/pkgs/container/sara"><img src="https://img.shields.io/badge/docker-amd64%20%7C%20arm64-2496ED" alt="Docker image for amd64 and arm64"></a>
@@ -28,7 +28,7 @@ modèles que vous choisissez.
   <sub>Une vraie session, non montée, avec un modèle local (qwen3.8 27B sur Ollama, une RTX 5090) sur un serveur de test jetable : elle discute avec sa personnalité, écrit l'application, demande avant de lancer un serveur, ouvre l'aperçu et le teste dans son propre navigateur. La dernière image montre l'application avec des nombres saisis.</sub>
 </p>
 
-> **État :** 2.4, licence MIT, avec quinze versions riches en nouveautés depuis la 1.0 (toutes
+> **État :** 2.5, licence MIT, avec seize versions riches en nouveautés depuis la 1.0 (toutes
 > ci-dessous). L'[app Android](https://play.google.com/store/apps/details?id=com.backstagecoding.sara) est sur Google Play ;
 > l'app iPhone et la version Mac App Store arrivent dès qu'Apple les aura approuvées. Lisez
 > [docs/DISCLOSURES.md](docs/DISCLOSURES.md) avant d'utiliser ou de partager Sara.
@@ -37,6 +37,7 @@ modèles que vous choisissez.
 
 | Version | Ce que vous y gagnez |
 |---|---|
+| **2.5** · Le nouveau look, partie 1 | **Sombre par défaut et son travail à l'écran :** une ligne sous chaque réponse montre ce qu'elle a fait, les résultats arrivent en cartes (météo, tâches, fichiers modifiés, tests, recherches), une conversation plus légère sur téléphone et ordinateur, et les apps Windows et Mac dessinent la page jusque dans la barre de titre. [Le plan](docs/design/NEW_LOOK.md) |
 | **2.4** · Bien rangé | **Tout est plus facile à trouver :** une barre latérale courte avec un menu *Plus* pour épingler, des Réglages avec de vrais titres qui se replient, outils et autorisations expliqués simplement, des photos que l'on peut supprimer de l'album souvenirs, des écrans et menus plus nets dans chaque app, et un enregistrement plus sûr en coulisses. [Ce qui a changé](CHANGELOG.md) |
 | **2.3** · Gros documents | **Livres et manuels de 500 à 1 000 pages** (PDF jusqu'à 1 Go) dans sa bibliothèque : envois qui reprennent, chaque page numérisée lue, sommaire et résumés par chapitre, et des réponses qui citent la page (« p. 412 ») avec un lien direct. 30 questions sur 30 justes sur un livre test de 1 000 pages. [Comment ça marche](docs/LIBRARY.md) |
 | **2.2** · Vos autres serveurs en SSH | **Elle peut travailler sur vos autres machines**, avec un mot de passe ou une clé. Après une connexion par mot de passe, **elle crée sa propre clé, vous dit où elle se trouve et oublie le mot de passe** (gardé seulement si vous insistez, après un avertissement). Les clés d'hôte sont vérifiées, chaque commande suit ses règles d'approbation, et vous pouvez révoquer sa clé à tout moment. [Comment ça marche](docs/SSH.md) |
@@ -206,8 +207,8 @@ qu'aucun test ne vérifiait. Ce qu'elle apporte aujourd'hui, c'est la manière d
 lance les tests, demande avant les étapes risquées, montre ce qui a tourné), pas un meilleur score
 sur ces jeux. Détails, résultats par tâche et comment relancer : [docs/RESULTS.md](docs/RESULTS.md).
 
-En plus, `npm run check` : une vérification des types et 849 tests automatiques avec un faux modèle
-scripté (sans réseau, sans GPU) : 841 passent sous Windows, et les 8 autres sont des tests
+En plus, `npm run check` : une vérification des types et 866 tests automatiques avec un faux modèle
+scripté (sans réseau, sans GPU) : 858 passent sous Windows, et les 8 autres sont des tests
 d'isolation propres à Linux, exécutés sur un serveur Linux.
 
 ## Comparaison

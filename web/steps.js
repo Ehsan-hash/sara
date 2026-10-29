@@ -1,0 +1,269 @@
+// Phase 75 (stage 1, "her work on screen"): the step line under each reply. Built from the tool
+// events the chat stream already sends (tool_call / approval / tool_running / tool_result) and,
+// after a reload, from the stored tool messages; the memories she used in the reply count as a
+// step too. One quiet line, collapsed: "Remembered 2 things · Checked the weather 0.4 s · Added a
+// to-do"; live while she works ("Checking the weather…"); one tap or click opens the details of
+// every step (what ran, the output, how long). Replaces the grey "$ command" boxes.
+import { locale, t } from './naming.js';
+
+const el = (tag, cls, text) => {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text !== undefined) e.textContent = text;
+  return e;
+};
+
+// How long a step took: "0.4 s", "12 s", "2 min".
+export function fmtDuration(ms) {
+  if (!Number.isFinite(ms) || ms < 0) return '';
+  const nf = (n, d) => n.toLocaleString(locale(), { maximumFractionDigits: d });
+  if (ms < 10_000) return `${nf(Math.max(0.1, ms / 1000), 1)} s`;
+  if (ms < 90_000) return `${nf(Math.round(ms / 1000), 0)} s`;
+  return `${nf(Math.round(ms / 60_000), 0)} min`;
+}
+
+const TEST_CMD = /(^|[;&|(\s])(npm (run )?(test|check)\b|npm t\b|yarn test|pnpm (run )?test|bun test|node (--\S+ )*--test\b|npx (jest|vitest|mocha)\b|jest\b|vitest\b|pytest\b|python3? -m (pytest|unittest)\b|cargo test\b|go test\b|deno test\b|make (check|test)\b|dotnet test\b)/;
+
+/**
+ * The words for one step: [while running, when done, icon]. Known tools read as everyday verbs;
+ * others fall back to their plain name (TOOL_NAME in app.js, passed as `named`) or the raw name.
+ */
+export function stepWords(name, args = {}, named = '') {
+  const a = args ?? {};
+  const cmd = String(a.command ?? a.url ?? '');
+  const act = String(a.action ?? '');
+  const pair = (now, done, icon) => [now, done, icon];
+  if (/\bwttr\.in\b/i.test(cmd) && (name === 'shell' || name === 'web_fetch')) return pair(t('Checking the weather…'), t('Checked the weather'), '🌦');
+  switch (name) {
+    case 'shell':
+      if (TEST_CMD.test(cmd)) return pair(t('Running the tests…'), t('Ran the tests'), '🧪');
+      if (/^\s*git\b/.test(cmd)) return pair(t('Checking the project…'), t('Checked the project'), '🌿');
+      if (/\b(npm|pnpm|yarn) (i|install|ci|add)\b|\bpip3? install\b/.test(cmd)) return pair(t('Installing packages…'), t('Installed packages'), '📦');
+      if (/\b(npm run build|make\b|tsc\b|cargo build|go build|vite build)/.test(cmd)) return pair(t('Building the project…'), t('Built the project'), '🛠');
+      return pair(t('Running a command…'), t('Ran a command'), '⌨️');
+    case 'todo':
+      if (act === 'add') return pair(t('Adding a to-do…'), t('Added a to-do'), '✅');
+      if (act === 'done') return pair(t('Ticking off a to-do…'), t('Ticked off a to-do'), '✅');
+      if (act === 'list') return pair(t('Looking at your to-dos…'), t('Looked at your to-dos'), '✅');
+      return pair(t('Updating your to-dos…'), t('Updated your to-dos'), '✅');
+    case 'remind':
+      if (act === 'set') return pair(t('Setting a reminder…'), t('Set a reminder'), '⏰');
+      if (act === 'cancel') return pair(t('Cancelling a reminder…'), t('Cancelled a reminder'), '⏰');
+      return pair(t('Checking your reminders…'), t('Checked your reminders'), '⏰');
+    case 'note':
+      if (act === 'save') return pair(t('Saving a note…'), t('Saved a note'), '📝');
+      return pair(t('Looking through your notes…'), t('Looked through your notes'), '📝');
+    case 'recall':
+      return pair(t('Looking back at past chats…'), t('Looked back at past chats'), '🧠');
+    case 'web_search':
+      return pair(t('Searching the web…'), t('Searched the web'), '🔎');
+    case 'web_fetch':
+      return pair(t('Reading a web page…'), t('Read a web page'), '🌐');
+    case 'calendar_events':
+      return pair(t('Looking at your calendar…'), t('Looked at your calendar'), '📅');
+    case 'calendar_add':
+      return pair(t('Adding to your calendar…'), t('Added to your calendar'), '📅');
+    case 'read_file':
+      return pair(t('Reading a file…'), t('Read a file'), '📄');
+    case 'write_file':
+      return pair(t('Writing a file…'), t('Wrote a file'), '✍️');
+    case 'edit_file':
+      return pair(t('Editing a file…'), t('Edited a file'), '✍️');
+    case 'list_dir':
+    case 'search':
+    case 'code_map':
+    case 'code_find':
+    case 'code_refs':
+    case 'code_deps':
+      return pair(t('Looking through the files…'), t('Looked through the files'), '🗂');
+    case 'home_status':
+      return pair(t('Checking your home…'), t('Checked your home'), '🏠');
+    case 'home_control':
+      return pair(t('Changing something at home…'), t('Changed something at home'), '🏠');
+    case 'take_photo':
+      return pair(t('Making a picture…'), t('Made a picture'), '📷');
+    case 'share_photo':
+      return pair(t('Picking a picture…'), t('Sent a picture'), '📷');
+    case 'moments':
+      return pair(t('Looking through your moments…'), t('Looked through your moments'), '🖼');
+    case 'start_job':
+      return pair(t('Starting a background task…'), t('Started a background task'), '⏳');
+    case 'job_status':
+      return pair(t('Checking a background task…'), t('Checked a background task'), '⏳');
+    case 'gmail_search':
+    case 'gmail_read':
+    case 'gmail_thread':
+    case 'gmail_needs_answer':
+      return pair(t('Checking your email…'), t('Checked your email'), '✉️');
+    case 'gmail_draft':
+      return pair(t('Writing an email draft…'), t('Wrote an email draft'), '✉️');
+    case 'gmail_send':
+      return pair(t('Sending an email…'), t('Sent an email'), '✉️');
+    case 'git':
+      return pair(t('Checking the project…'), t('Checked the project'), '🌿');
+    case 'git_commit':
+      return pair(t('Saving a checkpoint…'), t('Saved a checkpoint'), '🌿');
+    case 'git_push':
+      return pair(t('Sending work to GitHub…'), t('Sent work to GitHub'), '🌿');
+    case 'library':
+      return pair(t('Reading your documents…'), t('Read your documents'), '📚');
+    case 'settings_guide':
+      return pair(t('Looking up how the app works…'), t('Looked up how the app works'), '❓');
+    case 'preview_start':
+      return pair(t('Starting a preview…'), t('Started a preview'), '🖥');
+    default:
+      if (/^browser_/.test(name)) return pair(t('Using her test browser…'), t('Used her test browser'), '🧭');
+      return [t('Using {tool}…', { tool: named || name }), t('Used {tool}', { tool: named || name }), '⚙️'];
+  }
+}
+
+const DETAIL_LIMIT = 4000;
+
+/**
+ * A new step line (collapsed). `named(name)` gives a tool's plain name; `undo(body, snapshotId)`
+ * adds the "Undo to before this step" button to a step's details.
+ */
+export function stepLine({ named = () => '', undo = () => {} } = {}) {
+  const box = el('details', 'steps');
+  box.setAttribute('aria-live', 'polite');
+  const sum = el('summary', 'steps-sum');
+  sum.append(el('span', 'steps-dot'), el('span', 'steps-text'), el('span', 'steps-total'));
+  const list = el('ol', 'steps-list');
+  box.append(sum, list);
+  box._named = named;
+  box._undo = undo;
+  box._steps = [];
+  return box;
+}
+
+function rowFor(box, step) {
+  const li = el('li', `step ${step.status}`);
+  if (step.id) li.dataset.call = step.id;
+  const d = el('details', 'step-detail');
+  const s = el('summary', 'step-head');
+  s.append(el('span', 'step-icon', step.icon), el('span', 'step-verb'), el('span', 'step-ms'));
+  const body = el('div', 'step-body');
+  d.append(s, body);
+  li.append(d);
+  step.li = li;
+  step.body = body;
+  box.querySelector('.steps-list').append(li);
+}
+
+function fillRow(step) {
+  const li = step.li;
+  li.className = `step ${step.status}`;
+  const verb = step.status === 'running' ? step.now : step.status === 'waiting' ? t('Waiting for your OK: {what}', { what: step.done }) : step.status === 'denied' ? t('Not allowed: {what}', { what: step.done }) : step.status === 'error' ? t("Didn't work: {what}", { what: step.done }) : step.done;
+  li.querySelector('.step-verb').textContent = verb;
+  li.querySelector('.step-ms').textContent = step.ms !== undefined && step.status !== 'running' && step.status !== 'waiting' ? fmtDuration(step.ms) : '';
+  const body = step.body;
+  // What ran (the command or the call's summary), then what came back.
+  if (!body.querySelector('.step-what')) {
+    const what = el('code', 'step-what', step.what || step.name);
+    const raw = el('span', 'tool-raw', step.name);
+    const head = el('div', 'step-what-row');
+    head.append(what, raw);
+    body.prepend(head);
+  }
+  let out = body.querySelector('.step-out');
+  if (step.output !== undefined) {
+    if (!out) {
+      out = el('pre', 'step-out');
+      body.append(out);
+    }
+    out.textContent = String(step.output ?? '').slice(0, DETAIL_LIMIT) || t('(no output)');
+  }
+}
+
+function render(box) {
+  const steps = box._steps;
+  const running = steps.find((s) => s.status === 'running' || s.status === 'waiting');
+  // Finished steps with the same words are counted once ("Wrote a file ×2 0.2 s").
+  const groups = [];
+  for (const s of steps) {
+    const g = groups.at(-1);
+    if (g && s.status === 'ok' && g.status === 'ok' && g.done === s.done && s.kind !== 'memory') {
+      g.n += 1;
+      g.ms = (g.ms ?? 0) + (s.ms ?? 0);
+    } else groups.push({ ...s, n: 1 });
+  }
+  const said = (s) => (s.status === 'error' ? t("Didn't work: {what}", { what: s.done }) : s.status === 'denied' ? t('Not allowed: {what}', { what: s.done }) : s.done);
+  const parts = groups.map((s) => (s.status === 'running' ? s.now : s.status === 'waiting' ? t('Waiting for your OK') : `${s.n > 1 ? `${said(s)} ×${s.n}` : said(s)}${s.ms !== undefined && s.kind !== 'memory' ? ` ${fmtDuration(s.ms)}` : ''}`));
+  // Long turns: the first two, the one running now, then "+3 more".
+  const runningAt = groups.findIndex((s) => s.status === 'running' || s.status === 'waiting');
+  const shown = parts.length > 4 ? [...parts.slice(0, 2), ...(runningAt >= 2 ? [parts[runningAt]] : []), t('+{n} more', { n: parts.length - (runningAt >= 2 ? 3 : 2) })] : parts;
+  box.querySelector('.steps-text').textContent = shown.join(' · ');
+  const total = steps.filter((s) => s.ms !== undefined).reduce((n, s) => n + s.ms, 0);
+  box.querySelector('.steps-total').textContent = !running && total >= 1000 && steps.length > 1 ? fmtDuration(total) : '';
+  box.classList.toggle('live', Boolean(running));
+  box.classList.toggle('has-error', steps.some((s) => s.status === 'error'));
+  box.querySelector('.steps-sum').setAttribute('aria-label', `${t('What she did')}: ${parts.join(', ')}`);
+}
+
+/** A tool call starts (or comes from history with its result already). */
+export function addStep(box, { id, name, summary, args, status = 'running', output, ms, snapshotId }) {
+  const named = box._named(name) || '';
+  const [now, done, icon] = stepWords(name, args, named);
+  const command = name === 'shell' ? String(args?.command ?? '') : '';
+  const step = { kind: 'tool', id, name, now, done, icon, status, what: command || summary || name, output, ms };
+  rowFor(box, step);
+  box._steps.push(step);
+  fillRow(step);
+  if (snapshotId) box._undo(step.body, snapshotId);
+  render(box);
+  return step;
+}
+
+const find = (box, id) => box._steps.find((s) => s.id === id) ?? box._steps.findLast((s) => s.status === 'running' || s.status === 'waiting');
+
+/** Waiting for the owner's OK (an approval card is showing). */
+export function waitStep(box, id) {
+  const s = find(box, id);
+  if (!s) return;
+  s.status = 'waiting';
+  fillRow(s);
+  render(box);
+}
+
+/** An approved call starts running. */
+export function runStep(box, id) {
+  const s = find(box, id);
+  if (!s) return;
+  s.status = 'running';
+  fillRow(s);
+  render(box);
+}
+
+/** A call's result arrived. */
+export function finishStep(box, { id, status, output, ms, snapshotId }) {
+  const s = find(box, id);
+  if (!s) return null;
+  s.status = status;
+  s.output = output;
+  s.ms = ms;
+  fillRow(s);
+  if (snapshotId) box._undo(s.body, snapshotId);
+  render(box);
+  return s.body;
+}
+
+/** The memories she used in this reply (ids from the reply's meta), as the first step. */
+export function memoryStep(box, count) {
+  if (!count || box._steps.some((s) => s.kind === 'memory')) return;
+  const done = count === 1 ? t('Remembered 1 thing') : t('Remembered {n} things', { n: count });
+  const step = { kind: 'memory', name: 'memory', now: done, done, icon: '🧠', status: 'ok' };
+  const li = el('li', 'step ok memory');
+  const row = el('div', 'step-head');
+  row.append(el('span', 'step-icon', '🧠'), el('span', 'step-verb', done));
+  const link = el('a', 'step-link small', t('See what she remembers'));
+  link.href = '/#view=memory';
+  row.append(link);
+  li.append(row);
+  step.li = li;
+  box.querySelector('.steps-list').prepend(li);
+  box._steps.unshift(step);
+  render(box);
+}
+
+/** True when a line has anything to show. */
+export const hasSteps = (box) => Boolean(box?._steps?.length);
