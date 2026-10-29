@@ -23,12 +23,13 @@ test('example tool: weather_now geocodes, reads current conditions, hides when d
   const { dir, cleanup } = tempDir();
   t.after(cleanup);
   const urls: string[] = [];
+  let forecastCode = 2;
   const fakeFetch = (async (url: string) => {
     urls.push(String(url));
     if (String(url).includes('geocoding')) {
       return Response.json(String(url).includes('Nowhere') ? {} : { results: [{ name: 'Austin', admin1: 'Texas', country: 'United States', latitude: 30.27, longitude: -97.74 }] });
     }
-    return Response.json({ current: { time: '2026-10-27T14:00', temperature_2m: 24.1, apparent_temperature: 25, wind_speed_10m: 11.2, weather_code: 2 } });
+    return Response.json({ current: { time: '2026-10-27T14:00', temperature_2m: 24.1, apparent_temperature: 25, wind_speed_10m: 11.2, weather_code: forecastCode } });
   }) as typeof fetch;
   let on = true;
   const tool = createWeatherTool({ fetch: fakeFetch, enabled: () => on });
@@ -40,7 +41,30 @@ test('example tool: weather_now geocodes, reads current conditions, hides when d
   assert.match(urls[1], /latitude=30\.27&longitude=-97\.74/);
   await assert.rejects(tool.run({ place: 'Nowhere' }, ctx(dir)), /couldn't find a place/);
   await assert.rejects(tool.run({}, ctx(dir)), /Missing required argument "place"/);
+
+  const knownCodes = [0, 1, 2, 3, 45, 48, 51, 53, 55, 56, 57, 61, 63, 65, 66, 67, 71, 73, 75, 77, 80, 81, 82, 85, 86, 95, 96, 97, 99];
+  const missingDescriptions = {
+    56: 'light freezing drizzle',
+    57: 'heavy freezing drizzle',
+    66: 'light freezing rain',
+    67: 'heavy freezing rain',
+    77: 'snow grains',
+    85: 'light snow showers',
+    86: 'heavy snow showers',
+    97: 'heavy thunderstorm',
+  };
+  for (const code of knownCodes) assert.notEqual(describeCode(code), `weather code ${code}`);
+  assert.deepEqual(
+    Object.fromEntries(Object.keys(missingDescriptions).map((code) => [code, describeCode(Number(code))])),
+    missingDescriptions,
+  );
   assert.equal(describeCode(95), 'thunderstorm');
+  assert.equal(describeCode(999), 'weather code 999');
+
+  for (const [code, description] of Object.entries(missingDescriptions)) {
+    forecastCode = Number(code);
+    assert.match(await tool.run({ place: 'Austin' }, ctx(dir)), new RegExp(`local time: ${description},`));
+  }
 
   // Registered like any tool: shown to the model only while available and not set to "never".
   const reg = new ToolRegistry([]);

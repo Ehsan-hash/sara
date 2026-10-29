@@ -20,7 +20,7 @@ export interface WeatherToolOptions {
   forecastUrl?: string;
 }
 
-/** WMO weather codes (the ones Open-Meteo uses) in plain words. */
+/** WMO weather codes (the ones Open-Meteo uses) in plain words. See https://open-meteo.com/en/docs#weathervariables. */
 const CODES: Record<number, string> = {
   0: 'clear sky',
   1: 'mainly clear',
@@ -31,17 +31,25 @@ const CODES: Record<number, string> = {
   51: 'light drizzle',
   53: 'drizzle',
   55: 'heavy drizzle',
+  56: 'light freezing drizzle',
+  57: 'heavy freezing drizzle',
   61: 'light rain',
   63: 'rain',
   65: 'heavy rain',
+  66: 'light freezing rain',
+  67: 'heavy freezing rain',
   71: 'light snow',
   73: 'snow',
   75: 'heavy snow',
+  77: 'snow grains',
   80: 'rain showers',
   81: 'rain showers',
   82: 'violent rain showers',
+  85: 'light snow showers',
+  86: 'heavy snow showers',
   95: 'thunderstorm',
   96: 'thunderstorm with hail',
+  97: 'heavy thunderstorm',
   99: 'thunderstorm with heavy hail',
 };
 

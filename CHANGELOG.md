@@ -2,6 +2,11 @@
 
 Format: newest first. Versions follow `0.<phase>.<patch>` until 1.0.0.
 
+## Unreleased
+
+- **Weather example:** describes all weather conditions currently documented by Open-Meteo,
+  including freezing precipitation, snow grains, snow showers and heavy thunderstorms.
+
 ## 2.2.0 (2026-10-29): your other servers over SSH
 
 Phase 73. See [docs/SSH.md](docs/SSH.md).

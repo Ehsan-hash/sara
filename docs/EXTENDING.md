@@ -59,6 +59,9 @@ service: `'ask'`. Anything experimental: `'never'`, so the owner opts in.
 The example, [`examples/tools/weather-tool.ts`](../examples/tools/weather-tool.ts), looks up the
 current weather from the free Open-Meteo API. The core of it:
 
+The example describes every weather condition currently documented by Open-Meteo. Its test uses an
+injected fake fetch, so the checks do not call a live service.
+
 ```ts
 import { str, ToolError } from '../../src/tools/types.ts';
 import type { Tool } from '../../src/tools/types.ts';
