@@ -4,6 +4,7 @@ import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { test } from 'node:test';
 import { runDoctor } from '../src/doctor.ts';
+import type { BrowserInfo } from '../src/browser.ts';
 import { Store } from '../src/store.ts';
 import { join } from 'node:path';
 import { makeApp, tempDir } from './helpers.ts';
@@ -42,4 +43,62 @@ test('doctor: database, providers (answering and not), backups, off-server copy'
   assert.equal(by('Backups').status, 'warn');
   assert.equal(by('Off-server copy').status, 'warn');
   assert.equal(by('Node.js').status, 'ok');
+});
+
+test('doctor: reports the testing browser when it is found without launching it', async (t) => {
+  const { dir, cleanup } = tempDir();
+  const app = makeApp(dir, { now: new Date('2026-10-28T20:00:00Z') });
+  t.after(() => {
+    app.store.close();
+    cleanup();
+  });
+  let lookups = 0;
+  const browser: BrowserInfo = {
+    found: true,
+    path: '/fake/chrome',
+    name: 'Google Chrome',
+    kind: 'chrome',
+    how: 'install a Chromium browser',
+  };
+  const checks = await runDoctor({
+    dataDir: dir,
+    settings: app.settings,
+    vault: app.vault,
+    browser: () => {
+      lookups++;
+      return browser;
+    },
+  });
+  const check = checks.find((c) => c.name === 'Testing browser')!;
+  assert.equal(check.status, 'ok');
+  assert.match(check.detail, /Google Chrome.*\/fake\/chrome/);
+  assert.equal(lookups, 1, 'doctor looks up the browser but never starts one');
+});
+
+test('doctor: explains how to install the testing browser when it is missing', async (t) => {
+  const { dir, cleanup } = tempDir();
+  const app = makeApp(dir, { now: new Date('2026-10-28T20:00:00Z') });
+  t.after(() => {
+    app.store.close();
+    cleanup();
+  });
+  let lookups = 0;
+  const browser: BrowserInfo = {
+    found: false,
+    how: 'Install the pinned browser with deploy/install-browser.sh, then restart Sara.',
+  };
+  const checks = await runDoctor({
+    dataDir: dir,
+    settings: app.settings,
+    vault: app.vault,
+    browser: () => {
+      lookups++;
+      return browser;
+    },
+  });
+  const check = checks.find((c) => c.name === 'Testing browser')!;
+  assert.equal(check.status, 'warn');
+  assert.match(check.detail, /not found/i);
+  assert.match(check.detail, /deploy\/install-browser\.sh/);
+  assert.equal(lookups, 1, 'doctor looks up the browser but never starts one');
 });

@@ -2,6 +2,10 @@
 
 Format: newest first. Versions follow `0.<phase>.<patch>` until 1.0.0.
 
+## Unreleased
+
+- **Doctor:** `sara doctor` and **Run full check** now report whether the optional testing browser was found and explain how to install it when it is missing.
+
 ## 1.10.0 (2026-10-29): our moments
 
 Phase 70. See [docs/MOMENTS.md](docs/MOMENTS.md).

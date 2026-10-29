@@ -426,7 +426,7 @@ Sara checks each list once a day. Nothing is sent anywhere for this but the list
 | **Telegram / Discord** | Settings → Connections → Telegram / Discord (create a bot, paste its token, link yourself) |
 | **Web search** | Settings → Abilities → Web search (Brave, Tavily, Ollama or SearXNG) |
 | **MCP tools** | Settings → Abilities → Other programs (MCP) ("Start from": Email or Calendar presets) |
-| **Browser for testing** (she previews, clicks through and screenshots the web apps she builds) | Linux: `sudo /opt/sara-src/deploy/install-browser.sh` (~120 MB download, ~275 MB in `/opt/sara-browser`); Windows uses Microsoft Edge; macOS uses Chrome, Edge or Chromium if installed. Then restart Sara |
+| **Browser for testing** (she previews, clicks through and screenshots the web apps she builds) | Linux: `sudo /opt/sara-src/deploy/install-browser.sh` (~120 MB download, ~275 MB in `/opt/sara-browser`); Windows uses Microsoft Edge; macOS uses Chrome, Edge or Chromium if installed. Then restart Sara. `sara doctor` and **Run full check** also show whether it was found and how to install it |
 
 The installers download only pinned versions and check each download against its checksum (Node.js,
 the voice models and the testing browser by SHA-256 in the scripts; the subscription programs
@@ -532,7 +532,7 @@ unless you add `--delete-data`). The other Saras are left as they are.
 
 ```sh
 sudo sara status            # running? data size, last backup
-sudo sara doctor            # deeper checks: database, every model provider, backups, off-server copy
+sudo sara doctor            # deeper checks: database, testing browser, every model provider, backups, off-server copy
 sudo sara update            # backs up first, pulls, reinstalls, restarts, checks health (rolls back if it fails)
 sudo sara check-updates     # is there a newer version?
 sudo sara backup [file]     # back up now
@@ -550,7 +550,8 @@ Settings → Data & health → Backups → *Off-server copy* puts an encrypted c
 of each daily backup in a folder (e.g. a mounted drive) or S3-compatible storage (Backblaze B2,
 Cloudflare R2, AWS S3, Wasabi). Keep the passphrase in your password manager: without it the copies
 can't be opened. Settings → Data & health → Health shows the model, disk space, backups, memory, sandbox,
-bridges and MCP servers at a glance; *Run full check* is the same as `sara doctor`.
+bridges and MCP servers at a glance; *Run full check* is the same as `sara doctor` and also reports
+whether the testing browser was found and how to install it when it is missing.
 
 ## Upgrading
 
