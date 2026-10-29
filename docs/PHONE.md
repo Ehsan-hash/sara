@@ -73,6 +73,19 @@ signs the phone out of that server only. [SERVERS.md](SERVERS.md)
   on (off by default; the phone asks for the camera the first time). A video call runs inside the
   app, so keep it open; voice calls keep going with the screen off. [VIDEO_CALLS.md](VIDEO_CALLS.md)
 
+## Sara as your phone's assistant (Android, 2.1)
+
+Phone settings → **Apps → Default apps → Digital assistant app → Default digital assistant app →
+Sara**. Then a long press on the home button (or the assistant gesture or key) opens her ready to
+listen (with voice set up) or with the cursor in the message box. "Hey Google" can't be replaced by
+another app, so it opens by press or gesture, not by voice. [VOICE_ASSISTANTS.md](VOICE_ASSISTANTS.md)
+
+## Siri on iPhone (2.1)
+
+Say **"Ask Sara"** (or use the *Ask Sara* action in Shortcuts), say your message, and Siri speaks her
+reply. It uses the server the app is on now. It comes with the next iPhone app update.
+[VOICE_ASSISTANTS.md](VOICE_ASSISTANTS.md)
+
 ## When something doesn't work
 
 - **The address doesn't open on the phone:** with Tailscale, the Tailscale app must be on and

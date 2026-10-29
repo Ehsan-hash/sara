@@ -2,6 +2,28 @@
 
 Format: newest first. Versions follow `0.<phase>.<patch>` until 1.0.0.
 
+## 2.1.0 (2026-10-29): her voice in the home
+
+Phase 72. See [docs/VOICE_ASSISTANTS.md](docs/VOICE_ASSISTANTS.md) and [docs/ALEXA.md](docs/ALEXA.md).
+
+- **Alexa:** "Alexa, open sara companion" and talk to her on any Echo. You make the skill yourself in
+  the Alexa developer console (free, about 15 minutes, development mode for your own account), paste
+  the interaction model Sara gives you, and link it with a one-time spoken code. Every request is
+  checked as Amazon requires (certificate chain, signature, time, skill id) before anything runs.
+  Household members link their own Alexa to their own space. Not in the demo or in private local mode.
+- **Android:** pick Sara as the default digital assistant app; a long-press of the home button (or
+  the assistant gesture) opens her ready to talk. ("Hey Google" can't be replaced by any app.)
+- **Google Home and Nest speakers, through Home Assistant:** talk to her through an Assist voice
+  satellite and hear her on a Nest speaker; the Home Assistant integration 0.3.0 speaks replies
+  without markdown or emoji and returns a `spoken` field.
+- **Siri (iPhone):** an "Ask Sara" shortcut ("Hey Siri, ask Sara…") in the next iPhone app update.
+  On a Mac (and on iPhone today) a Shortcuts recipe in the docs uses her OpenAI-compatible API.
+- **Presence (Home Assistant):** off by default. Pick people/trackers, and she can greet you when you
+  arrive, say goodbye when you leave, wish you good night or good morning, as a message and/or an
+  announcement on a speaker. Rate-limited per kind, respects quiet hours.
+- **Voice rooms:** Alexa and Home Assistant conversations are treated as shared rooms: never explicit
+  whatever Adult mode says, and the AI notice is spoken at every session start and every 3 hours.
+
 ## 2.0.0 (2026-10-29): household mode
 
 Phase 71. See [docs/HOUSEHOLD.md](docs/HOUSEHOLD.md).

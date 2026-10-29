@@ -1,0 +1,292 @@
+{
+  "interactionModel": {
+    "languageModel": {
+      "invocationName": "sara companion",
+      "intents": [
+        {
+          "name": "AMAZON.CancelIntent",
+          "samples": []
+        },
+        {
+          "name": "AMAZON.HelpIntent",
+          "samples": []
+        },
+        {
+          "name": "AMAZON.StopIntent",
+          "samples": [
+            "bye",
+            "goodbye",
+            "that's all"
+          ]
+        },
+        {
+          "name": "AMAZON.NavigateHomeIntent",
+          "samples": []
+        },
+        {
+          "name": "AMAZON.FallbackIntent",
+          "samples": []
+        },
+        {
+          "name": "LinkIntent",
+          "slots": [
+            {
+              "name": "code",
+              "type": "AMAZON.NUMBER"
+            }
+          ],
+          "samples": [
+            "link code {code}",
+            "link {code}",
+            "the code is {code}",
+            "my code is {code}",
+            "link with code {code}",
+            "link my account with {code}",
+            "code {code}"
+          ]
+        },
+        {
+          "name": "TalkIntent",
+          "slots": [
+            {
+              "name": "query",
+              "type": "AMAZON.SearchQuery"
+            }
+          ],
+          "samples": [
+            "tell her {query}",
+            "tell you {query}",
+            "say {query}",
+            "I want to say {query}",
+            "I want to tell you {query}",
+            "tell her that {query}",
+            "ask her {query}",
+            "and {query}",
+            "so {query}",
+            "well {query}",
+            "okay {query}",
+            "yes {query}",
+            "no {query}",
+            "hey {query}",
+            "hi {query}",
+            "hello {query}",
+            "listen {query}",
+            "guess what {query}",
+            "by the way {query}",
+            "also {query}",
+            "actually {query}",
+            "oh {query}"
+          ]
+        },
+        {
+          "name": "WhatIntent",
+          "slots": [
+            {
+              "name": "query",
+              "type": "AMAZON.SearchQuery"
+            }
+          ],
+          "samples": [
+            "what {query}",
+            "what's {query}"
+          ]
+        },
+        {
+          "name": "HowIntent",
+          "slots": [
+            {
+              "name": "query",
+              "type": "AMAZON.SearchQuery"
+            }
+          ],
+          "samples": [
+            "how {query}",
+            "how's {query}"
+          ]
+        },
+        {
+          "name": "WhyIntent",
+          "slots": [
+            {
+              "name": "query",
+              "type": "AMAZON.SearchQuery"
+            }
+          ],
+          "samples": [
+            "why {query}"
+          ]
+        },
+        {
+          "name": "WhoIntent",
+          "slots": [
+            {
+              "name": "query",
+              "type": "AMAZON.SearchQuery"
+            }
+          ],
+          "samples": [
+            "who {query}",
+            "who's {query}"
+          ]
+        },
+        {
+          "name": "WhereIntent",
+          "slots": [
+            {
+              "name": "query",
+              "type": "AMAZON.SearchQuery"
+            }
+          ],
+          "samples": [
+            "where {query}",
+            "where's {query}"
+          ]
+        },
+        {
+          "name": "WhenIntent",
+          "slots": [
+            {
+              "name": "query",
+              "type": "AMAZON.SearchQuery"
+            }
+          ],
+          "samples": [
+            "when {query}"
+          ]
+        },
+        {
+          "name": "CanYouIntent",
+          "slots": [
+            {
+              "name": "query",
+              "type": "AMAZON.SearchQuery"
+            }
+          ],
+          "samples": [
+            "can you {query}",
+            "could you {query}",
+            "would you {query}",
+            "will you {query}"
+          ]
+        },
+        {
+          "name": "DoYouIntent",
+          "slots": [
+            {
+              "name": "query",
+              "type": "AMAZON.SearchQuery"
+            }
+          ],
+          "samples": [
+            "do you {query}",
+            "did you {query}",
+            "have you {query}"
+          ]
+        },
+        {
+          "name": "AreYouIntent",
+          "slots": [
+            {
+              "name": "query",
+              "type": "AMAZON.SearchQuery"
+            }
+          ],
+          "samples": [
+            "are you {query}",
+            "were you {query}"
+          ]
+        },
+        {
+          "name": "IAmIntent",
+          "slots": [
+            {
+              "name": "query",
+              "type": "AMAZON.SearchQuery"
+            }
+          ],
+          "samples": [
+            "I'm {query}",
+            "I am {query}"
+          ]
+        },
+        {
+          "name": "IIntent",
+          "slots": [
+            {
+              "name": "query",
+              "type": "AMAZON.SearchQuery"
+            }
+          ],
+          "samples": [
+            "I {query}",
+            "I've {query}",
+            "I'll {query}",
+            "I'd {query}"
+          ]
+        },
+        {
+          "name": "MyIntent",
+          "slots": [
+            {
+              "name": "query",
+              "type": "AMAZON.SearchQuery"
+            }
+          ],
+          "samples": [
+            "my {query}"
+          ]
+        },
+        {
+          "name": "LetsIntent",
+          "slots": [
+            {
+              "name": "query",
+              "type": "AMAZON.SearchQuery"
+            }
+          ],
+          "samples": [
+            "let's {query}",
+            "let us {query}"
+          ]
+        },
+        {
+          "name": "PleaseIntent",
+          "slots": [
+            {
+              "name": "query",
+              "type": "AMAZON.SearchQuery"
+            }
+          ],
+          "samples": [
+            "please {query}"
+          ]
+        },
+        {
+          "name": "RemindMeIntent",
+          "slots": [
+            {
+              "name": "query",
+              "type": "AMAZON.SearchQuery"
+            }
+          ],
+          "samples": [
+            "remind me {query}"
+          ]
+        },
+        {
+          "name": "GoodIntent",
+          "slots": [
+            {
+              "name": "query",
+              "type": "AMAZON.SearchQuery"
+            }
+          ],
+          "samples": [
+            "good {query}"
+          ]
+        }
+      ],
+      "types": []
+    }
+  }
+}

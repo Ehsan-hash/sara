@@ -14,7 +14,7 @@ modèles que vous choisissez.
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="License: MIT"></a>
   <img src="https://img.shields.io/badge/node-%E2%89%A5%2024-339933" alt="Node 24 or newer">
   <img src="https://img.shields.io/badge/runtime%20dependencies-0-brightgreen" alt="Zero runtime dependencies">
-  <img src="https://img.shields.io/badge/tests-763%20passing-brightgreen" alt="763 tests passing">
+  <img src="https://img.shields.io/badge/tests-784%20passing-brightgreen" alt="784 tests passing">
   <a href="docs/RESULTS.md"><img src="https://img.shields.io/badge/HumanEval%20pass%401-96.3%25-informational" alt="HumanEval pass@1 96.3%"></a>
   <a href="https://github.com/farena-ai/sara/releases/latest"><img src="https://img.shields.io/github/v/release/farena-ai/sara?label=release" alt="Latest release"></a>
   <a href="https://github.com/farena-ai/sara/pkgs/container/sara"><img src="https://img.shields.io/badge/docker-amd64%20%7C%20arm64-2496ED" alt="Docker image for amd64 and arm64"></a>
@@ -28,7 +28,7 @@ modèles que vous choisissez.
   <sub>Une vraie session, non montée, avec un modèle local (qwen3.8 27B sur Ollama, une RTX 5090) sur un serveur de test jetable : elle discute avec sa personnalité, écrit l'application, demande avant de lancer un serveur, ouvre l'aperçu et le teste dans son propre navigateur. La dernière image montre l'application avec des nombres saisis.</sub>
 </p>
 
-> **État :** 2.0, licence MIT, avec onze versions riches en nouveautés depuis la 1.0 (toutes
+> **État :** 2.1, licence MIT, avec douze versions riches en nouveautés depuis la 1.0 (toutes
 > ci-dessous). L'[app Android](https://play.google.com/store/apps/details?id=com.backstagecoding.sara) est sur Google Play ;
 > l'app iPhone et la version Mac App Store arrivent dès qu'Apple les aura approuvées. Lisez
 > [docs/DISCLOSURES.md](docs/DISCLOSURES.md) avant d'utiliser ou de partager Sara.
@@ -37,6 +37,7 @@ modèles que vous choisissez.
 
 | Version | Ce que vous y gagnez |
 |---|---|
+| **2.1** · Sa voix chez vous | **« Alexa, ouvre sara companion »** : parlez-lui sur n'importe quel Echo grâce à votre propre skill gratuite (vérifiée comme Amazon l'exige). Faites-en votre **assistant Android** (appui long sur Accueil), écoutez-la sur les enceintes **Google Home / Nest** via Home Assistant, et laissez-la **vous accueillir quand vous rentrez**. Siri sur iPhone arrive avec la prochaine mise à jour de l'app. [Comment ça marche](docs/VOICE_ASSISTANTS.md) |
 | **2.0** · Mode foyer | **Partagez votre serveur Sara avec les personnes qui vivent avec vous.** Invitez un adulte avec un lien à usage unique : il a ses propres compagnes, conversations, mémoire, bibliothèque et apps dans un espace à lui. Vous restez l'administrateur : vous choisissez ses modèles, fixez des limites par jour et voyez l'usage et le coût, jamais ce qu'il dit. [Comment ça marche](docs/HOUSEHOLD.md) |
 | **1.10** · Nos moments | **Un album photo partagé** avec vos photos et celles qu'elle envoie, chacune avec une légende qu'elle écrit avec sa propre voix à partir de votre conversation. Des albums qui se remplissent seuls (Nous, Lieux, Ses looks), « Ce jour-là », et parfois elle en ressort un : *tu te souviens ?* Les conversations privées restent dehors sauf si vous les ajoutez. [Comment ça marche](docs/MOMENTS.md) |
 | **1.9** · Appels vidéo | **Voyez-la pendant que vous parlez :** un appel vidéo affiche son portrait animé en grand, les lèvres synchronisées sur sa voix, le visage qui suit son humeur, dans sa tenue et son lieu du moment. Allumez votre caméra si vous voulez : elle regarde toutes les quelques secondes (ou quand vous appuyez sur *Regarde ça*) ; rien n'est enregistré. [Comment ça marche](docs/VIDEO_CALLS.md) |
@@ -55,7 +56,6 @@ Toutes les versions : [CHANGELOG.md](CHANGELOG.md) · [versions](https://github.
 
 | Version | Fonctionnalité |
 |---|---|
-| 2.1 | **Sa voix chez vous :** Alexa (« Alexa, demande à Sara… »), l'assistant d'Android et Google Home, les raccourcis Siri, et des réactions selon qui est à la maison grâce à Home Assistant |
 | 2.2 | **Vos autres serveurs en SSH :** avec un mot de passe ou une clé ; après une connexion par mot de passe, elle crée sa propre clé, vous dit où elle se trouve et ne garde le mot de passe que si vous le demandez (avec un avertissement) |
 | 2.3 | **Gros documents :** des PDF et des livres de 500 à 1 000 pages dans sa bibliothèque, chaque page scannée lue, des réponses avec les numéros de page |
 
@@ -206,8 +206,8 @@ qu'aucun test ne vérifiait. Ce qu'elle apporte aujourd'hui, c'est la manière d
 lance les tests, demande avant les étapes risquées, montre ce qui a tourné), pas un meilleur score
 sur ces jeux. Détails, résultats par tâche et comment relancer : [docs/RESULTS.md](docs/RESULTS.md).
 
-En plus, `npm run check` : une vérification des types et 771 tests automatiques avec un faux modèle
-scripté (sans réseau, sans GPU) : 763 passent sous Windows, et les 8 autres sont des tests
+En plus, `npm run check` : une vérification des types et 792 tests automatiques avec un faux modèle
+scripté (sans réseau, sans GPU) : 784 passent sous Windows, et les 8 autres sont des tests
 d'isolation propres à Linux, exécutés sur un serveur Linux.
 
 ## Comparaison

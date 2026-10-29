@@ -37,6 +37,8 @@ import type { FirstClaim } from './claim.ts';
 import { cleanScope, DeviceFlow } from './device-flow.ts';
 import { handleOpenAI } from './openai-api.ts';
 import { handleMcp } from './mcp-server.ts';
+import { AlexaService, alexaModel } from './alexa.ts';
+import { cleanPresence, PRESENCE_KINDS, presenceSettings } from './presence.ts';
 import { cleanOrigins, DEFAULT_APP_NAME, KeyLimiter, otherAppsSettings } from './other-apps.ts';
 import { CardError, cardPng, cardToCharacter, isPng, MAX_CARD_JSON, MAX_CARD_PNG, parseCardFile, personaToCard, placeholderPicture, portraitPng, type CardImport } from './character-cards.ts';
 import { cleanBudget, cleanPrices, DEFAULT_PRICES, mergeSummaries, priceTable, usageLine } from './usage.ts';
@@ -173,6 +175,8 @@ export interface ServerOptions {
   spaceId?: string;
   /** Phase 71: whether anyone on this server has a passkey (the sign-in page offers passkey sign-in). */
   anyPasskeys?: () => boolean;
+  /** Phase 72: her Alexa skill, shared by every space (main.ts routes each linked Alexa to its person). */
+  alexa?: AlexaService;
 }
 
 /** Phase 71: what a member's space needs from main.ts. */
@@ -1077,6 +1081,16 @@ export function createSaraServer(opts: ServerOptions): Server {
   // Phase 23: updates from Settings.
   // Phase 31: the server's own folder (each companion's app.dataDir is her own folder).
   const rootDir = app.rootDir ?? app.dataDir;
+  // Phase 72: her Alexa skill. main.ts hands every space one shared service (links name a person and
+  // a companion); a server built alone (tests) answers for its own companions.
+  const alexa =
+    opts.alexa ??
+    new AlexaService({
+      dir: rootDir,
+      skillId: () => app.settings.get().alexa?.skillId,
+      quick: () => app.settings.get().alexa?.quick === true,
+      resolve: (l) => (l.space !== spaceId ? undefined : (opts.companions?.get(l.companion)?.app ?? (l.companion === (app.companionId ?? 'main') ? app : undefined))),
+    });
   // ---- Phase 67: private local mode and a model on this computer ----
   const privateLocalOf = (): PrivateLocalStore => (app.privateLocal ??= new PrivateLocalStore(rootDir));
   /** Chat models that run on this computer: the local Ollama's (providerId '' when Sara has no provider entry for it yet), and loopback providers with a model set. */
@@ -3989,6 +4003,40 @@ export function createSaraServer(opts: ServerOptions): Server {
       }
     }
     // Phase 29: Home Assistant (address in settings, token in the vault).
+    // Phase 72: smart-home presence (per companion): what she reacts to and how, the entity pickers, a test.
+    if (a === 'home' && (b === 'presence' || b === 'entities')) {
+      if (opts.demo) throw new HttpError(403, 'Not in the demo.');
+      const base = app.settings.get().home?.url;
+      const token = app.vault.get(HOME_VAULT);
+      if (b === 'entities' && !c && method === 'GET') {
+        if (!base || !token) throw new HttpError(400, 'Connect Home Assistant first.');
+        const want = String(new URL(req.url ?? '/', 'http://x').searchParams.get('domains') ?? '').split(',').map((x) => x.trim()).filter((x) => /^[a-z_]{1,40}$/.test(x)).slice(0, 8);
+        const r = await netFetch(`${base}/api/states`, { headers: { authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(10_000), redirect: 'error' }).catch((err: Error) => err);
+        if (r instanceof Error || !r.ok) throw new HttpError(502, 'Couldn’t read the list from Home Assistant.');
+        const all = (await r.json().catch(() => [])) as { entity_id?: string; state?: string; attributes?: { friendly_name?: unknown } }[];
+        const list = (Array.isArray(all) ? all : []).filter((x) => typeof x.entity_id === 'string' && (!want.length || want.includes(x.entity_id.split('.')[0])));
+        return send(res, 200, { entities: list.slice(0, 500).map((x) => ({ id: x.entity_id, name: typeof x.attributes?.friendly_name === 'string' ? x.attributes.friendly_name.slice(0, 80) : x.entity_id, state: String(x.state ?? '').slice(0, 40) })) });
+      }
+      const view = () => ({ ...presenceSettings(app), connected: Boolean(base && token), log: app.presence?.log ?? [] });
+      if (b === 'presence' && !c && method === 'GET') return send(res, 200, view());
+      if (b === 'presence' && !c && method === 'PUT') {
+        const body = await readJson(req);
+        try {
+          app.settings.update({ presence: cleanPresence(body, presenceSettings(app)) });
+        } catch (err) {
+          throw new HttpError(400, (err as Error).message);
+        }
+        return send(res, 200, view());
+      }
+      if (b === 'presence' && c === 'test' && method === 'POST') {
+        const body = await readJson(req);
+        const kind = PRESENCE_KINDS.find((k) => k === body.kind) ?? 'arrive';
+        if (!base || !token) throw new HttpError(400, 'Connect Home Assistant first.');
+        if (!app.presence) throw new HttpError(400, 'Presence isn’t available here.');
+        return send(res, 200, await app.presence.fire(kind, presenceSettings(app), true));
+      }
+      throw new HttpError(404, 'Not found');
+    }
     if (a === 'home' && !b) {
       if (method === 'GET') {
         const base = app.settings.get().home?.url;
@@ -4310,6 +4358,59 @@ export function createSaraServer(opts: ServerOptions): Server {
     }
     // Phase 57: Settings → Connections → Other apps: the switches, the allowed browser addresses and the keys.
     // The stdio bridge for MCP apps that start a program (Claude Desktop): one standalone file.
+    // Phase 72: Settings → Other apps → Alexa: the skill id (owner), one-time link codes, linked Alexas.
+    if (a === 'alexa') {
+      if (opts.demo) throw new HttpError(403, 'Not in the demo.');
+      const myCompanion = app.companionId ?? 'main';
+      const ownerOnly = () => {
+        if (opts.member) throw new HttpError(403, 'Only the owner of this server can use this.', { ownerOnly: true });
+      };
+      const view = () => {
+        const cfg = app.settings.get().alexa ?? {};
+        return {
+          configured: Boolean(cfg.skillId),
+          ...(opts.member ? {} : { skillId: cfg.skillId ?? '', quick: cfg.quick === true }),
+          owner: !opts.member,
+          privateLocal: privateLocalOn(),
+          codeExpiresAt: alexa.links.pendingCode(spaceId, myCompanion) ?? null,
+          links: alexa.links.list(spaceId).map((l) => ({ id: l.id, companion: opts.companions?.get(l.companion)?.app.persona.name ?? app.persona.name, mine: l.companion === myCompanion, linkedAt: l.linkedAt, lastUsedAt: l.lastUsedAt ?? null })),
+        };
+      };
+      if (!b && method === 'GET') return send(res, 200, view());
+      if (!b && method === 'PUT') {
+        ownerOnly();
+        const body = await readJson(req);
+        const cur = app.settings.get().alexa ?? {};
+        let skillId = cur.skillId;
+        if (body.skillId !== undefined) {
+          const v = String(body.skillId ?? '').trim();
+          if (v && !/^amzn1\.ask\.skill\.[0-9a-f-]{36}$/i.test(v)) throw new HttpError(400, 'A skill id looks like amzn1.ask.skill.1234abcd-…: copy it from the Alexa developer console (Your skills → View Skill ID).');
+          skillId = v || undefined;
+        }
+        app.settings.update({ alexa: { ...(skillId ? { skillId } : {}), quick: typeof body.quick === 'boolean' ? body.quick : cur.quick === true } });
+        return send(res, 200, view());
+      }
+      if (b === 'code' && !c && method === 'POST') {
+        await readJson(req);
+        if (privateLocalOn()) throw new HttpError(403, 'Private local mode is on: Alexa needs Amazon, so it is paused.');
+        if (!(app.settings.get().alexa ?? {}).skillId) throw new HttpError(400, 'Set up the Alexa skill first: the owner adds its skill id here.');
+        try {
+          return send(res, 200, alexa.links.makeCode(spaceId, myCompanion));
+        } catch (err) {
+          throw new HttpError(400, (err as Error).message);
+        }
+      }
+      if (b === 'links' && c && !parts[3] && method === 'DELETE') {
+        if (!alexa.links.unlink(spaceId, c)) throw new HttpError(404, 'That Alexa is not linked.');
+        return send(res, 200, view());
+      }
+      if (b === 'model' && !c && method === 'GET') {
+        const name = String(new URL(req.url ?? '/', 'http://x').searchParams.get('invocation') ?? '').toLowerCase().replace(/[^a-z ]/g, '').replace(/\s+/g, ' ').trim().slice(0, 50);
+        res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'content-disposition': 'attachment; filename="sara-alexa-model.json"', 'cache-control': 'no-store', ...SECURITY_HEADERS });
+        return void res.end(JSON.stringify(alexaModel(name.split(' ').length >= 2 ? name : undefined), null, 2));
+      }
+      throw new HttpError(404, 'Not found');
+    }
     if (a === 'other-apps' && b === 'bridge' && method === 'GET') {
       const f = join(webRoot, '..', 'src', 'mcp-bridge.ts');
       if (!existsSync(f)) throw new HttpError(404, 'The bridge file is not in this install.');
@@ -5412,6 +5513,8 @@ export function createSaraServer(opts: ServerOptions): Server {
       if (url.pathname === '/v1' || url.pathname.startsWith('/v1/')) {
         return await handleOpenAI(req, res, url.pathname, { app, auth, ...(opts.companions ? { companions: opts.companions } : {}), demo: Boolean(opts.demo), limiter: appLimiter });
       }
+      // Phase 72: Alexa (signed by Amazon; checked in src/alexa.ts before anything is read).
+      if (url.pathname === '/alexa' || url.pathname === '/alexa/') return await alexa.handle(req, res, { demo: Boolean(opts.demo) });
       if (url.pathname === '/mcp' || url.pathname === '/mcp/') {
         return await handleMcp(req, res, { app, auth, demo: Boolean(opts.demo), version: info.version, limiter: appLimiter, requestApproval });
       }

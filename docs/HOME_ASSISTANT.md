@@ -46,6 +46,58 @@ to do, so you can ask again in the Sara app.
 
 Install and options: [integrations/home-assistant/README.md](../integrations/home-assistant/README.md).
 
+**Voice rooms (2.1):** a Home Assistant voice satellite or speaker is a shared room, like a group
+channel: Sara keeps Home Assistant conversations non-explicit whatever Adult mode says, keeps your
+private matters out unless you bring them up there, and answers in a few spoken sentences. From
+integration 0.3.0 the words Home Assistant speaks have markdown, link addresses and emoji left out
+(the conversation in Sara keeps her full reply).
+
+## 3. Assist voice satellites and Google Home / Nest speakers
+
+**Listening** goes through Home Assistant's Assist: Home Assistant → **Settings → Voice
+assistants** → your assistant (or **Add assistant**) → **Conversation agent: Sara**. Then a Home
+Assistant Voice Preview Edition, an ESPHome satellite, the Home Assistant phone or watch app, or a
+wall tablet with Assist sends what you say to Sara and speaks her reply with that assistant's
+text-to-speech.
+
+**Google Home and Nest speakers** can't listen for Sara (Google closed its voice apps for third
+parties in 2023, and "Hey Google" always goes to Google). They can **speak** for her: Home
+Assistant's **Google Cast** integration finds them as `media_player` entities, and any
+text-to-speech in Home Assistant can play on them. Two ways to use that:
+
+- **Presence** (below): her greetings announced on a Nest speaker.
+- **An automation or script**, for example a morning summary on the kitchen speaker
+  (`sara.send_message` returns `reply`, and from 0.3.0 `spoken`, the same words ready for a speaker):
+
+  ```yaml
+  sequence:
+    - action: sara.send_message
+      data:
+        text: "Give me a two-sentence summary of my day."
+      response_variable: sara
+    - action: tts.speak
+      target:
+        entity_id: tts.google_translate_en_com
+      data:
+        media_player_entity_id: media_player.kitchen_nest
+        message: "{{ sara.spoken }}"
+  ```
+
+Her safety layer runs before any of it: the AI notice when due, crisis resources, the minors
+block. A speaker reads exactly the reply the conversation in Sara shows.
+
+## 4. Presence: she notices what happens at home
+
+With direction 1 connected, **Settings → Abilities → Home Assistant → Presence** (per companion,
+off until you switch it on) lets her react when someone gets home or leaves (`person.…` or
+`device_tracker.…`), at bedtime (a switch or `input_boolean` turning on, or a time while someone is
+home) or when a light goes on in the morning. She says one short line of her own as a message on
+your devices, an announcement on a Home Assistant speaker (`tts.speak` on a `media_player`, for
+example a Nest), or both; announcements start with the AI notice every 3 hours. Each kind at most
+once every few hours (3 by default), never in the quiet hours of *Calls from her*. Sara polls only
+the chosen entities once a minute. Members of a household have no Home Assistant in 2.0, so presence
+is the owner's. More: [VOICE_ASSISTANTS.md](VOICE_ASSISTANTS.md).
+
 ## Both at once
 
 With both set up, you can say to a voice satellite "Sara, is the garage door open?" and she reads

@@ -81,6 +81,21 @@ lines as yours, the other companions' lines as theirs, tagged with the chat's na
 aren't in the chat learn nothing from it. Group chats are never shown to other apps, MCP or the API,
 and deleting one deletes every member's copy.
 
+## Voice assistants and presence (2.1)
+
+| What | Goes to | When | How to turn it off |
+|---|---|---|---|
+| **What you say to Alexa** (as text) and **her reply** | Amazon: Alexa turns your voice into text and sends it to your server's `/alexa`; her reply goes back through Amazon to the speaker. Your server downloads Amazon's signing certificate from `s3.amazonaws.com` (cached) and may ask `api.amazonalexa.com` to say "One moment" | Only after the owner set up the skill and you linked your Alexa with a code, each time you talk to it | Unlink it (Settings → Other apps → Alexa), delete the skill in the Alexa developer console, or clear the skill ID. Paused in private local mode |
+| **What you say to Siri** ("Ask Sara") | Apple turns your voice into text on its side; the iPhone app then sends the text to your own server and Siri speaks her reply | When you use the Ask Sara shortcut | Don't use it |
+| **Android assistant** | Nothing new: the app opens on your phone as usual | When you long-press home with Sara as your assistant | Pick another assistant in the phone's settings |
+| **Presence** | Your own Home Assistant (states of the entities you picked, once a minute; `tts.speak` for announcements). A Google Home or Nest speaker receives the audio Home Assistant sends it | Only when switched on (per companion) | Settings → Abilities → Home Assistant → Presence |
+
+Sara keeps of an Alexa link only a hash of Alexa's user id, which person and companion it belongs
+to, and when it was linked and last used. Codes are kept as hashes for 10 minutes. Presence keeps
+only the time each kind of event last fired. The words said through Alexa, Siri and Home Assistant
+are in her conversations (named *Alexa*, *Siri*, *Home Assistant*) like any message, so you can
+read or delete them. More: [VOICE_ASSISTANTS.md](VOICE_ASSISTANTS.md).
+
 ## More than one person (household)
 
 If the owner of a server invites other adults ([HOUSEHOLD.md](HOUSEHOLD.md)), each person's

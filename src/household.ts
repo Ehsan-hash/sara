@@ -309,7 +309,7 @@ export function memberDirs(dataDir: string, h: HouseholdStore): { member: Member
  * Settings only the owner has (server, accounts, bridges, tools, imports). A member's settings never
  * contain them, and a member's change never writes them.
  */
-export const OWNER_SETTINGS: readonly (keyof Settings)[] = ['providers', 'prices', 'mcpServers', 'search', 'offsite', 'backup', 'discord', 'telegram', 'home', 'githubWatch', 'helpers', 'teamLimits', 'jobBudget', 'shellNetwork', 'modelLists', 'modelAutoSwitch', 'safetyClassifier', 'claimJudge', 'toolPermissions'];
+export const OWNER_SETTINGS: readonly (keyof Settings)[] = ['providers', 'prices', 'mcpServers', 'search', 'offsite', 'backup', 'discord', 'telegram', 'home', 'githubWatch', 'helpers', 'teamLimits', 'jobBudget', 'shellNetwork', 'modelLists', 'modelAutoSwitch', 'safetyClassifier', 'claimJudge', 'toolPermissions', 'alexa', 'presence'];
 
 /**
  * A member's settings: their own file, with the owner's providers (for the server code that runs
@@ -509,6 +509,8 @@ export const MEMBER_ROUTES: ReadonlySet<string> = new Set([
   'library',
   // their settings and data
   'settings', 'providers', 'usage', 'export', 'push', 'phone', 'safety', 'other-apps',
+  // Phase 72: their own Alexa links (codes and unlinking in their space; the skill id stays the owner's)
+  'alexa',
 ]);
 
 /** Families a member may write to only partly: GET-only for members. */

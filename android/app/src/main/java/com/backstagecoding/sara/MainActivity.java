@@ -532,6 +532,12 @@ public class MainActivity extends Activity {
             intent.setAction(null);
             return true;
         }
+        // Phase 72: opened as the phone's assistant: straight into a voice turn (or the text box).
+        if (Intent.ACTION_ASSIST.equals(intent.getAction())) {
+            pendingRing = "window.saraAssist&&window.saraAssist()";
+            intent.setAction(null);
+            return true;
+        }
         String action = intent.getStringExtra("ringAction");
         String ring = intent.getStringExtra("ring");
         if (action == null || ring == null) return false;

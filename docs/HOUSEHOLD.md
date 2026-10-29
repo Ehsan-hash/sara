@@ -216,3 +216,14 @@ the member's own confirmation.
 - Members importing ChatGPT/Claude history or other companion apps' chats (owner only for now).
 - Telegram/Discord bridges for members.
 - A member's own off-site backup (their export file is the way to take data with them).
+- Smart-home presence (2.1): it reads the owner's Home Assistant, which members don't have, so it is
+  the owner's only.
+
+### Alexa (2.1)
+
+Each member links their own Alexa: Settings → Connections → Other apps → *Talk to her through Alexa*
+→ **Make a link code** in their own space. The code (and later every request from that Amazon
+account) is tied to the member's space and the companion that was open, so their Alexa only ever
+reaches their own companion; the owner's list doesn't show it. The skill itself and its ID are the
+owner's (one skill per server). A paused or removed member's Alexa answers nothing, and deleting a
+member removes their links.

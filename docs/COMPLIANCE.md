@@ -109,6 +109,20 @@ marks NSFW (age-gated by Discord) or Discord channels / Telegram groups the owne
 the minor block and crisis handling apply everywhere. Strangers who DM the Telegram bot are told
 once that she is an AI companion that only talks with her owner.
 
+## Voice assistants (2.1)
+
+Alexa, Home Assistant voice (and the Google Home / Nest speakers it talks through), Siri and the
+Android assistant are new ways in; the whole safety layer runs for each (docs/VOICE_ASSISTANTS.md):
+
+- **Disclosure:** Alexa says she is an AI companion when an Alexa account is linked, at the start of
+  every Alexa session and at least every 3 hours (in addition to her own 3-hour notice, which is
+  spoken when due); Home Assistant and Siri get her normal notice as part of the reply when it's
+  due, as /v1 does; speaker announcements (presence) start with the notice every 3 hours.
+- **Honesty, crisis resources and the minors block** apply unchanged (spoken: 988 described as US-only).
+- **Shared rooms:** a speaker can be heard by anyone, including children, so Alexa and Home
+  Assistant conversations are never explicit, whatever Adult mode says (like work channels), and a
+  room note tells her so.
+
 ## More than one person on one server (household mode, 2.0)
 
 Each person the owner invites has their own space, with the same disclosure screen before first use,

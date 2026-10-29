@@ -1687,6 +1687,28 @@
       <p class="muted small">Make one in Home Assistant: click your name (bottom left) → Security → Long-lived access tokens → Create token.</p>
       <div class="add-row"><button id="ha-save" type="button">Save and test</button><button id="ha-clear" type="button" class="ghost" hidden>Disconnect</button></div>
       <p id="ha-status" class="muted small" role="status"></p>
+      <h3>Presence</h3>
+      <p class="muted small">She can notice when you get home, leave, go to bed or switch the lights on in the morning, and say a short word: a message on your devices, an announcement on a speaker, or both. Off until you switch it on, for this companion. Each kind at most once every few hours, never in the quiet hours of Calls from her.</p>
+      <p id="pr-off" class="muted small" hidden>Connect Home Assistant above first.</p>
+      <div id="pr-box" data-nodirty data-noauto>
+      <label class="row"><input id="pr-on" type="checkbox"> <span>React to what happens at home</span></label>
+      <label>People and phones to watch <select id="pr-people" multiple size="4"></select></label>
+      <label class="row"><input id="pr-arrive" type="checkbox"> <span>When someone gets home</span></label>
+      <label class="row"><input id="pr-leave" type="checkbox"> <span>When someone leaves</span></label>
+      <label class="row"><input id="pr-bed-on" type="checkbox"> <span>At bedtime</span></label>
+      <label>Bedtime switch <select id="pr-bed-entity"></select></label>
+      <label>Or bedtime at <input id="pr-bed-time" type="time"></label>
+      <label class="row"><input id="pr-morning-on" type="checkbox"> <span>When a light goes on in the morning</span></label>
+      <label>Morning light <select id="pr-morning-light"></select></label>
+      <label>Morning from <input id="pr-morning-from" type="time"></label>
+      <label>Morning until <input id="pr-morning-to" type="time"></label>
+      <label>How she reacts <select id="pr-how"><option value="message">A message (notification)</option><option value="speaker">An announcement on a speaker</option><option value="both">A message and an announcement</option></select></label>
+      <label>Speaker <select id="pr-player"></select></label>
+      <label>Home Assistant voice <select id="pr-tts"></select></label>
+      <label>At most once every <select id="pr-gap"><option value="1">1 hour</option><option value="2">2 hours</option><option value="3">3 hours</option><option value="6">6 hours</option><option value="12">12 hours</option></select></label>
+      <div class="add-row"><button id="pr-test" type="button" class="ghost">Try it now</button></div>
+      <p id="pr-status" class="muted small" role="status"></p>
+      </div>
         </section>
         <section class="settings-page" data-page="ab-search" data-group="Abilities" data-title="Web search" data-owner-only hidden>
       <label>Search service
@@ -1821,6 +1843,18 @@
       <label><span>Browser apps that may call her <button type="button" class="tip" data-tip="Only for apps that run in a web browser on another address, like SillyTavern at http://localhost:8000. Type that address (several: separate with commas). Leave empty if you don't use one: other web pages are then always refused.">?</button></span> <input id="oa-origins" placeholder="e.g. http://localhost:8000" spellcheck="false"></label>
       </div>
       <p id="oa-status" class="muted small" role="status"></p>
+      <h3 id="alexa-head">Talk to her through Alexa <button type="button" class="tip" data-tip="Talk to her on an Echo or any Alexa device through your own Alexa skill. It stays private to your Amazon account (development mode). The owner sets it up once; then each person links their Alexa with a code.">?</button></h3>
+      <p class="muted small">Say "Alexa, open sara companion" and talk to her. You make the skill yourself in the Alexa developer console (free, about 15 minutes); the step-by-step guide is in the help (Talking to her through Alexa, Google, Siri and your phone).</p>
+      <div data-nodirty data-noauto data-owner-only>
+      <label>Skill ID <input id="alexa-skill" placeholder="amzn1.ask.skill.…" spellcheck="false" autocomplete="off"></label>
+      <p class="small">The skill's endpoint (her Alexa address): <code id="alexa-endpoint"></code> <button id="alexa-endpoint-copy" type="button" class="ghost small">Copy</button></p>
+      <label class="row"><input id="alexa-quick" type="checkbox"> <span>Answer Alexa with the quick model</span></label>
+      <p class="small"><a id="alexa-model" href="/api/alexa/model" download>Download the interaction model</a> (paste it in the Alexa developer console: Build → Interaction Model → JSON Editor).</p>
+      </div>
+      <div class="add-row" data-nodirty><button id="alexa-code-new" type="button">Make a link code</button></div>
+      <p id="alexa-code" class="small" role="status"></p>
+      <ul id="alexa-links" class="dev-list"></ul>
+      <p id="alexa-status" class="muted small" role="status"></p>
       <h3>Set up an app</h3>
       <details class="oa-howto">
         <summary data-raw>SillyTavern</summary>

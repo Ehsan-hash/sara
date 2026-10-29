@@ -150,6 +150,14 @@ export interface Settings {
    * apps on other addresses allowed to call her (CORS; none by default).
    */
   otherApps?: { tools?: boolean; changes?: boolean; origins?: string[] };
+  /**
+   * Phase 72: her Alexa skill (server-wide, the owner's): the skill id from the Alexa developer
+   * console (requests for any other skill are refused) and whether her Alexa replies use the quick
+   * model (Settings → Models → Which model does what). Linked Alexa accounts are in <data>/alexa.json.
+   */
+  alexa?: { skillId?: string; quick?: boolean };
+  /** Phase 72: smart-home presence through Home Assistant (per companion; off by default). */
+  presence?: import('./presence.ts').PresenceSettings;
 }
 
 const FILE = 'settings.json';

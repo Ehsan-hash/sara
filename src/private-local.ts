@@ -156,6 +156,7 @@ export function whatWouldLeave(s: Settings, facts: LeaveFacts = {}): LeaveItem[]
     { id: 'weather', label: 'Weather and travel times', active: Boolean(s.briefing?.place) || s.leaveBy?.enabled === true },
     { id: 'mcp', label: 'Other programs (MCP) on other computers', names: remoteMcp.map((m) => m.name), active: remoteMcp.length > 0 },
     { id: 'home', label: 'Home Assistant on another computer', active: homeRemote },
+    { id: 'alexa', label: 'Alexa (your own skill; it runs at Amazon)', active: Boolean(s.alexa?.skillId) },
     { id: 'shell', label: 'Internet for her commands (builds, npm install, git push)', active: s.shellNetwork !== false },
   ];
   return items;

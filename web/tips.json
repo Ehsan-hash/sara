@@ -1008,6 +1008,74 @@
     "me-cover": [
       "Make this photo the cover picture of an album (the picture on the album's card). Pick \"Not a cover\" to go back to the newest photo.",
       "moments"
+    ],
+    "alexa-skill": [
+      "Copy it from the Alexa developer console: Your skills → View Skill ID. Requests for any other skill are refused, so a copy of the endpoint can't be used by someone else's skill.",
+      "assistants"
+    ],
+    "alexa-quick": [
+      "On: her Alexa replies use the quick model (Which model does what), so she answers within Alexa's 8 seconds. Off: her usual model; slow answers are kept and she says \"ask me again in a moment\".",
+      "assistants"
+    ],
+    "pr-on": [
+      "Off by default. On: she watches the people and lights you choose below in Home Assistant (once a minute) and reacts with one short line. Only for this companion.",
+      "home"
+    ],
+    "pr-people": [
+      "The person or phone entities from Home Assistant (person.… or device_tracker.…) that tell her who is home. Hold Ctrl (or Cmd) to pick more than one.",
+      "home"
+    ],
+    "pr-arrive": [
+      "She says hello when one of the people above gets home, for example \"Welcome back! How was the drive?\"",
+      "home"
+    ],
+    "pr-leave": [
+      "She says a short goodbye when one of the people above leaves home. Off by default.",
+      "home"
+    ],
+    "pr-bed-on": [
+      "A goodnight at bedtime: when the switch below turns on (for example an input_boolean your bedtime routine sets), or at the time below while someone is home.",
+      "home"
+    ],
+    "pr-bed-entity": [
+      "A switch, input_boolean or binary sensor in Home Assistant that turns on at bedtime. Leave empty to use only the time.",
+      "home"
+    ],
+    "pr-bed-time": [
+      "A time of day for the goodnight, for example 22:30. It only counts while someone is home. Quiet hours still apply, so pick a time before they start.",
+      "home"
+    ],
+    "pr-morning-on": [
+      "A good morning when the light below turns on inside the morning window, for example the bedroom light at 07:15.",
+      "home"
+    ],
+    "pr-morning-light": [
+      "The light (or switch) that tells her you're up.",
+      "home"
+    ],
+    "pr-morning-from": [
+      "The morning window starts here; the light turning on earlier doesn't count.",
+      "home"
+    ],
+    "pr-morning-to": [
+      "The morning window ends here; later the light doesn't count as waking up.",
+      "home"
+    ],
+    "pr-how": [
+      "A message: a notification on your phone and computers. An announcement: Home Assistant speaks her line on the speaker below (a Google Home, Nest or Sonos it knows). Announcements start with the AI notice every 3 hours.",
+      "home"
+    ],
+    "pr-player": [
+      "The speaker Home Assistant announces on (a media_player). Google Home and Nest speakers work when Home Assistant has the Google Cast integration.",
+      "home"
+    ],
+    "pr-tts": [
+      "Home Assistant's text-to-speech that reads her line (a tts.… entity, for example Google Translate, Piper or Home Assistant Cloud).",
+      "home"
+    ],
+    "pr-gap": [
+      "Each kind of event (home, leaving, bedtime, morning) makes her speak at most once in this time, so a phone jumping in and out of home doesn't repeat it.",
+      "home"
     ]
   },
   "pages": {

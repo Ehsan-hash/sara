@@ -396,6 +396,16 @@
   <li>Your Home Assistant must be reachable from your Sara server, for example through Nabu Casa or Tailscale.</li>
   <li><strong>Place reminders</strong>: "remind me when I get to the store" or "…when I leave work". Save places in <em>Planner → Reminders → Places</em>: by address, or with "Save where I am" in the phone app. Then switch on <em>Place reminders</em> in <em>Settings → Connections → Phone and notifications</em> on your phone, and allow location "all the time".</li>
   <li>Your location stays on the phone. The phone only tells your server "arrived at Store" or "left Work". Looking up an address asks OpenStreetMap.</li>
+  <li><strong>Presence</strong> (<em>Settings → Abilities → Home Assistant → Presence</em>, off until you switch it on): she notices through Home Assistant when someone gets home or leaves, at bedtime, or when a light goes on in the morning, and says a short word as a message or on a speaker. Each kind at most once every few hours, never in the quiet hours of <em>Calls from her</em>.</li>
+</ul>
+
+<h2 id="assistants">Talking to her through Alexa, Google, Siri and your phone</h2>
+<ul>
+  <li><strong>Alexa</strong>: you make your own Alexa skill once in the free Alexa developer console (development mode, only your Amazon account can use it), paste the skill ID and the downloaded interaction model, and set the endpoint to her address with /alexa at the end. Then make a link code in <em>Settings → Connections → Other apps → Alexa</em> and say "Alexa, ask sara companion to link code" and the six numbers. Everyone in a household links their own Alexa with their own code.</li>
+  <li>On Alexa she says she is an AI at the start of each session, keeps her answers short and never explicit (a speaker in a room can be heard by anyone), and your private chats stay out of it. If an answer takes too long for Alexa, she says so and gives it when you ask again.</li>
+  <li><strong>Android</strong>: in your phone's settings, choose Sara under <em>Default apps → Digital assistant app</em>. A long press on the home button (or the assistant gesture) then opens her ready to listen. "Hey Google" itself can't be replaced by another app.</li>
+  <li><strong>Google Home and Nest speakers</strong> work through Home Assistant: make Sara the conversation agent of a Home Assistant voice assistant, and let Home Assistant speak on your Google speakers.</li>
+  <li><strong>Siri</strong>: on iPhone and Mac, say "Ask Sara" (or use the Ask Sara action in Shortcuts) and type or say your message; she answers in Siri.</li>
 </ul>
 
 <h2 id="team">Sara leads a team</h2>

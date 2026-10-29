@@ -97,6 +97,8 @@ import { DeviceFlow } from './device-flow.ts';
 import { SESSION_COOKIE } from './auth.ts';
 import { cookieValue, HouseholdStore, MEMBER_TOKEN_PREFIX, MemberPolicy, MemberSettings, memberDirs, memberOfToken, memberUsage, memberVault, PairRegistry, peekJson, type MemberRecord, type ModelPick } from './household.ts';
 import type { Vault as VaultT } from './vault.ts';
+import { AlexaService } from './alexa.ts';
+import { PresenceWorker } from './presence.ts';
 
 // A promise nobody waited for that failed: log it and carry on (a background job, a model call
 // whose answer was no longer needed). A thrown error nothing caught: log it plainly and stop, so
@@ -345,8 +347,21 @@ function claimBanner(): void {
       : [` Or set her up in the browser: open ${where} within ${st.minutesLeft} minutes`, ` and enter this setup code: ${formatClaimCode(claim.code)}`, ' (Restart her for a new code. It stops working once she has an owner.)'];
   process.stdout.write(`================================================================\n${lines.join('\n')}\n================================================================\n\n`);
 }
+// Phase 72: her Alexa skill, one for the server. A linked Alexa names a person's space and one of
+// their companions; a paused, leaving or removed member's links answer nothing.
+const alexa = new AlexaService({
+  dir: dataDir,
+  skillId: () => settings.get().alexa?.skillId,
+  quick: () => settings.get().alexa?.quick === true,
+  resolve: (link) => {
+    const sp = link.space === 'owner' ? ownerSpace : memberSpaces.get(link.space);
+    if (!sp || (sp.member && household.get(sp.id)?.status !== 'active')) return undefined;
+    return sp.companions.get(link.companion)?.app;
+  },
+});
 const serverOpts = {
   auth,
+  alexa,
   claim,
   info,
   webDir,
@@ -565,6 +580,8 @@ function buildCompanion(space: Space, id: string, dir: string): Companion {
     },
     sceneOf: (image) => photoSettings(settingsC).taken?.find((x) => x.id === image)?.scene,
   });
+  // Phase 72: smart-home presence through Home Assistant (the owner's companions; off until switched on).
+  if (!isMember && !isDemo) app.presence = new PresenceWorker(app);
   // Phase 39: team tasks she leads (helpers with their own models, tools and approvals).
   if (!isMember) app.team = new TeamManager(app, store.db);
   if (!isMember) for (const t of createTeamTools(() => app)) tools.add(t);
@@ -610,6 +627,7 @@ function buildCompanion(space: Space, id: string, dir: string): Companion {
       app.review!.start();
       if (!isDemo) app.story!.start();
       if (!isDemo) app.momentsWorker!.start();
+      app.presence?.start();
       if (!isDemo) wardrobe.start();
       // Learning from imported history that was still going when the server stopped carries on.
       if (!isDemo) setTimeout(() => app.historyImport?.start(), 20_000).unref();
@@ -624,6 +642,7 @@ function buildCompanion(space: Space, id: string, dir: string): Companion {
       issueWatcher?.stop();
       app.story?.stop();
       app.momentsWorker?.stop();
+      app.presence?.stop();
       reminders.stop();
       lifeWorker.stop();
       weeklyWorker.stop();
@@ -686,6 +705,7 @@ async function deleteMemberSpace(id: string): Promise<void> {
     for (const c of sp.companions.all()) c.app.store.close();
   }
   household.deleteMember(id);
+  alexa.links.removeSpace(id);
   console.log('Household: a member\'s space was deleted.');
 }
 const householdHooks: HouseholdHooks = {

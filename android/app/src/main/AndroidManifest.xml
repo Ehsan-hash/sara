@@ -66,6 +66,12 @@
                 <action android:name="com.backstagecoding.sara.CALL" />
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
+            <!-- Phase 72: Sara as the phone's digital assistant (Settings → Default apps → Digital
+                 assistant app). A long press on home or the assistant gesture opens her listening. -->
+            <intent-filter android:label="@string/assist_label">
+                <action android:name="android.intent.action.ASSIST" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
             <meta-data android:name="android.app.shortcuts" android:resource="@xml/shortcuts" />
         </activity>
 

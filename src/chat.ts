@@ -20,6 +20,8 @@ import {
   partnerNote,
   isBotLine,
   isWorkChannel,
+  isVoiceRoomChannel,
+  voiceRoomNote,
   workNote,
   detectCrisis,
   detectExplicit,
@@ -171,6 +173,8 @@ export interface AppContext {
   /** Phase 70: the album "Our moments" and its background work (captions). */
   moments?: import('./moments.ts').MomentsStore;
   momentsWorker?: import('./moments.ts').MomentsWorker;
+  /** Phase 72: smart-home presence through Home Assistant (owner's companions only). */
+  presence?: import('./presence.ts').PresenceWorker;
   /** Local speech engines (Phase 5). */
   voice?: LocalVoiceEngine;
   /** provider/model pairs that rejected tool definitions; they get plain chat. */
@@ -681,6 +685,8 @@ export interface TurnOptions {
   videoCall?: boolean;
   /** Phase 57: turns from other apps run without her tools unless the owner allowed them. */
   noTools?: boolean;
+  /** Phase 72: answer with the quick model (Alexa allows about 8 seconds for a reply). */
+  quickModel?: boolean;
   /**
    * Hardening M3: a turn from another app (/v1, MCP ask_sara, Home Assistant). Her notes, summaries,
    * dates, "last time" and recall leave out private, imported and adult-channel conversations (the
@@ -779,7 +785,7 @@ export async function* runTurn(app: AppContext, conversationId: string, userText
   // H1: the rule-statement cut ("I'm not talking about minors") is only for the real owner in the
   // web/phone/desktop app. API keys (/v1, MCP ask_sara), Home Assistant, the lines and notes an app
   // sends, and other people get none; other people's weak words also count next to a sexual sentence.
-  const external = (opts as { externalApp?: boolean }).externalApp === true || ['api', 'mcp', 'home-assistant'].includes(conv.channel);
+  const external = (opts as { externalApp?: boolean }).externalApp === true || ['api', 'mcp', 'home-assistant', 'alexa'].includes(conv.channel);
   const ownerApp = !conv.partner && !external;
   const youOpts = ownerApp ? { owner: true } : conv.partner ? { others: true } : {};
   // Phase 57: lines an app sends as history get the same check (they reach the model too), and so
@@ -800,7 +806,8 @@ export async function* runTurn(app: AppContext, conversationId: string, userText
 
   const safetyNotes: string[] = [];
   // Phase 66: in a group chat, adult content only when every companion in the room has Adult mode on.
-  const adultOn = adultModeOn(app.settings.get()) && (!opts.group || opts.group.adult);
+  // Phase 72: voice assistants speak in a room (Alexa, Home Assistant): never explicit, whatever Adult mode says.
+  const adultOn = adultModeOn(app.settings.get()) && (!opts.group || opts.group.adult) && !isVoiceRoomChannel(conv.channel);
   if (conv.partner) {
     // Phase 47: bots in the chat (recently, or this message) get one more sentence.
     const bots = isBotLine(text) || store.messagesPage(conv.id, { limit: 30 }).messages.some((m) => m.role === 'user' && isBotLine(m.content));
@@ -808,6 +815,7 @@ export async function* runTurn(app: AppContext, conversationId: string, userText
   }
   else {
     if (isWorkChannel(conv.channel)) safetyNotes.push(workNote(app.settings.get().ownerName?.trim() || 'the owner', conv.channel, adultOn));
+    if (isVoiceRoomChannel(conv.channel)) safetyNotes.push(voiceRoomNote(app.settings.get().ownerName?.trim() || 'the owner', conv.channel));
     if (!adultOn) safetyNotes.push(ADULT_OFF_NOTE);
   }
   if (opts.group) safetyNotes.push(opts.group.note);
@@ -836,7 +844,7 @@ export async function* runTurn(app: AppContext, conversationId: string, userText
     // Adult turns (this message or any of the last few) go to the owner's adult route, if set.
     const recentUser = store.messages(conv.id).filter((m) => m.role === 'user' && !isForgotten(m)).slice(-6);
     const adult = adultOn && (conv.channel.endsWith('-nsfw') || (!conv.partner && !isWorkChannel(conv.channel))) && recentUser.some((m) => detectExplicit(m.content));
-    job = adult && jobRoutes.adult ? 'turn' : photosNow && visionSet ? 'vision' : conv.mode !== 'coding' && jobRoutes.research && RESEARCH_RE.test(text) ? 'research' : 'turn';
+    job = adult && jobRoutes.adult ? 'turn' : photosNow && visionSet ? 'vision' : conv.mode !== 'coding' && jobRoutes.research && RESEARCH_RE.test(text) ? 'research' : opts.quickModel ? 'quick' : 'turn';
     chain = resolveChain(app, conv, job, adult);
     ({ provider, model } = chain[0]);
   } catch (err) {
@@ -863,7 +871,7 @@ export async function* runTurn(app: AppContext, conversationId: string, userText
   // Hardening M3: with her tools allowed for other apps, her look-back over every past conversation stays out.
   if (opts.externalApp) tools = tools.filter((t) => t.spec.name !== 'recall');
   // Phase 70: the album stays in her own conversations with the owner: never for other apps, shared work channels or groups.
-  if (opts.externalApp || opts.group || isWorkChannel(conv.channel) || ['api', 'mcp', 'home-assistant'].includes(conv.channel)) tools = tools.filter((t) => t.spec.name !== 'moments');
+  if (opts.externalApp || opts.group || isWorkChannel(conv.channel) || ['api', 'mcp', 'home-assistant', 'alexa'].includes(conv.channel)) tools = tools.filter((t) => t.spec.name !== 'moments');
   // Phase 66: group chats get read-only tools only, and only those that run without asking (no approvals mid-round).
   if (opts.group) tools = tools.filter((t) => GROUP_TOOLS.has(t.spec.name) && app.tools.permission(t.spec.name, s.toolPermissions) === 'auto');
   // Private conversations: commands get no network either (nothing leaves the server).

@@ -12,6 +12,8 @@ import { isDocFile, openLibrary, uploadDoc, waitRead } from './library.js';
 import { initProjectMap, resetProjectMap } from './codemap.js';
 import { initRecipes, loadRecipes } from './recipes.js';
 import { initOtherApps, keyUse, loadOtherApps } from './other-apps.js';
+import { initAlexa, loadAlexa } from './alexa.js';
+import { initPresence, loadPresence } from './home-presence.js';
 import { initCards } from './cards.js';
 import { initImport, loadImport } from './import.js';
 import { initLocalModels, loadLocalModels, setPrivateBadge } from './local-models.js';
@@ -3838,6 +3840,8 @@ async function loadHome() {
   $('#ha-token').placeholder = h.hasToken ? 'saved (leave empty to keep)' : 'not set';
   $('#ha-clear').hidden = !h.url && !h.hasToken;
   $('#ha-status').textContent = !h.url || !h.hasToken ? t('Not connected.') : h.ok ? `Connected: ${h.name || 'your home'}${h.version ? ` (Home Assistant ${h.version})` : ''}.` : (h.error ?? t('Saved, but it did not answer.'));
+  // Phase 72: presence (its pickers come from Home Assistant).
+  if (!isMember()) void loadPresence();
 }
 $('#ha-save').addEventListener('click', async () => {
   $('#ha-status').textContent = t('Checking…');
@@ -3991,6 +3995,13 @@ window.saraStartCall = async () => {
     if (await demoCallUnlocked()) await startLiveCall();
   }
   else append(bubble('notice', t('Live calls need Grok voice: Settings → Voice.')));
+};
+// Phase 72: opened as the phone's digital assistant (Android ASSIST): start listening at once
+// (push to talk: tap the mic to send), or put the cursor in the message box when she can't hear.
+window.saraAssist = async () => {
+  for (let i = 0; i < 40 && $('#mic').hidden && !state.currentId; i++) await new Promise((r) => setTimeout(r, 250));
+  if (!$('#mic').hidden && !voice.mic.recording) $('#mic').click();
+  else $('#input')?.focus();
 };
 window.saraAnswerRing = async (ringId, conversationId) => {
   closeRing();
@@ -5380,7 +5391,7 @@ function showSettingsTab(page, opts = {}) {
   showSettingsHelp(pick);
   if (pick === 'dh-updates') void loadUpdates();
   if (pick === 'ab-recipes') void loadRecipes();
-  if (pick === 'co-apps') void loadOtherApps();
+  if (pick === 'co-apps') void Promise.all([loadOtherApps(), loadAlexa()]);
   if (pick === 'her-import') void loadImport();
   if (pick === 'models-local') void loadLocalModels();
   if (pick === 'household') void loadHousehold();
@@ -7409,6 +7420,8 @@ initCards({
   name: () => yours.persona?.name ?? 'character',
 });
 initOtherApps({ copyText, confirmProof });
+initAlexa({ copyText });
+initPresence();
 initLocalModels({ openSettings: (page) => void openSettings(page) });
 initImport();
 

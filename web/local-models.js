@@ -40,6 +40,7 @@ const LEAVE = {
   weather: () => t('Weather and travel times'),
   mcp: () => t('Other programs (MCP) on other computers'),
   home: () => t('Home Assistant on another computer'),
+  alexa: () => t('Alexa (your own skill; it runs at Amazon)'),
   shell: () => t('Internet for her commands (builds, npm install, git push)'),
 };
 

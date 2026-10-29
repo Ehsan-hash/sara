@@ -10,6 +10,10 @@ Sara can be reached from other programs, with her own memory and personality:
 - **Character cards**: import SillyTavern-style cards (V2 and V3, PNG or JSON) into the gallery,
   and export a companion as a card.
 
+- **Alexa** (2.1): your own Alexa skill talks to her through `https://<her address>/alexa`; set up on
+  the same page under *Talk to her through Alexa*. Step by step: [ALEXA.md](ALEXA.md); all voice
+  assistants: [VOICE_ASSISTANTS.md](VOICE_ASSISTANTS.md).
+
 Everything here is set up in **Settings → Connections → Other apps**. None of it is available on
 the demo server.
 
@@ -239,6 +243,21 @@ Sara's version) and `tools/list` with all her tools, write tools included, and n
 (every tool call says how to connect). It exists for MCP directories such as
 [Glama](https://glama.ai/mcp/servers) that check a server by starting it with no setup
 (`packaging/glama/Dockerfile`); it never contacts anything.
+
+### Siri Shortcuts with the API
+
+A Shortcut can ask her through `/v1/chat/completions` with an API key (Get Contents of URL, POST,
+JSON body with `model` = `sara` and one user message; the reply is `choices[0].message.content`).
+It works on a Mac, iPhone or iPad without the app; the steps are in
+[VOICE_ASSISTANTS.md](VOICE_ASSISTANTS.md#siri-and-shortcuts-on-a-mac).
+
+## Alexa
+
+Settings → Connections → Other apps → **Talk to her through Alexa**: the owner pastes the skill ID
+from the Alexa developer console (and may let her answer Alexa with the quick model); everyone, the
+owner and household members, makes one-time **link codes** for their own Alexa and sees and unlinks
+their linked Alexas there. The interaction model to paste into the console is downloadable there
+too. Full guide: [ALEXA.md](ALEXA.md).
 
 ## Character cards
 

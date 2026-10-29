@@ -404,6 +404,60 @@ New entry points: `/v1/*` (OpenAI-compatible), `/mcp` (MCP, Streamable HTTP), th
   as in the web app). The stdio bridge reads its key from the environment or a file; anyone who
   can read the MCP app's config can read the key (as with any MCP credential).
 
+## Alexa endpoint, voice assistants and presence (Phase 72)
+
+New entry point: **`POST /alexa`**, reachable without a Sara sign-in (Amazon calls it). See
+docs/ALEXA.md.
+
+- **Forged requests:** nothing is read until the request passes Amazon's checks
+  (`src/alexa.ts`): the certificate URL must be `https://s3.amazonaws.com[:443]/echo.api/…` after
+  normalising; the chain (downloaded through `netFetch`, 4 s timeout, 64 KB cap, cached until the
+  leaf expires) must be in date on the whole path, name `echo-api.amazon.com` in the leaf's SAN,
+  link by signature and issuer, and end at a root in Node's own `tls.rootCertificates`; the
+  `Signature-256` RSA-SHA256 signature must cover the exact raw body; the timestamp must be within
+  150 s (replays); the skill id must equal the owner's. Failures answer 400 with no detail and are
+  logged with the reason. There is no switch that disables these checks; tests pass their own root
+  only into the test instance.
+- **Someone else's skill pointed at the address:** refused by the skill id. **Someone else's Alexa
+  on the owner's skill** (dev mode: only the owner's Amazon account can reach it): still needs a
+  link code. Codes are 6 digits, single use, 10 minutes, stored as hashes; 5 wrong tries per Alexa
+  account or 30 in total per 10 minutes pause linking (10⁶ codes, so a blind guess in the window is
+  under 1 in 30 000).
+- **Wrong person's data:** a link names a space (owner or member id) and a companion; the turn runs
+  only in that space's companion (household isolation unchanged), in its own `alexa` conversation.
+  A paused, leaving or removed member's link resolves to nothing; deleting a member drops their
+  links. The owner's list shows only the owner's links. Members may make codes and unlink their own
+  Alexas (`alexa` is in `MEMBER_ROUTES`); the skill id and quick-model switch are owner-only (403
+  `ownerOnly`).
+- **What a turn can reach:** an external-app turn (`externalApp`): private, imported, group and
+  adult-channel conversations stay out; her tools only if the owner allows other apps, and an
+  approval waits in the app (the Alexa answer says so). The `alexa` and `home-assistant` channels
+  are voice rooms: never explicit whatever Adult mode says, with a room note in her instructions.
+- **Safety layer:** AI disclosure (spoken at every new Alexa session and every 3 h, plus her own
+  3-hour notice), honesty, crisis resources, minors block (on the message and her reply) as in
+  every turn. Speech is plain text, SSML-escaped (`& < > " '`), emoji and markup removed, capped.
+- **SSRF via the progressive response:** the "One moment" call goes only to
+  `https://api(.eu|.fe).amazonalexa.com` from the request's `apiEndpoint` (a forged request never
+  gets this far).
+- **Denial of service:** bodies over 128 KB are refused; an unverifiable request costs one cached
+  certificate check. Slow turns are kept per link (one at a time; the conversation's busy lock
+  applies).
+- **Demo and private local mode:** `/alexa` answers 404 on the demo and 403 while private local
+  mode is on (and the certificate fetch couldn't leave anyway).
+- **Android assistant:** an `ACTION_ASSIST` intent filter on the existing activity; it opens the
+  app as before (the page's own sign-in applies) and starts a voice or text turn. Android tells the
+  user an assistant may read the screen; Sara reads nothing from it.
+- **Siri (iPhone):** the App Intent sends one message with the in-use server's own cookie (never
+  another server's) to `/api/conversations/<its Siri conversation>/messages`; nothing new on the
+  server.
+- **Presence:** outbound only, to the owner's Home Assistant with the existing token; only the
+  chosen entities are read; entity ids are validated (`domain.object_id`); lines she writes go
+  through the claim and minors checks (else a fixed greeting); rate-limited per kind and quiet
+  hours apply. Owner-only (`home` family), not on the demo.
+- **Known limits:** Alexa identifies an Amazon account, not a voice: anyone speaking to an Echo
+  signed in to a linked account talks to that person's companion (the room rule keeps it
+  non-explicit, and private chats stay out). Amazon sees what is said to Alexa.
+
 ## Desktop apps (Phase 33)
 
 - The page bridge (`window.SaraDesktop`) answers only pages from the configured server's origin;

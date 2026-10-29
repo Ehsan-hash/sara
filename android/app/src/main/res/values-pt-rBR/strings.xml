@@ -9,4 +9,6 @@
     <string name="servers_cancel">Cancelar</string>
     <string name="servers_add_a_sara">Adicionar uma Sara</string>
     <string name="servers_back">Voltar para %1$s</string>
+    <!-- Phase 72: the phone's digital assistant -->
+    <string name="assist_label">Falar com a Sara</string>
 </resources>
