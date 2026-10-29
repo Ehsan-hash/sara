@@ -29,13 +29,14 @@ export async function processParents(platform: NodeJS.Platform = process.platfor
     return out;
   }
   if (platform === 'win32') {
-    // WMI now and then answers "Call cancelled" part-way through on a busy machine (a cut list):
-    // a complete list always has this process in it, so try again until it does.
+    // WMI now and then answers "Call cancelled" or "Quota violation" part-way through on a busy
+    // machine (a cut list): a complete list always has this process in it, so try again until it does.
+    // Asking for only the two fields keeps the query small, which is what fails far less often.
     let text = '';
     const self = new RegExp(`^${process.pid} \\d+\\s*$`, 'm');
     for (let i = 0; i < 3 && !self.test(text); i++) {
       if (i) await new Promise((r) => setTimeout(r, 300 * i));
-      text = await run('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', 'Get-CimInstance Win32_Process | ForEach-Object { "$($_.ProcessId) $($_.ParentProcessId)" }'], 20_000);
+      text = await run('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', 'Get-CimInstance Win32_Process -Property ProcessId,ParentProcessId | ForEach-Object { "$($_.ProcessId) $($_.ParentProcessId)" }'], 20_000);
     }
     for (const line of text.split(/\r?\n/)) {
       const m = /^(\d+) (\d+)$/.exec(line.trim());

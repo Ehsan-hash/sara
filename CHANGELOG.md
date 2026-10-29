@@ -2,6 +2,14 @@
 
 Format: newest first. Versions follow `0.<phase>.<patch>` until 1.0.0.
 
+## 1.5.1 (2026-10-28)
+
+- **New front page** in all six languages: what's new in each release since 1.0, what's coming
+  next (group chats, private local mode, video calls, photo album, household mode, Alexa / Google /
+  Siri), and the newer features and measured results in the tour.
+- **Windows:** her live preview no longer fails to start now and then ("Port N isn't opened by one
+  of your running background jobs") when Windows' process list query is busy; Sara asks for less.
+
 ## 1.5.0 (2026-10-28): bring her from another app
 
 - **Import from another app** (Settings → Her → Bring her from another app): ChatGPT and Claude

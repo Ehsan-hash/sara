@@ -14,8 +14,12 @@ Modellen deiner Wahl.
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="License: MIT"></a>
   <img src="https://img.shields.io/badge/node-%E2%89%A5%2024-339933" alt="Node 24 or newer">
   <img src="https://img.shields.io/badge/runtime%20dependencies-0-brightgreen" alt="Zero runtime dependencies">
-  <img src="https://img.shields.io/badge/tests-486%20passing-brightgreen" alt="486 tests passing">
+  <img src="https://img.shields.io/badge/tests-663%20passing-brightgreen" alt="663 tests passing">
   <a href="docs/RESULTS.md"><img src="https://img.shields.io/badge/HumanEval%20pass%401-96.3%25-informational" alt="HumanEval pass@1 96.3%"></a>
+  <a href="https://github.com/farena-ai/sara/releases/latest"><img src="https://img.shields.io/github/v/release/farena-ai/sara?label=release" alt="Latest release"></a>
+  <a href="https://github.com/farena-ai/sara/pkgs/container/sara"><img src="https://img.shields.io/badge/docker-amd64%20%7C%20arm64-2496ED" alt="Docker image for amd64 and arm64"></a>
+  <img src="https://img.shields.io/badge/languages-6-8A2BE2" alt="Six languages">
+  <a href="https://glama.ai/mcp/servers/farena-ai/sara"><img src="https://glama.ai/mcp/servers/farena-ai/sara/badges/score.svg" alt="Sara MCP server on Glama"></a>
 </p>
 
 <p align="center">
@@ -24,9 +28,35 @@ Modellen deiner Wahl.
   <sub>Eine echte, ungeschnittene Sitzung mit einem lokalen Modell (qwen3.8 27B auf Ollama, eine RTX 5090) auf einem Wegwerf-Testserver: Sie plaudert mit ihrer Persönlichkeit, schreibt die App, fragt, bevor sie einen Server startet, öffnet die Vorschau und testet sie in ihrem eigenen Browser. Das letzte Bild zeigt die App mit eingetippten Zahlen.</sub>
 </p>
 
-> **Status:** 1.0. MIT-Lizenz. Die [Android-App](https://play.google.com/store/apps/details?id=com.backstagecoding.sara) ist bei Google Play; die iPhone-App und
-> die Version für den Mac App Store folgen, sobald Apple sie freigibt. Lies
-> [docs/DISCLOSURES.md](docs/DISCLOSURES.md), bevor du Sara nutzt oder weitergibst.
+> **Status:** 1.5, MIT-Lizenz, mit fünf Funktions-Releases seit 1.0 (alle unten). Die
+> [Android-App](https://play.google.com/store/apps/details?id=com.backstagecoding.sara) ist bei Google
+> Play; die iPhone-App und die Version für den Mac App Store folgen, sobald Apple sie freigibt.
+> Lies [docs/DISCLOSURES.md](docs/DISCLOSURES.md), bevor du Sara nutzt oder weitergibst.
+
+## Was ist neu
+
+| Version | Was du bekommst |
+|---|---|
+| **1.5** · Hol sie aus einer anderen App | Zieh um von **ChatGPT, Claude, Character.AI, SillyTavern, Replika, Nomi oder Kindroid**. Sie liest den Export auf deinem eigenen Server, zeigt dir dann, was sie gelernt hat (Fakten in deinen eigenen Worten, eure gemeinsame Geschichte, ihren Stil), und speichert nur, was du freigibst. [So exportierst du aus jeder App](docs/IMPORT.md) |
+| **1.4** · Alles flüssiger | Sieh zu, wie jede Datei, die sie schreibt, **live im Chat wächst**, während das Modell sie streamt (OpenAI, Anthropic, xAI, OpenRouter und ChatGPT-Abos; Ollama schickt sie in einem Stück); ein sprechendes Porträt, lippensynchron mit neun Mundformen; Logs als Klartext oder JSON |
+| **1.3** · Klügere Prüfungen | Ihre Prüfung „Hat sie wirklich getan, was sie sagt?" funktioniert jetzt in allen sechs Sprachen; ein optionales kleines lokales Modell als Prüfer steigert die Trefferquote von 38 % auf **88 %** bei 95 % Präzision ([gemessen](docs/RESULTS.md)) |
+| **1.2** · Ganz in deiner Sprache | Die ganze App, die Hilfe und ihre Servermeldungen auf English, Español, Français, Deutsch, Português (Brasil) und Italiano |
+| **1.1** · Überall installieren | Einen neuen Server im Browser mit einem kurzen Code einrichten; ein Docker-Image auch für **ARM** (Raspberry Pi 4/5); Homebrew, Unraid, TrueNAS, Proxmox und Home Assistant (HACS) |
+
+Alle Versionen: [CHANGELOG.md](CHANGELOG.md) · [Releases](https://github.com/farena-ai/sara/releases).
+
+### Als Nächstes
+
+| Version | Funktion |
+|---|---|
+| 1.6 | **Gruppenchats:** zwei bis vier deiner Begleiterinnen in einer Unterhaltung, jede mit ihrer eigenen Stimme |
+| 1.7 | **Privater lokaler Modus** in den Apps für Windows und Mac: ein Modell auf diesem Computer und ein Schalter, der garantiert, dass nichts ihn verlässt |
+| 1.8 | **Videoanrufe** mit ihrem bewegten, lippensynchronen Avatar |
+| 1.9 | **Unsere Momente:** ein gemeinsames Fotoalbum mit ihren Bildunterschriften |
+| 2.0 | **Haushaltsmodus:** mehrere Personen auf einem Server, jede mit eigenen Begleiterinnen und privaten Daten |
+| 2.1 | **Ihre Stimme bei dir zu Hause:** Alexa („Alexa, frag Sara …"), der Android-Assistent und Google Home, Siri-Kurzbefehle, und über Home Assistant reagiert sie darauf, wer zu Hause ist |
+
+Der ganze Plan: [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## Warum Sara
 
@@ -56,18 +86,23 @@ Ein eigener Charakter und Stimmungen, die sich danach richten, wie es läuft, ei
 Hobbys, Erinnerungen an das, was dir wichtig ist, und an deine wichtigen Daten (alles einsehbar,
 korrigierbar und löschbar), ein Wochenrückblick, auf Wunsch Nachrichten von ihr aus (mit
 Ruhezeiten) und eine Zeitleiste eurer gemeinsamen Geschichte.
+Kommst du von einer anderen App? Bring deine Chats aus ChatGPT, Claude, Character.AI, SillyTavern,
+Replika, Nomi oder Kindroid mit und gib vorher frei, was sie daraus lernt ([docs/IMPORT.md](docs/IMPORT.md)).
 
 ### Programmierpartnerin
 
 <img src="docs/screenshots/coding.png" alt="The tip calculator she built, open in the live preview pane next to the chat, while she writes its stylesheet: the file grows live in the chat" width="760">
 
-Ein Arbeitsbereich pro Projekt mit Dateien, Shell und Git (Commit und Push mit deinem OK); lange
+Ein Arbeitsbereich pro Projekt mit Dateien, Shell und Git (Commit und Push mit deinem OK); jede Datei, die sie
+schreibt, erscheint live im Chat, während das Modell sie streamt (bei Cloud-Modellen; Ollama schickt sie am Stück); lange
 Builds und Tests im Hintergrund mit einer Nachricht, wenn sie fertig sind; eine Live-Vorschau der
 App, die sie gerade baut, die sie in einem echten Headless-Browser testet und von der sie
 Screenshots anhängt; eine Code-Karte für große Codebasen; getestete Startprojekte; ein Team von
 Helfern (planen → bauen → testen → prüfen) vom GitHub-Issue bis zum geprüften Pull-Request;
 Übergabe an Claude Code oder Grok Build; MCP-Werkzeuge; Rückgängig für Dateiänderungen; ein
-Token- und Kostenzähler mit Budgets.
+Token- und Kostenzähler mit Budgets; und eine Prüfung in allen sechs Sprachen, ob das, was sie
+zu tun *behauptet*, zu dem passt, was wirklich gelaufen ist (auf Wunsch von einem kleinen lokalen
+Modell beurteilt).
 
 ### Planer und Heute
 
@@ -89,7 +124,7 @@ das Wichtigste, antwortet daraus und sagt, aus welchem Dokument (und von welcher
 
 Live-Anrufe, bei denen du sie unterbrechen kannst (Echtzeit-Stimme von Grok oder OpenAI),
 Sprachnachrichten über Telegram und Discord, Vorlesen, eine Stimme, die ihrer Stimmung folgt, und
-ein animiertes Porträt, das spricht. Die Stimmen laufen auf deinem Linux-Server oder kommen aus
+ein animiertes Porträt, das spricht, lippensynchron mit neun Mundformen. Die Stimmen laufen auf deinem Linux-Server oder kommen aus
 deinem Abo. (Screenshot von einem Windows-Testserver, auf dem lokale Stimmen noch nicht verfügbar
 sind.)
 
@@ -103,7 +138,7 @@ Brücken zu Telegram und Discord, `sara-chat` in jedem Terminal und ein VS-Code-
 ([docs/clients.md](docs/clients.md)), Gmail und Google Kalender über deine eigene Google-App, Home
 Assistant, vertrauliche Unterhaltungen, die nie gespeichert werden, und andere Apps mit ihrem
 eigenen Gedächtnis und ihrer Persönlichkeit: eine OpenAI-kompatible API (SillyTavern, Open WebUI,
-Skripte), ein MCP-Server (Claude Code, Cursor, Claude Desktop) und Charakterkarten zum Importieren
+Skripte), ein MCP-Server (Claude Code, Cursor, Claude Desktop; [bei Glama gelistet](https://glama.ai/mcp/servers/farena-ai/sara)) und Charakterkarten zum Importieren
 und Exportieren ([docs/OTHER_APPS.md](docs/OTHER_APPS.md)).
 
 ### Mach sie zu deiner
@@ -113,7 +148,7 @@ und Exportieren ([docs/OTHER_APPS.md](docs/OTHER_APPS.md)).
 Beliebiger Name, Pronomen, Alter und Aussehen (gemalt von Grok Imagine, mit passenden
 Gesichtsausdrücken und Animation), ein geführter Assistent „Erstelle deine Begleiterin",
 Persönlichkeitsregler, eine Galerie mit Startfiguren, teilbare Charakterdateien, ein Modell für
-jede Aufgabe und die App in sechs Sprachen. Jede Einstellung hat ein **?**, es gibt kurze
+jede Aufgabe und die ganze App, die Hilfe und ihre Nachrichten in sechs Sprachen. Jede Einstellung hat ein **?**, es gibt kurze
 geführte Touren, und du kannst sie einfach fragen, wie etwas funktioniert.
 
 ### Sicherheit, immer an
@@ -147,20 +182,24 @@ deinen eigenen Modellen wiederholen. Daten, Aufbau und Ergebnisdateien:
 | HumanEval, dasselbe Modell ohne Werkzeuge (Vergleichswert) | qwen3.8 27B, lokal | **161/164** (pass@1 98,2 %) | 2026-10-27 |
 | Repository-Aufgaben: 14 eigene Fehlerbehebungen, Funktionen und Refactorings über mehrere Dateien (versteckte Tests), über ihre Agenten-Schleife | qwen3.8 27B, lokal | **11/14** (in beiden Läufen) | 2026-10-28 |
 | Repository-Aufgaben, dasselbe Modell mit allen Dateien in einer Nachricht und ohne Werkzeuge (Vergleichswert) | qwen3.8 27B, lokal | **12/14** (in beiden Läufen) | 2026-10-28 |
+| Projekte in echter Größe: 3 eigene Projekte mit 22–36 Dateien (versteckte Tests), über ihre Agenten-Schleife | qwen3.8 27B, lokal | **2/3**, dann **3/3** | 2026-10-28 |
+| Projekte in echter Größe, dasselbe Modell mit allen Dateien in einer Nachricht und ohne Werkzeuge (Vergleichswert) | qwen3.8 27B, lokal | **3/3** (in beiden Läufen) | 2026-10-28 |
+| Behauptungsprüfung in 6 Sprachen (240 zurückgehaltene Antworten): nur Muster → mit lokalem Prüfer | qwen3.5 9B, lokal, als Prüfer | erkannt **38 % → 88 %**, Präzision 92 % → 95 % | 2026-10-28 |
 | Gedächtnis über Sitzungen hinweg (erinnern, nichts erfinden, vergessen) | qwen3.8 27B, lokal | **11/12** Prüfungen | 2026-10-27 |
 | Bibliothek: antwortet aus Dokumenten und nennt die Quelle | qwen3.8 27B, lokal | **8/8** in beiden Läufen | 2026-10-27 |
 | Code-Karte: Fragen zu ihrem eigenen Code | qwen3.8 27B, lokal | **8/8** | 2026-10-27 |
 
 Ehrlich gelesen: Ihre Agenten-Schleife bringt bei beiden Programmier-Tests noch keine Punkte.
 Das Modell allein löst die kurzen HumanEval-Aufgaben schon fast alle, und die 14 Repository-Aufgaben
-sind klein genug (5 bis 7 Dateien), um sie komplett in eine Nachricht zu kopieren; die Fehler in
+sind klein genug (5 bis 7 Dateien), um sie komplett in eine Nachricht zu kopieren (das gilt auch für die drei Projekte in echter Größe
+mit unter 1.100 Zeilen); die Fehler in
 beiden Modi waren Regeln, die nur in einer README oder SPEC standen und von keinem Test geprüft
 wurden. Was sie heute beiträgt, ist die Arbeitsweise (sie lässt die Tests laufen, fragt vor
 riskanten Schritten, zeigt, was gelaufen ist), nicht ein höheres Ergebnis bei diesen Sätzen.
 Details, Ergebnisse pro Aufgabe und wie man es wiederholt: [docs/RESULTS.md](docs/RESULTS.md).
 
-Dazu `npm run check`: eine Typprüfung und 493 automatische Tests mit einem geskripteten
-Schein-Modell (ohne Netz, ohne GPU): 486 laufen unter Windows durch, die anderen 7 sind
+Dazu `npm run check`: eine Typprüfung und 670 automatische Tests mit einem geskripteten
+Schein-Modell (ohne Netz, ohne GPU): 663 laufen unter Windows durch, die anderen 7 sind
 Linux-spezifische Sandbox-Tests, die auf einem Linux-Server laufen.
 
 ## Sara im Vergleich
@@ -176,6 +215,8 @@ sich):
 | Schreibt, startet und testet Code, fragt vor riskanten Schritten | ✅ | ❌ | ✅ | unterschiedlich (Plug-ins) |
 | Planer, Erinnerungen, Dokumente, Sprachanrufe | ✅ | teilweise | ❌ | teilweise |
 | Handy-Apps, Telegram und Discord | ✅ | Handy-Apps | ❌ | unterschiedlich |
+| Chats aus anderen Begleiter-Apps mitbringen, vor dem Speichern geprüft | ✅ | ❌ meist nicht | ❌ | unterschiedlich |
+| Die ganze App in sechs Sprachen | ✅ | unterschiedlich | unterschiedlich | unterschiedlich |
 | Sicherheitsschicht, die keine Einstellung abschalten kann | ✅ | eigene Richtlinien | n/a | meist nicht |
 | Preis | kostenlos (MIT); du zahlst deine Modelle | Abo | unterschiedlich | meist kostenlos |
 
@@ -198,9 +239,10 @@ sudo docker compose up -d                       # or: sudo docker compose --prof
 sudo docker compose logs sara | grep -A1 'owner token'   # oder: ihre Seite öffnen und den Einrichtungscode aus diesem Log eingeben
 ```
 
-**App-Stores und NAS:** das Image `ghcr.io/farena-ai/sara` (auch für ARM), Homebrew, TrueNAS,
-Proxmox und HACS (als benutzerdefiniertes Repository) funktionieren jetzt; winget, CasaOS/ZimaOS,
-Umbrel und Unraid warten auf die Prüfung ([Übersicht](docs/INSTALL.md#other-ways-to-install)). Ein neuer Server wird im Browser
+**App-Stores und NAS:** das Image `ghcr.io/farena-ai/sara` (amd64 und ARM),
+`brew install --cask farena-ai/tap/sara`, TrueNAS, Proxmox und HACS (als benutzerdefiniertes
+Repository) funktionieren jetzt; Unraid ist freigegeben, und winget, CasaOS/ZimaOS, Umbrel und die
+Store-Liste von HACS warten auf die Prüfung ([Übersicht](docs/INSTALL.md#other-ways-to-install)). Ein neuer Server wird im Browser
 mit einem kurzen Code aus ihrem Log eingerichtet (bei Umbrel mit einem Klick).
 
 **Windows und macOS:** Lade `Sara-Setup-<version>.exe` oder `Sara-<version>.dmg` von der
@@ -247,7 +289,7 @@ sudo sara access       # how you reach her (change: tailscale, local, domain, la
 | [Ergebnisse](docs/RESULTS.md) | Benchmarks und Auswertungen, und wie man sie wiederholt |
 | [Übersetzen](docs/TRANSLATING.md) | Die App in deiner Sprache |
 | [Compliance](docs/COMPLIANCE.md) · [Bedrohungsmodell](docs/THREAT_MODEL.md) · [Hinweise](docs/DISCLOSURES.md) | Schutz, Sicherheit, was man zuerst wissen sollte |
-| [Roadmap](docs/ROADMAP.md) · [Änderungsprotokoll](CHANGELOG.md) · [Versionshinweise 1.0 (Entwurf)](docs/RELEASE_NOTES_1.0_DRAFT.md) | Wohin es geht, was sich geändert hat |
+| [Roadmap](docs/ROADMAP.md) · [Änderungsprotokoll](CHANGELOG.md) · [Releases](https://github.com/farena-ai/sara/releases) | Wohin es geht, was sich geändert hat |
 
 All das lässt sich auch zu einer kleinen durchsuchbaren Website mit Dunkelmodus bauen:
 `node scripts/build-docs.ts` schreibt sie nach `outputs/site/` (öffne `index.html`; sie ist bereit

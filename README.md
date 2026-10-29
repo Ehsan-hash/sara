@@ -10,8 +10,12 @@ your own server, with the models you pick.
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="License: MIT"></a>
   <img src="https://img.shields.io/badge/node-%E2%89%A5%2024-339933" alt="Node 24 or newer">
   <img src="https://img.shields.io/badge/runtime%20dependencies-0-brightgreen" alt="Zero runtime dependencies">
-  <img src="https://img.shields.io/badge/tests-486%20passing-brightgreen" alt="486 tests passing">
+  <img src="https://img.shields.io/badge/tests-663%20passing-brightgreen" alt="663 tests passing">
   <a href="docs/RESULTS.md"><img src="https://img.shields.io/badge/HumanEval%20pass%401-96.3%25-informational" alt="HumanEval pass@1 96.3%"></a>
+  <a href="https://github.com/farena-ai/sara/releases/latest"><img src="https://img.shields.io/github/v/release/farena-ai/sara?label=release" alt="Latest release"></a>
+  <a href="https://github.com/farena-ai/sara/pkgs/container/sara"><img src="https://img.shields.io/badge/docker-amd64%20%7C%20arm64-2496ED" alt="Docker image for amd64 and arm64"></a>
+  <img src="https://img.shields.io/badge/languages-6-8A2BE2" alt="Six languages">
+  <a href="https://glama.ai/mcp/servers/farena-ai/sara"><img src="https://glama.ai/mcp/servers/farena-ai/sara/badges/score.svg" alt="Sara MCP server on Glama"></a>
 </p>
 
 <p align="center">
@@ -20,9 +24,35 @@ your own server, with the models you pick.
   <sub>A real, unedited session on a local model (qwen3.8 27B on Ollama, one RTX 5090) on a throwaway test server: she chats in character, writes the app, asks before starting a server, opens the preview and tests it in her own browser. The last frame is the app with numbers typed in.</sub>
 </p>
 
-> **Status:** 1.0. MIT licensed. The [Android app](https://play.google.com/store/apps/details?id=com.backstagecoding.sara) is on Google Play; the iPhone app and
-> the Mac App Store version are coming as soon as Apple approves them. Read
-> [docs/DISCLOSURES.md](docs/DISCLOSURES.md) before using or sharing Sara.
+> **Status:** 1.5, MIT licensed, with five feature releases since 1.0 (all below). The
+> [Android app](https://play.google.com/store/apps/details?id=com.backstagecoding.sara) is on Google
+> Play; the iPhone app and the Mac App Store version are coming as soon as Apple approves them.
+> Read [docs/DISCLOSURES.md](docs/DISCLOSURES.md) before using or sharing Sara.
+
+## What's new
+
+| Release | What you get |
+|---|---|
+| **1.5** · Bring her from another app | Move in from **ChatGPT, Claude, Character.AI, SillyTavern, Replika, Nomi or Kindroid**. She reads the export on your own server, then shows you what she learned (facts in your own words, your history together, her style) and saves only what you approve. [How to export from each app](docs/IMPORT.md) |
+| **1.4** · Smoothness | Watch each file she writes **grow live in the chat** as the model streams it (OpenAI, Anthropic, xAI, OpenRouter and ChatGPT plans; Ollama sends it in one piece); a talking portrait that lip-syncs with nine mouth shapes; logs in plain text or JSON |
+| **1.3** · Smarter checks | Her "did she really do what she says?" check now works in all six languages; an optional small local model as judge raises what it catches from 38% to **88%** at 95% precision ([measured](docs/RESULTS.md)) |
+| **1.2** · Fully in your language | The whole app, the help guide and her server messages in English, Español, Français, Deutsch, Português (Brasil) and Italiano |
+| **1.1** · Install anywhere | Set up a new server in the browser with a short code; a Docker image for **ARM** (Raspberry Pi 4/5) too; Homebrew, Unraid, TrueNAS, Proxmox and Home Assistant (HACS) |
+
+Every release: [CHANGELOG.md](CHANGELOG.md) · [releases](https://github.com/farena-ai/sara/releases).
+
+### Coming next
+
+| Version | Feature |
+|---|---|
+| 1.6 | **Group chats:** two to four of your companions in one conversation, each in her own voice |
+| 1.7 | **Private local mode** in the Windows and Mac apps: a model on that computer and a switch that guarantees nothing leaves it |
+| 1.8 | **Video calls** with her moving, lip-synced avatar |
+| 1.9 | **Our moments:** a shared photo album with her captions |
+| 2.0 | **Household mode:** several people on one server, each with their own companions and private data |
+| 2.1 | **Her voice in your home:** Alexa ("Alexa, ask Sara…"), Android's assistant and Google Home, Siri Shortcuts, and reacting to who's home through Home Assistant |
+
+The full plan: [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## Why Sara
 
@@ -49,17 +79,21 @@ your own server, with the models you pick.
 Her own character and moods that change with how things go, her own day and hobbies, memory of
 what matters to you and the dates you care about (see, correct or forget any of it), a weekly look
 back, texting first if you want (with quiet hours), and a timeline of your story together.
+Coming from another app? Bring your chats from ChatGPT, Claude, Character.AI, SillyTavern, Replika,
+Nomi or Kindroid, and approve what she learns from them first ([docs/IMPORT.md](docs/IMPORT.md)).
 
 ### Coding partner
 
 <img src="docs/screenshots/coding.png" alt="The tip calculator she built, open in the live preview pane next to the chat, while she writes its stylesheet: the file grows live in the chat" width="760">
 
-A workspace per project with files, shell and git (commit and push with your OK); long builds and
+A workspace per project with files, shell and git (commit and push with your OK); every file she
+writes appears live in the chat as the model streams it (on cloud models; Ollama sends it whole); long builds and
 tests in the background with a ping when done; a live preview of the app she's building, which she
 tests in a real headless browser and attaches screenshots of; a code map for big codebases; tested
 starter projects; a team of helpers (plan → build → test → review) from a GitHub issue to a
 reviewed pull request; hand-off to Claude Code or Grok Build; MCP tools; undo for file changes;
-a token and cost meter with budgets.
+a token and cost meter with budgets; and a check, in all six languages, that what she *says* she
+did matches what actually ran (optionally judged by a small local model).
 
 ### Planner and Today
 
@@ -80,7 +114,8 @@ points, answers from them and says which document (and page) it came from.
 <img src="docs/screenshots/voice.png" alt="The voice settings page" width="760">
 
 Live calls you can interrupt (Grok or OpenAI realtime voice), voice notes on Telegram and Discord,
-read-aloud, a voice that follows her mood, and an animated portrait that talks. Voices run on your
+read-aloud, a voice that follows her mood, and an animated portrait that talks, lip-synced with nine
+mouth shapes. Voices run on your
 Linux server or come from your subscription. (Screenshot from a Windows test server, where local
 voice isn't available yet.)
 
@@ -94,7 +129,7 @@ Telegram and Discord bridges, `sara-chat` in any terminal and a VS Code panel
 ([docs/clients.md](docs/clients.md)), Gmail and Google Calendar on your own Google app, Home
 Assistant, off-the-record conversations that are never saved, and other apps with her own memory
 and personality: an OpenAI-compatible API (SillyTavern, Open WebUI, scripts), an MCP server (Claude
-Code, Cursor, Claude Desktop) and character cards in and out ([docs/OTHER_APPS.md](docs/OTHER_APPS.md)).
+Code, Cursor, Claude Desktop; [listed on Glama](https://glama.ai/mcp/servers/farena-ai/sara)) and character cards in and out ([docs/OTHER_APPS.md](docs/OTHER_APPS.md)).
 
 ### Make it yours
 
@@ -102,7 +137,7 @@ Code, Cursor, Claude Desktop) and character cards in and out ([docs/OTHER_APPS.m
 
 Any name, pronouns, age and look (painted by Grok Imagine, with matching expressions and
 animation), a guided "create your companion" wizard, personality dials, a gallery of starter
-characters, character files you can share, a model for each job, and the app in six languages.
+characters, character files you can share, a model for each job, and the whole app, help guide and her messages in six languages.
 Every setting has a **?**, there are short guided tours, and you can simply ask her how something
 works.
 
@@ -135,19 +170,22 @@ your own models. Dates, setup and the result files: **[docs/RESULTS.md](docs/RES
 | HumanEval, same model with no tools (baseline) | qwen3.8 27B, local | **161/164** (pass@1 98.2%) | 2026-10-27 |
 | Repository tasks: 14 original multi-file bug fixes, features and refactors (hidden tests), through her agent loop | qwen3.8 27B, local | **11/14** (both runs) | 2026-10-28 |
 | Repository tasks, same model with every file in one prompt and no tools (baseline) | qwen3.8 27B, local | **12/14** (both runs) | 2026-10-28 |
+| Real-size projects: 3 original projects of 22–36 files (hidden tests), through her agent loop | qwen3.8 27B, local | **2/3**, then **3/3** | 2026-10-28 |
+| Real-size projects, same model with every file in one prompt and no tools (baseline) | qwen3.8 27B, local | **3/3** (both runs) | 2026-10-28 |
+| Claim check in 6 languages (240 held-out replies): patterns only → with a local judge | qwen3.5 9B, local, as judge | caught **38% → 88%**, precision 92% → 95% | 2026-10-28 |
 | Memory across sessions (recall, no inventing, forgetting) | qwen3.8 27B, local | **11/12** checks | 2026-10-27 |
 | Library: answers from documents and says where | qwen3.8 27B, local | **8/8** in both runs | 2026-10-27 |
 | Code map: questions about her own code | qwen3.8 27B, local | **8/8** | 2026-10-27 |
 
 The honest reading: her agent loop doesn't add points on either coding benchmark yet. The plain
 model already aces the short HumanEval problems, and the 14 repository tasks are small enough (5 to
-7 files) to paste whole into one prompt; the misses in both modes were rules written only in a
+7 files) to paste whole into one prompt (so are the three real-size projects, at under 1,100 lines); the misses in both modes were rules written only in a
 README or SPEC that no test checked. What she adds today is the way of working (she runs the tests,
 asks before risky steps, shows what ran), not a higher score on these sets. Details, per-task
 results and how to re-run: [docs/RESULTS.md](docs/RESULTS.md).
 
-Plus `npm run check`: a typecheck and 493 automated tests with a scripted fake model (no network,
-no GPU): 486 pass on Windows and the other 7 are Linux-only sandbox tests, run on a Linux server.
+Plus `npm run check`: a typecheck and 670 automated tests with a scripted fake model (no network,
+no GPU): 663 pass on Windows and the other 7 are Linux-only sandbox tests, run on a Linux server.
 
 ## How Sara compares
 
@@ -161,6 +199,8 @@ A general comparison with the usual kinds of alternatives (individual products v
 | Writes, runs and tests code, asks before risky steps | ✅ | ❌ | ✅ | varies (plug-ins) |
 | Planner, reminders, documents, voice calls | ✅ | some | ❌ | some |
 | Phone apps, Telegram and Discord | ✅ | phone apps | ❌ | varies |
+| Bring your chats from other companion apps, reviewed before saving | ✅ | ❌ usually | ❌ | varies |
+| The whole app in six languages | ✅ | varies | varies | varies |
 | Safety layer that no setting can turn off | ✅ | their own policies | n/a | usually not |
 | Price | free (MIT); you pay for your models | subscription | varies | usually free |
 
@@ -183,9 +223,10 @@ sudo docker compose up -d                       # or: sudo docker compose --prof
 sudo docker compose logs sara | grep -A1 'owner token'   # or: open her page and enter the setup code from this log
 ```
 
-**App stores and NAS:** the image `ghcr.io/farena-ai/sara` (also for ARM), Homebrew, TrueNAS,
-Proxmox and HACS (as a custom repository) work now; winget, CasaOS/ZimaOS, Umbrel and Unraid are
-waiting for review
+**App stores and NAS:** the image `ghcr.io/farena-ai/sara` (amd64 and ARM),
+`brew install --cask farena-ai/tap/sara`, TrueNAS, Proxmox and HACS (as a custom repository) work
+now; Unraid is approved, and winget, CasaOS/ZimaOS, Umbrel and the HACS store list are waiting for
+review
 ([which is which](docs/INSTALL.md#other-ways-to-install)). A new server is set up in the browser
 with a short code from her log (one click on Umbrel), no long token to copy.
 
@@ -237,7 +278,7 @@ sudo sara access       # how you reach her (change: tailscale, local, domain, la
 | [Results](docs/RESULTS.md) | Benchmarks and evals, and how to re-run them |
 | [Translating](docs/TRANSLATING.md) | The app in your language |
 | [Compliance](docs/COMPLIANCE.md) · [Threat model](docs/THREAT_MODEL.md) · [Disclosures](docs/DISCLOSURES.md) | Safety, security, what to know first |
-| [Roadmap](docs/ROADMAP.md) · [Changelog](CHANGELOG.md) · [1.0 release notes (draft)](docs/RELEASE_NOTES_1.0_DRAFT.md) | Where it's going, what changed |
+| [Roadmap](docs/ROADMAP.md) · [Changelog](CHANGELOG.md) · [Releases](https://github.com/farena-ai/sara/releases) | Where it's going, what changed |
 
 All of these also build into a small searchable website with a dark mode:
 `node scripts/build-docs.ts` writes it to `outputs/site/` (open `index.html`; it's ready for GitHub

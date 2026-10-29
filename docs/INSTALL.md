@@ -778,7 +778,8 @@ once accepted):
   administrator; run the installer yourself for a Windows service).
 - **CasaOS / ZimaOS:** *Sara* in the App Store.
 - **Umbrel:** *Sara* in the Umbrel App Store.
-- **Unraid:** *Sara* in Community Applications (template: `farena-ai/unraid-templates`).
+- **Unraid:** *Sara* in Community Applications (template: `farena-ai/unraid-templates`); approved,
+  and it appears once Community Applications next refreshes its list.
 - **HACS store:** Sara in HACS's own list, so the custom-repository step isn't needed.
 
 **The first sign-in** works the same way for every container install (Docker, TrueNAS, Unraid,
