@@ -5,6 +5,14 @@ Format: newest first. Semantic versions since 1.0.0 (before that `0.<phase>.<pat
 
 ## Unreleased
 
+## 2.8.3 (2026-10-30): a new front page
+
+- **The README and the social preview** show the new look: 13 new screenshots from a real session on
+  a local model (Today, her panel, the command bar, phones, coding, library with page citations), a
+  re-recorded animated demo and a rewritten pitch, in all six languages.
+- **Fix:** a weather card from a web page fetch of wttr.in could show the page's "written by others"
+  notice as the weather condition.
+
 ## 2.8.2 (2026-10-30): first community contributions
 
 Thanks to [@Ehsan-hash](https://github.com/Ehsan-hash), Sara's first outside contributor:

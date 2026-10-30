@@ -2,10 +2,10 @@
 
 # Sara
 
-**Eine selbst gehostete KI-Begleiterin mit der Persönlichkeit, die du wählst, und zugleich eine
-echte Programmierpartnerin.** Sie unterhält sich, erinnert sich, plant, liest deine Dokumente und
-baut und testet Software in einer abgeschotteten Umgebung, auf deinem eigenen Server, mit den
-Modellen deiner Wahl.
+**Eine KI-Begleiterin mit der Persönlichkeit, die du wählst, und zugleich eine echte Programmierpartnerin.**
+Sie redet mit dir, erinnert sich, plant deinen Tag und liest deine Bücher; sie schreibt, startet und
+testet Code in ihrem eigenen abgeschotteten Arbeitsbereich. Alles auf deinem eigenen Server, mit den
+Modellen deiner Wahl, in einer App für Web, Windows, Mac und Handy.
 
 > Dies ist eine Übersetzung der [englischen README](README.md). Die Links führen zur Dokumentation,
 > die auf Englisch ist.
@@ -14,7 +14,7 @@ Modellen deiner Wahl.
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="License: MIT"></a>
   <img src="https://img.shields.io/badge/node-%E2%89%A5%2024-339933" alt="Node 24 or newer">
   <img src="https://img.shields.io/badge/runtime%20dependencies-0-brightgreen" alt="Zero runtime dependencies">
-  <img src="https://img.shields.io/badge/tests-928%20passing-brightgreen" alt="928 tests passing">
+  <img src="https://img.shields.io/badge/tests-929%20passing-brightgreen" alt="929 tests passing">
   <a href="docs/RESULTS.md"><img src="https://img.shields.io/badge/HumanEval%20pass%401-96.3%25-informational" alt="HumanEval pass@1 96.3%"></a>
   <a href="https://github.com/farena-ai/sara/releases/latest"><img src="https://img.shields.io/github/v/release/farena-ai/sara?label=release" alt="Latest release"></a>
   <a href="https://github.com/farena-ai/sara/pkgs/container/sara"><img src="https://img.shields.io/badge/docker-amd64%20%7C%20arm64-2496ED" alt="Docker image for amd64 and arm64"></a>
@@ -23,15 +23,48 @@ Modellen deiner Wahl.
 </p>
 
 <p align="center">
-  <img src="docs/screenshots/demo.png" alt="Animated demo: Sara cheers the user up, builds a tip calculator, asks before starting a server, opens a live preview, tests it in her own browser and shows the screenshot she took" width="860">
+  <img src="docs/screenshots/demo.png" alt="Animated demo: the user says it was a rough week; Sara answers warmly and suggests three tiny things to build; she writes a module and its test, asks before running a command, finds a real bug through a failing test, fixes it and gets all 7 tests green" width="860">
   <br>
-  <sub>Eine echte, ungeschnittene Sitzung mit einem lokalen Modell (qwen3.8 27B auf Ollama, eine RTX 5090) auf einem Wegwerf-Testserver: Sie plaudert mit ihrer Persönlichkeit, schreibt die App, fragt, bevor sie einen Server startet, öffnet die Vorschau und testet sie in ihrem eigenen Browser. Das letzte Bild zeigt die App mit eingetippten Zahlen.</sub>
+  <sub>Eine echte Sitzung mit einem lokalen Modell (qwen3.8 27B auf Ollama, eine RTX 5090) auf einem Wegwerf-Testserver, im Nacht-Look: Sie muntert ihr Gegenüber auf, schreibt eine kleine App samt Test, während das Modell sie streamt, fragt, bevor sie einen Befehl ausführt, findet über einen fehlschlagenden Test einen echten Fehler und behebt ihn, bis alle 7 Tests grün sind. Ausgewählte Bilder aus der Aufnahme; nichts darin wurde bearbeitet.</sub>
 </p>
 
-> **Status:** 2.8, MIT-Lizenz, mit neunzehn Funktions-Releases seit 1.0 (alle unten). Die
+> **Status:** 2.8, MIT-Lizenz, mit neunzehn Funktions-Releases seit 1.0 (alle unten). Mit 2.5 bis 2.8
+> hat die ganze App einen neuen Look bekommen. Die
 > [Android-App](https://play.google.com/store/apps/details?id=com.backstagecoding.sara) ist bei Google
 > Play; die iPhone-App und die Version für den Mac App Store folgen, sobald Apple sie freigibt.
 > Lies [docs/DISCLOSURES.md](docs/DISCLOSURES.md), bevor du Sara nutzt oder weitergibst.
+
+## Warum Sara
+
+- **Eine Persönlichkeit, die du festlegst, und die sie behält.** Gib ihr einen beliebigen Namen,
+  wähle sie/er/they, starte mit einer fertigen Figur oder stell einfache Regler ein (verspielt,
+  direkt, knapp, neugierig…). Sie bleibt dabei: Stimmungen, die sich mit dem Lauf der Dinge ändern,
+  ein eigener Tag, Running Gags und Erinnerungen an das, was du ihr erzählt hast, die du sehen,
+  korrigieren und löschen kannst.
+- **Eine echte Programmierumgebung.** Ein abgeschotteter Arbeitsbereich pro Projekt mit Dateien,
+  Shell und Git, Hintergrundjobs, Live-Vorschauen, die sie in ihrem eigenen Browser testet, ein Team
+  von Helfern (planen → bauen → testen → prüfen), ihre Regel, vor riskanten Schritten zu fragen, und
+  eine Prüfung, ob das, was sie *sagt*, wirklich ausgeführt wurde.
+- **Eine schöne App auf jedem Gerät.** Ein ruhiger Nacht-Look (oder Tag, wenn dir das lieber ist) mit
+  ihrer Präsenz neben jedem Chat, einer Zeile unter jeder Antwort, die zeigt, was sie getan hat, und
+  Ergebnissen als Karten. Im Web und als installierbare App, in den Apps für Windows und Mac (mit
+  *Schnellfrage* per Tastenkürzel über jeder App), auf Android und auf dem iPhone (die App wartet auf
+  Apple; die Web-App auf dem Home-Bildschirm funktioniert schon).
+- **Privat und deins.** Ein Besitzer pro Server; Chats, Erinnerungen und Schlüssel bleiben dort.
+  Jedes Modell: lokal (Ollama, vLLM, llama.cpp), in der Cloud (OpenAI, Anthropic, xAI, OpenRouter)
+  oder die Abos, die du schon bezahlst (ChatGPT, Claude Pro/Max, SuperGrok / X Premium+). Ein Schalter
+  hält alles auf einem Computer. Kommt **ganz ohne Zugangsdaten**.
+- **Klein und lesbar.** TypeScript, das Node direkt ausführt: kein Build-Schritt, null
+  Laufzeitabhängigkeiten, von Grund auf neu gebaut (nicht auf Basis von Hermes Agent oder OpenClaw).
+  Leicht zu [erweitern](docs/EXTENDING.md).
+
+**Außerdem dabei:** [Schnellfrage](docs/desktop.md) per globalem Tastenkürzel · ihr [Präsenz-Panel](#ihre-präsenz) ·
+[Heute als Kacheln](#heute) · [Befehlsleiste](#befehlsleiste) mit Strg+K · [Haushaltsmodus](docs/HOUSEHOLD.md)
+für die Menschen, mit denen du lebst · [Videoanrufe](docs/VIDEO_CALLS.md) mit ihrem bewegten Porträt ·
+[Alexa, Google Home und Android-Assistent](docs/VOICE_ASSISTANTS.md) · deine anderen Server
+[per SSH](docs/SSH.md) · [Bücher mit 1.000 Seiten](docs/LIBRARY.md) mit Antworten, die die Seite nennen ·
+[privater lokaler Modus](docs/PRIVATE_LOCAL.md) · [Gruppenchats](docs/GROUP_CHATS.md) ·
+[Umzug von ChatGPT, Character.AI, Replika und anderen](docs/IMPORT.md).
 
 ## Was ist neu
 
@@ -42,6 +75,12 @@ Modellen deiner Wahl.
 | **2.6** · Der neue Look, Teil 2 | **Ihre Gegenwart:** ein Seitenbereich (auf dem Handy ein Blatt zum Hochziehen) mit ihrer Stimmung, dem, was sie gerade tut, Freigaben, Aufträgen, dem Tag und dem, woran sie sich erinnert hat; Strg+K springt überallhin; und in den Windows- und Mac-Apps ein **Schnellfrage-Fenster per Tastenkürzel** über jeder App, dazu ihre Stimmung und Freigaben im Tray-Menü. [Der Plan](docs/design/NEW_LOOK.md) |
 | **2.5** · Der neue Look, Teil 1 | **Dunkel als Standard und ihre Arbeit sichtbar:** eine Zeile unter jeder Antwort zeigt, was sie getan hat, Ergebnisse kommen als Karten (Wetter, Aufgaben, geänderte Dateien, Testläufe, Suchen), ein leichterer Chat auf Handy und Computer, und die Windows- und Mac-Apps zeichnen die Seite bis in die Titelleiste. [Der Plan](docs/design/NEW_LOOK.md) |
 | **2.4** · Aufgeräumt | **Alles leichter zu finden:** eine kurze Seitenleiste mit einem *Mehr*-Menü zum Anheften, Einstellungen mit echten Überschriften zum Auf- und Zuklappen, Werkzeuge und Freigaben in einfachen Worten erklärt, Fotos, die du aus dem Sammelalbum löschen kannst, aufgeräumtere Bildschirme und Menüs in jeder App und sichereres Speichern im Hintergrund. [Was sich geändert hat](CHANGELOG.md) |
+
+<details>
+<summary><b>Frühere Releases: 1.1 bis 2.3</b> (große Dokumente, SSH, Alexa und Google Home, Haushaltsmodus, Momente, Videoanrufe, mehrere Server, privater lokaler Modus, Gruppenchats, Umzug aus anderen Apps…)</summary>
+
+| Version | Was du bekommst |
+|---|---|
 | **2.3** · Große Dokumente | **Bücher und Handbücher mit 500–1.000 Seiten** (PDFs bis 1 GB) in ihrer Bibliothek: Uploads, die weiterlaufen, jede gescannte Seite gelesen, Inhaltsverzeichnis und Kapitelzusammenfassungen, und Antworten, die die Seite nennen („S. 412“), mit Link direkt dorthin. 30 von 30 Fragen richtig bei einem 1.000-seitigen Testbuch. [So funktioniert es](docs/LIBRARY.md) |
 | **2.2** · Deine anderen Server per SSH | **Sie kann auf deinen anderen Rechnern arbeiten**, mit Passwort oder Schlüssel. Nach einer Anmeldung mit Passwort **erstellt sie ihren eigenen Schlüssel, sagt dir, wo er liegt, und vergisst das Passwort** (behalten nur, wenn du darauf bestehst, nach einer Warnung). Host-Schlüssel werden geprüft, jeder Befehl folgt ihren Freigaberegeln, und du kannst ihren Schlüssel jederzeit widerrufen. [So funktioniert es](docs/SSH.md) |
 | **2.1** · Ihre Stimme in deinem Zuhause | **„Alexa, öffne sara companion“**: Sprich auf jedem Echo mit ihr, über deinen eigenen kostenlosen Skill (so geprüft, wie Amazon es verlangt). Mach sie zu deinem **Android-Assistenten** (Home-Taste lange drücken), hör sie auf **Google-Home-/Nest**-Lautsprechern über Home Assistant, und lass sie **dich begrüßen, wenn du heimkommst**. Siri auf dem iPhone kommt mit dem nächsten App-Update. [So funktioniert es](docs/VOICE_ASSISTANTS.md) |
@@ -57,6 +96,8 @@ Modellen deiner Wahl.
 | **1.2** · Ganz in deiner Sprache | Die ganze App, die Hilfe und ihre Servermeldungen auf English, Español, Français, Deutsch, Português (Brasil) und Italiano |
 | **1.1** · Überall installieren | Einen neuen Server im Browser mit einem kurzen Code einrichten; ein Docker-Image auch für **ARM** (Raspberry Pi 4/5); Homebrew, Unraid, TrueNAS, Proxmox und Home Assistant (HACS) |
 
+</details>
+
 Alle Versionen: [CHANGELOG.md](CHANGELOG.md) · [Releases](https://github.com/farena-ai/sara/releases).
 
 ### Als Nächstes
@@ -65,113 +106,144 @@ Alle geplanten Phasen sind erschienen. Als Nächstes: die iPhone-App (wartet auf
 
 Der ganze Plan: [docs/ROADMAP.md](docs/ROADMAP.md).
 
-## Warum Sara
-
-- **Angenehme Gesellschaft.** Gib ihr einen beliebigen Namen, wähle sie/er/they, stell ihre
-  Persönlichkeit mit einfachen Reglern ein (oder fang mit einer fertigen Figur an), und sie bleibt
-  dabei: Stimmungen, ihr eigener Tag, Running Gags und Erinnerungen an das, was du ihr erzählt
-  hast, die du ansehen, korrigieren und löschen kannst.
-- **Nützlich für echte Arbeit.** Dateien, Shell und Git in einem abgeschotteten Arbeitsbereich,
-  Hintergrundjobs, Live-Vorschauen, die sie in ihrem eigenen Browser testet, ein Team von Helfern
-  für größere Aufgaben und eine Prüfung, ob das, was sie zu tun *behauptet*, auch wirklich
-  gelaufen ist.
-- **Deine.** Ein Besitzer pro Server; deine Chats, Erinnerungen und Schlüssel bleiben dort. Nutze
-  jedes Modell: lokal (Ollama, vLLM, llama.cpp), in der Cloud (OpenAI, Anthropic, xAI, OpenRouter)
-  oder die Abos, die du schon bezahlst (ChatGPT-Abo, Claude Pro/Max, SuperGrok / X Premium+).
-  Kommt **ganz ohne Zugangsdaten**.
-- **Klein und lesbar.** TypeScript, das Node direkt ausführt: kein Build-Schritt, null
-  Laufzeitabhängigkeiten, von Grund auf neu gebaut (nicht auf Hermes Agent oder OpenClaw
-  aufgebaut). Leicht zu [erweitern](docs/EXTENDING.md).
-
 ## Die Funktionen im Überblick
+
+Alle Screenshots stammen von einem echten Wegwerf-Testserver mit einem lokalen Modell (qwen3.8 27B auf
+Ollama), angemeldet als Beispielnutzer „Alex“. Nacht ist der Standard-Look.
 
 ### Begleiterin
 
-<img src="docs/screenshots/companion.png" alt="Sara answering a tired user warmly and with humour before starting work" width="760">
+<img src="docs/screenshots/companion.png" alt="Night look: Sara answers a tired user warmly, checks the weather for tomorrow's run and shows it as a card; her presence panel on the right shows her portrait with a mood halo, what she's doing, today's to-dos and the notes she remembered" width="760">
 
-Ein eigener Charakter und Stimmungen, die sich danach richten, wie es läuft, ein eigener Tag und
-Hobbys, Erinnerungen an das, was dir wichtig ist, und an deine wichtigen Daten (alles einsehbar,
-korrigierbar und löschbar), ein Wochenrückblick, auf Wunsch Nachrichten von ihr aus (mit
-Ruhezeiten) und eine Zeitleiste eurer gemeinsamen Geschichte.
-Kommst du von einer anderen App? Bring deine Chats aus ChatGPT, Claude, Character.AI, SillyTavern,
-Replika, Nomi oder Kindroid mit und gib vorher frei, was sie daraus lernt ([docs/IMPORT.md](docs/IMPORT.md)).
-Oder hol zwei bis vier deiner Begleiterinnen in einen Gruppenchat ([docs/GROUP_CHATS.md](docs/GROUP_CHATS.md)).
-Alles auf einem Gerät? Schalte **Nichts verlässt diesen Computer** ein ([docs/PRIVATE_LOCAL.md](docs/PRIVATE_LOCAL.md)).
+Ein eigener Charakter und Stimmungen, die sich mit dem Lauf der Dinge ändern (der Ring um ihr Porträt
+nimmt die Farbe ihrer Stimmung an), ein eigener Tag und Hobbys, Erinnerung an das, was dir wichtig ist,
+und an Daten, die dir etwas bedeuten (alles einsehbar, korrigierbar und löschbar), ein Wochenrückblick,
+auf Wunsch schreibt sie von sich aus (mit Ruhezeiten), und eine Zeitleiste eurer gemeinsamen
+Geschichte. Du kommst von einer anderen App? Bring deine Chats aus ChatGPT, Claude, Character.AI,
+SillyTavern, Replika, Nomi oder Kindroid mit und bestätige zuerst, was sie daraus lernt
+([docs/IMPORT.md](docs/IMPORT.md)). Oder hol zwei bis vier deiner Begleiterinnen in einen Gruppenchat
+([docs/GROUP_CHATS.md](docs/GROUP_CHATS.md)). Alles auf einem Rechner? Schalte **Nichts verlässt diesen
+Computer** ein ([docs/PRIVATE_LOCAL.md](docs/PRIVATE_LOCAL.md)).
+
+### Ihre Präsenz
+
+<img src="docs/screenshots/presence.png" alt="A coding chat: a Files changed card, then an approval card asking to run npm test; the presence panel shows Waiting for your OK with Allow and Deny, and two background jobs with their last line and a Stop button" width="760">
+
+Ein Panel neben jedem Chat (auf dem Handy ein Blatt, das du hochziehst) mit ihrem Porträt, das in der
+Farbe ihrer Stimmung leuchtet, und **Jetzt**: was sie gerade tut, wartende Freigaben mit Erlauben /
+Ablehnen, Hintergrundjobs mit ihrer letzten Zeile und Stopp; dann das Nächste des Tages, die Notizen,
+die sie für die letzte Antwort benutzt hat (eingeklappt, bis du sie öffnest), sowie Modell,
+Arbeitsbereich und Privatsphäre dieses Gesprächs. Unter jeder Antwort sagt eine dezente Zeile, was sie
+getan hat („6 Dinge erinnert · Erinnerung gestellt 0,1 s“); tipp darauf für Befehle, Ausgabe und
+Rückgängig.
 
 ### Programmierpartnerin
 
-<img src="docs/screenshots/coding.png" alt="The tip calculator she built, open in the live preview pane next to the chat, while she writes its stylesheet: the file grows live in the chat" width="760">
+<img src="docs/screenshots/coding.png" alt="A coding chat in a project workspace: she explains her plan, edits five files (a Files changed card), runs the tests, finds three failures, fixes them and ends with a green Tests passed card showing 11; the panel shows two background jobs" width="760">
 
-Ein Arbeitsbereich pro Projekt mit Dateien, Shell und Git (Commit und Push mit deinem OK); jede Datei, die sie
-schreibt, erscheint live im Chat, während das Modell sie streamt (bei Cloud-Modellen; Ollama schickt sie am Stück); lange
-Builds und Tests im Hintergrund mit einer Nachricht, wenn sie fertig sind; eine Live-Vorschau der
-App, die sie gerade baut, die sie in einem echten Headless-Browser testet und von der sie
-Screenshots anhängt; eine Code-Karte für große Codebasen; getestete Startprojekte; ein Team von
-Helfern (planen → bauen → testen → prüfen) vom GitHub-Issue bis zum geprüften Pull-Request;
-Übergabe an Claude Code oder Grok Build; MCP-Werkzeuge; Rückgängig für Dateiänderungen; ein
-Token- und Kostenzähler mit Budgets; und eine Prüfung in allen sechs Sprachen, ob das, was sie
-zu tun *behauptet*, zu dem passt, was wirklich gelaufen ist (auf Wunsch von einem kleinen lokalen
-Modell beurteilt).
+Ein Arbeitsbereich pro Projekt mit Dateien, Shell und Git (Commit und Push mit deinem OK); jede Datei,
+die sie schreibt, erscheint live im Chat, während das Modell sie streamt; lange Builds und Tests im
+Hintergrund, mit Nachricht, wenn sie fertig sind; eine Live-Vorschau der App, die sie baut, die sie in
+einem echten Headless-Browser testet und von der sie Screenshots anhängt; eine Code-Karte für große
+Projekte; getestete Startprojekte; ein Team von Helfern (planen → bauen → testen → prüfen) vom
+GitHub-Issue bis zum geprüften Pull Request; deine anderen Server per SSH mit ihrem eigenen Schlüssel
+([docs/SSH.md](docs/SSH.md)); Übergabe an Claude Code oder Grok Build; MCP-Werkzeuge; Rückgängig für
+Dateiänderungen; ein Token- und Kostenzähler mit Budgets; und eine Prüfung in allen sechs Sprachen, ob
+das, was sie *sagt*, wirklich ausgeführt wurde (wahlweise von einem kleinen lokalen Modell beurteilt).
 
-### Planer und Heute
+### Planer
 
-<img src="docs/screenshots/planner.png" alt="Sara adding a reminder and two to-dos from one message" width="760">
+<img src="docs/screenshots/planner.png" alt="One message becomes a reminder and two to-dos, each shown as a card with its time and an Open the Planner link" width="760">
 
-Aufgaben, Notizen und Erinnerungen aus ganz normalen Sätzen, zugestellt im Chat, auf dem Handy und
-über Telegram oder Discord; ein Morgen-Briefing und eine Heute-Seite.
+Aufgaben, Notizen und Erinnerungen aus ganz normalen Sätzen, zugestellt im Chat, als Benachrichtigung
+auf Handy oder Computer (Erledigt / Später in den Apps für Windows und Mac) und auf Telegram oder
+Discord; ein Morgenbriefing; ortsbezogene Erinnerungen über die Handy-App.
+
+### Heute
+
+<img src="docs/screenshots/today.png" alt="The Today page: a serif greeting with her portrait and mood, then tiles for the weather in Chicago with the next hours, your day, the Planner with a progress ring, what she remembered, moments with captions she wrote, background work and coming up" width="760">
+
+Hier öffnet Sara: ihr Gesicht, ihre Stimmung und ein Gruß, dann Kacheln für das Wetter (vom Ort deines
+Briefings), deinen Tag, den Planer zum Abhaken, was sie sich gemerkt hat, eure gemeinsamen Momente,
+Arbeit im Hintergrund, was bald ansteht, und dein Zuhause (Lichter und Schalter direkt auf der
+Kachel). Vier Spalten auf großen Bildschirmen, eine auf dem Handy.
 
 ### Bibliothek
 
-<img src="docs/screenshots/library.png" alt="Sara answering from a handbook in her library" width="760">
+<img src="docs/screenshots/library.png" alt="Sara answers a book-club question from a Project Gutenberg copy of Jekyll and Hyde, citing p. 6 and p. 9 as links; beside it, the page she read, opened at p. 6 with the passage highlighted" width="860">
 
-Gib ihr PDFs (auch Scans), Word, Excel, PowerPoint, E-Books, Webseiten und Notizen. Sie merkt sich
-das Wichtigste, antwortet daraus und sagt, aus welchem Dokument (und von welcher Seite) es stammt.
+Gib ihr PDFs (auch gescannte, und Bücher mit 500 bis 1.000 Seiten), Word, Excel, PowerPoint, E-Books,
+Webseiten und Notizen. Sie lernt das Wichtigste, antwortet daraus und sagt, aus welchem Dokument und
+von welcher Seite es stammt, mit einem Link, der genau dort öffnet ([docs/LIBRARY.md](docs/LIBRARY.md)).
+
+### Befehlsleiste
+
+<img src="docs/screenshots/command-bar.png" alt="The Ctrl+K command bar over Today: typing 'pa' finds her page, two conversations and five settings" width="760">
+
+Strg+K / ⌘K (oder die Lupe auf dem Handy) springt zu jedem Ort, jedem Gespräch (auch über Wörter in
+den Nachrichten), jeder Einstellungsseite oder einzelnen Einstellung, oder führt eine Aktion aus: neues
+Gespräch, vertraulich, Anruf, Begleiterin wechseln, Look wechseln.
 
 ### Stimme
 
-<img src="docs/screenshots/voice.png" alt="The voice settings page" width="760">
+<img src="docs/screenshots/voice.png" alt="The Voice settings page in the Night look: hearing you, her voice, expressive voice, tone, her voice following her mood, live calls and how often she looks during video calls" width="760">
 
-Live-Anrufe, bei denen du sie unterbrechen kannst (Echtzeit-Stimme von Grok oder OpenAI),
-Sprachnachrichten über Telegram und Discord, Vorlesen, eine Stimme, die ihrer Stimmung folgt, und
-ein animiertes Porträt, das spricht, lippensynchron mit neun Mundformen. Die Stimmen laufen auf deinem Linux-Server oder kommen aus
-deinem Abo. (Screenshot von einem Windows-Testserver, auf dem lokale Stimmen noch nicht verfügbar
+Live-Anrufe, die du unterbrechen kannst (Echtzeit-Stimme von Grok oder OpenAI), Videoanrufe mit ihrem
+bewegten Porträt ([docs/VIDEO_CALLS.md](docs/VIDEO_CALLS.md)), Sprachnachrichten auf Telegram und
+Discord, Vorlesen, eine Stimme, die ihrer Stimmung folgt, und ein animiertes Porträt, das spricht,
+lippensynchron mit neun Mundformen. Sprich mit ihr auf einem Echo über deinen eigenen Alexa-Skill, mach
+sie zu deinem Android-Assistenten oder hör sie auf Google-Home-Lautsprechern
+([docs/VOICE_ASSISTANTS.md](docs/VOICE_ASSISTANTS.md)). Die Stimmen laufen auf deinem Linux-Server oder
+kommen aus deinem Abo. (Screenshot von einem Windows-Testserver, wo lokale Stimmen noch nicht verfügbar
 sind.)
+
+### Auf dem Handy
+
+<img src="docs/screenshots/phone.png" alt="Four phone screens: Today with the weather tile; a chat with a weather card; her presence sheet pulled up from her face; Today in the Day theme. A floating bottom bar with Chat, Today, Planner and More" width="860">
+
+Derselbe Look auf dem Handy: eine schwebende Leiste unten (Chat, Heute, Planer, Mehr), ihre Präsenz als
+Blatt, das du von ihrem Gesicht hochziehst, und die Nachrichtenleiste über der Tastatur. Standardmäßig
+Nacht; Tag oder *wie das System* unter Einstellungen → Aussehen.
 
 ### Überall
 
-<img src="docs/screenshots/everywhere.png" alt="Sara on a phone-sized screen answering from her library" width="260">
+<img src="docs/screenshots/everywhere.png" alt="Sara on a phone answering a book-club question from her library, citing the page" width="260">
 
 Web-App und installierbare PWA, Apps für Android und iPhone ([android/](android/README.md),
-[ios/](ios/README.md)), Desktop-Apps für Windows und macOS ([docs/desktop.md](docs/desktop.md)),
-Brücken zu Telegram und Discord, `sara-chat` in jedem Terminal und ein VS-Code-Panel
-([docs/clients.md](docs/clients.md)), Gmail und Google Kalender über deine eigene Google-App, Home
-Assistant, vertrauliche Unterhaltungen, die nie gespeichert werden, und andere Apps mit ihrem
-eigenen Gedächtnis und ihrer Persönlichkeit: eine OpenAI-kompatible API (SillyTavern, Open WebUI,
-Skripte), ein MCP-Server (Claude Code, Cursor, Claude Desktop; [bei Glama gelistet](https://glama.ai/mcp/servers/farena-ai/sara)) und Charakterkarten zum Importieren
+[ios/](ios/README.md)), Desktop-Apps für Windows und macOS mit der Seite bis in die Titelleiste,
+Schnellfrage per Tastenkürzel, Benachrichtigungen mit Erlauben / Ablehnen und *Senden an → Sara* für
+Dateien ([docs/desktop.md](docs/desktop.md)), Brücken zu Telegram und Discord, `sara-chat` in jedem
+Terminal und ein VS-Code-Panel ([docs/clients.md](docs/clients.md)), Gmail und Google Kalender über
+deine eigene Google-App, Home Assistant, vertrauliche Gespräche, die nie gespeichert werden, mehrere
+Saras in einer App ([docs/SERVERS.md](docs/SERVERS.md)), ein gemeinsamer Server für deinen Haushalt mit
+einem eigenen Bereich für jeden Erwachsenen ([docs/HOUSEHOLD.md](docs/HOUSEHOLD.md)) und andere Apps mit
+ihrem Gedächtnis und ihrer Persönlichkeit: eine OpenAI-kompatible API (SillyTavern, Open WebUI,
+Skripte), ein MCP-Server (Claude Code, Cursor, Claude Desktop;
+[gelistet bei Glama](https://glama.ai/mcp/servers/farena-ai/sara)) und Charakterkarten zum Importieren
 und Exportieren ([docs/OTHER_APPS.md](docs/OTHER_APPS.md)).
 
 ### Mach sie zu deiner
 
-<img src="docs/screenshots/make-it-yours.png" alt="Name and personality settings with the character gallery" width="760">
+<img src="docs/screenshots/make-it-yours.png" alt="Name and personality settings: her name, pronouns and age, a Create your companion button and a gallery of starter characters; beside it the personality dials (playfulness, teasing, directness, temper, confidence, message length, tone, curiosity, optimism) and her life" width="760">
 
-Beliebiger Name, Pronomen, Alter und Aussehen (gemalt von Grok Imagine, mit passenden
-Gesichtsausdrücken und Animation), ein geführter Assistent „Erstelle deine Begleiterin",
-Persönlichkeitsregler, eine Galerie mit Startfiguren, teilbare Charakterdateien, ein Modell für
-jede Aufgabe und die ganze App, die Hilfe und ihre Nachrichten in sechs Sprachen. Jede Einstellung hat ein **?**, es gibt kurze
+Beliebiger Name, Pronomen, Alter und Aussehen (gemalt von Grok Imagine, mit passenden Gesichtsausdrücken
+und Animation), ein geführter Assistent „Erstelle deine Begleiterin“, Persönlichkeitsregler, eine
+Galerie von Startfiguren, Charakterdateien zum Teilen, ein Modell für jede Aufgabe und die ganze App,
+die Hilfe und ihre Nachrichten in sechs Sprachen. Jede Einstellung hat ein **?**, es gibt kurze
 geführte Touren, und du kannst sie einfach fragen, wie etwas funktioniert.
 
 ### Sicherheit, immer an
 
-<img src="docs/screenshots/safety.png" alt="An approval card: Sara asks before running a command" width="760">
+<img src="docs/screenshots/safety.png" alt="An approval card: Sara asks before running npm test, with Allow and Deny, after a Tests failed card; the status bar says Waiting for your OK" width="760">
 
-Riskante Aktionen warten auf dein OK (unter Windows, wo es keine Befehls-Sandbox gibt, gilt das für
-jeden Befehl). Die Sicherheitsschicht läuft im Code um jeden Modellaufruf herum und **lässt sich
-nicht abschalten**: ein KI-Hinweis zu Beginn und danach regelmäßig, eine ehrliche Antwort, wann
-immer sie ernsthaft gefragt wird, ob sie eine KI ist, Hilfsangebote in Krisen und eine harte Sperre
-für sexuelle Inhalte mit Minderjährigen ([docs/COMPLIANCE.md](docs/COMPLIANCE.md),
-[docs/THREAT_MODEL.md](docs/THREAT_MODEL.md)). Tägliche Backups (plus verschlüsselte Kopien
-außerhalb des Servers), Wiederherstellen und Aktualisieren mit einem Befehl und `sara doctor`
-halten sie gesund.
+Riskante Aktionen warten auf dein OK (unter Windows, das keine Befehls-Sandbox hat, jeder Befehl): im
+Chat, in ihrem Panel oder als Benachrichtigung mit Erlauben / Ablehnen in den Apps für Windows und Mac.
+Die Sicherheitsschicht läuft im Code um jeden Modellaufruf herum und **lässt sich nicht abschalten**:
+KI-Hinweis zu Beginn und regelmäßig danach, eine ehrliche Antwort, wann immer sie ernsthaft gefragt
+wird, ob sie eine KI ist, Hilfsangebote in Krisen und eine harte Sperre für sexuelle Inhalte mit
+Minderjährigen ([docs/COMPLIANCE.md](docs/COMPLIANCE.md), [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md)).
+Tägliche Backups (plus verschlüsselte Kopien außerhalb des Servers), Wiederherstellen und Aktualisieren
+mit einem Befehl und `sara doctor` halten sie gesund.
 
 ## Wie alles zusammenpasst
 
@@ -207,8 +279,8 @@ wurden. Was sie heute beiträgt, ist die Arbeitsweise (sie lässt die Tests lauf
 riskanten Schritten, zeigt, was gelaufen ist), nicht ein höheres Ergebnis bei diesen Sätzen.
 Details, Ergebnisse pro Aufgabe und wie man es wiederholt: [docs/RESULTS.md](docs/RESULTS.md).
 
-Dazu `npm run check`: eine Typprüfung und 936 automatische Tests mit einem geskripteten
-Schein-Modell (ohne Netz, ohne GPU): 928 laufen unter Windows durch, die anderen 8 sind
+Dazu `npm run check`: eine Typprüfung und 937 automatische Tests mit einem geskripteten
+Schein-Modell (ohne Netz, ohne GPU): 929 laufen unter Windows durch, die anderen 8 sind
 Linux-spezifische Sandbox-Tests, die auf einem Linux-Server laufen.
 
 ## Sara im Vergleich

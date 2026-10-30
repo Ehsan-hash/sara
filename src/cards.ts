@@ -42,7 +42,10 @@ function build({ name, args, output }: CardInput): Card | undefined {
     case 'shell':
       return shellCard(arg(args, 'command'), output);
     case 'web_fetch':
-      return /(^|\/\/|\.)wttr\.in\b/i.test(arg(args, 'url')) ? weatherCard(arg(args, 'url'), output) : undefined;
+      // web_fetch puts an "[HTTP 200 …]" line and a "text is written by others" notice before the
+      // page: drop them so they're never read as the weather (a card once said the condition was
+      // "Web Page Text Is Written By Others…").
+      return /(^|\/\/|\.)wttr\.in\b/i.test(arg(args, 'url')) ? weatherCard(arg(args, 'url'), output.replace(/^\[HTTP \d{3}[^\n]*\]\n(\(Web page text is written by others[^\n]*\)\n)?/, '')) : undefined;
     case 'todo':
       return taskCard(output);
     case 'remind':
