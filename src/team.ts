@@ -16,6 +16,7 @@ import type { RoutePurpose } from './settings.ts';
 import { ToolError, type Tool } from './tools/types.ts';
 import { workspaceDir } from './tools/workspace.ts';
 import { cleanBudget, usageLine, usageScope, type UsageTotals } from './usage.ts';
+import { budgetCheck, type Budget, type Dimension } from './budget.ts';
 import { filesNamed, RunRecorder } from './runs.ts';
 
 export type HelperRole = 'researcher' | 'coder' | 'reviewer' | 'tester' | 'writer' | 'designer' | 'agent';
@@ -109,6 +110,16 @@ export function cleanLimits(v: unknown, base: TeamLimits = DEFAULT_LIMITS): Team
   const usdRaw = l.usd === undefined ? base.usd : l.usd === null || l.usd === '' ? 0 : Number(l.usd);
   const usd = Number.isFinite(usdRaw) && Number(usdRaw) > 0 ? Math.min(10_000, Math.round(Number(usdRaw) * 100) / 100) : 0;
   return { minutes: n(l.minutes, base.minutes, 2, 240), tokens: n(l.tokens, base.tokens, 10_000, 5_000_000), steps: n(l.steps, base.steps, 2, 40), ...(usd ? { usd } : {}) };
+}
+
+/** Phase 79: a team task's limits as the one Budget (src/budget.ts), only the lines asked for. */
+export function teamBudget(l: TeamLimits, lines: Dimension[] = ['tokens', 'usd', 'steps', 'minutes']): Budget {
+  return {
+    ...(lines.includes('tokens') ? { tokens: l.tokens } : {}),
+    ...(lines.includes('usd') && l.usd ? { usd: l.usd } : {}),
+    ...(lines.includes('steps') ? { steps: l.steps } : {}),
+    ...(lines.includes('minutes') ? { minutes: l.minutes } : {}),
+  };
 }
 
 export type TaskStatus = 'planning' | 'running' | 'waiting' | 'done' | 'failed' | 'stopped' | 'limit' | 'interrupted';
@@ -458,12 +469,12 @@ CREATE INDEX IF NOT EXISTS team_log_task ON team_log(task_id, id);
   /** The limit a task is at (or about to pass with its next call of about `next` tokens). */
   #overLimit(task: TeamTask, next = 0): string | undefined {
     // Real counts of every call in the run (the plan too) where the models report them.
-    const used = Math.max(task.tokens, this.#app.usage?.forTeam(task.id).tokens ?? 0);
-    if (used + next > task.limits.tokens) return `the spending limit (about ${task.limits.tokens.toLocaleString('en-US')} tokens)`;
-    if (task.limits.usd) {
-      const usd = this.#app.usage?.forTeam(task.id).usd ?? 0;
-      if (usd >= task.limits.usd) return `the budget of $${task.limits.usd.toFixed(2)}`;
-    }
+    // Phase 79: checked through the one Budget (src/budget.ts); the team's own words stay.
+    const u = this.#app.usage?.forTeam(task.id);
+    const used = Math.max(task.tokens, u?.tokens ?? 0);
+    const chk = budgetCheck(teamBudget(task.limits, ['tokens', 'usd']), { tokens: used, usd: u?.usd ?? 0 }, { next: { tokens: next } });
+    if (chk.reached === 'tokens') return `the spending limit (about ${task.limits.tokens.toLocaleString('en-US')} tokens)`;
+    if (chk.reached === 'usd') return `the budget of $${(task.limits.usd ?? 0).toFixed(2)}`;
     return undefined;
   }
 
@@ -582,10 +593,10 @@ CREATE INDEX IF NOT EXISTS team_log_task ON team_log(task_id, id);
           continue;
         }
         if (run.ctl.signal.aborted) throw run.ctl.signal.reason;
-        if ((Date.now() - started) / 60_000 > cur.limits.minutes) throw new LimitError(`the time limit (${cur.limits.minutes} minutes)`);
+        if (budgetCheck(teamBudget(cur.limits, ['minutes']), { tokens: 0, usd: 0, ms: Date.now() - started }).reached) throw new LimitError(`the time limit (${cur.limits.minutes} minutes)`);
         const over = this.#overLimit(cur);
         if (over) throw new LimitError(over);
-        if (++runs > cur.limits.steps) throw new LimitError(`the limit of ${cur.limits.steps} helper runs`);
+        if (budgetCheck(teamBudget(cur.limits, ['steps']), { tokens: 0, usd: 0, steps: runs++ }, { next: { steps: 1 } }).reached) throw new LimitError(`the limit of ${cur.limits.steps} helper runs`);
         const helper = byId.get(step.helper);
         if (!helper) {
           step.status = 'skipped';
@@ -814,7 +825,7 @@ CREATE INDEX IF NOT EXISTS team_log_task ON team_log(task_id, id);
       let corrected = false;
       for (let round = 0; round < MAX_HELPER_ROUNDS; round++) {
         if (ctl.signal.aborted) throw ctl.signal.reason;
-        if ((Date.now() - started) / 60_000 > task.limits.minutes) throw new LimitError(`the time limit (${task.limits.minutes} minutes)`);
+        if (budgetCheck(teamBudget(task.limits, ['minutes']), { tokens: 0, usd: 0, ms: Date.now() - started }).reached) throw new LimitError(`the time limit (${task.limits.minutes} minutes)`);
         // Phase 52: stop before a call that would go past the budget (its input is counted roughly).
         const over = this.#overLimit(task, est(messages));
         if (over) throw new LimitError(over);

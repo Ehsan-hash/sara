@@ -1853,6 +1853,32 @@
       <div class="add-row"><label>Workspace <select id="pj-ws"></select></label><button id="pj-refresh" type="button" class="ghost">Look again</button></div>
       <div id="pj-list" class="pj-list"></div>
         </section>
+        <section class="settings-page" data-page="ab-budgets" data-group="Abilities" data-title="Budgets" data-owner-only hidden>
+      <div id="ab-budgets-form">
+      <p class="muted small">A ceiling for each of her replies, so a long task can't run on and on. Near the limit she saves (a cheaper model, fewer tools), then wraps up and tells you what's done and what's left. Going on past it is always your call.</p>
+      <h3>Coding chats</h3>
+      <label class="row"><input id="bud-coding-on" type="checkbox"> Limit each reply in coding chats</label>
+      <div class="bud-grid">
+        <label>Tokens <select id="bud-coding-tokens"></select></label>
+        <label>Steps <select id="bud-coding-steps"></select></label>
+        <label>Spending limit <select id="bud-coding-usd"></select></label>
+        <label>Time <select id="bud-coding-minutes"></select></label>
+      </div>
+      <h3>Everyday chats</h3>
+      <label class="row"><input id="bud-chat-on" type="checkbox"> Limit each reply in everyday chats</label>
+      <div class="bud-grid">
+        <label>Tokens <select id="bud-chat-tokens"></select></label>
+        <label>Steps <select id="bud-chat-steps"></select></label>
+        <label>Spending limit <select id="bud-chat-usd"></select></label>
+        <label>Time <select id="bud-chat-minutes"></select></label>
+      </div>
+      <h3>Near the limit</h3>
+      <label class="row"><input id="bud-quick" type="checkbox"> Switch to the quick model to save</label>
+      <p id="bud-quick-note" class="muted small"></p>
+      <label>At the limit <select id="bud-on-limit"><option value="wrap">Wrap up and tell me what's left</option><option value="ask">Ask me before going on</option></select></label>
+      <p class="muted small">On a subscription (a ChatGPT, Claude or Grok sign-in) a spending limit can't be counted: you don't pay per token there. Tokens, steps and time still apply.</p>
+      </div>
+        </section>
         <section class="settings-page" data-page="ab-recipes" data-group="Abilities" data-title="Recipes" data-owner-only hidden>
       <p class="muted small">After a tricky job goes well she can write down how she did it (a <strong>recipe</strong>: when to use it and the steps that worked). In coding conversations she sees the recipes that fit what you ask and follows them. Saving one asks you first; you can change that for <code>recipe_save</code> in Tools and approvals.</p>
       <div id="rc-list" class="rc-list"></div>

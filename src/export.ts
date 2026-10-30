@@ -9,6 +9,7 @@ import { cleanTags } from './store.ts';
 import { cleanTags as cleanRecipeTags } from './recipes.ts';
 import { cleanBudget, cleanPrices } from './usage.ts';
 import { cleanLimits } from './team.ts';
+import { turnBudgetSettings } from './budget.ts';
 
 export const EXPORT_FORMAT = 'sara-export';
 export const EXPORT_VERSION = 1;
@@ -43,6 +44,8 @@ export interface ExportFile {
   jobBudget?: import('./usage.ts').Budget;
   /** L10: the team task limits (minutes, tokens, steps, dollar budget). */
   teamLimits?: Partial<import('./team.ts').TeamLimits>;
+  /** Phase 79: the per-reply budgets (Settings → Budgets; older files don't have them). */
+  turnBudgets?: import('./budget.ts').TurnBudgetSettings;
 }
 
 const has = (app: AppContext, table: string) => Boolean(app.store.db.prepare("SELECT 1 FROM sqlite_master WHERE type IN ('table') AND name = ?").get(table));
@@ -76,6 +79,7 @@ export function exportAll(app: AppContext, opts: { runs?: boolean } = {}): Expor
     ...(s.prices?.length ? { prices: s.prices } : {}),
     ...(s.jobBudget && (s.jobBudget.tokens || s.jobBudget.usd) ? { jobBudget: s.jobBudget } : {}),
     ...(s.teamLimits && Object.keys(s.teamLimits).length ? { teamLimits: s.teamLimits } : {}),
+    ...(s.turnBudgets && Object.keys(s.turnBudgets).length ? { turnBudgets: turnBudgetSettings(s) } : {}),
     ...(opts.runs && app.runs ? { runs: app.runs.exportRows() as unknown as ExportFile['runs'] } : {}),
   };
   return app.redactor.redactValue(file) as ExportFile;
@@ -423,6 +427,10 @@ export function importAll(app: AppContext, data: unknown): ImportResult {
   if (f.teamLimits && typeof f.teamLimits === 'object' && !(s.teamLimits && Object.keys(s.teamLimits).length)) {
     const l = cleanLimits(f.teamLimits);
     app.settings.update({ teamLimits: { minutes: l.minutes, tokens: l.tokens, steps: l.steps, ...(l.usd ? { usd: l.usd } : {}) } });
+  }
+  // Phase 79: per-reply budgets come back unless this server has its own already.
+  if (f.turnBudgets && typeof f.turnBudgets === 'object' && !(s.turnBudgets && Object.keys(s.turnBudgets).length)) {
+    app.settings.update({ turnBudgets: turnBudgetSettings({ turnBudgets: f.turnBudgets }) });
   }
   if ((!s.ownerName && f.owner?.ownerName) || (!s.timeZone && f.owner?.timeZone)) {
     app.settings.update({ ...(!s.ownerName && f.owner?.ownerName ? { ownerName: f.owner.ownerName } : {}), ...(!s.timeZone && f.owner?.timeZone ? { timeZone: f.owner.timeZone } : {}) });

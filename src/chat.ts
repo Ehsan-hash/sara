@@ -81,6 +81,8 @@ import { cutOtherSpeakers, GROUP_TOOLS, isGroupChannel, otherLine, ownerLine, st
 import { cardFor, type Card } from './cards.ts';
 import { cardOf, checkPlan, contradictionNote, contradictSettings, declinedOutput, gateAct, judgePrompt, judgeSaysNo, type Contradiction, type ContradictionCard } from './contradict.ts';
 import { filesNamed, RunRecorder, toolSetHash } from './runs.ts';
+import { budgetSummaryFallback, quickIsCheaper, turnBudgetFor, turnBudgetSettings, TurnMeter, type Budget, type BudgetState, type ModelCallPlan } from './budget.ts';
+import { billingOf, findPrice, priceTable } from './usage.ts';
 
 export interface AppContext {
   store: Store;
@@ -231,7 +233,9 @@ export type ChatEvent =
   /** Phase 63: a tool call the model is still writing (throttled; see src/tool-stream.ts). Shown only, never run. */
   | ToolBuilding
   /** Phase 77: `contradiction` = the card's \"This goes against something you decided\" section (a stop). */
-  | { type: 'approval'; approvalId: string; id: string; name: string; summary: string; args: Record<string, unknown>; contradiction?: ContradictionCard }
+  | { type: 'approval'; approvalId: string; id: string; name: string; summary: string; args: Record<string, unknown>; contradiction?: ContradictionCard; budget?: BudgetState }
+  /** Phase 79: the turn's budget (the step line's meter, a rung of the ladder, the limit reached). */
+  | { type: 'budget'; state: BudgetState }
   /** Phase 77: a planned call may go against a decision; not stopped, she mentions it (also every stop's outcome). */
   | { type: 'contradiction'; id: string; item: Contradiction }
   /** An approved tool has started running. */
@@ -770,6 +774,17 @@ export interface TurnOptions {
   recorder?: RunRecorder;
   /** Phase 78: extra hooks at the four fixed places of the turn (after the built-in ones). */
   hooks?: TurnHooks;
+  /**
+   * Phase 79: this turn's budget instead of the owner's default (Settings → Budgets); null = none.
+   * Callers that aren't chat (tests, evals) use it; the app uses the settings.
+   */
+  budget?: Budget | null;
+  /**
+   * Phase 79: "Continue with N more": an explicit override after a turn stopped at its budget. The
+   * turn answers the last message again (like `resume`) with exactly this much budget, recorded on
+   * the run and the reply.
+   */
+  budgetMore?: Budget;
 }
 
 /**
@@ -779,8 +794,12 @@ export interface TurnOptions {
  * gate: beforeTool; M6 security pass: afterReply with `final`; M8/M9 replay: all four).
  */
 export interface TurnHooks {
-  /** Right before each model call of the loop (one per step), with exactly what is sent. */
-  beforeModelCall?(c: BeforeModelCall): void | Promise<void>;
+  /**
+   * Right before each model call of the loop (one per step), with exactly what is sent. Phase 79: a
+   * hook may answer with a plan (the budget's ladder: another model, no tools, a capped summary,
+   * ask the owner, stop); the first plan that asks or stops ends the round, later hooks see the rest.
+   */
+  beforeModelCall?(c: BeforeModelCall): void | ModelCallPlan | undefined | Promise<void | ModelCallPlan | undefined>;
   /** A planned tool call that may run (after the 'never' / not-available checks, before the approval point). */
   beforeTool?(c: BeforeTool): BeforeToolResult | void | Promise<BeforeToolResult | void>;
   /** A tool call finished (its scrubbed result is stored). */
@@ -841,11 +860,38 @@ export interface AfterReply {
 }
 
 /** Hooks called in order; beforeTool events are joined, the first stop wins. */
-function joinHooks(list: (TurnHooks | undefined)[]): Required<Omit<TurnHooks, 'beforeTool'>> & { beforeTool(c: BeforeTool): Promise<BeforeToolResult> } {
+function joinHooks(list: (TurnHooks | undefined)[]): Required<Omit<TurnHooks, 'beforeTool' | 'beforeModelCall'>> & { beforeTool(c: BeforeTool): Promise<BeforeToolResult>; beforeModelCall(c: BeforeModelCall): Promise<ModelCallPlan> } {
   const hs = list.filter((h): h is TurnHooks => Boolean(h));
   return {
     async beforeModelCall(c) {
-      for (const h of hs) await h.beforeModelCall?.(c);
+      // Phase 79: a plan changes what the later hooks see (the model, the tools, the notes sent).
+      const out: ModelCallPlan = {};
+      for (const h of hs) {
+        const r = await h.beforeModelCall?.(c);
+        if (!r) continue;
+        if (r.events?.length) out.events = [...(out.events ?? []), ...r.events];
+        if (r.ask || r.stop) return { ...out, ...(r.ask ? { ask: r.ask } : {}), ...(r.stop ? { stop: true } : {}) };
+        if (r.switchTo && !out.switchTo) {
+          out.switchTo = r.switchTo;
+          c.provider = r.switchTo.provider;
+          c.model = r.switchTo.model;
+        }
+        if (r.noTools) {
+          out.noTools = true;
+          c.tools = [];
+        }
+        if (r.maxTokens) out.maxTokens = Math.min(out.maxTokens ?? r.maxTokens, r.maxTokens);
+        if (r.noThinking) out.noThinking = true;
+        for (const n of r.notes ?? []) {
+          c.messages.push({ role: 'system', content: n });
+          c.extra.push(n);
+        }
+        if (r.userNote) {
+          c.messages.push({ role: 'user', content: r.userNote });
+          c.extra.push(r.userNote);
+        }
+      }
+      return out;
     },
     async beforeTool(c: BeforeTool) {
       const out: BeforeToolResult = {};
@@ -967,7 +1013,7 @@ export async function* runTurn(app: AppContext, conversationId: string, userText
         /* the conversation may be gone */
       }
     }
-    if (!opts.recorder) rec.close(status, replyId || rec.lastReplyId || undefined);
+    if (!opts.recorder) rec.close(status === 'ok' && rec.outcome ? rec.outcome : status, replyId || rec.lastReplyId || undefined);
   }
 }
 
@@ -1179,7 +1225,53 @@ async function* runTurnInner(app: AppContext, conversationId: string, userText: 
     .map((m) => ({ name: String(m.meta?.name ?? ''), status: (m.meta?.status ?? 'ok') as Receipt['status'], args: (m.meta?.args ?? {}) as Record<string, unknown>, output: m.content }));
   let correction: string | undefined;
   let corrected = false;
-  const maxSteps = conv.mode === 'coding' ? MAX_STEPS_CODING : MAX_STEPS;
+  // Phase 79 (harness M4): the turn's budget (Settings → Budgets: coding chats 200k tokens / 40
+  // steps by default, everyday chats off), or the explicit "Continue with N more". The meter is a
+  // set of TurnHooks fed by the run recorder's sums; near a limit it steps down the ladder (quick
+  // model → one more tool round → a small summary without tools) instead of running on.
+  const budgetSet = turnBudgetSettings(s);
+  const budgetKind = conv.mode === 'coding' || isWorkChannel(conv.channel) ? 'coding' : 'chat';
+  const turnBudget = opts.budgetMore
+    ? { ...opts.budgetMore, degrade: turnBudgetFor({ ...budgetSet, [budgetKind]: { ...budgetSet[budgetKind], on: true } }, budgetKind)?.degrade }
+    : opts.budget === null
+      ? undefined
+      : (opts.budget ?? turnBudgetFor(budgetSet, budgetKind));
+  /** Rung 1: the quick model, only when set, allowed here (private, local-only, household) and cheaper. */
+  const quickFor = () => {
+    const r = s.routes?.quick;
+    if (!r || !s.providers.some((p) => p.id === r.providerId)) return undefined;
+    try {
+      const q = resolveProvider(app, r.providerId, r.model, { purpose: 'quick', conversationId: conv.id });
+      if (conv.private && (!q.provider.config.local || isCloudModelName(q.model))) return undefined;
+      if (privateLocalOn() && !onThisComputer(q.provider.config, q.model)) return undefined;
+      const table = app.usage ? app.usage.prices() : priceTable(s.prices);
+      const per = (cfg: ProviderConfig, m: string) => {
+        const pr = findPrice(table, cfg.id, m);
+        return pr ? pr.inPerM + pr.outPerM : undefined;
+      };
+      const cheaper = quickIsCheaper(
+        { billing: billingOf(provider.config), model, providerId: provider.config.id, pricePerM: per(provider.config, model) },
+        { billing: billingOf(q.provider.config), model: q.model, providerId: q.provider.config.id, pricePerM: per(q.provider.config, q.model) },
+      );
+      return cheaper ? { provider: rec.on ? rec.wrap(q.provider) : q.provider, model: q.model } : undefined;
+    } catch {
+      return undefined; // a quick model without its key, or not allowed for this person
+    }
+  };
+  const meter = turnBudget
+    ? new TurnMeter({
+        budget: turnBudget,
+        ...(rec.on ? { spent: () => rec.totals() } : {}),
+        quick: quickFor,
+        onLimit: budgetSet.onLimit,
+        ownerName: s.ownerName?.trim() || 'the owner',
+        ...(opts.budgetMore ? { override: opts.budgetMore } : {}),
+      })
+    : undefined;
+  // With a step line in the budget, the budget decides (the summary is its last step); without one,
+  // the old stops (25 steps, 80 in coding) still hold.
+  const stepCap = () => (meter?.budget.steps ? meter.maxSteps : conv.mode === 'coding' ? MAX_STEPS_CODING : MAX_STEPS);
+  let maxSteps = stepCap();
   // Phase 77 (harness M2): planned tool calls are checked against the owner's decisions. Clear
   // conflicts stop with an approval card in coding and work conversations (strictness \"stop\");
   // everything else is a flag she mentions. It can only ADD a stop ('auto' → ask); 'never' stays.
@@ -1229,7 +1321,13 @@ async function* runTurnInner(app: AppContext, conversationId: string, userText: 
       return { events, stopFor: found.find((x) => x.act === 'stop') };
     },
   };
-  const hooks = joinHooks([planHook, recorderHooks(app, rec), opts.hooks]);
+  // Phase 79: the budget goes first (its plan picks the model and tools the others then record).
+  const budgetHook: TurnHooks | undefined = meter && {
+    beforeModelCall: (c) => meter.beforeModelCall(c),
+    afterReply: (c) => meter.afterReply(c),
+    afterTool: (c) => meter.afterTool(c),
+  };
+  const hooks = joinHooks([budgetHook, planHook, recorderHooks(app, rec), opts.hooks]);
   // Phase 78: what the run is made of (M9 compares runs by these).
   const memPolicy = decayPolicy(memCfg).id;
   rec.setPolicy({ memoryPolicy: memPolicy, model: `${provider.config.id}/${model}`, tools: toolSetHash(tools.map((t) => t.spec.name)), mode: conv.mode, ...(conv.private ? { private: true } : {}) });
@@ -1330,13 +1428,16 @@ async function* runTurnInner(app: AppContext, conversationId: string, userText: 
     }
     // Phase 77: what the plan check found (flags she should mention).
     for (const n of contradictNotes.splice(0)) messages.push({ role: 'system', content: n });
-    if (opts.resume && step === 0 && hist.messages.at(-1)?.role === 'assistant') {
+    if (opts.resume && !opts.budgetMore && step === 0 && hist.messages.at(-1)?.role === 'assistant') {
       messages.push({ role: 'user', content: '[Note from the app: your last reply was cut off (stopped, an error, or a restart). Continue from exactly where it stopped. Do not repeat what you already wrote and do not apologize; just carry on.]' });
     }
     // Phase 78 seam 1: right before the model call (the recorder opens its step here).
+    // Phase 79: the budget's plan for this call (another model, no tools, a small summary, stop).
+    let callMax: number | undefined;
+    let callThink: 'none' | undefined;
     {
       const sent = new Set<ChatMessage>(hist.messages);
-      await hooks.beforeModelCall({
+      const mc: BeforeModelCall = {
         step,
         provider,
         model,
@@ -1346,7 +1447,41 @@ async function* runTurnInner(app: AppContext, conversationId: string, userText: 
         extra: messages.slice(1).filter((m) => !sent.has(m)).map((m) => (typeof m.content === 'string' ? m.content : '')),
         tools: tools.map((t) => t.spec.name),
         ...(injection?.picks.length ? { memoryPicks: injection.picks, policyId: injection.picks[0]?.policy ?? memPolicy } : { policyId: memPolicy }),
-      });
+      };
+      let plan = await hooks.beforeModelCall(mc);
+      if (plan.ask && meter) {
+        // "Ask me before going on": the owner's explicit OK is the only way past the limit here.
+        for (const ev of plan.events ?? []) yield ev;
+        const { id, decision } = app.approvals.request(conv.id, signal);
+        yield { type: 'approval', approvalId: id, id: `budget-${rec.id || 'turn'}-${step}`, name: 'budget', summary: plan.ask.summary, args: {}, budget: plan.ask.state };
+        const t0 = Date.now();
+        const yes = await decision;
+        meter.waited(Date.now() - t0);
+        app.approvals.takeHow(id);
+        if (signal.aborted) {
+          yield { type: 'error', message: 'Stopped.' };
+          return;
+        }
+        meter.answer(yes);
+        if (yes) {
+          maxSteps = stepCap();
+          yield { type: 'budget', state: meter.extendedState() };
+        }
+        plan = await hooks.beforeModelCall(mc);
+      }
+      for (const ev of plan.events ?? []) yield ev;
+      if (plan.stop) break;
+      if (plan.switchTo) {
+        // Rung 1: the rest of the turn runs on the quick model; if it fails, the models of the turn take over.
+        const rest = chain.slice(ci).filter((c) => !(c.provider.config.id === plan.switchTo!.provider.config.id && c.model === plan.switchTo!.model));
+        provider = plan.switchTo.provider;
+        model = plan.switchTo.model;
+        chain = [{ provider, model, from: 'quick' }, ...rest];
+        ci = 0;
+      }
+      if (plan.noTools) tools = [];
+      callMax = plan.maxTokens;
+      callThink = plan.noThinking ? 'none' : undefined;
     }
 
     let reply = '';
@@ -1357,7 +1492,7 @@ async function* runTurnInner(app: AppContext, conversationId: string, userText: 
       const p = provider;
       const m = model;
       const offered = tools.map((t) => t.spec);
-      for await (const ev of streamWithin((sig) => p.stream({ model: m, messages, tools: offered, signal: sig }), signal, fallbackAfterMs(app, { provider: p, promptChars: promptChars(messages) }))) {
+      for await (const ev of streamWithin((sig) => p.stream({ model: m, messages, tools: offered, signal: sig, ...(callMax ? { maxTokens: callMax } : {}), ...(callThink ? { reasoning: callThink } : {}) }), signal, fallbackAfterMs(app, { provider: p, promptChars: promptChars(messages) }))) {
         if (ev.type === 'text') {
           reply += ev.text;
           yield { type: 'token', text: ev.text };
@@ -1419,6 +1554,9 @@ async function* runTurnInner(app: AppContext, conversationId: string, userText: 
     }
 
     if (!reply && !calls.length) {
+      // Phase 79: the budget's summary came back empty (small models): the app writes its own words
+      // after the loop (what was done, what was dropped, Continue), not an error.
+      if (meter?.final) break;
       yield { type: 'error', message: 'The model returned an empty reply.' };
       return;
     }
@@ -1469,7 +1607,8 @@ async function* runTurnInner(app: AppContext, conversationId: string, userText: 
       if (!claims.length) break;
       store.recordSafetyEvent('unverified_claim', conv.id);
       store.updateMessageMeta(saved.id, { unverified: claims });
-      const correcting = !corrected && step < maxSteps - 1;
+      // Phase 79: after the budget's summary the claims are still checked and flagged (no new call).
+      const correcting = !corrected && step < maxSteps - 1 && !meter?.final;
       yield { type: 'claim_check', messageId: saved.id, claims, correcting };
       if (!correcting) break;
       corrected = true;
@@ -1596,12 +1735,37 @@ async function* runTurnInner(app: AppContext, conversationId: string, userText: 
         return;
       }
     }
-    if (step === maxSteps - 1) {
+    if (step === maxSteps - 1 && !meter?.final) {
       rec.stopped('steps');
       yield { type: 'error', message: personalize(`Stopped after ${maxSteps} steps. Say "continue" to let her keep going.`, identityOf(app.persona)) };
     }
   }
   if (pendingImages.length || pendingProof.length) lastAssistantId = store.addMessage(conv.id, 'assistant', '', { model, provider: provider.config.label, ...takeImages() }).id;
+  // Phase 79: the budget's outcome on the reply (the step line meter, the "Budget reached" card with
+  // what was dropped and Continue) and on the run (runs.budget, the summary step stopped='budget').
+  if (meter) {
+    // Ended inside the ladder without its summary (an answer in the capped round, a failed call): still a budget stop.
+    // A message that carries tool calls is a working step, never her answer (the summary came back empty).
+    const isAnswer = (m: ReturnType<typeof store.messageById>): boolean => Boolean(m?.content.trim()) && !(m?.meta?.toolCalls as unknown[] | undefined)?.length;
+    meter.endShort(!isAnswer(lastAssistantId ? store.messageById(lastAssistantId) : undefined));
+    if (meter.hit) {
+      const last = lastAssistantId ? store.messageById(lastAssistantId) : undefined;
+      // A summary the safety layer blocked stays blocked (and the step keeps that reason).
+      if (!last?.meta?.blocked) rec.stopped('budget');
+      rec.outcome = 'budget';
+      // A small model may say nothing in its summary: the app's own words, with what was dropped.
+      if (!isAnswer(last) && !last?.meta?.blocked) {
+        const fallback = budgetSummaryFallback(meter.hit, s);
+        if (last && !(last.meta?.toolCalls as unknown[] | undefined)?.length) store.updateMessageContent(last.id, fallback);
+        else lastAssistantId = store.addMessage(conv.id, 'assistant', fallback, { model, provider: provider.config.label }).id;
+        yield { type: 'token', text: fallback };
+      }
+    }
+    const state = meter.state();
+    rec.setBudget(state);
+    if (lastAssistantId) store.updateMessageMeta(lastAssistantId, { budget: state });
+    if (meter.hit) yield { type: 'budget', state };
+  }
   // Phase 34: the nudge was used; check this reply in the background (some or every reply).
   if (nudge) app.drift?.markCorrected(nudge.id);
   const finalReply = lastAssistantId ? store.messages(conv.id).find((m) => m.id === lastAssistantId) : undefined;

@@ -4,6 +4,7 @@
 // subscriptions are never given a price: they show as "local" and "$0 (subscription)".
 import { AsyncLocalStorage } from 'node:async_hooks';
 import type { DatabaseSync } from 'node:sqlite';
+import type { Budget } from './budget.ts';
 import { SUBSCRIPTION_KINDS, type ChatRequest, type Provider, type ProviderConfig, type StreamEvent } from './providers/types.ts';
 
 /** How a call is paid for. */
@@ -412,11 +413,13 @@ export function usageLine(t: UsageTotals): string {
   return `${k(t.tokens)} tokens (${k(t.input)} in, ${k(t.output)} out) · ${cost}`;
 }
 
-/** Phase 52: budgets for a job or team run (0/undefined = none). */
-export interface Budget {
-  tokens?: number;
-  usd?: number;
-}
+/**
+ * Phase 52: budgets for a job or team run (0/undefined = none). Phase 79: one Budget for every task
+ * (tokens, dollars, steps, minutes and the degrade ladder) lives in src/budget.ts; jobs and team
+ * tasks are checked through it (`overBudget` keeps Phase 52's words and rules).
+ */
+export type { Budget } from './budget.ts';
+export { overBudget } from './budget.ts';
 
 export function cleanBudget(v: unknown): Budget {
   const b = (v ?? {}) as Record<string, unknown>;
@@ -426,15 +429,4 @@ export function cleanBudget(v: unknown): Budget {
   const u = Number(b.usd);
   if (b.usd !== undefined && b.usd !== null && b.usd !== '' && Number.isFinite(u) && u > 0) out.usd = Math.min(10_000, Math.round(u * 100) / 100);
   return out;
-}
-
-/** The first budget line that is reached, in plain words, or undefined. */
-export function overBudget(b: Budget | undefined, used: { tokens: number; usd: number; unpriced?: number }): string | undefined {
-  if (!b) return undefined;
-  if (b.tokens && used.tokens >= b.tokens) return `its token budget (${b.tokens.toLocaleString('en-US')} tokens)`;
-  if (b.usd && used.usd >= b.usd) return `its budget of $${b.usd.toFixed(2)}`;
-  // Security review (L4): a dollar-only budget can't be kept for a model with no price: stop at the
-  // first such call instead of running on unmetered. A token budget (or a price) avoids this.
-  if (b.usd && !b.tokens && (used.unpriced ?? 0) > 0) return `its budget of $${b.usd.toFixed(2)}: there's no price for this model, so its cost can't be counted (set a token budget or a price for the model)`;
-  return undefined;
 }

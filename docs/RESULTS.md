@@ -481,6 +481,43 @@ inside emphasis (`(_#view=library:1:16_)`); the chat now shows those as links to
 Screenshots of the reading progress, the document page with its contents and summaries, and an
 answer with page links: `outputs/p74-shots/` (desktop and phone width; not in git).
 
+## Budgets: a long coding task stops cleanly (Phase 79)
+
+A throwaway server on this PC (Windows 11, Ollama): main model `qwen3.8:27b-mtp-q4_K_M`, quick model
+`spark-x2.5:4b-bf16` (Models → Which model does what), a coding chat in a scratch workspace. The task
+needs more than 40 steps by design: a trail of 60 clue files in random nested folders, each naming
+the next, "read them one after another with read_file, then tell me the secret word". (The search
+tool was set to *never* for the step runs: with it, the 4B model searched for "END" and skipped
+the trail.)
+
+| Run | Budget | Where it stopped | Ladder | Her last message |
+|---|---|---|---|---|
+| Default | 200k tokens / 40 steps | step 15, **185,844 tokens (93%)**, 26 s | quick model → one more tool round → summary | "I got through clues 1–13 … I hit the token budget, so I didn't finish the full 60 clues or find the END marker. You can press **Continue with more** and we'll pick up right after clue 13." |
+| Step line | 2M tokens / 40 steps | **exactly 40 steps** (549,527 tokens), 111 s | warning at step 32, quick model at 38, one more round at 39, summary as the 40th | "I got through 38 of 60 clues … The remaining 22 clues didn't finish within the step limit. I also couldn't reach the END marker … press 'Continue with more' and I'll keep going from clue 39 and up." |
+| Continue with 30 more steps | the override only | she went on from **clue 39** (no re-reading), stopped by herself at clue 56 after 19 steps | none needed | the override is on the reply (`meta.budget.override`) and on the new run (`runs.budget`) |
+| Ask me before going on | 10 steps | the card at the limit: "This task reached its step limit (10 steps). Keep going with the same again?" → *Wrap up* | quick → one more round → summary | a short summary and the Budget reached card, 32 s |
+
+Each stop shows the **Budget reached** card (why, what she did to save, the meter, the Continue
+button) and the run's status is `budget`, with `stopped='budget'` on its last step. All runs were
+local, so the $ line is not counted (it says so); tokens, steps and time were.
+
+What the live runs changed (each now pinned by a test in `test/phase79.test.ts`):
+
+- **The ladder started too early on a step line.** Starting at 80% of 40 steps cost 8 steps on the
+  cheaper model. Now 80% is only a warning on the meter. The ladder runs on the last 3 steps.
+- **It also started too late on a token line.** Projecting one step ahead overshot to 212k on a
+  200k budget: every step re-sends a prompt that keeps growing (12k → 14k here). Now it looks 4
+  steps ahead (+10%). The ladder needs 3 calls, and waiting one more step must not be too late.
+  Stops landed at 186k and 199.5k.
+- **A small thinking model spent a whole step thinking out loud** (28k tokens and 2+ minutes in one
+  answer). On the ladder, one answer now gets at most a third of the room left. The summary is
+  sent without thinking (`reasoning: 'none'`) and capped at 400 tokens.
+- **An empty summary was an error** ("The model returned an empty reply."). Now the app writes its
+  own words: what was reached, what was dropped, and Continue.
+- **A turn that ended inside the capped round showed no card.** Now it counts as a budget stop.
+  The text she wrote next to her last tool calls is not taken as her answer.
+- **Cost of the meter:** about 0.007 ms per step (150 steps with a 60-message history, in the test suite).
+
 ## Code map
 
 `scripts/eval-codemap.ts` copies Sara's own code into a workspace and asks 8 "where is…?"

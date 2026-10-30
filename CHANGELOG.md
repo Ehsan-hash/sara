@@ -5,6 +5,25 @@ Format: newest first. Semantic versions since 1.0.0 (before that `0.<phase>.<pat
 
 ## Unreleased
 
+## 2.12.0 (2026-10-30): budgets she keeps (harness track, Phase 79)
+
+- **One budget for every task** (tokens, dollars, steps, minutes): chat turns, background jobs and team
+  tasks. Coding chats get 200k tokens / 40 steps by default (no dollar limit unless you set one);
+  everyday chats have none by default (the old 25-step stop still holds).
+- **A hard ceiling with a graceful landing:** close to the limit she 1) switches to your quick model (if
+  set, allowed and cheaper), 2) gets one last round of tools, 3) writes a short summary with no tools:
+  what's done, what's left, what was dropped. Then the **Budget reached** card offers *Continue with
+  more*, the only way past it (recorded on the reply and the run). Or choose *Ask me before going on*.
+- A budget never skips approvals, the safety layer or the claim check. On subscriptions and local
+  models dollars aren't counted (it says so); tokens, steps and minutes still are.
+- A meter on the step line and in the Run view. Settings → Abilities → **Budgets**.
+- Jobs and team tasks keep their settings and *Continue with more budget*, now through the same check.
+- **Faster saves:** the database no longer waits for a disk flush on every write (WAL with
+  synchronous=NORMAL, as the code map already did); on the home server each save took ~80 ms. A power
+  cut can lose the last moment of writes; the file can't be corrupted.
+- Measured on a local model: a 60-file task stopped at 186k of 200k tokens and at exactly 40 steps, each
+  time with a useful summary; *Continue* picked up where it left off.
+
 ## 2.11.0 (2026-10-30): run snapshots (harness track, Phase 78)
 
 - **Every step recorded** for chat turns, background jobs and team tasks: model and provider, tokens,

@@ -84,7 +84,7 @@ version's details are in the [changelog](../CHANGELOG.md).
 | 76 | Ranked memory: each note she uses says why it came to mind and how sure that is; old notes fade unless used or pinned | ✅ 2.9 |
 | 77 | Contradiction check: before she acts, a planned step that goes against something you decided stops and asks | ✅ 2.10 |
 | 78 | Run snapshots: every step of her work recorded (prompt, tools, files, memory, cost) | ✅ 2.11 |
-| 79 | Hard cost budgets per task, with a graceful slow-down instead of a surprise bill | 2.12 |
+| 79 | Hard cost budgets per task, with a graceful slow-down instead of a surprise bill | ✅ 2.12 |
 | 80 | Sandbox gate: her code runs in a throwaway copy before it touches your workspace | 2.13 |
 | 81 | Security pass: code checks, secret scan and live dependency advisories, with a fix branch for each finding | 2.14 |
 | 82 | Threat-model second pass: a dedicated pass that fixes the risky spots it finds in her new code | 2.15 |

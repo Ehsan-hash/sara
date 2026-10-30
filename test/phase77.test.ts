@@ -303,14 +303,16 @@ test('performance: the check adds < 20 ms per tool call with 10,000 notes', (t) 
   const input = { tool: 'shell', args: { command: 'git push origin main' }, callId: 'c', summary: '$ git push origin main', conversationId: 'x', workspaceDir: ws };
   checkPlan(mem, input); // warm (prepared statements, rule cache)
   const ms: number[] = [];
-  for (let i = 0; i < 9; i++) {
+  // 15 checks, the median compared: the full suite runs files in parallel, so a few slow samples on
+  // a loaded machine don't fail it (it measured 21.6 ms once in a full run, ~7 ms alone).
+  for (let i = 0; i < 15; i++) {
     const t0 = performance.now();
     const found = checkPlan(mem, { ...input, args: { command: i % 2 ? 'git push origin main' : 'write the tests for the garden budget' } });
     ms.push(performance.now() - t0);
     if (i % 2) assert.ok(found.some((c) => c.clear));
   }
   ms.sort((a, b) => a - b);
-  assert.ok(ms[4] < 20, `median ${ms[4].toFixed(1)} ms`);
+  assert.ok(ms[7] < 20, `median ${ms[7].toFixed(1)} ms`);
 });
 
 test('parsing: the clear shapes in other words, and plans read in code', () => {

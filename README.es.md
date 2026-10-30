@@ -14,7 +14,7 @@ para la web, Windows, Mac y el móvil.
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="License: MIT"></a>
   <img src="https://img.shields.io/badge/node-%E2%89%A5%2024-339933" alt="Node 24 or newer">
   <img src="https://img.shields.io/badge/runtime%20dependencies-0-brightgreen" alt="Zero runtime dependencies">
-  <img src="https://img.shields.io/badge/tests-972%20passing-brightgreen" alt="972 tests passing">
+  <img src="https://img.shields.io/badge/tests-986%20passing-brightgreen" alt="986 tests passing">
   <a href="docs/RESULTS.md"><img src="https://img.shields.io/badge/HumanEval%20pass%401-96.3%25-informational" alt="HumanEval pass@1 96.3%"></a>
   <a href="https://github.com/farena-ai/sara/releases/latest"><img src="https://img.shields.io/github/v/release/farena-ai/sara?label=release" alt="Latest release"></a>
   <a href="https://github.com/farena-ai/sara/pkgs/container/sara"><img src="https://img.shields.io/badge/docker-amd64%20%7C%20arm64-2496ED" alt="Docker image for amd64 and arm64"></a>
@@ -28,7 +28,7 @@ para la web, Windows, Mac y el móvil.
   <sub>Una sesión real con un modelo local (qwen3.8 27B en Ollama, una RTX 5090) en un servidor de pruebas desechable, con el aspecto Noche: anima a quien le habla, escribe una pequeña app y su prueba mientras el modelo las transmite, pide permiso antes de ejecutar un comando, detecta un error real con una prueba que falla y lo corrige hasta que pasan las 7 pruebas. Fotogramas elegidos de la grabación; nada en ellos se ha editado.</sub>
 </p>
 
-> **Estado:** 2.11, licencia MIT, con veintidós versiones con novedades desde la 1.0 (todas abajo). De
+> **Estado:** 2.12, licencia MIT, con veintitrés versiones con novedades desde la 1.0 (todas abajo). De
 > la 2.5 a la 2.8 toda la app estrenó aspecto. La
 > [app de Android](https://play.google.com/store/apps/details?id=com.backstagecoding.sara) está en Google
 > Play; la app de iPhone y la versión del Mac App Store llegarán en cuanto Apple las apruebe. Lee
@@ -70,6 +70,7 @@ para las personas con las que vives · [videollamadas](docs/VIDEO_CALLS.md) con 
 
 | Versión | Qué te trae |
 |---|---|
+| **2.12** · Presupuestos que respeta | **Un límite firme, no un informe:** las tareas de código tienen un presupuesto (200k tokens / 40 pasos por defecto, dólares opcionales). Cerca del límite cambia a tu modelo rápido, reduce las rondas de herramientas, escribe un breve resumen de lo hecho y lo pendiente, y se detiene. Seguir requiere tu **Continuar con más**. Las tareas en segundo plano y de equipo usan el mismo presupuesto. [Cómo funciona](docs/design/HARNESS_TRACK.md) |
 | **2.11** · Instantáneas de cada ejecución | **Cada paso de su trabajo queda registrado:** qué modelo, el prompt, cada llamada a herramienta y su resultado (sin secretos), los archivos que tocó (en proyectos de código, el HEAD de git y los archivos cambiados), las notas que usó, los conflictos que encontró, tokens, coste y tiempo. **Ver la ejecución**, bajo cualquier respuesta, lo muestra paso a paso. Se guarda 90 días por defecto; nada sale de tu servidor. La base de los presupuestos, el viaje en el tiempo y las evaluaciones. [Cómo funciona](docs/design/HARNESS_TRACK.md) |
 | **2.10** · Compara sus planes con los tuyos | **Antes de actuar, compara el paso con lo que decidiste.** ¿Le dijiste «nunca hagas push a main», «pruebas antes de cada push», «usa pnpm» o «no toques la configuración de producción»? Un paso planeado que va en contra **se detiene en una tarjeta** que cita tu decisión, con *Hacerlo igualmente*, *No* o *Actualizar la nota*. En la charla diaria solo lo menciona. Las reglas se comprueban en el código (sin adivinar) y solo puede añadir una parada, nunca quitarla. [Cómo funciona](docs/design/HARNESS_TRACK.md) |
 | **2.9** · Memoria ordenada | **Te dice por qué recordó algo:** cada nota que usa se puntúa para tu mensaje y muestra *por qué le vino a la mente* y *con qué seguridad* (también en su panel). Las notas viejas se desvanecen poco a poco en vez de desaparecer, las que usa a menudo siguen fuertes y puedes **fijar** las que nunca deben desvanecerse. El desvanecimiento se ajusta con un control deslizante. [Cómo funciona](docs/design/HARNESS_TRACK.md) |
@@ -282,8 +283,8 @@ prueba comprobaba. Lo que aporta hoy es la forma de trabajar (ejecuta las prueba
 antes de pasos arriesgados, muestra lo que se ejecutó), no una puntuación más alta en estos
 conjuntos. Detalles, resultados por tarea y cómo repetirlo: [docs/RESULTS.md](docs/RESULTS.md).
 
-Además, `npm run check`: una comprobación de tipos y 980 pruebas automáticas con un modelo falso
-programado (sin red, sin GPU): 972 pasan en Windows y las otras 8 son pruebas del aislamiento solo
+Además, `npm run check`: una comprobación de tipos y 995 pruebas automáticas con un modelo falso
+programado (sin red, sin GPU): 986 pasan en Windows y las otras 8 son pruebas del aislamiento solo
 para Linux, que se ejecutan en un servidor Linux.
 
 ## Cómo se compara Sara

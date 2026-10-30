@@ -505,6 +505,16 @@
   <li>The Run view is read only for now: branching from a step comes later.</li>
 </ul>
 
+<h2 id="budgets">Budgets for her replies</h2>
+<ul>
+  <li>Each reply has a ceiling, so a long task can't run on and on. Coding chats have one by default: <strong>200k tokens and 40 steps</strong>, no dollar limit. Everyday chats have none unless you turn it on (they still stop after 25 steps, as before). Change both in <em>Settings → Abilities → Budgets</em>, or switch them off.</li>
+  <li>Near the limit she saves instead of running on: first the rest of the reply goes to your <strong>quick model</strong> (if one is set and it's cheaper), then she uses <strong>one more round of tools</strong> at most, then she writes <strong>a short summary without tools</strong>: what's done, what she didn't get to, and what is kept.</li>
+  <li>The reply then shows <strong>Budget reached</strong> with what was dropped and <strong>Continue with more</strong>. Nothing goes past a limit by itself: Continue gives exactly that much more, and it is noted on the reply and in its run. With <em>Ask me before going on</em> you get a card at the limit instead (<em>Keep going</em> or <em>Wrap up</em>).</li>
+  <li>A small meter on the step line (and in <strong>Show the run</strong>) shows how much of the budget a reply used.</li>
+  <li>On a subscription (a ChatGPT, Claude or Grok sign-in) or a model on your own computer, a dollar limit can't be counted: there's no price per token. Tokens, steps and time still apply. Time spent waiting for your OK doesn't count.</li>
+  <li>A budget never skips a safety check or an approval: tools that ask first still ask, and her summary is checked like any reply. Background jobs and team tasks keep their own budgets (above).</li>
+</ul>
+
 <h2 id="together">Things to do together</h2>
 <ul>
   <li>Press 🎲 next to the message box: <strong>20 questions</strong>, <strong>trivia</strong>, <strong>would you rather</strong>, <strong>journal together</strong> (she asks about your day and writes a short entry you can save), <strong>watch along</strong> (tell her what you're watching) and <strong>a story together</strong>. A bar above the message box shows what you're doing; press <em>End</em> to stop.</li>

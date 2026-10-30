@@ -141,6 +141,8 @@ export interface RunView {
   ms: number;
   bytes: number;
   policy: Record<string, unknown> | null;
+  /** Phase 79: the task's budget (a job's, a team task's limits, a turn's with how it ended). */
+  budget: Record<string, unknown> | null;
 }
 
 export interface StepView {
@@ -327,8 +329,8 @@ export class RunStore {
   }
 
   /** Closes a run: totals from its steps (and what the recorder kept for the end: one write). */
-  close(id: number, status: RunStatus, bytes: number, startedMs: number, patch: { userMessageId?: number; replyMessageId?: number; policy?: Record<string, unknown> } = {}): void {
-    if (patch.userMessageId !== undefined || patch.replyMessageId !== undefined || patch.policy !== undefined) this.#db.prepare('UPDATE runs SET user_message_id = COALESCE(?, user_message_id), reply_message_id = COALESCE(?, reply_message_id), policy = COALESCE(?, policy) WHERE id = ?').run(patch.userMessageId ?? null, patch.replyMessageId ?? null, patch.policy ? JSON.stringify(patch.policy) : null, id);
+  close(id: number, status: RunStatus, bytes: number, startedMs: number, patch: { userMessageId?: number; replyMessageId?: number; policy?: Record<string, unknown>; budget?: unknown } = {}): void {
+    if (patch.userMessageId !== undefined || patch.replyMessageId !== undefined || patch.policy !== undefined || patch.budget !== undefined) this.#db.prepare('UPDATE runs SET user_message_id = COALESCE(?, user_message_id), reply_message_id = COALESCE(?, reply_message_id), policy = COALESCE(?, policy), budget = COALESCE(?, budget) WHERE id = ?').run(patch.userMessageId ?? null, patch.replyMessageId ?? null, patch.policy ? JSON.stringify(patch.policy) : null, patch.budget !== undefined ? JSON.stringify(patch.budget) : null, id);
     const t = this.#db.prepare('SELECT COUNT(*) AS n, COALESCE(SUM(tokens_in),0) AS i, COALESCE(SUM(tokens_out),0) AS o, COALESCE(SUM(usd),0) AS u, COALESCE(SUM(unpriced),0) AS up, COALESCE(SUM(unreported),0) AS ur, COALESCE(SUM(bytes),0) AS b FROM run_steps WHERE run_id = ?').get(id) as Row;
     this.#db
       .prepare('UPDATE runs SET status = ?, ended_at = ?, steps = ?, tokens_in = ?, tokens_out = ?, usd = ?, unpriced = ?, unreported = ?, ms = ?, bytes = ? WHERE id = ?')
@@ -360,6 +362,7 @@ export class RunStore {
       ms: Number(r.ms),
       bytes: Number(r.bytes),
       policy: parse<Record<string, unknown> | null>(r.policy, null),
+      budget: parse<Record<string, unknown> | null>(r.budget, null),
     };
   }
 
@@ -719,6 +722,9 @@ export class RunRecorder {
   /** The last model message saved in this run (the run link goes on it when the turn ends early). */
   lastReplyId = 0;
 
+  /** Phase 79: how the run ended when it isn't plain ok (a turn stopped at its budget: 'budget'). */
+  outcome?: RunStatus;
+
   /** The model's message of this step was saved (afterReply). */
   reply(messageId: number, patch: { contradictions?: unknown[]; stopped?: string } = {}): void {
     this.#safe(() => {
@@ -759,7 +765,35 @@ export class RunRecorder {
     await Promise.allSettled(this.#pending.splice(0));
   }
 
-  #patch: { userMessageId?: number; policy?: Record<string, unknown> } = {};
+  #patch: { userMessageId?: number; policy?: Record<string, unknown>; budget?: unknown } = {};
+
+  /** Phase 79: the turn's budget and how it ended (written with the run's close: one write). */
+  setBudget(budget: unknown): void {
+    this.#patch.budget = budget;
+  }
+
+  /**
+   * Phase 79: what the run has spent so far, from every call recorded in its steps (the budget's
+   * live sums): tokens in + out, dollars of the priced calls, paid calls with no price, calls that
+   * reported nothing, and how the calls are paid for.
+   */
+  totals(): { tokens: number; usd: number; unpriced: number; unreported: number; billing: Billing[] } {
+    let tokens = 0;
+    let usd = 0;
+    let unpriced = 0;
+    let unreported = 0;
+    const billing = new Set<Billing>();
+    for (const st of this.#steps) {
+      for (const c of st.calls) {
+        tokens += c.in + c.out;
+        if (c.billing) billing.add(c.billing);
+        if (!c.reported) unreported++;
+        else if (c.usd === null) unpriced++;
+        else usd += c.usd;
+      }
+    }
+    return { tokens, usd: Math.round(usd * 1e8) / 1e8, unpriced, unreported, billing: [...billing] };
+  }
 
   /** Kept until the run closes (one write then). */
   setUserMessage(id: number): void {

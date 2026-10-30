@@ -27,7 +27,8 @@ import { startsOnToday } from './start-view.js';
 import { initHousehold, joinFromLink, loadAccount, loadHousehold, showPaused } from './household.js';
 import { initNav, relabelNav, revealNav, setMore } from './nav.js';
 import { emptyState, initTidy, overflowMenu } from './tidy.js';
-import { addStep, finishStep, hasSteps, memoryStep, runLink, runStep, stepLine, waitStep } from './steps.js';
+import { addStep, finishStep, hasSteps, memoryStep, runLink, runStep, setBudget, stepLine, waitStep } from './steps.js';
+import { budgetCard, budgetMeter, fillBudgetSelect, overrideNote } from './budget-view.js';
 import { openRunView } from './run-view.js';
 import { renderCard, renderCards } from './result-cards.js';
 import { initLook, setContextRing, setLookBusy, showHeadChips } from './look.js';
@@ -1267,10 +1268,12 @@ function renderMessages(messages, opts = {}) {
   // Phase 75: what she did in a turn (tools, memories) becomes one step line under the reply that
   // ends it; result cards sit where the result came; the files she changed form one card.
   let turn = null;
-  const newTurn = () => ({ steps: null, files: [], filesSlot: null, mem: new Set(), runId: 0 });
+  const newTurn = () => ({ steps: null, files: [], filesSlot: null, mem: new Set(), runId: 0, budget: null, budgetMsg: null });
   const flush = () => {
     if (!turn) return;
     if (turn.mem.size) memoryStep((turn.steps ??= newSteps()), turn.mem.size);
+    // Phase 79: the reply's budget meter on its step line.
+    if (turn.budget && turn.steps) setBudget(turn.steps, budgetMeter(turn.budget, { compact: true }));
     // Phase 78: "Show the run" (not on the demo, which keeps no run history for visitors).
     if (turn.runId && turn.steps && !document.body.classList.contains('demo')) runLink(turn.steps, turn.runId, showRun);
     if (turn.filesSlot) {
@@ -1280,6 +1283,11 @@ function renderMessages(messages, opts = {}) {
       else els.splice(at, 1);
     }
     if (hasSteps(turn.steps)) els.push(turn.steps);
+    // Phase 79: "Budget reached" with what was dropped; Continue only on the latest reply (it answers the last message again).
+    if (turn.budget?.stage === 'reached') {
+      const latest = turn.budgetMsg === lastAssistant && lastAssistant.id > (lastUser?.id ?? 0) && !document.body.classList.contains('demo') && !isGroup(state.conv);
+      els.push(budgetCard(turn.budget, latest ? { onContinue: (more) => void runStream(`/conversations/${state.currentId}/continue`, { budget: more }, null) } : {}));
+    }
     turn = null;
   };
   let prevBubble = null;
@@ -1288,6 +1296,10 @@ function renderMessages(messages, opts = {}) {
     turn ??= newTurn();
     if (m.role === 'assistant' && Array.isArray(m.meta?.memoryIds)) for (const id of m.meta.memoryIds) turn.mem.add(id);
     if (m.role === 'assistant' && m.meta?.runId) turn.runId = m.meta.runId;
+    if (m.role === 'assistant' && m.meta?.budget) {
+      turn.budget = m.meta.budget;
+      turn.budgetMsg = m;
+    }
     // Phase 77: flags and finished stops of her plan check (`meta.contradictions`), under that step.
     if (m.role === 'assistant' && Array.isArray(m.meta?.contradictions)) for (const c of m.meta.contradictions) if (c?.note && c.status !== 'open') els.push(contradictionFlag(c));
     if (m.role === 'tool') {
@@ -1322,6 +1334,9 @@ function renderMessages(messages, opts = {}) {
       // Phase 66: who said it, in a group chat (her face, name and colour).
       if (m.role === 'assistant' && m.meta?.speaker) speakerHeader(b, m.meta.speaker);
       if (m.meta?.unverified) flagClaims(b, m.meta.unverified);
+      // Phase 79: a reply that ran on extra budget the owner gave says so.
+      const extra = m.role === 'assistant' ? overrideNote(m.meta?.budget) : null;
+      if (extra) b.append(extra);
       if (Array.isArray(m.meta?.proof) && m.meta.proof.length) b.append(proofStrip(m.meta.proof));
       if (m.meta?.team?.id) {
         const tb = el('button', 'ghost small team-link', `👥 ${t('Team task')} #${m.meta.team.id}`);
@@ -1734,8 +1749,14 @@ async function runStream(path, body, userBubble) {
           }
           addStep(ensureSteps(), { id: ev.id, name: ev.name, summary: ev.summary, args: ev.args, status: 'running' });
           setActivity('running', ev.summary);
+        } else if (ev.type === 'budget') {
+          // Phase 79: the meter on this turn's step line; at the limit, the "Budget reached" card
+          // (the redraw after the turn adds its Continue button).
+          if (steps || ev.state.stage !== 'meter') setBudget(ensureSteps(), budgetMeter(ev.state, { compact: true }));
+          if (ev.state.stage === 'reached') place(budgetCard(ev.state));
+          else if (ev.state.stage === 'smaller-model' || ev.state.stage === 'fewer-tools' || ev.state.stage === 'summarize-stop') setActivity('thinking', t('saving budget'));
         } else if (ev.type === 'approval') {
-          if (steps) waitStep(steps, ev.id);
+          if (steps && !ev.budget) waitStep(steps, ev.id);
           const card = approvalCard(ev);
           place(card);
           card.scrollIntoView({ block: 'nearest' });
@@ -2102,6 +2123,13 @@ function approvalCard(ev, block) {
   const row = document.createElement('div');
   row.className = 'row';
   const c = ev.contradiction;
+  // Phase 79: "Ask me before going on": the budget is reached; going on is the owner's explicit OK.
+  if (ev.budget) {
+    title.textContent = t('Budget reached: keep going?');
+    title.dataset.raw = '';
+    what.hidden = true;
+    card.classList.add('approval-budget');
+  }
   const decide = async (approved, how) => {
     card.querySelectorAll('button').forEach((b) => (b.disabled = true));
     try {
@@ -2115,12 +2143,12 @@ function approvalCard(ev, block) {
   };
   const yes = document.createElement('button');
   yes.type = 'button';
-  yes.textContent = c ? t('Do it anyway') : t('Allow');
+  yes.textContent = c ? t('Do it anyway') : ev.budget ? t('Keep going') : t('Allow');
   yes.addEventListener('click', () => decide(true, c ? 'override' : undefined));
   const no = document.createElement('button');
   no.type = 'button';
   no.className = 'ghost';
-  no.textContent = c ? t("Don't") : t('Deny');
+  no.textContent = c ? t("Don't") : ev.budget ? t('Wrap up') : t('Deny');
   no.addEventListener('click', () => decide(false, c ? 'deny' : undefined));
   row.append(yes, no);
   if (c) {
@@ -2132,7 +2160,7 @@ function approvalCard(ev, block) {
     row.append(upd);
     card.classList.add('approval-contradict');
   }
-  card.append(title, ...(c ? [contradictionSection(c)] : []), what, row);
+  card.append(title, ...(c ? [contradictionSection(c)] : []), ...(ev.budget ? [budgetMeter(ev.budget)] : []), what, row);
   if (card.classList.contains('approval-tidy')) {
     if (TOOL_WORDS[ev.name]) title.after(el('p', 'approval-about muted small', t(TOOL_WORDS[ev.name])));
     row.append(el('span', 'tool-raw approval-raw', ev.name));
@@ -4145,6 +4173,37 @@ async function saveRuns() {
   await api('/runs/settings', { method: 'PUT', body: { keepDays: Number($('#runs-keep').value) } });
   void loadRuns();
 }
+// ---------- Phase 79: per-reply budgets (Settings → Abilities → Budgets) ----------
+const BUDGET_KINDS = ['coding', 'chat'];
+const BUDGET_LINES = ['tokens', 'steps', 'usd', 'minutes'];
+async function loadBudgets() {
+  let r;
+  try {
+    r = await api('/budgets');
+  } catch {
+    return;
+  }
+  for (const k of BUDGET_KINDS) {
+    $(`#bud-${k}-on`).checked = r[k].on;
+    for (const line of BUDGET_LINES) fillBudgetSelect($(`#bud-${k}-${line}`), line, r.choices[line], r[k][line]);
+  }
+  $('#bud-quick').checked = r.quick;
+  $('#bud-on-limit').value = r.onLimit;
+  $('#bud-quick-note').textContent = r.quickSet ? t('Uses your quick model from Which model does what.') : t('No quick model is set (Models → Which model does what), so this step is skipped.');
+  $('#ab-budgets-form').dataset.loaded = '1';
+  budgetLinesShown();
+}
+/** A switched-off kind greys out its pick-lists. */
+function budgetLinesShown() {
+  for (const k of BUDGET_KINDS) for (const line of BUDGET_LINES) $(`#bud-${k}-${line}`).disabled = !$(`#bud-${k}-on`).checked;
+}
+for (const k of BUDGET_KINDS) $(`#bud-${k}-on`).addEventListener('change', budgetLinesShown);
+async function saveBudgets() {
+  // Only values read from the server go back (never a list's first choice by accident).
+  if (!$('#ab-budgets-form').dataset.loaded) return;
+  const kind = (k) => ({ on: $(`#bud-${k}-on`).checked, ...Object.fromEntries(BUDGET_LINES.map((line) => [line, Number($(`#bud-${k}-${line}`).value)])) });
+  await api('/budgets', { method: 'PUT', body: { coding: kind('coding'), chat: kind('chat'), quick: $('#bud-quick').checked, onLimit: $('#bud-on-limit').value } });
+}
 $('#runs-delete').addEventListener('click', async () => {
   if (!confirm(t('Delete the whole run history? Chats, memories and files stay.'))) return;
   try {
@@ -6050,7 +6109,7 @@ const SETTINGS_ORDER = [
   'you-about', 'you-briefing', 'you-leave-by', 'you-adult',
   'models-default', 'models-routes', 'models-providers', 'models-subs', 'models-local',
   'ab-tools', 'ab-search', 'ab-library', 'ab-google', 'ab-home', 'ab-mcp',
-  'ab-projects', 'ab-github', 'ab-ssh', 'ab-recipes',
+  'ab-projects', 'ab-budgets', 'ab-github', 'ab-ssh', 'ab-recipes',
   'co-phone', 'desktop-app', 'co-telegram', 'co-discord', 'co-apps',
   'dh-health', 'dh-devices', 'dh-backups', 'dh-data', 'dh-updates', 'dh-usage', 'dh-reports',
   'household', 'account',
@@ -6180,6 +6239,7 @@ function showSettingsTab(page, opts = {}) {
   openGroupOf(pick);
   if (pick === 'dh-updates') void loadUpdates();
   if (pick === 'ab-recipes') void loadRecipes();
+  if (pick === 'ab-budgets') void loadBudgets();
   if (pick === 'ab-ssh') void loadSsh();
   if (pick === 'ab-library') void loadLibrarySettings();
   if (pick === 'co-apps') void Promise.all([loadOtherApps(), loadAlexa()]);
@@ -6353,6 +6413,7 @@ const SETTINGS_SAVERS = {
   'co-phone': [savePush],
   'dh-usage': [saveUsage],
   'dh-health': [saveRuns],
+  'ab-budgets': [saveBudgets],
 };
 const settingsChanged = new Set();
 /** Notes which Settings page an edit was made on (programmatic fills call this themselves). */

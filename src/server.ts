@@ -21,6 +21,7 @@ import { handleMcp } from './mcp-server.ts';
 import { AlexaService } from './alexa.ts';
 import { DEFAULT_APP_NAME, KeyLimiter } from './other-apps.ts';
 import { usageLine } from './usage.ts';
+import { cleanMore } from './budget.ts';
 import { MAX_IMAGES_PER_MESSAGE, UploadError } from './uploads.ts';
 import { TogetherStore } from './together.ts';
 import { runTurn, type TurnOptions, type AppContext, type ChatEvent } from './chat.ts';
@@ -1710,8 +1711,20 @@ export function createSaraServer(opts: ServerOptions): Server {
         // Continue a reply that was cut off (restart, error, stop) without a new message.
         if (c === 'continue' && method === 'POST') {
           requireDisclosure(req);
+          const body = await readJson(req).catch(() => ({}) as Record<string, unknown>);
           const lastUser = cx.store.messages(b).filter((m) => m.role === 'user').at(-1);
           if (!lastUser) throw new HttpError(400, 'Nothing to continue.');
+          // Phase 79: "Continue with N more" after a reply stopped at its budget: an explicit override
+          // with exactly that amount, recorded on the reply that stopped and on the new run.
+          if (body.budget !== undefined) {
+            const more = cleanMore(body.budget);
+            if (!more) throw new HttpError(400, 'Say how much more: tokens, steps, dollars or minutes.');
+            if (active.has(b)) throw new HttpError(409, me('Sara is still working on this conversation. Wait for her or press Stop.'), { errorKey: 'Sara is still working on this conversation. Wait for her or press Stop.' });
+            const stoppedAt = cx.store.messages(b).filter((m) => m.role === 'assistant' && m.id > lastUser.id).findLast((m) => (m.meta?.budget as { stage?: string } | undefined)?.stage === 'reached');
+            if (!stoppedAt) throw new HttpError(400, 'The last reply didn\'t stop at its budget, so there is nothing to continue with more.');
+            cx.store.updateMessageMeta(stoppedAt.id, { budget: { ...(stoppedAt.meta!.budget as object), continued: { more, at: app.now().toISOString() } } });
+            return streamChat(req, res, b, lastUser.content, { resume: true, budgetMore: more });
+          }
           return streamChat(req, res, b, lastUser.content, { resume: true });
         }
       }

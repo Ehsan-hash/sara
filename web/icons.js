@@ -92,6 +92,8 @@ export const ICONS = {
   package: '<path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/><path d="M4 7.5l8 4.5 8-4.5M12 12v9M8 5.2l8 4.6"/>',
   wrench: '<path d="M14.7 6.3a4 4 0 0 0 5 5L20 11a4.5 4.5 0 0 1-5.6 5.6L7.5 21.5a2.1 2.1 0 0 1-3-3l4.9-6.9A4.5 4.5 0 0 1 15 6z"/>',
   sliders: '<path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/>',
+  // Phase 79: budgets (a half-dial with its needle).
+  gauge: '<path d="M4 16.5a8 8 0 0 1 16 0"/><path d="M12 16.5l4-5"/><path d="M4 19.5h16"/>',
   shirt: '<path d="M8.5 3.5L4 6l1.5 4.5 2-.8V20.5h9V9.7l2 .8L20 6l-4.5-2.5c-.4 1.5-1.8 2.5-3.5 2.5S8.9 5 8.5 3.5z"/>',
   puzzle: '<path d="M10 4.5a2 2 0 0 1 4 0V6h4.5v4.5H17a2 2 0 0 0 0 4h1.5V19H14v-1.5a2 2 0 0 0-4 0V19H5.5v-4.5H7a2 2 0 0 0 0-4H5.5V6H10z"/>',
   pointer: '<path d="M5 4l13.5 6-5.8 1.8L11 17.5z"/><path d="M13 12l5 5"/>',

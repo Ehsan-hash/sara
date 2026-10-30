@@ -295,5 +295,16 @@ export function runLink(box, runId, open) {
   box.querySelector('.steps-list').append(li);
 }
 
+/**
+ * Phase 79: the reply's budget meter (web/budget-view.js) at the end of the line's summary, replaced
+ * as the turn goes on.
+ */
+export function setBudget(box, meter) {
+  if (!box || !meter) return;
+  const sum = box.querySelector('.steps-sum');
+  sum.querySelector('.budget-meter')?.remove();
+  sum.append(meter);
+}
+
 /** True when a line has anything to show. */
 export const hasSteps = (box) => Boolean(box?._steps?.length);

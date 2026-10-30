@@ -4,6 +4,7 @@ import { closeSync, existsSync, openSync, readdirSync, readSync, statSync } from
 import { join } from 'node:path';
 import { buildHistory, resolveChain } from '../chat.ts';
 import { historyRange, KEEP_DAY_CHOICES, runSettings } from '../runs.ts';
+import { DEFAULT_TURN_BUDGETS, mergeTurnBudgets, MINUTE_CHOICES, STEP_CHOICES, TOKEN_CHOICES, turnBudgetSettings, USD_CHOICES } from '../budget.ts';
 import { as400, HttpError, readJson, send, validWorkspace } from '../http.ts';
 import { trOwner } from '../i18n.ts';
 import { checkIssues, cleanWatch, type OpenIssue, openIssues, startFromIssue, watchSettings } from '../issues.ts';
@@ -28,6 +29,17 @@ export function createCodingRoutes(ctx: RouteCtx): RouteHandler {
     const [a, b, c] = parts;
     // Phase 78: run snapshots (read only; time-travel is M8). The owner's own space; a household
     // member's space answers from that member's own database; the demo refuses (not in DEMO_READS).
+    // Phase 79: per-reply budgets (Settings → Abilities → Budgets). Owner-only (members follow the
+    // owner's: OWNER_SETTINGS); the demo refuses (not in DEMO_READS).
+    if (a === 'budgets' && !b) {
+      if (method === 'PUT') {
+        const body = await readJson(req);
+        app.settings.update({ turnBudgets: mergeTurnBudgets(turnBudgetSettings(app.settings.get()), body) });
+      } else if (method !== 'GET') throw new HttpError(405, 'Method not allowed');
+      const s = app.settings.get();
+      const quick = s.routes?.quick;
+      return send(res, 200, { ...turnBudgetSettings(s), choices: { tokens: TOKEN_CHOICES, steps: STEP_CHOICES, usd: USD_CHOICES, minutes: MINUTE_CHOICES }, quickSet: Boolean(quick && s.providers.some((p) => p.id === quick.providerId)), defaults: DEFAULT_TURN_BUDGETS });
+    }
     if (a === 'runs') {
       const runs = app.runs;
       if (!runs) throw new HttpError(404, 'Run history is not available here.');

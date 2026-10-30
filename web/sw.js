@@ -7,15 +7,16 @@ const OFFLINE = '/offline.html';
 // v9 (Phase 76): a fresh cache with the memory panel's sureness and pin changes.
 // v10 (Phase 77): the approval card's "goes against something you decided" section and plan flags.
 // v11 (Phase 78): the Run view (run-view.js) and "Show the run" on the step line.
+// v12 (Phase 79): budgets (budget-view.js: the step line meter, "Budget reached", Settings → Budgets).
 const SHELL = [OFFLINE, '/offline.css', '/offline.js', '/theme.css', '/theme-boot.js', '/icon-192.png'];
 
 self.addEventListener('install', (event) => {
-  event.waitUntil(caches.open('sara-shell-v11').then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));
+  event.waitUntil(caches.open('sara-shell-v12').then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));
 });
 
 self.addEventListener('activate', (event) => {
-  // Every older cache goes (sara-shell-v10 from Phase 77 and before).
-  event.waitUntil(caches.keys().then((keys) => Promise.all(keys.filter((k) => k !== 'sara-shell-v11').map((k) => caches.delete(k)))).then(() => self.clients.claim()));
+  // Every older cache goes (sara-shell-v11 from Phase 78, sara-shell-v10 from Phase 77 and before).
+  event.waitUntil(caches.keys().then((keys) => Promise.all(keys.filter((k) => k !== 'sara-shell-v12').map((k) => caches.delete(k)))).then(() => self.clients.claim()));
 });
 
 self.addEventListener('fetch', (event) => {

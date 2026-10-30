@@ -1156,6 +1156,54 @@
     "ssh-key-path": [
       "Or the full path of a key file on the computer Sara runs on (not your phone or laptop). She copies it into her data folder.",
       "ssh"
+    ],
+    "bud-coding-on": [
+      "A ceiling for each reply in coding chats, so a long task can't run on. On by default (200k tokens, 40 steps). Off: she keeps going up to 80 steps as before. Going past a limit always needs your OK.",
+      "budgets"
+    ],
+    "bud-coding-tokens": [
+      "How many tokens (words in and out of the model, roughly) one coding reply may use. Near it she saves; at it she wraps up. Example: 200k for a big refactor, 50k for small fixes.",
+      "budgets"
+    ],
+    "bud-coding-steps": [
+      "How many model steps one coding reply may take (each step: she thinks, then runs tools). The last step is her short summary. Example: 40.",
+      "budgets"
+    ],
+    "bud-coding-usd": [
+      "An optional dollar ceiling for one coding reply, from the prices in Usage and costs. Not counted on a subscription or a model on your own computer: they cost $0 per token. Example: $1.",
+      "budgets"
+    ],
+    "bud-coding-minutes": [
+      "An optional time ceiling for one coding reply. Time spent waiting for your OK isn't counted. Example: 20 minutes.",
+      "budgets"
+    ],
+    "bud-chat-on": [
+      "Off by default: everyday replies are short and the old stop after 25 steps still holds. Turn it on to give chats a token, step, dollar or time ceiling too (useful on a paid model).",
+      "budgets"
+    ],
+    "bud-chat-tokens": [
+      "How many tokens one everyday reply may use when chat budgets are on. Example: 100k.",
+      "budgets"
+    ],
+    "bud-chat-steps": [
+      "How many model steps one everyday reply may take when chat budgets are on (her tool rounds plus the summary). Example: 20.",
+      "budgets"
+    ],
+    "bud-chat-usd": [
+      "An optional dollar ceiling for one everyday reply (paid models only; subscriptions and local models cost $0 per token). Example: $0.25.",
+      "budgets"
+    ],
+    "bud-chat-minutes": [
+      "An optional time ceiling for one everyday reply. Time waiting for your OK isn't counted.",
+      "budgets"
+    ],
+    "bud-quick": [
+      "Near a limit, the rest of the reply runs on your quick model (Models → Which model does what), if one is set and it's cheaper. Then she uses one more round of tools at most, then sums up.",
+      "budgets"
+    ],
+    "bud-on-limit": [
+      "Wrap up: at the limit she writes a short summary of what's done and what's left, with a Continue with more button. Ask me: you get a card first; Keep going gives the same budget again.",
+      "budgets"
     ]
   },
   "pages": {
@@ -1254,6 +1302,10 @@
     "ab-projects": [
       "What she knows about each coding project: commands, layout, rules and her notes. Add a note to teach her something for next time.",
       "coding"
+    ],
+    "ab-budgets": [
+      "Ceilings for each of her replies (tokens, steps, dollars, time), for coding and everyday chats, and what she does near and at the limit.",
+      "budgets"
     ],
     "ab-library": [
       "How big her documents may be and how she reads long ones: size limits, scanned pages, background speed.",

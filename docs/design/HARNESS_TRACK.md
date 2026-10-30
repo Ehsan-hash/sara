@@ -323,6 +323,56 @@ step line (`web/steps.js`), retention on Settings → Data & health → Health.
   model with no price stops at the first call (same rule as `overBudget` L4, `src/usage.ts:379-381`);
   local models with no price are counted in tokens; Continue adds exactly the asked amount; budget
   never cuts the safety checks (minors check, receipt check run after the summary call too).
+- **Built (Phase 79):**
+  - `src/budget.ts` holds the one `Budget` (tokens, usd, steps, minutes) and `budgetCheck`.
+    `overBudget` (the L4 / Phase 52 words and rules) moved there; `usage.ts` re-exports it.
+    Jobs keep calling `overBudget`. Team tasks' `#overLimit` goes through `budgetCheck(teamBudget(...))`.
+    Both keep their settings keys (`jobBudget`, `teamLimits`), wording, status and Continue button.
+  - `TurnMeter` is a `TurnHooks` object; it reads the `RunRecorder`'s live sums. Its
+    `beforeModelCall` returns a plan that `runTurnInner` applies at one spot: switch model,
+    no tools, output cap, no thinking, notes, ask, stop.
+  - The ladder:
+    1. Switch to the quick route, only if it is set, allowed for the chat (private, local-only,
+       household rules) and cheaper (`quickIsCheaper`). If it fails, the turn's own models are next.
+    2. One more round of tools.
+    3. A no-tools, no-thinking summary capped at 400 tokens. The prompt asks for what is done, what
+       she didn't get to and what is kept. If it comes back empty, the app writes its own words
+       (`budgetSummaryFallback`).
+  - When the ladder starts:
+    - 80% of any line is only a warning on the meter.
+    - Steps: the ladder runs on the last 3, and the summary is the last allowed step.
+    - Tokens and minutes: it starts when 4 more steps like the last (+10%) would pass the line.
+    - On the ladder, one answer gets at most a third of the room left.
+  - Calls refused after the summary are listed as `dropped`.
+  - A turn that ends inside the capped round still counts as a budget stop.
+  - Settings → Abilities → Budgets (`turnBudgets`, owner-only, `GET/PUT /api/budgets`, refused on
+    the demo). Coding chats and work channels: on, 200k tokens / 40 steps, no $, no time limit.
+    Everyday chats: off (the old 25-step stop still holds). Also: quick model on/off, and at the
+    limit wrap up or ask first.
+  - Ask mode shows an approval-style card. *Keep going* is an explicit override of the same budget
+    again. Minutes spent waiting for approval aren't counted.
+  - *Continue with more* (`POST /api/conversations/:id/continue` with `{budget}`, checked by
+    `cleanMore`) starts a turn with exactly that budget. The app tells her once to carry on without
+    redoing. The override is on the reply (`meta.budget.override`) and the run (`runs.budget`).
+  - Subscriptions and local models: $ is not counted (`usdIgnored`, and the UI says so); tokens,
+    steps and minutes are.
+  - Approvals, never-tools, the minors check and the receipt check run as before, including on the
+    summary.
+  - UI: a meter on the step line and in the Run view (`web/budget-view.js`, `gauge` icon), and the
+    Budget reached card. Measured on a real local model: [RESULTS.md](../RESULTS.md#budgets-a-long-coding-task-stops-cleanly-phase-79).
+- **Deviations:**
+  1. No per-conversation budget and no composer control. The defaults are per kind (coding,
+     everyday), changed in Settings; Continue and the ask card are the per-task overrides.
+  2. Jobs and team tasks share the Budget check but not the turn ladder. They still stop hard at
+     their limit with Continue: a job is one command, and team steps run in their own loop.
+  3. Without the coding budget, coding turns stop at 80 steps as before; everyday chats at 25.
+  4. A summary that the safety layer blocked keeps the blocked reason on its step (not `budget`);
+     the run is still `budget`.
+- **Hooks left:**
+  - M5: a sandbox gate's verdict can be refused like any tool; the budget never skips it.
+  - M8: `runs.budget` (limits, used, rungs, dropped, override) is the input a branch replays.
+  - M9: a variant's budget per run is `Budget` (`cleanMore` for the eval's own ceiling).
+  - M10: runs with `status='budget'` and their `dropped` list feed run signatures.
 
 ### M5 · Phase 80 · 2.13.0: sandbox execution gate
 

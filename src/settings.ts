@@ -113,6 +113,11 @@ export interface Settings {
   contradict?: Partial<import('./contradict.ts').ContradictSettings>;
   /** Phase 78: how long run snapshots are kept (days; 0 = until deleted) and their size cap (MB). */
   runs?: Partial<import('./runs.ts').RunSettings>;
+  /**
+   * Phase 79: per-reply budgets (Settings → Abilities → Budgets): coding chats and everyday chats
+   * (tokens, steps, optional $ and minutes, on/off), the quick-model step and what happens at the limit.
+   */
+  turnBudgets?: Partial<Omit<import('./budget.ts').TurnBudgetSettings, 'coding' | 'chat'>> & { coding?: Partial<import('./budget.ts').TurnLimits>; chat?: Partial<import('./budget.ts').TurnLimits> };
   /** Discord bridge (Phase 6). Bot token lives in the vault (bridge:discord). */
   discord?: Partial<DiscordSettings>;
   /** Automatic backups (Phase 6). */

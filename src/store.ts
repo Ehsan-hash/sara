@@ -162,7 +162,11 @@ export class Store {
   constructor(path: string, now: () => Date = () => new Date()) {
     try {
       this.db = new DatabaseSync(path);
-      this.db.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;');
+      // WAL with synchronous=NORMAL: each commit no longer waits for a disk flush (it measured
+      // ~80 ms per commit on the home server, for every saved message and run step). SQLite's own
+      // guidance for WAL: the file can't be corrupted; only the last moments of writes can be lost
+      // if the whole machine loses power, never on a crash of Sara herself.
+      this.db.exec('PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL; PRAGMA foreign_keys = ON;');
       this.db.exec(SCHEMA);
       migrate(this.db);
     } catch (err) {

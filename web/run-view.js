@@ -8,6 +8,7 @@
 import { locale, t } from './naming.js';
 import { icon } from './icons.js';
 import { fmtDuration, stepWords } from './steps.js';
+import { budgetMeter } from './budget-view.js';
 
 const el = (tag, cls, text) => {
   const e = document.createElement(tag);
@@ -253,6 +254,17 @@ export async function openRunView(runId, { api, named = () => '' }) {
     stat(t('Time'), fmtDuration(run.ms)),
     stat(t('Tools'), nf(steps.reduce((n, s) => n + s.tools.length, 0))),
   );
+  // Phase 79: the run's budget (a reply's, a job's or a team task's limits) as a meter.
+  const b = run.budget;
+  if (b && typeof b === 'object') {
+    const limits = b.limits ?? { ...(b.tokens ? { tokens: b.tokens } : {}), ...(b.usd ? { usd: b.usd } : {}), ...(b.steps ? { steps: b.steps } : {}), ...(b.minutes ? { minutes: b.minutes } : {}) };
+    const used = b.used ?? { tokens: run.tokensIn + run.tokensOut, usd: run.usd, steps: steps.length, minutes: run.ms / 60_000 };
+    const fr = [limits.tokens ? used.tokens / limits.tokens : 0, limits.usd ? used.usd / limits.usd : 0, limits.steps ? used.steps / limits.steps : 0, limits.minutes ? used.minutes / limits.minutes : 0];
+    const st = b.limits ? b : { stage: run.status === 'budget' || run.status === 'limit' ? 'reached' : 'meter', limits, used, frac: Math.max(...fr) };
+    const c = el('div', 'run-stat run-budget');
+    c.append(budgetMeter(st), el('span', 'run-stat-l muted small', t('Budget use')));
+    stats.append(c);
+  }
   const list = el('ol', 'run-steps');
   for (const s of steps) {
     const li = el('li', '');
