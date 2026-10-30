@@ -5,6 +5,12 @@ Format: newest first. Semantic versions since 1.0.0 (before that `0.<phase>.<pat
 
 ## Unreleased
 
+## 2.8.1 (2026-10-29): She remembered stays folded
+
+- **Privacy:** *She remembered* in her panel starts folded, showing only how many notes she used. Her notes
+  aren't even loaded until you open it, and it folds again in every new conversation and on every start
+  (never saved), so nobody looking at the screen with you sees them by accident.
+
 ## 2.8.0 (2026-10-29): polish
 
 The new look, one notch up, on phones and computers alike.

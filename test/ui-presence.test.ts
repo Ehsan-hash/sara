@@ -202,3 +202,15 @@ test('GET /api/memories?ids=: just the notes asked for, in that order, capped, n
   assert.equal((await get('/memories')).body.length, 3, 'the plain list is unchanged');
   assert.equal((await get(`/memories?ids=${a}`, '')).status, 401, 'signed-in only');
 });
+
+test('"She remembered" is folded by default and not fetched until opened (privacy)', () => {
+  const root = join(import.meta.dirname, '..', 'web');
+  const html = readFileSync(join(root, 'index.html'), 'utf8');
+  const js = readFileSync(join(root, 'her-panel.js'), 'utf8');
+  assert.match(html, /id="hp-mem-h"[^>]*aria-expanded="false"[^>]*aria-controls="hp-mem-list"/, 'a closed toggle button');
+  assert.match(html, /<ul id="hp-mem-list" class="hp-list" hidden>/, 'the list starts hidden');
+  const load = js.slice(js.indexOf('async function loadMemories'), js.indexOf('function memOpen'));
+  assert.ok(load.indexOf('if (!memOpen())') > -1 && load.indexOf('if (!memOpen())') < load.indexOf('/memories?ids='), 'no fetch while folded');
+  assert.doesNotMatch(js.slice(js.indexOf('function setMemOpen'), js.indexOf('/** The memory ids')), /localStorage/, 'the open state is never saved');
+  assert.match(js, /A new conversation folds "She remembered" again/);
+});

@@ -446,6 +446,15 @@ async function loadMemories() {
   const last = msgs.findLast((m) => m.role === 'assistant' && String(m.content ?? '').trim());
   // The notes of the whole last turn (a turn with tools has several of her messages).
   const ids = memoryIdsOfLastTurn(msgs);
+  const count = $('#hp-mem-count');
+  if (count) count.textContent = ids.length ? String(ids.length) : '';
+  // Folded (the default, for privacy when someone else can see the screen): only the count shows,
+  // and her notes aren't even fetched until the owner opens the section.
+  if (!memOpen()) {
+    list.replaceChildren();
+    ui.memKey = '';
+    return;
+  }
   const key = `${conv.id}:${last?.id ?? ''}:${ids.join(',')}`;
   if (key === ui.memKey) return;
   ui.memKey = key;
@@ -460,6 +469,20 @@ async function loadMemories() {
   if (ui.memKey !== key) return;
   if (!mems.length) return void list.replaceChildren(el('li', 'hp-empty', t('Her last reply used nothing from her memory.')));
   list.replaceChildren(...mems.map(memoryItem));
+}
+
+/** "She remembered" starts folded on every page load and in every conversation (privacy); never saved. */
+function memOpen() {
+  return $('#hp-mem-h')?.getAttribute('aria-expanded') === 'true';
+}
+function setMemOpen(open) {
+  const b = $('#hp-mem-h');
+  const list = $('#hp-mem-list');
+  if (!b || !list) return;
+  b.setAttribute('aria-expanded', String(open));
+  list.hidden = !open;
+  ui.memKey = '';
+  void loadMemories();
 }
 
 /** The memory ids she used in the last turn: every reply of hers after your last message. */
@@ -623,6 +646,10 @@ export function panelConv() {
     ui.convId = id;
     ui.shown = null;
     ui.memKey = '';
+    // A new conversation folds "She remembered" again.
+    $('#hp-mem-h')?.setAttribute('aria-expanded', 'false');
+    const ml = $('#hp-mem-list');
+    if (ml) ml.hidden = true;
   }
   if (!ui.ctx) return;
   renderHer();
@@ -642,6 +669,7 @@ export function initHerPanel(ctx) {
   ui.ctx = ctx;
   const p = panel();
   if (!p) return;
+  $('#hp-mem-h')?.addEventListener('click', () => setMemOpen(!memOpen()));
   ui.open = panelMode() === 'side' ? savedOpen(localStorage.getItem(KEY)) : false;
   apply();
   $('#panel-toggle')?.addEventListener('click', togglePanel);
