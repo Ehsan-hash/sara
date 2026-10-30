@@ -86,7 +86,7 @@ version's details are in the [changelog](../CHANGELOG.md).
 | 78 | Run snapshots: every step of her work recorded (prompt, tools, files, memory, cost) | ✅ 2.11 |
 | 79 | Hard cost budgets per task, with a graceful slow-down instead of a surprise bill | ✅ 2.12 |
 | 80 | Sandbox gate: her code runs in a throwaway copy before it touches your workspace | ✅ 2.13 |
-| 81 | Security pass: code checks, secret scan and live dependency advisories, with a fix branch for each finding | 2.14 |
+| 81 | Security pass: code checks, secret scan and live dependency advisories, with a fix branch for each finding | ✅ 2.14 |
 | 82 | Threat-model second pass: a dedicated pass that fixes the risky spots it finds in her new code | 2.15 |
 | 83 | Time-travel: rewind a run to any step, change one thing, branch | 2.16 |
 | 84 | Eval loop: define "done", rerun her, see which prompt, tools or memory setting won, with evidence | 2.17 |

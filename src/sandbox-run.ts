@@ -304,6 +304,8 @@ export interface DetectDeps {
   platform?: NodeJS.Platform;
   /** Runs a probe (tests replace it). Returns the exit status. */
   probe?: (file: string, args: string[]) => number | null;
+  /** Whether a file exists (tests replace it so the Windows path can be checked on any system). */
+  exists?: (path: string) => boolean;
 }
 
 const probeRun = (file: string, args: string[]): number | null => {
@@ -334,7 +336,7 @@ export function detectIsolation(base: SandboxInfo, gate: Pick<SandboxGateSetting
     const docker = probe('docker', ['version', '--format', '{{.Server.Version}}']) === 0;
     const dockerImage = docker && probe('docker', ['image', 'inspect', '--format', '{{.Id}}', gate.dockerImage]) === 0;
     if (docker && dockerImage) return { driver: 'docker', isolated: true, label: ISOLATION_LABELS.docker, found: { docker, dockerImage, wsl: false } };
-    const wsl = existsSync(wslExe()) && probe(wslExe(), ['--status']) === 0;
+    const wsl = (deps.exists ?? existsSync)(wslExe()) && probe(wslExe(), ['--status']) === 0;
     const wslBwrap = wsl && probe(wslExe(), ['-e', 'sh', '-c', 'command -v bwrap >/dev/null && bwrap --ro-bind / / --unshare-all true']) === 0;
     if (wsl && wslBwrap) return { driver: 'wsl', isolated: true, label: ISOLATION_LABELS.wsl, found: { docker, dockerImage, wsl, wslBwrap } };
     return { driver: 'copy', isolated: false, label: ISOLATION_LABELS.copy, found: { docker, dockerImage, wsl, wslBwrap } };

@@ -507,6 +507,88 @@ projects → *Try commands in a sandbox first*.
   (offline)"; the fix loop opens a branch, re-runs only the failing rule, marks fixed; push stays
   "ask first".
 
+**As built (Phase 81, 2026-10-30):** `src/security/{findings,rules,deps,advisories,git,pass,fix}.ts`,
+the `securityHook` in `src/chat.ts` (joined with the other `TurnHooks`), `/api/security-pass` and
+`/api/findings` in `src/routes/coding.ts`, `web/findings-view.js` (the Findings window, the chat card,
+the approval card's section), Settings → Abilities → Coding projects → *Security pass*.
+
+- **The findings table** (§2.5, one for every source): run/step, conversation, workspace, source
+  (`security | advisory | sandbox | contradiction | threat | redteam`), origin (code/model), severity,
+  rule, title, file, line, quote, advice, status (`open | fixed | dismissed | accepted`) + reason,
+  `fix_branch`, the fix state, a fingerprint (the same finding from a second pass is not doubled;
+  install, sandbox and contradiction rows are per event). `validateQuotes` drops a finding that
+  names a file but whose quote is not in it (a wrong line number is moved to the real one). M2
+  contradictions and M5 sandbox observations are also written as rows by `recordTurnFindings`, with
+  the owner's answer as status (override/applied → accepted, no/discarded → dismissed); their copies
+  on the message and the run step stay.
+- **When:** after the final reply of a coding turn whose files changed (`dirtyFiles` of a repo, else
+  the files her tools wrote), in the background, as its own run (`kind: 'security'`). Settings
+  `securityPass.mode`: *After coding turns* (default) / *Only when I ask* (Findings → Check now) /
+  *Off*. Never in everyday chats, groups, partner or external-app turns.
+- **Deterministic checks** (`rules.ts`, no model): secrets (`KEY_SHAPED` from the redactor plus
+  secret-named assignments, placeholders and env lookups skipped), `eval` / `new Function` / timers /
+  `child_process` / `os.system` / `subprocess(shell=True)` / Go `sh -c` with built strings,
+  string-built SQL (capitals, or SQL inside a DB call; joins, templates, f-strings, `%`, `.format`,
+  `Sprintf`), path joins from request input (basename / `send_from_directory` / `safe_join` pass),
+  TLS verification off, `pickle/marshal/yaml.load/unserialize`, CORS wildcard or echoed origin with
+  credentials, a route without the auth middleware/decorator the file's other routes use (only when
+  the pattern is detectable; changed lines only after a turn), md5/sha1/ECB/DES/`Math.random` for
+  secrets, `innerHTML` from values, debug on. Comments are skipped (not for secrets); docs,
+  dependency folders and lockfiles are not scanned for code shapes.
+- **Reviewing model:** new model job *Reviewing* (`review` route, falls back to Coding). It gets
+  the diff (cut to its budget) and the code findings as context, answers JSON, and may add findings
+  only with a verbatim quote in a changed file; it has no tools and executes nothing. Own budget
+  (`budgetTokens` 10k/30k/100k, default 30k) counted with the M4 recorder; a private conversation
+  reviews only on a local model.
+- **Live advisories** (§7 #2): OSV.dev `POST /v1/querybatch` (≤ 50 per call) then
+  `GET /v1/vulns/{id}` for the ones found; `advisory_cache` in each space's sara.db (verdicts 6 h,
+  errors 1 h, details 1 day); one request in flight per space (a queue); only through `netFetch`.
+  Off by default; switching it on in Settings first shows the package list that would be sent
+  (`GET /api/security-pass?preview=1`). Never from private conversations or private local mode;
+  offline → cached verdicts still apply (marked stale), unseen packages "not checked: offline".
+  After a turn, changed manifests/lockfiles are checked and each vulnerable package is a finding
+  quoting its lockfile line.
+- **Install-time check:** the `beforeTool` hook reads pinned targets of npm/pnpm/yarn/bun add,
+  pip/uv/poetry, cargo add, go get/install and gem install in a `shell` call; a known-vulnerable
+  version stops with the approval card *Known vulnerability: install anyway?* (packages, severity,
+  ids, fixed-in). *Install anyway* is `decide(id, true, 'override')`, recorded as an accepted
+  finding with the reason; *Don't install* returns a tool result naming the fixed versions and a
+  dismissed finding. Bare names (no version yet) are left to the post-turn lockfile check. `never`
+  stays never; the M2 stop and the M5 sandbox gate keep their places.
+- **Fix branches** (§7 #5): `FixBranches.start(id)` → worktree `<data>/cache/fix-branches/<id>` on a
+  new local branch `sara/fix-<id>` from HEAD; the owner's uncommitted changes are copied in and
+  committed there as the base, so the owner's branch, index and files are never touched. The Coding
+  model gets ONE finding and the file and returns exact find/replace edits (two tries); the finding's
+  own rule re-checks the file (the proof); the project's tests (`npm test`, `pytest`, `cargo test`,
+  `go test`, when detectable) run in an M5 sandbox copy of the worktree. Then *Apply to
+  my branch* (writes only the fix's files into the workspace, refuses a file changed since the start,
+  marks fixed, deletes the branch), *Keep the branch* (worktree removed, branch kept), *Discard*.
+  Git runs hardened (`git.ts`): no push, fetch or remote command exists in its allowlist. *Fix all
+  serious* queues the open high findings one after another. Start-up `recover()` cleans a fix
+  interrupted by a restart.
+- **Measured:** deterministic pass on the seeded samples (`scripts/eval-security.ts`): tuning set
+  precision 97 % / recall 100 %, held-out set 93 % / 100 %
+  ([RESULTS.md](../RESULTS.md#security-pass-phase-81)). Live OSV check (lodash 4.17.15): 6 advisories
+  in 1 batch + 6 detail calls, < 1 s, second check from the cache.
+- **Deviations:**
+  1. The pass runs after coding conversations' turns only; team helpers' runs (`src/team.ts`) are
+     not checked yet (their files are seen by the next coding turn or *Check now*).
+  2. The reviewer executes nothing (no tools), so it never needs the sandbox; tests run only in the
+     fix loop, in an M5 sandbox copy (copy-only on the dev PC, labelled not isolated).
+  3. The fix model returns find/replace edits instead of running as a full coding turn with tools:
+     smaller, budget-bounded, and nothing it does can touch the real workspace.
+  4. The install check only acts on pinned versions in the command; ranges and bare names are
+     checked after the turn from the lockfile.
+  5. Rules are line-based shape checks, not data-flow analysis: they catch the textbook mistakes,
+     not all of them, and a route-auth check needs the pattern to be visible in the same file.
+  6. *Install anyway* on a bridge (Telegram/Discord) is the plain Allow (recorded as the override).
+  7. No `src/cards.ts` / `src/tools/builtin.ts` changes: the card rides on the existing approval
+     event (`advisory`), the gate on the `beforeTool` hook.
+- **Hooks left:** M7 writes `source: 'threat'` rows through `FindingStore.add` + `validateQuotes`,
+  reuses `reviewDiff`, `askModel` and `FixBranches` (its findings get fix branches for free when
+  their rule has a checker; others need a re-check function); M11 writes `source: 'redteam'` rows and
+  runs its probes with `runInSandbox`; M9 can score `scripts/eval-security.ts` over time.
+
 ### M7 · Phase 82 · 2.15.0: threat-model second pass
 
 - **Ships:** after M6, a reviewer pass maps the entry points her changes touch (HTTP routes, CLI

@@ -5,6 +5,28 @@ Format: newest first. Semantic versions since 1.0.0 (before that `0.<phase>.<pat
 
 ## Unreleased
 
+## 2.14.0 (2026-10-30): the security pass (harness track, Phase 81)
+
+- **One findings list** for everything the harness finds (security, advisories, sandbox, plan checks):
+  **every finding must quote the real line** from the file or it is dropped. Settings → Coding and a
+  *Findings* window per project or run: filter, dismiss or accept with a reason.
+- **Security pass after coding turns** that changed files: 11 code checks written for Sara (secrets in
+  code, eval / shell built from input, SQL built from strings, path traversal, TLS verification off,
+  unsafe deserializing, CORS with credentials, missing auth where the project's pattern is visible, weak
+  crypto, innerHTML, debug left on) plus a new **Reviewing** model job (falls back to the Coding model)
+  that can only add quoted findings. Its own small budget. Never in everyday chat.
+- **Live dependency advisories (opt-in, off by default):** OSV.dev for npm, PyPI, crates, Go and gems;
+  you see the package list before switching it on; never in private chats or private local mode;
+  cached (6 h); offline says *not checked: offline*. A pinned install of a known-bad version stops on a
+  **Known vulnerability** card (*Install anyway* is recorded).
+- **Fix it:** a local branch `sara/fix-<id>` in its own worktree (your branch is never touched); the
+  Coding model fixes just that finding, the check re-runs and your tests run in the sandbox; then
+  **Apply**, **Keep the branch** or **Discard**. It never pushes, fetches or adds remotes.
+- Measured on seeded projects: precision 93 % and recall 100 % on the held-out set
+  ([RESULTS](docs/RESULTS.md)).
+- Tests: the sandbox test's WSL2 case no longer depends on wsl.exe existing; a Windows temp-folder
+  lock no longer fails a test's cleanup.
+
 ## 2.13.0 (2026-10-30): sandbox first (harness track, Phase 80)
 
 - **Risky commands are tried in a throwaway copy of the workspace first** in coding chats and team

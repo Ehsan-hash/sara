@@ -30,6 +30,13 @@ const PATTERNS: [RegExp, Replacement][] = [
   ],
 ];
 
+/**
+ * Phase 81: the key-shaped patterns above (private key blocks, provider keys, cloud and chat
+ * tokens), as plain detectors for the security pass's secret check (src/security/rules.ts). The
+ * same list scrubs output and finds secrets written into code, so the two never disagree.
+ */
+export const KEY_SHAPED: readonly RegExp[] = PATTERNS.filter(([, rep]) => typeof rep === 'string').map(([re]) => new RegExp(re.source, re.flags.replace('g', '')));
+
 export class Redactor {
   readonly #secrets: () => string[];
 

@@ -44,6 +44,7 @@
   <a href="#usage">Usage and costs</a>
   <a href="#runs">Show the run</a>
   <a href="#sandbox">Commands tried in a sandbox first</a>
+  <a href="#security">Security pass and fix branches</a>
   <a href="#library">Her library</a>
   <a href="#chatapps">Telegram and Discord</a>
   <a href="#together">Things to do together</a>
@@ -524,6 +525,16 @@
   <li>How isolated a try is depends on the computer: on Linux <strong>bubblewrap</strong> and on a Mac the <strong>macOS sandbox</strong> keep the rest of the computer read-only, your home folder hidden and the network off. On Windows it uses <strong>Docker</strong> (with its image already downloaded) or <strong>WSL2</strong> with bubblewrap if they are there; otherwise the copy is <strong>not isolated</strong>: writes outside it are watched and flagged, she asks before trying a command that asks first, and nothing is applied until you choose.</li>
   <li>Change it in <em>Settings → Abilities → Coding projects</em>: only risky commands (the default), every command, or off; network for tries (off by default); the largest copy and the time limit. Dependency folders such as <code>node_modules</code> are never copied: they are shared read-only where the computer can, otherwise left out of the copy.</li>
   <li>Approvals, tools you switched off, the check against your decisions and budgets work as before: the try never replaces them.</li>
+</ul>
+
+<h2 id="security">Security pass and fix branches</h2>
+<ul>
+  <li>After a coding turn that changed files, she checks those files in the background for common security mistakes: secrets written into code, <code>eval</code> or shell commands built from input, SQL built by joining strings, file paths taken from a request, certificate checks turned off, unsafe loading of data, any website allowed with cookies, a new route without the sign-in check the others use, weak hashing for passwords or tokens, HTML built from input and debug mode left on.</li>
+  <li>Every finding quotes the <strong>real line</strong> it is about. A second look by the <strong>Reviewing</strong> model (Which model does what; the Coding model when unset) may add findings, but only ones whose quote is really in your file: invented ones are dropped. It has its own small budget.</li>
+  <li><strong>Findings</strong> (in the sidebar) lists them per project and per run, with filters. <strong>Dismiss</strong> or <strong>Accept</strong> needs a reason, which is kept with the finding. Sandbox tries and plans that went against your decisions are listed here too.</li>
+  <li><strong>Fix on a branch</strong> makes a local branch <code>sara/fix-…</code> in a separate folder (your checked-out branch and files are not touched), has the Coding model fix only that finding, checks it again and runs the project's tests in a sandbox copy, then shows the diff: <strong>Apply to my branch</strong> writes only those files (a file you changed meanwhile is left alone), <strong>Keep the branch</strong> leaves it for you to merge, <strong>Discard</strong> throws it away. Nothing is ever pushed; pushing or a pull request still asks first.</li>
+  <li><strong>Known vulnerabilities</strong> in dependencies are off until you switch them on in <em>Settings → Abilities → Coding projects</em>, which first shows the package list that would be sent. Only package names and versions go to <strong>OSV.dev</strong>, never code; never from private conversations or private local mode. Answers are kept for six hours; offline, it says <em>not checked: offline</em>. Installing a version with a known vulnerability shows a card first: <em>Install anyway</em> is your explicit choice and is recorded.</li>
+  <li>These checks look at your own code only and catch common mistakes; they are not a full security audit.</li>
 </ul>
 
 <h2 id="together">Things to do together</h2>

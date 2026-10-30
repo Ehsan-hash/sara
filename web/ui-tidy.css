@@ -480,3 +480,74 @@ dialog:not(.settings-dialog) .settings-body > :is(.error, p[role="status"]):empt
   .sbx-actions button { flex: 1 1 auto; }
   .sbx { padding: 8px 10px; }
 }
+
+/* Phase 81: findings (the window, a finding's card, the fix branch, the chat card, the install check). */
+#findings { width: min(920px, calc(100vw - 32px)); }
+.fnd-filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 8px 12px; align-items: end; }
+.fnd-tools { display: flex; flex-wrap: wrap; gap: 8px; }
+.fnd-run-chip { justify-self: start; width: fit-content; max-width: 100%; display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 2px 4px 2px 10px; border-radius: var(--r-pill); background: var(--surface-2); border: 1px solid var(--hairline); color: var(--text-2); margin: 0; }
+.fnd-list { display: grid; gap: 10px; grid-template-columns: minmax(0, 1fr); }
+.fnd-empty { padding: 18px 6px; text-align: center; }
+.fnd-card { display: grid; gap: 6px; grid-template-columns: minmax(0, 1fr); padding: 10px 12px; border-radius: var(--r-control); background: var(--surface-2); border: 1px solid var(--hairline); border-inline-start: 4px solid var(--hairline-strong); min-width: 0; }
+.fnd-card.sev-high, .fnd-card.sev-block { border-inline-start-color: var(--danger); }
+.fnd-card.sev-medium { border-inline-start-color: var(--warn); }
+.fnd-card.sev-low, .fnd-card.sev-info { border-inline-start-color: var(--info); }
+.fnd-card.status-fixed { border-inline-start-color: var(--success); }
+.fnd-card.status-dismissed, .fnd-card.status-accepted { opacity: 0.85; }
+.fnd-card p { margin: 0; }
+.fnd-head { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; min-width: 0; }
+.fnd-title { overflow-wrap: anywhere; }
+.fnd-icon { display: inline-grid; place-items: center; flex: none; color: var(--text-2); }
+.fnd-icon svg.ic { width: 16px; height: 16px; }
+.fnd-card.sev-high .fnd-head .fnd-icon, .fnd-card.sev-block .fnd-head .fnd-icon { color: var(--danger); }
+.fnd-sev { display: inline-flex; padding: 1px 8px; border-radius: var(--r-pill); font-size: var(--fs-small); border: 1px solid var(--hairline-strong); color: var(--text-2); }
+.fnd-sev.sev-high, .fnd-sev.sev-block { color: var(--danger); background: var(--danger-soft); border-color: color-mix(in srgb, var(--danger) 40%, transparent); }
+.fnd-sev.sev-medium { color: var(--warn); background: var(--warn-soft); border-color: color-mix(in srgb, var(--warn) 40%, transparent); }
+.fnd-meta { display: flex; flex-wrap: wrap; gap: 2px 10px; align-items: baseline; }
+.fnd-meta code { font-family: var(--font-mono); overflow-wrap: anywhere; }
+.fnd-status.st-fixed { color: var(--success); }
+.fnd-quote { margin: 0; padding: 6px 8px; border-radius: var(--r-control); background: var(--surface-1); font-family: var(--font-mono); font-size: var(--fs-small); white-space: pre-wrap; overflow-wrap: anywhere; max-height: 8em; overflow: auto; }
+.fnd-vulns { margin: 0; padding-inline-start: 18px; overflow-wrap: anywhere; }
+.fnd-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.fnd-reason { display: flex; flex-wrap: wrap; gap: 6px 8px; align-items: center; }
+.fnd-reason select, .fnd-reason input { min-width: 0; flex: 1 1 180px; }
+.fnd-fix { display: grid; gap: 6px; grid-template-columns: minmax(0, 1fr); padding: 8px 10px; border-radius: var(--r-control); background: var(--surface-1); border: 1px dashed var(--hairline-strong); }
+.fnd-fix.fix-ready { border-style: solid; border-color: color-mix(in srgb, var(--info) 45%, var(--hairline)); }
+.fnd-fix.fix-failed { border-color: color-mix(in srgb, var(--warn) 45%, var(--hairline)); }
+.fnd-fix.fix-applied { border-color: color-mix(in srgb, var(--success) 45%, var(--hairline)); }
+.fnd-fix-head { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
+.fnd-fix-head code { font-family: var(--font-mono); font-size: var(--fs-small); }
+.fnd-pass { color: var(--success); }
+.fnd-fail { color: var(--warn); }
+.fnd-diff { margin: 0; padding: 6px 8px; border-radius: var(--r-control); background: var(--surface-2); font-family: var(--font-mono); font-size: var(--fs-small); white-space: pre-wrap; overflow-wrap: anywhere; max-height: 22em; overflow: auto; }
+.fnd-diff .fnd-add { color: var(--success); }
+.fnd-diff .fnd-del { color: var(--danger); }
+.fnd-diff .fnd-hunk { color: var(--text-3); }
+.fnd-out summary { cursor: pointer; color: var(--text-2); font-size: var(--fs-small); }
+.fnd-out pre { margin: 4px 0 0; max-height: 12em; overflow: auto; font-family: var(--font-mono); font-size: var(--fs-small); white-space: pre-wrap; overflow-wrap: anywhere; }
+.fnd-chat { align-self: flex-start; display: flex; gap: 8px; align-items: center; max-width: min(720px, 85%); padding: 8px 12px; border-radius: 12px; background: var(--surface-1); border: 1px solid var(--hairline); font-size: 13px; }
+#messages > .fnd-chat { margin-left: 60px; max-width: min(640px, calc(100% - 60px)); }
+.fnd-chat.fnd-flagged { border-color: color-mix(in srgb, var(--danger) 45%, transparent); background: color-mix(in srgb, var(--danger-soft) 50%, var(--surface-1)); }
+.fnd-chat.fnd-some { border-color: color-mix(in srgb, var(--warn) 45%, transparent); }
+.fnd-chat.fnd-clean .fnd-icon { color: var(--success); }
+.fnd-chat.fnd-flagged .fnd-icon { color: var(--danger); }
+.fnd-chat-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1 1 auto; }
+.fnd-chat-body span { overflow-wrap: anywhere; }
+.approval-advisory { border-color: color-mix(in srgb, var(--danger) 45%, var(--hairline-strong)); }
+.fnd-adv { display: grid; gap: 6px; grid-template-columns: minmax(0, 1fr); padding: 10px 12px; border-radius: var(--r-control); background: color-mix(in srgb, var(--danger-soft) 45%, var(--surface-2)); border: 1px solid color-mix(in srgb, var(--danger) 35%, var(--hairline)); }
+.fnd-adv p { margin: 0; }
+.fnd-adv-head { display: flex; align-items: center; gap: 6px; color: var(--danger); }
+.fnd-adv-pkg p { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.fnd-adv-pkg code { font-family: var(--font-mono); }
+.fnd-flag { align-self: flex-start; display: flex; gap: 8px; align-items: center; max-width: min(720px, 85%); padding: 6px 10px; border-radius: 10px; background: var(--surface-1); border: 1px dashed var(--hairline-strong); font-size: 13px; }
+#messages > .fnd-flag { margin-left: 60px; max-width: min(640px, calc(100% - 60px)); }
+.fnd-flag.fnd-flag-override { border-color: color-mix(in srgb, var(--danger) 50%, transparent); }
+.fnd-flag.fnd-flag-offline { color: var(--text-2); }
+.sec-preview summary { cursor: pointer; color: var(--text-2); font-size: var(--fs-small); }
+.sec-preview-list { margin: 4px 0 0; padding-inline-start: 18px; max-height: 12em; overflow: auto; font-family: var(--font-mono); overflow-wrap: anywhere; }
+@media (max-width: 720px) {
+  #findings { width: 100vw; }
+  #messages > .fnd-chat, #messages > .fnd-flag { margin-left: 48px; max-width: calc(100% - 48px); }
+  .fnd-actions button { flex: 1 1 auto; }
+  .fnd-card { padding: 8px 10px; }
+}

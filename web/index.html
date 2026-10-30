@@ -171,6 +171,7 @@
           <div class="side-dest" data-dest="moments"><button class="side-go" id="open-moments" type="button" title="Our moments: your photo album with her captions"><i class="ic" data-icon="moments"></i><span>Moments</span></button></div>
           <div class="side-dest" data-dest="story"><button class="side-go" id="open-story" type="button" title="Your story: your time together, in order (Alt+Y)"><i class="ic" data-icon="story"></i><span>Your story</span></button></div>
           <div class="side-dest" data-dest="team" data-owner-only><button class="side-go" id="open-team" type="button" data-owner-only title="Team: helpers she leads on bigger jobs"><i class="ic" data-icon="team"></i><span>Team</span><i id="team-dot" class="side-dot" hidden></i></button></div>
+          <div class="side-dest" data-dest="findings" data-owner-only><button class="side-go" id="open-findings" type="button" data-owner-only title="Findings: what her security pass found in your code, and fixes on their own branch"><i class="ic" data-icon="shield"></i><span>Findings</span></button></div>
           </div>
           <p id="side-more-empty" class="muted small side-more-note" hidden>Everything is pinned to your sidebar.</p>
           <p class="muted small side-more-note">Use the pin to keep a place in your sidebar. Pins are saved on this device.</p>
@@ -915,6 +916,27 @@
           </p>
         </div>
       </div>
+    </form>
+  </dialog>
+
+  <!-- Phase 81: findings (the security pass, live advisories, the sandbox, your decisions) -->
+  <dialog id="findings" aria-label="Findings">
+    <form method="dialog" class="settings-body findings">
+      <h2>Findings</h2>
+      <p class="muted small">What her checks found in your projects: her security pass after coding turns, known vulnerabilities in dependencies, sandbox tries and plans that went against your decisions. Each one quotes the real line. Fix one on its own local branch, or dismiss or accept it with a reason.</p>
+      <div class="fnd-filters" data-nodirty>
+        <label>Project <select id="fnd-ws"></select></label>
+        <label>Status <select id="fnd-status"><option value="open">Open</option><option value="fixed">Fixed</option><option value="dismissed">Dismissed</option><option value="accepted">Accepted</option><option value="all">All</option></select></label>
+        <label>How serious <select id="fnd-severity"><option value="">Any</option><option value="high">Serious</option><option value="medium">Worth a look</option><option value="low">Minor</option></select></label>
+        <label>From <select id="fnd-source"><option value="">Every check</option><option value="security">Code checks</option><option value="advisory">Known vulnerabilities</option><option value="sandbox">Sandbox tries</option><option value="contradiction">Your decisions</option></select></label>
+      </div>
+      <p id="fnd-run-chip" class="fnd-run-chip small" hidden><span id="fnd-run-label"></span> <button id="fnd-run-clear" type="button" class="ghost small">Show all</button></p>
+      <div class="add-row fnd-tools" data-nodirty>
+        <button id="fnd-scan" type="button" class="ghost">Check now</button>
+        <button id="fnd-fixall" type="button" class="ghost">Fix all serious</button>
+      </div>
+      <p id="fnd-status-line" class="muted small" role="status"></p>
+      <div id="fnd-list" class="fnd-list"></div>
     </form>
   </dialog>
 
@@ -1863,6 +1885,25 @@
         <label>Time limit for a try <select id="sbx-time"></select></label>
       </div>
       <div class="add-row"><button id="sbx-recheck" type="button" class="ghost small">Look again</button></div>
+      </div>
+      <div id="sec-form">
+      <h3>Security pass</h3>
+      <p class="muted small">After a coding turn that changed files, she checks them for common security mistakes (secrets in code, string-built SQL, commands built from input, certificate checks turned off and more) and lists what she found, with the real line quoted. A finding can be fixed on its own local branch.</p>
+      <label>Check her code changes <select id="sec-mode"><option value="after">After coding turns</option><option value="ask">Only when I ask</option><option value="off">Off</option></select></label>
+      <label class="row"><input id="sec-reviewer" type="checkbox"> A second look by the Reviewing model</label>
+      <label class="row" data-noauto><input id="sec-advisories" type="checkbox"> Check dependencies for known vulnerabilities (OSV.dev)</label>
+      <details id="sec-preview" class="sec-preview">
+        <summary>What would be sent</summary>
+        <p class="muted small">Only package names and versions from your projects' lockfiles go to OSV.dev, never code or conversations. Private conversations and private local mode never send anything.</p>
+        <p id="sec-preview-count" class="small" role="status"></p>
+        <ul id="sec-preview-list" class="sec-preview-list"></ul>
+      </details>
+      <div class="bud-grid">
+        <label>Budget for the second look and each fix <select id="sec-budget"></select></label>
+      </div>
+      <label class="row"><input id="sec-tests" type="checkbox"> Run the project's tests after a fix (in a sandbox copy)</label>
+      <p id="sec-status" class="muted small" role="status"></p>
+      <div class="add-row"><button id="sec-open" type="button" class="ghost small">Open findings</button></div>
       </div>
         </section>
         <section class="settings-page" data-page="ab-budgets" data-group="Abilities" data-title="Budgets" data-owner-only hidden>

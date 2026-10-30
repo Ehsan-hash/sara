@@ -24,6 +24,7 @@ export const JOBS: JobInfo[] = [
   { id: 'planning', label: 'Planning', tip: 'Morning briefing, weekly review, and the plans for her team of helpers. A careful, strong model.' },
   { id: 'writing', label: 'Writing', tip: 'Her diary days, filling in her life story and character writing. A model with a nice way with words.' },
   { id: 'research', label: 'Web research', tip: 'When you ask her to research or look something up. A model that is good with tools and sources.' },
+  { id: 'review', label: 'Reviewing', tip: 'The second look at her code changes for security problems (after coding turns). A strong model is best; when this is empty, the Coding model does it.' },
   { id: 'quick', label: 'Quick replies', tip: 'Short messages she sends by herself and short notes about finished jobs. A small, fast model is fine.' },
   { id: 'background', label: 'Memory and summaries', tip: 'Noting what matters from your conversations, summaries and other behind-the-scenes work. A fast, cheap model is fine.' },
   { id: 'embeddings', label: 'Meaning search', tip: 'Lets her memory find things said in other words ("the cabin" finds "our Pine Lake trip"). Needs an embedding model, e.g. on Ollama: ollama pull nomic-embed-text. Off: she searches by words.', advanced: true },
@@ -93,6 +94,7 @@ export function recommend(cands: Candidate[], current: { providerId?: string; mo
   out.vision = cur && SEES.test(cur.model) ? pick(cur, 'Your talking model can see pictures too.') : pick(first(chat.filter((c) => SEES.test(c.model)), (c) => c.local), 'Can see pictures.');
   const coder = first(chat.filter((c) => CODE.test(c.model)), (c) => /coder|code/i.test(c.model));
   out.coding = pick(coder, 'Good with code and tools.');
+  out.review = pick(first(chat.filter((c) => STRONG.test(c.model) || CODE.test(c.model))), 'A strong model for the security review.');
   const strong = first(chat.filter((c) => STRONG.test(c.model)));
   out.planning = pick(strong ?? cur, strong ? 'A strong, careful model.' : 'Your talking model.');
   out.research = pick(strong ?? cur, strong ? 'Good with tools and sources.' : 'Your talking model.');
@@ -125,6 +127,7 @@ const PROMPTS: Record<RoutePurpose, { quick: string; compare: string }> = {
   private: { quick: 'Say hi in one short sentence.', compare: "I had a rough day at work, my boss took credit for my idea in front of everyone. Reply as a close friend would, in 2 to 4 sentences." },
   adult: { quick: 'Say hi in one short, flirty sentence.', compare: 'Write a short, flirty good-night text (2 sentences).' },
   embeddings: { quick: '', compare: '' },
+  review: { quick: 'In one sentence: what is wrong with building SQL as "SELECT * FROM users WHERE name = \'" + name + "\'"?', compare: 'Review this Node.js line for security problems and say how to fix it, in 3 short bullet points: app.get(\'/file\', (req, res) => res.sendFile(path.join(__dirname, req.query.name)));' },
 };
 
 export interface TestResult {

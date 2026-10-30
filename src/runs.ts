@@ -22,7 +22,8 @@ import type { ChatMessage, Provider } from './providers/types.ts';
 import type { ToolCall } from './providers/types.ts';
 import { billingOf, costOf, findPrice, priceTable, type Billing, type CallInfo, type UsageStore } from './usage.ts';
 
-export type RunKind = 'turn' | 'job' | 'team' | 'eval' | 'redteam';
+/** Phase 81: 'security' = a security pass or a fix-branch run (src/security/). */
+export type RunKind = 'turn' | 'job' | 'team' | 'eval' | 'redteam' | 'security';
 export type RunStatus = 'running' | 'ok' | 'error' | 'stopped' | 'blocked' | 'budget' | 'limit' | 'interrupted';
 
 /** One provider call inside a step. `usd` null = cost unknown (no price, or the model reported no usage). */

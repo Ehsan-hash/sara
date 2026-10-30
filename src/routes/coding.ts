@@ -22,6 +22,8 @@ import { APPROVAL_HOWS, type ApprovalHow } from '../tools/registry.ts';
 import { runCommand } from '../tools/sandbox.ts';
 import { resolveInside, workspaceDir } from '../tools/workspace.ts';
 import { cleanBudget, usageLine } from '../usage.ts';
+import { FINDING_SEVERITIES, FINDING_SOURCES, FINDING_STATUSES, type FindingSeverity, type FindingSource, type FindingStatus } from '../security/findings.ts';
+import { DEFAULT_SECURITY, mergeSecurity, REVIEW_BUDGET_CHOICES, SECURITY_MODES, securitySettings } from '../security/pass.ts';
 import { NEXT, type RouteCtx, type RouteHandler } from './context.ts';
 
 export function createCodingRoutes(ctx: RouteCtx): RouteHandler {
@@ -53,6 +55,97 @@ export function createCodingRoutes(ctx: RouteCtx): RouteHandler {
       } else if (method !== 'GET') throw new HttpError(405, 'Method not allowed');
       const iso = gate.isolation(new URL(req.url ?? '/', 'http://x').searchParams.get('recheck') === '1');
       return send(res, 200, { ...sandboxGateSettings(app.settings.get()), choices: { mode: SANDBOX_GATE_MODES, maxMB: SANDBOX_SIZE_CHOICES, timeLimitS: SANDBOX_TIME_CHOICES }, defaults: DEFAULT_SANDBOX_GATE, isolation: { driver: iso.driver, isolated: iso.isolated, label: iso.label, ...(iso.found ? { found: iso.found } : {}) }, platform: process.platform });
+    }
+    // Phase 81 (harness M6): the security pass (Settings → Abilities → Coding projects). Owner-only
+    // (members have no coding; OWNER_SETTINGS); the demo refuses (not in DEMO_READS). `?preview=1`
+    // lists the packages live advisories would send to OSV.dev (shown before switching them on).
+    if (a === 'security-pass' && !b) {
+      const sec = app.security;
+      if (!sec) throw new HttpError(404, 'The security pass is not available here.');
+      if (method === 'PUT') {
+        const body = await readJson(req);
+        app.settings.update({ securityPass: mergeSecurity(securitySettings(app.settings.get()), body) });
+      } else if (method === 'DELETE') {
+        sec.osv.clearCache();
+      } else if (method !== 'GET') throw new HttpError(405, 'Method not allowed');
+      const q = new URL(req.url ?? '/', 'http://x').searchParams;
+      const wsRoot = join(rootDir, 'workspaces');
+      const preview = q.get('preview') === '1' ? sec.previewPackages((existsSync(wsRoot) ? readdirSync(wsRoot, { withFileTypes: true }) : []).filter((e) => e.isDirectory()).map((e) => ({ name: e.name, dir: join(wsRoot, e.name) }))) : undefined;
+      return send(res, 200, { ...securitySettings(app.settings.get()), choices: { mode: SECURITY_MODES, budgetTokens: REVIEW_BUDGET_CHOICES }, defaults: DEFAULT_SECURITY, privateLocal: privateLocalOn(), cached: sec.osv.cacheSize(), reviewModel: Boolean(app.settings.get().routes?.review), ...(preview ? { preview } : {}) });
+    }
+    // Phase 81: the findings table (per project and per run), dismiss / accept with a reason, the
+    // fix-branch loop (Apply to my branch / Keep the branch / Discard), "Fix all high", "Check now".
+    if (a === 'findings') {
+      const store = app.findings;
+      if (!store) throw new HttpError(404, 'Findings are not available here.');
+      const id = b && /^\d+$/.test(b) ? Number(b) : 0;
+      if (!b && method === 'GET') {
+        const q = new URL(req.url ?? '/', 'http://x').searchParams;
+        const status = q.get('status') ?? 'open';
+        const filter = {
+          ...(q.get('workspace') ? { workspace: validWorkspace(q.get('workspace')) } : {}),
+          ...(q.get('conversationId') ? { conversationId: String(q.get('conversationId')) } : {}),
+          ...(Number(q.get('runId')) > 0 ? { runId: Number(q.get('runId')) } : {}),
+          ...(FINDING_SEVERITIES.includes(q.get('severity') as FindingSeverity) ? { severity: q.get('severity') as FindingSeverity } : {}),
+          ...(FINDING_SOURCES.includes(q.get('source') as FindingSource) ? { source: q.get('source') as FindingSource } : {}),
+        };
+        const list = store.list({ ...filter, status: status === 'all' || FINDING_STATUSES.includes(status as FindingStatus) ? (status as FindingStatus | 'all') : 'open' });
+        return send(res, 200, { findings: list.map((f) => ({ ...f, canFix: app.fixes ? !app.fixes.why(f) : false })), counts: store.counts({ ...(filter.workspace ? { workspace: filter.workspace } : {}), ...(filter.conversationId ? { conversationId: filter.conversationId } : {}), ...(filter.runId ? { runId: filter.runId } : {}) }), workspaces: store.workspaces(), settings: app.security ? securitySettings(app.settings.get()) : null });
+      }
+      if (b === 'scan' && !c && method === 'POST') {
+        // "Check now" (also the "Only when I ask" mode): the uncommitted files, or the whole project.
+        const body = await readJson(req);
+        const sec = app.security;
+        if (!sec) throw new HttpError(404, 'The security pass is not available here.');
+        const conv = body.conversationId ? app.store.getConversation(String(body.conversationId)) : undefined;
+        if (body.conversationId && !conv) throw new HttpError(404, 'Conversation not found');
+        if (conv && conv.mode !== 'coding') throw new HttpError(400, 'The security pass is for coding conversations.');
+        const workspace = conv ? conv.workspace : validWorkspace(body.workspace);
+        const wsDir = workspaceDir(rootDir, workspace);
+        const files = sec.filesToCheck(wsDir);
+        const summary = await sec.run({ conversationId: conv?.id ?? null, workspace, wsDir, files, reason: 'ask', private: Boolean(conv?.private) });
+        return send(res, 200, { summary });
+      }
+      if (b === 'fix-all' && !c && method === 'POST') {
+        const body = await readJson(req);
+        if (!app.fixes) throw new HttpError(404, 'The fix loop is not available here.');
+        return send(res, 200, app.fixes.startAll(validWorkspace(body.workspace)));
+      }
+      if (!id) {
+        if (method !== 'GET') await readJson(req).catch(() => ({}));
+        throw new HttpError(404, 'Not found');
+      }
+      const f = store.get(id);
+      if (!f) {
+        if (method !== 'GET') await readJson(req).catch(() => ({}));
+        throw new HttpError(404, 'Finding not found.');
+      }
+      if (!c && method === 'GET') return send(res, 200, { finding: { ...f, canFix: app.fixes ? !app.fixes.why(f) : false }, ...(app.fixes?.why(f) ? { whyNot: app.fixes.why(f) } : {}) });
+      if (c === 'status' && method === 'POST') {
+        const body = await readJson(req);
+        const status = String(body.status ?? '');
+        if (!(['open', 'dismissed', 'accepted'] as string[]).includes(status)) throw new HttpError(400, 'Status: open, dismissed or accepted.');
+        const reason = String(body.reason ?? '').trim().slice(0, 500);
+        if (status !== 'open' && !reason) throw new HttpError(400, 'Say why (a reason is kept with the finding).');
+        return send(res, 200, { finding: store.setStatus(id, status as FindingStatus, status === 'open' ? null : reason) });
+      }
+      if (c === 'fix' && method === 'POST') {
+        const fixes = app.fixes;
+        if (!fixes) throw new HttpError(404, 'The fix loop is not available here.');
+        const how = parts[3];
+        await readJson(req).catch(() => ({}));
+        try {
+          if (!how) return send(res, 202, { finding: fixes.start(id) });
+          if (how === 'apply') return send(res, 200, { finding: fixes.apply(id) });
+          if (how === 'keep') return send(res, 200, { finding: fixes.keep(id) });
+          if (how === 'discard') return send(res, 200, { finding: fixes.discard(id) });
+        } catch (err) {
+          throw new HttpError(409, (err as Error).message);
+        }
+        throw new HttpError(404, 'Not found');
+      }
+      if (method !== 'GET') await readJson(req).catch(() => ({}));
+      throw new HttpError(405, 'Method not allowed');
     }
     if (a === 'runs') {
       const runs = app.runs;

@@ -56,6 +56,10 @@ import { appInfo } from './health.ts';
 import { DiscordBridge } from './bridges/discord.ts';
 import { McpManager } from './tools/mcp.ts';
 import { detectSandbox, lockDataDir, type SandboxInfo, type SandboxPreference } from './tools/sandbox.ts';
+import { FindingStore } from './security/findings.ts';
+import { OsvClient } from './security/advisories.ts';
+import { SecurityPass } from './security/pass.ts';
+import { FixBranches, sweepFixDirs } from './security/fix.ts';
 import { detectIsolation, SandboxGate, sandboxGateSettings, sweepSandboxRuns, type Isolation, type SandboxGateSettings } from './sandbox-run.ts';
 import { accessInfo, adminHint, localVoiceMissing, localVoiceSupported } from './platform.ts';
 import { statusReport } from './status.ts';
@@ -557,6 +561,21 @@ function buildCompanion(space: Space, id: string, dir: string): Companion {
   app.runs.usage = app.usage;
   app.runs.settings = () => runSettings(app.settings.get());
   app.runs.prune(true);
+  // Phase 81 (harness M6): the one findings table (every space), the security pass, live advisories
+  // (OSV.dev, off until the owner switches them on) and the fix-branch loop (the owner's companions;
+  // household members have no coding tools). Fix worktrees left by a restart were swept at start-up.
+  app.findings = new FindingStore(store.db, app.now);
+  app.findings.onChange = (x) => app.events?.publish({ type: 'findings', conversationId: x.conversationId, workspace: x.workspace });
+  if (!isMember) {
+    app.security = new SecurityPass(app, app.findings, new OsvClient(store.db));
+    app.fixes = new FixBranches(app, join(dir, 'cache', 'fix-branches'));
+    sweepFixDirs(join(dir, 'cache', 'fix-branches'));
+    try {
+      app.fixes.recover();
+    } catch (err) {
+      console.warn(`fix branches: ${(err as Error).message}`);
+    }
+  }
   // Phase 13: background jobs, git and delegating to Claude Code / Grok Build.
   app.jobs = new JobManager(app, store.db);
   app.reports = new ReportStore(store.db, app.now);

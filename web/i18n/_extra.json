@@ -225,6 +225,8 @@
   "Her diary days, filling in her life story and character writing. A model with a nice way with words.",
   "Web research",
   "When you ask her to research or look something up. A model that is good with tools and sources.",
+  "Reviewing",
+  "The second look at her code changes for security problems (after coding turns). A strong model is best; when this is empty, the Coding model does it.",
   "Quick replies",
   "Short messages she sends by herself and short notes about finished jobs. A small, fast model is fine.",
   "Memory and summaries",

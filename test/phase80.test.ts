@@ -149,7 +149,7 @@ test('the gate decision: settings, tools, coding only; Windows copy mode always 
   const docker = detectIsolation({ mode: 'none', network: true, detail: '' }, s, { platform: 'win32', probe: (f, a) => (f === 'docker' ? 0 : a.includes('--status') ? 1 : 1) });
   assert.equal(docker.driver, 'docker');
   assert.equal(docker.isolated, true);
-  const wsl = detectIsolation({ mode: 'none', network: true, detail: '' }, s, { platform: 'win32', probe: (f) => (f === 'docker' ? null : 0) });
+  const wsl = detectIsolation({ mode: 'none', network: true, detail: '' }, s, { platform: 'win32', probe: (f) => (f === 'docker' ? null : 0), exists: () => true });
   assert.equal(wsl.driver, 'wsl');
   const imageMissing = detectIsolation({ mode: 'none', network: true, detail: '' }, s, { platform: 'win32', probe: (f, a) => (f === 'docker' && a[0] === 'version' ? 0 : 1) });
   assert.equal(imageMissing.driver, 'copy', 'Docker without the image: never pulled, copy mode');

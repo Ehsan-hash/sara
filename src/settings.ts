@@ -18,8 +18,9 @@ import type { DiscordSettings } from './bridges/discord.ts';
  * Jobs a model can be pointed at (Phase 38 added vision, planning, writing, research, quick and
  * embeddings). Pictures, hearing and her voice have their own pages (Pictures, Voice).
  */
-export type RoutePurpose = 'chat' | 'coding' | 'background' | 'private' | 'adult' | 'vision' | 'planning' | 'writing' | 'research' | 'quick' | 'embeddings';
-export const ROUTE_PURPOSES: readonly RoutePurpose[] = ['chat', 'coding', 'background', 'private', 'adult', 'vision', 'planning', 'writing', 'research', 'quick', 'embeddings'];
+export type RoutePurpose = 'chat' | 'coding' | 'background' | 'private' | 'adult' | 'vision' | 'planning' | 'writing' | 'research' | 'quick' | 'embeddings' | 'review';
+/** Phase 81 added 'review' (Reviewing: the security pass's second look; falls back to Coding). */
+export const ROUTE_PURPOSES: readonly RoutePurpose[] = ['chat', 'coding', 'background', 'private', 'adult', 'vision', 'planning', 'writing', 'research', 'quick', 'embeddings', 'review'];
 /** A model for a job, with up to two others to take over if it fails or is slow (Phase 38). */
 export interface ModelRoute {
   providerId: string;
@@ -124,6 +125,12 @@ export interface Settings {
    * Docker image used on Windows when Docker is present.
    */
   sandboxGate?: Partial<import('./sandbox-run.ts').SandboxGateSettings>;
+  /**
+   * Phase 81: the security pass (Settings → Abilities → Coding projects): after coding turns /
+   * only when asked / off, the Reviewing model's second look, live advisories from OSV.dev (off by
+   * default), the pass's token budget and the fix loop's test run.
+   */
+  securityPass?: Partial<import('./security/pass.ts').SecuritySettings>;
   /** Discord bridge (Phase 6). Bot token lives in the vault (bridge:discord). */
   discord?: Partial<DiscordSettings>;
   /** Automatic backups (Phase 6). */

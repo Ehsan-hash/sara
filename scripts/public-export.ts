@@ -28,6 +28,11 @@ export const FAIL: [string, RegExp, RegExp?][] = [
   ['xAI key', /\bxai-[A-Za-z0-9]{20,}/],
   ['Anthropic OAuth token', /\bsk-ant-oat01-[A-Za-z0-9_-]{20,}/],
   ['GitHub token', /\b(ghp|gho|ghu|ghs|github_pat)_[A-Za-z0-9_]{20,}/],
+  // GitHub's push protection refuses these even when they are made-up examples (2.14.0's eval had a
+  // fake Stripe key): build such strings in pieces ('sk_' + 'live_…') so the file never holds one.
+  ['Stripe key', /\b[sr]k_live_[A-Za-z0-9]{16,}/],
+  ['AWS access key', /\b(AKIA|ASIA)[A-Z0-9]{16}\b/],
+  ['Google API key', /\bAIza[0-9A-Za-z_-]{35}\b/],
   ['Slack/Discord-style token', /\b[MN][A-Za-z\d]{23}\.[\w-]{6}\.[\w-]{27,}/],
   ['root SSH login', /\broot@[\w.-]+\.(com|net|org)\b/],
   ['Apple sign-in key file', /\bAuthKey_(?!X{10})[A-Z0-9]{10}\.p8\b/],

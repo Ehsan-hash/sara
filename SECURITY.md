@@ -68,3 +68,23 @@ working example.
 [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md) describes what Sara protects, from whom, and how:
 sign-in, the demo mode, the tools and their approvals, the sandbox, the encrypted vault, backups
 and the apps. [docs/COMPLIANCE.md](docs/COMPLIANCE.md) covers the safety layer.
+
+## Her security pass over your code (Phase 81)
+
+This is about the code Sara writes for you, not about Sara herself. After a coding turn that
+changed files she checks them for common mistakes (secrets in code, commands or SQL built from
+input, path traversal, TLS checks off, unsafe deserialization, CORS with credentials, a route
+without the file's sign-in check, weak crypto for secrets, HTML from input, debug on), with an
+optional second look by the Reviewing model. Every finding must quote a real line of the file or it
+is dropped. These are shape checks for textbook mistakes, not an audit, and they only read and fix
+your own projects: no scanning of other systems, no exploit or payload generation.
+
+- **Dependency advisories** (OSV.dev) are off until the owner switches them on, after seeing the
+  package list; only package names and versions are sent, never code, and never from private
+  conversations or private local mode.
+- **Fix branches** are local `sara/fix-<id>` branches in a separate worktree; the owner's checked-out
+  branch is never touched, and Sara's git calls for them have no push, fetch or remote command at
+  all (hooks, credential helpers and prompts are switched off). Publishing still goes through the
+  normal approvals.
+- Everything is owner-only (`/api/findings`, `/api/security-pass`); household members and the demo
+  get 403. Details: [docs/design/HARNESS_TRACK.md § M6](docs/design/HARNESS_TRACK.md).

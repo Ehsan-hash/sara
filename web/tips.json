@@ -1224,6 +1224,42 @@
     "sbx-recheck": [
       "Looks again for what can isolate tries on this computer: bubblewrap (Linux), the macOS sandbox, or Docker with its image already downloaded or WSL2 with bubblewrap (Windows). Nothing is installed.",
       "sandbox"
+    ],
+    "sec-mode": [
+      "After coding turns: when a coding turn changed files, she checks them in the background and lists findings with the real line quoted. Only when I ask: use Check now in Findings. Off: no checks. Never in everyday chats.",
+      "security"
+    ],
+    "sec-reviewer": [
+      "Besides the fixed checks, the Reviewing model (or the Coding model when unset) reads the change and may add findings. Each one must quote a real line of your code, or it is dropped. Uses its own small budget.",
+      "security"
+    ],
+    "sec-advisories": [
+      "Off by default. On: package names and versions from your lockfiles (npm, PyPI, crates, Go, RubyGems) go to OSV.dev, and installing a known-vulnerable version asks first. Never code; never from private chats.",
+      "security"
+    ],
+    "sec-budget": [
+      "The most the second look and each fix may spend, separate from your reply budgets. A bigger change is cut to fit; a fix that needs more stops and says so. Example: 30,000 tokens.",
+      "security"
+    ],
+    "sec-tests": [
+      "After a fix, the project's tests (npm test, pytest, cargo test, go test) run in a throwaway sandbox copy and the result is shown before you choose. Off: only the check that found it runs again.",
+      "security"
+    ],
+    "fnd-ws": [
+      "Which project's findings to show. Pick one to use Check now and Fix all serious for it. All projects lists everything.",
+      "security"
+    ],
+    "fnd-status": [
+      "Open: still to look at. Fixed: a fix branch was applied. Dismissed or Accepted: you gave a reason; Open again brings one back.",
+      "security"
+    ],
+    "fnd-severity": [
+      "Serious: likely exploitable (a secret, string-built SQL, a command from input). Worth a look: depends on how the code is used. Minor: good to tidy.",
+      "security"
+    ],
+    "fnd-source": [
+      "Code checks: her security pass. Known vulnerabilities: dependencies (OSV.dev). Sandbox tries: what a command did in a copy. Your decisions: plans that went against something you decided.",
+      "security"
     ]
   },
   "pages": {

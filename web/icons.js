@@ -92,6 +92,8 @@ export const ICONS = {
   package: '<path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/><path d="M4 7.5l8 4.5 8-4.5M12 12v9M8 5.2l8 4.6"/>',
   wrench: '<path d="M14.7 6.3a4 4 0 0 0 5 5L20 11a4.5 4.5 0 0 1-5.6 5.6L7.5 21.5a2.1 2.1 0 0 1-3-3l4.9-6.9A4.5 4.5 0 0 1 15 6z"/>',
   sliders: '<path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/>',
+  // Phase 81: the security pass and findings (a shield with a check).
+  shield: '<path d="M12 3l7.5 3v5.5c0 4.6-3.2 8.3-7.5 9.5-4.3-1.2-7.5-4.9-7.5-9.5V6z"/><path d="M8.8 12.2l2.3 2.3 4.3-4.6"/>',
   // Phase 79: budgets (a half-dial with its needle).
   sandbox: '<rect x="3" y="3" width="18" height="18" rx="3" stroke-dasharray="3 2.5"/><path d="M12 7.5l4.5 2.5v5L12 17.5 7.5 15v-5z"/><path d="M7.5 10l4.5 2.5 4.5-2.5M12 12.5v5"/>',
   gauge: '<path d="M4 16.5a8 8 0 0 1 16 0"/><path d="M12 16.5l4-5"/><path d="M4 19.5h16"/>',

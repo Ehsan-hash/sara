@@ -544,6 +544,37 @@ mode, no Docker, WSL not installed):
 Not measured on this PC: bubblewrap, the macOS sandbox, Docker and WSL2 (the bubblewrap tests in
 `test/phase80.test.ts` run on the Linux server).
 
+## Security pass (Phase 81)
+
+The deterministic part of her security pass (`src/security/rules.ts`, no model, no network), scored
+by `scripts/eval-security.ts` on small seeded sample projects written for it: each file mixes
+deliberately vulnerable lines with safe look-alikes (placeholders, env lookups, parameterized
+queries, `execFile` with an argument list, `yaml.safe_load`, md5 for an ETag, `Math.random` for
+jitter, `send_from_directory`, a public `/health` route, docs mentioning the bad shapes). Expected
+findings are `[file, line, rule]`; a finding counts only on the right line with the right rule.
+
+| Set | Projects | Expected | Found | Correct | Precision | Recall |
+|---|---|---|---|---|---|---|
+| Tuning (Express shop, Flask notes, Go service, static front end) | 4 | 32 | 33 | 32 | **97 %** | **100 %** |
+| Held out (Koa blog, Django shop; written after the tuning, never used to change a rule) | 2 | 14 | 15 | 14 | **93 %** | **100 %** |
+
+- First run on the tuning set, before any change: precision 96 %, recall 75 %. The misses were
+  real gaps and were fixed generally (SQL strings holding the other quote character, `app.config['X']
+  = '…'` assignments, live payment keys, Go `md5.Sum`, `setTimeout` with a code string, `new
+  Function` with a call as argument).
+- The false alarms left: `app.get('/logo', …)` (a public route without the file's auth check is
+  flagged; the check can't know it's meant to be public) and `const apiKeyHeader = 'x-api-key'` (a
+  header *name* in a secret-named variable).
+- Line-based shape checks, not data-flow analysis: these numbers are for textbook mistakes in the
+  samples, not a claim about real-world coverage.
+
+**Live check of the advisories** (2026-10-30, the one manual call to api.osv.dev, `OsvClient` with
+`netFetch`): `lodash 4.17.15` → *vulnerable*, 6 advisories (GHSA-p6mc-m468-83gw high, fixed 4.17.19;
+GHSA-35jh-r3h4-6jhm high, fixed 4.17.21; GHSA-29mw-wpgm-hmr9 medium; GHSA-r5fr-rjxr-66jc high,
+GHSA-f23m-r3pf-42rh medium, fixed 4.18.0; GHSA-xxjr-mmjv-4gpg medium, fixed 4.17.23). `lodash
+4.17.21` is also listed (3 advisories fixed in 4.17.23 / 4.18.0). One batch + 6 detail calls, at most
+one in flight, 0.96 s; the same check again came from the cache with no request.
+
 ## Code map
 
 `scripts/eval-codemap.ts` copies Sara's own code into a workspace and asks 8 "where is…?"

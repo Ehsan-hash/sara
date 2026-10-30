@@ -31,6 +31,8 @@ export type HubEvent = (
   | { type: 'moments'; added: number; captioned: number }
   /** Phase 53: a look back was written (or failed). */
   | { type: 'story'; what: 'lookback'; id?: number; error?: string }
+  /** Phase 81: findings changed (a security pass ended, a fix branch moved on, a finding was dismissed). */
+  | { type: 'findings'; conversationId: string | null; workspace: string | null; summary?: unknown; findingId?: number }
 ) & {
   /** Phase 31: which companion it came from (set by her CompanionHub). */
   companion?: string;

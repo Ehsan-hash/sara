@@ -30,6 +30,7 @@ import { emptyState, initTidy, overflowMenu } from './tidy.js';
 import { addStep, finishStep, hasSteps, memoryStep, runLink, runStep, setBudget, stepLine, waitStep } from './steps.js';
 import { budgetCard, budgetMeter, fillBudgetSelect, overrideNote } from './budget-view.js';
 import { sandboxButtons, sandboxFirstNote, sandboxFlag, sandboxSection, teamSandboxRow } from './sandbox-view.js';
+import { advisoryFlag, advisorySection, initFindings, openFindings, refreshFindings, securityCard } from './findings-view.js';
 import { openRunView } from './run-view.js';
 import { renderCard, renderCards } from './result-cards.js';
 import { initLook, setContextRing, setLookBusy, showHeadChips } from './look.js';
@@ -1305,6 +1306,8 @@ function renderMessages(messages, opts = {}) {
     if (m.role === 'assistant' && Array.isArray(m.meta?.contradictions)) for (const c of m.meta.contradictions) if (c?.note && c.status !== 'open') els.push(contradictionFlag(c));
     // Phase 80: a command tried in a sandbox copy first (what it did and what you chose).
     if (m.role === 'tool' && m.meta?.sandbox?.decision) els.push(sandboxFlag({ ...m.meta.sandbox, callId: m.meta.toolCallId }));
+    // Phase 81: an install the "Known vulnerability" card stopped, and your answer.
+    if (m.role === 'tool' && m.meta?.advisory?.answer) els.push(advisoryFlag({ id: m.meta.toolCallId, state: m.meta.advisory.answer === 'override' ? 'override' : 'declined', packages: (m.meta.advisory.packages ?? []).map((p) => `${p.name} ${p.version}`) }));
     if (m.role === 'tool') {
       addStep((turn.steps ??= newSteps()), { id: m.meta?.toolCallId, name: m.meta?.name, summary: m.meta?.summary ?? m.meta?.name, args: m.meta?.args, status: m.meta?.status ?? 'ok', output: m.content, ms: m.meta?.ms, snapshotId: m.meta?.snapshotId });
       const card = (m.meta?.status ?? 'ok') === 'ok' ? m.meta?.card : null;
@@ -1364,6 +1367,8 @@ function renderMessages(messages, opts = {}) {
       b._msg = m;
       // The reply that ends a turn (no tool calls after it) carries the turn's step line.
       if (m.role === 'assistant' && !m.meta?.toolCalls?.length) flush();
+      // Phase 81: her security pass over the files this turn changed (when it has finished).
+      if (m.role === 'assistant' && m.meta?.security && !document.body.classList.contains('demo')) els.push(securityCard(m.meta.security, { onOpen: (sum) => void openFindings(sum.runId ? { runId: sum.runId } : { conversationId: state.currentId }) }));
     }
   }
   flush();
@@ -1778,6 +1783,9 @@ async function runStream(path, body, userBubble) {
         } else if (ev.type === 'sandbox') {
           // Phase 80: what the try showed and what you chose, under her step.
           place(sandboxFlag({ ...ev.record, callId: ev.id }));
+        } else if (ev.type === 'advisory') {
+          // Phase 81: the install check's outcome (installed anyway, not installed, not checked: offline).
+          place(advisoryFlag(ev));
         } else if (ev.type === 'tool_running') {
           document.querySelector(`.approval[data-call="${CSS.escape(ev.id)}"]`)?.remove();
           if (steps) runStep(steps, ev.id);
@@ -2161,15 +2169,22 @@ function approvalCard(ev, block) {
     if (block) block.open = false;
     return card;
   }
+  // Phase 81: "Known vulnerability": installing a known-vulnerable version needs an explicit override.
+  const adv = ev.advisory;
+  if (adv && !c) {
+    title.textContent = t('Known vulnerability: install anyway?');
+    title.dataset.raw = '';
+    card.classList.add('approval-advisory');
+  }
   const yes = document.createElement('button');
   yes.type = 'button';
-  yes.textContent = c ? t('Do it anyway') : ev.budget ? t('Keep going') : ev.sandboxFirst ? t('Try it in a copy') : t('Allow');
-  yes.addEventListener('click', () => decide(true, c ? 'override' : undefined));
+  yes.textContent = c ? t('Do it anyway') : adv ? t('Install anyway') : ev.budget ? t('Keep going') : ev.sandboxFirst ? t('Try it in a copy') : t('Allow');
+  yes.addEventListener('click', () => decide(true, c || adv ? 'override' : undefined));
   const no = document.createElement('button');
   no.type = 'button';
   no.className = 'ghost';
-  no.textContent = c ? t("Don't") : ev.budget ? t('Wrap up') : t('Deny');
-  no.addEventListener('click', () => decide(false, c ? 'deny' : undefined));
+  no.textContent = c ? t("Don't") : adv ? t("Don't install") : ev.budget ? t('Wrap up') : t('Deny');
+  no.addEventListener('click', () => decide(false, c || adv ? 'deny' : undefined));
   row.append(yes, no);
   if (c) {
     const upd = document.createElement('button');
@@ -2180,7 +2195,7 @@ function approvalCard(ev, block) {
     row.append(upd);
     card.classList.add('approval-contradict');
   }
-  card.append(title, ...(c ? [contradictionSection(c)] : []), ...(ev.budget ? [budgetMeter(ev.budget)] : []), what, ...(ev.sandboxFirst ? [sandboxFirstNote(ev.sandboxFirst)] : []), row);
+  card.append(title, ...(c ? [contradictionSection(c)] : []), ...(adv ? [advisorySection(adv)] : []), ...(ev.budget ? [budgetMeter(ev.budget)] : []), what, ...(ev.sandboxFirst ? [sandboxFirstNote(ev.sandboxFirst)] : []), row);
   if (card.classList.contains('approval-tidy')) {
     if (TOOL_WORDS[ev.name]) title.after(el('p', 'approval-about muted small', t(TOOL_WORDS[ev.name])));
     row.append(el('span', 'tool-raw approval-raw', ev.name));
@@ -4231,6 +4246,72 @@ async function saveSandboxGate() {
   await api('/sandbox', { method: 'PUT', body: { mode: $('#sbx-mode').value, network: $('#sbx-network').checked, maxMB: Number($('#sbx-size').value), timeLimitS: Number($('#sbx-time').value) } });
 }
 $('#sbx-recheck').addEventListener('click', () => void loadSandboxGate(true));
+// ---------- Phase 81: the security pass (Settings → Abilities → Coding projects) ----------
+async function loadSecPass() {
+  let r;
+  try {
+    r = await api('/security-pass');
+  } catch {
+    $('#sec-form').hidden = true;
+    return;
+  }
+  $('#sec-form').hidden = false;
+  $('#sec-mode').value = r.mode;
+  $('#sec-reviewer').checked = r.reviewer;
+  $('#sec-advisories').checked = r.advisories;
+  $('#sec-tests').checked = r.runTests;
+  $('#sec-budget').replaceChildren(...r.choices.budgetTokens.map((v) => new Option(t('{n} tokens', { n: v.toLocaleString(locale()) }), String(v))));
+  $('#sec-budget').value = String(r.budgetTokens);
+  const notes = [r.reviewModel ? t('Reviewing model: set in Which model does what.') : t('Reviewing model: not set, so the Coding model does the second look.')];
+  if (r.privateLocal) notes.push(t('Private local mode is on: dependencies are not checked online.'));
+  $('#sec-status').textContent = notes.join(' ');
+  $('#sec-form').dataset.loaded = '1';
+}
+async function saveSecPass() {
+  if (!$('#sec-form').dataset.loaded) return;
+  await api('/security-pass', { method: 'PUT', body: { mode: $('#sec-mode').value, reviewer: $('#sec-reviewer').checked, advisories: $('#sec-advisories').checked, budgetTokens: Number($('#sec-budget').value), runTests: $('#sec-tests').checked } });
+}
+/** The packages live advisories would send (shown before they are switched on). */
+async function loadSecPassPreview() {
+  const r = await api('/security-pass?preview=1');
+  const list = r.preview ?? [];
+  $('#sec-preview-count').textContent = list.length ? t('Packages that would be sent: {n}', { n: list.length }) : t('No lockfiles in your projects yet: nothing would be sent now.');
+  $('#sec-preview-list').replaceChildren(
+    ...list.slice(0, 300).map((p) => {
+      const li = el('li', 'small');
+      li.dataset.raw = '';
+      li.textContent = `${p.name} ${p.version} · ${p.ecosystem} · ${p.workspace}/${p.file}`;
+      return li;
+    }),
+  );
+  return list;
+}
+$('#sec-preview').addEventListener('toggle', () => {
+  if ($('#sec-preview').open) void loadSecPassPreview().catch(() => {});
+});
+$('#sec-advisories').addEventListener('change', async (e) => {
+  if (!e.isTrusted) return;
+  if (e.target.checked) {
+    // §7 #2: the package list is shown before anything is sent.
+    let list = [];
+    try {
+      list = await loadSecPassPreview();
+    } catch {
+      /* shown empty */
+    }
+    $('#sec-preview').open = true;
+    if (!confirm(t('From now on, the package names and versions in your projects\' lockfiles ({n} now) are sent to OSV.dev to look for known vulnerabilities. Never from private conversations or private local mode. Switch it on?', { n: list.length }))) {
+      e.target.checked = false;
+      return;
+    }
+  }
+  markSettingsArea('ab-projects');
+  markDirty($('#settings'));
+});
+$('#sec-open').addEventListener('click', () => {
+  $('#settings').close();
+  void openFindings();
+});
 // ---------- Phase 79: per-reply budgets (Settings → Abilities → Budgets) ----------
 const BUDGET_KINDS = ['coding', 'chat'];
 const BUDGET_LINES = ['tokens', 'steps', 'usd', 'minutes'];
@@ -4874,6 +4955,12 @@ function startEvents() {
     const { conversationId } = JSON.parse(e.data);
     void loadConversations();
     if (conversationId === state.currentId && !state.streaming && !state.watch) void openConversation(conversationId);
+  });
+  // Phase 81: findings changed (a security pass ended, a fix moved on): the open window and the chat follow.
+  es.addEventListener('findings', (e) => {
+    const ev = JSON.parse(e.data);
+    void refreshFindings();
+    if (ev.summary && ev.conversationId === state.currentId && !state.streaming && !state.watch) void openConversation(ev.conversationId);
   });
   // Phase 39: a team task moved on.
   es.addEventListener('team', (e) => onTeamEvent(JSON.parse(e.data).task));
@@ -6298,7 +6385,7 @@ function showSettingsTab(page, opts = {}) {
   if (pick === 'dh-updates') void loadUpdates();
   if (pick === 'ab-recipes') void loadRecipes();
   if (pick === 'ab-budgets') void loadBudgets();
-  if (pick === 'ab-projects') void loadSandboxGate();
+  if (pick === 'ab-projects') void Promise.all([loadSandboxGate(), loadSecPass()]);
   if (pick === 'ab-ssh') void loadSsh();
   if (pick === 'ab-library') void loadLibrarySettings();
   if (pick === 'co-apps') void Promise.all([loadOtherApps(), loadAlexa()]);
@@ -6473,7 +6560,7 @@ const SETTINGS_SAVERS = {
   'dh-usage': [saveUsage],
   'dh-health': [saveRuns],
   'ab-budgets': [saveBudgets],
-  'ab-projects': [saveSandboxGate],
+  'ab-projects': [saveSandboxGate, saveSecPass],
 };
 const settingsChanged = new Set();
 /** Notes which Settings page an edit was made on (programmatic fills call this themselves). */
@@ -8068,6 +8155,9 @@ async function openStory() {
   if (!$('#story').open) $('#story').showModal();
 }
 $('#open-story').addEventListener('click', () => void openStory());
+// Phase 81: findings (every project; filters inside the window).
+initFindings();
+$('#open-findings').addEventListener('click', () => void openFindings());
 initMoments({ openAtMessage });
 initHousehold({ show, boot, copyText, showSettingsTab });
 for (const b of document.querySelectorAll('[data-story]')) {

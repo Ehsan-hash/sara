@@ -84,6 +84,9 @@ import { cardOf, checkPlan, contradictionNote, contradictSettings, declinedOutpu
 import { filesNamed, RunRecorder, toolSetHash } from './runs.ts';
 import { budgetSummaryFallback, quickIsCheaper, turnBudgetFor, turnBudgetSettings, TurnMeter, type Budget, type BudgetState, type ModelCallPlan } from './budget.ts';
 import { billingOf, findPrice, priceTable } from './usage.ts';
+import type { SecurityPass } from './security/pass.ts';
+import { declinedInstallOutput, type AdvisoryCard } from './security/advisories.ts';
+import { recordTurnFindings, type FindingStore } from './security/findings.ts';
 
 export interface AppContext {
   store: Store;
@@ -102,6 +105,14 @@ export interface AppContext {
    * copy first (src/sandbox-run.ts). Optional: bare test apps and callers without it run as before.
    */
   sandboxGate?: SandboxGate;
+  /**
+   * Phase 81 (harness M6): the one findings table (src/security/findings.ts) and the security pass
+   * (after coding turns, live advisories, the install check, the fix-branch loop). Optional: bare
+   * test apps run without them.
+   */
+  findings?: FindingStore;
+  security?: SecurityPass;
+  fixes?: import('./security/fix.ts').FixBranches;
   /** MCP server connections (optional in tests). */
   mcp?: McpManager;
   /** Secret scrubbing for tool output and arguments. */
@@ -239,7 +250,9 @@ export type ChatEvent =
   /** Phase 63: a tool call the model is still writing (throttled; see src/tool-stream.ts). Shown only, never run. */
   | ToolBuilding
   /** Phase 77: `contradiction` = the card's \"This goes against something you decided\" section (a stop). */
-  | { type: 'approval'; approvalId: string; id: string; name: string; summary: string; args: Record<string, unknown>; contradiction?: ContradictionCard; budget?: BudgetState; sandbox?: SandboxCard; sandboxFirst?: { label: string; isolated: boolean } }
+  | { type: 'approval'; approvalId: string; id: string; name: string; summary: string; args: Record<string, unknown>; contradiction?: ContradictionCard; budget?: BudgetState; sandbox?: SandboxCard; sandboxFirst?: { label: string; isolated: boolean }; advisory?: AdvisoryCard }
+  /** Phase 81: the install check's outcome for a call (not checked offline, installed anyway, not installed). */
+  | { type: 'advisory'; id: string; state: 'offline' | 'override' | 'declined'; packages: string[] }
   /** Phase 80: the command is being tried in a throwaway copy (the sandbox gate). */
   | { type: 'sandbox_running'; id: string; label: string; isolated: boolean }
   /** Phase 80: what the sandbox try showed and what the owner chose (Apply / Discard / Run for real). */
@@ -309,7 +322,8 @@ export function resolveProvider(app: AppContext, providerId: string | null, mode
 /** Phase 38: a job a model can be asked to do ('turn' and 'background' are the older names). */
 export type Job = RoutePurpose | 'turn';
 /** Where a job without its own model goes (in the end: the default model). */
-const INHERIT: Partial<Record<RoutePurpose, RoutePurpose>> = { background: 'chat', planning: 'background', quick: 'background', writing: 'background', research: 'chat', vision: 'chat', adult: 'chat', coding: 'chat' };
+// Phase 81: Reviewing (the security pass's second look) falls back to the Coding model (§7 #5).
+const INHERIT: Partial<Record<RoutePurpose, RoutePurpose>> = { background: 'chat', planning: 'background', quick: 'background', writing: 'background', research: 'chat', vision: 'chat', adult: 'chat', coding: 'chat', review: 'coding' };
 /** Asks that are web research ("look up", "research", "find out…"), for the research job. */
 export const RESEARCH_RE = /\b(research|look (it |this |that )?up|find out|search (the web|online|for)|dig into|compare (prices|reviews)|what are people saying)\b/i;
 
@@ -852,6 +866,8 @@ export interface BeforeToolResult {
    * Discard / Run for real) is then the approval.
    */
   sandbox?: SandboxPlan;
+  /** Phase 81: an install of a known-vulnerable version: the "Known vulnerability" card (an explicit override goes on). */
+  advisory?: AdvisoryCard;
 }
 export interface AfterTool {
   step: number;
@@ -919,6 +935,7 @@ function joinHooks(list: (TurnHooks | undefined)[]): Required<Omit<TurnHooks, 'b
         if (r.events?.length) out.events = [...(out.events ?? []), ...r.events];
         out.stopFor ??= r.stopFor;
         out.sandbox ??= r.sandbox;
+        out.advisory ??= r.advisory;
       }
       return out;
     },
@@ -1361,7 +1378,40 @@ async function* runTurnInner(app: AppContext, conversationId: string, userText: 
           },
         }
       : undefined;
-  const hooks = joinHooks([budgetHook, planHook, sandboxHook, recorderHooks(app, rec), opts.hooks]);
+  // Phase 81 (harness M6): the install check (a pinned, known-vulnerable version stops with the
+  // "Known vulnerability" card; only with live advisories on, never in private conversations) and,
+  // in coding conversations, the security pass started in the background after the final reply.
+  const security = app.security && !opts.group && !conv.partner && !opts.externalApp && !external ? app.security : undefined;
+  const securityHook: TurnHooks | undefined = security
+    ? {
+        async beforeTool(c) {
+          if (c.call.name !== 'shell') return;
+          try {
+            const r = await security.installCheck(String(c.call.arguments.command ?? ''), conv, signal);
+            if (!r) return;
+            return { events: r.events.map((e) => (e.type === 'advisory' ? { ...e, id: c.call.id } : e)), ...(r.card ? { advisory: r.card } : {}) };
+          } catch (err) {
+            console.warn(`install check: ${(err as Error).message}`);
+            return undefined;
+          }
+        },
+        ...(conv.mode === 'coding' ? (security.turnHooks(conv, wsDir, { group: Boolean(opts.group), external: Boolean(opts.externalApp) }) ?? {}) : {}),
+      }
+    : undefined;
+  // Phase 81: plan-check stops/flags (M2) and sandbox observations (M5) also go into the findings table.
+  const findingsHook: TurnHooks | undefined = app.findings
+    ? {
+        afterTool(c) {
+          if (!c.contradictions?.length && !c.sandbox?.findings?.length) return;
+          try {
+            recordTurnFindings(app.findings!, { ...(c.contradictions ? { contradictions: c.contradictions } : {}), ...(c.sandbox ? { sandbox: c.sandbox } : {}) }, { conversationId: conv.id, workspace: conv.workspace, runId: rec.on ? rec.id : null, step: c.step });
+          } catch (err) {
+            console.warn(`findings: ${(err as Error).message}`);
+          }
+        },
+      }
+    : undefined;
+  const hooks = joinHooks([budgetHook, planHook, sandboxHook, securityHook, recorderHooks(app, rec), findingsHook, opts.hooks]);
   // Phase 78: what the run is made of (M9 compares runs by these).
   const memPolicy = decayPolicy(memCfg).id;
   rec.setPolicy({ memoryPolicy: memPolicy, model: `${provider.config.id}/${model}`, tools: toolSetHash(tools.map((t) => t.spec.name)), mode: conv.mode, ...(conv.private ? { private: true } : {}) });
@@ -1670,6 +1720,9 @@ async function* runTurnInner(app: AppContext, conversationId: string, userText: 
       let sbDecision: SandboxDecision | undefined;
       let applied: ApplyResult | undefined;
       let sbError = '';
+      // Phase 81: the install check's stop (if any) and the owner's answer.
+      let advisoryStop: AdvisoryCard | undefined;
+      let advisoryAnswer: 'override' | 'deny' | undefined;
 
       const set = tool ? app.tools.permission(call.name, s.toolPermissions) : 'never';
       // Phase 73: a few commands always ask first, even when the owner lets the tool run on its own.
@@ -1700,16 +1753,28 @@ async function* runTurnInner(app: AppContext, conversationId: string, userText: 
         for (const ev of pre.events ?? []) yield ev;
         const stopFor = pre.stopFor;
         const gate = pre.sandbox;
+        // Phase 81: a known-vulnerable install stops first (an explicit override goes on).
+        advisoryStop = pre.advisory;
         // Phase 80: with an isolated sandbox try, the try's card is the approval; without isolation
         // (Windows copy mode) a tool that asks first still asks before the try.
-        const firstCard = Boolean(stopFor) || (permission === 'ask' && (!gate || gate.askFirst));
+        const firstCard = Boolean(stopFor) || Boolean(advisoryStop) || (permission === 'ask' && (!gate || gate.askFirst));
         if (firstCard) {
           const { id, decision } = app.approvals.request(conv.id, signal);
           const stops = (turnContradictions.get(call.id) ?? []).filter((c) => c.act === 'stop');
-          yield { type: 'approval', approvalId: id, id: call.id, name: call.name, summary, args: shownArgs, ...(stopFor ? { contradiction: cardOf(stopFor, stops.filter((c) => c !== stopFor)) } : {}), ...(gate ? { sandboxFirst: { label: gate.isolation.label, isolated: gate.isolation.isolated } } : {}) };
+          yield { type: 'approval', approvalId: id, id: call.id, name: call.name, summary, args: shownArgs, ...(stopFor ? { contradiction: cardOf(stopFor, stops.filter((c) => c !== stopFor)) } : {}), ...(gate ? { sandboxFirst: { label: gate.isolation.label, isolated: gate.isolation.isolated } } : {}), ...(advisoryStop ? { advisory: advisoryStop } : {}) };
           allowed = await decision;
           approval = allowed ? 'allowed' : 'denied';
           const how = app.approvals.takeHow(id);
+          if (advisoryStop && !signal.aborted) {
+            // Phase 81: the owner's answer on the "Known vulnerability" card, kept as findings.
+            advisoryAnswer = allowed ? 'override' : 'deny';
+            try {
+              app.security?.recordInstall(advisoryStop, advisoryAnswer, { conversationId: conv.id, workspace: conv.workspace, runId: rec.on ? rec.id : null, step });
+            } catch (err) {
+              console.warn(`findings: ${(err as Error).message}`);
+            }
+            yield { type: 'advisory', id: call.id, state: allowed ? 'override' : 'declined', packages: advisoryStop.packages.map((p) => `${p.name} ${p.version}`) };
+          }
           if (stopFor) {
             // The owner's answer is kept on the finding (every note on the card): an explicit
             // override, a no, or \"update the note\". An override counts as a use of the note.
@@ -1787,7 +1852,7 @@ async function* runTurnInner(app: AppContext, conversationId: string, userText: 
           output = sandboxOutput(tried, sbDecision, applied);
         } else if (!allowed) {
           status = 'denied';
-          output = signal.aborted ? 'Cancelled.' : stopFor ? declinedOutput(stopFor, ownerWord) : 'The owner declined this action.';
+          output = signal.aborted ? 'Cancelled.' : stopFor ? declinedOutput(stopFor, ownerWord) : advisoryStop ? declinedInstallOutput(advisoryStop) : 'The owner declined this action.';
         } else {
           if (SNAPSHOT_TOOLS.has(call.name) && conv.mode !== 'coding') {
             try {
@@ -1831,7 +1896,7 @@ async function* runTurnInner(app: AppContext, conversationId: string, userText: 
       const card = cardFor({ name: call.name, args: shownArgs, status, output });
       const flagged = turnContradictions.get(call.id);
       const sbRecord = tried && sbDecision && sbRisk ? sandboxRecord(tried, sbRisk, sbDecision, applied) : undefined;
-      const toolMsg = store.addMessage(conv.id, 'tool', stored, { toolCallId: call.id, name: call.name, args: shownArgs, summary, status, ms, ...(snapshotId ? { snapshotId } : {}), ...(shown.length ? { images: shown } : {}), ...(card ? { card } : {}), ...(flagged?.length ? { contradiction: flagged[0] } : {}), ...(sbRecord ? { sandbox: sbRecord } : {}) });
+      const toolMsg = store.addMessage(conv.id, 'tool', stored, { toolCallId: call.id, name: call.name, args: shownArgs, summary, status, ms, ...(snapshotId ? { snapshotId } : {}), ...(shown.length ? { images: shown } : {}), ...(card ? { card } : {}), ...(flagged?.length ? { contradiction: flagged[0] } : {}), ...(sbRecord ? { sandbox: sbRecord } : {}), ...(advisoryStop ? { advisory: { ...advisoryStop, ...(advisoryAnswer ? { answer: advisoryAnswer } : {}) } } : {}) });
       receipts.push({ name: call.name, status, args: call.arguments, output });
       // Phase 78 seam 3: the call is done (the recorder keeps the scrubbed result).
       await hooks.afterTool({ step, call, summary, args: shownArgs, status, output, ms, approval, messageId: toolMsg.id, ...(snapshotId ? { snapshotId } : {}), ...(flagged?.length ? { contradictions: flagged } : {}), ...(sbRecord ? { sandbox: sbRecord } : {}) });
