@@ -72,6 +72,8 @@ import { createWebSearchTool } from './tools/search.ts';
 import { mcpSecrets, searchConfig } from './integrations.ts';
 import { loadPersona } from './persona.ts';
 import { createSaraServer, proxyTrust } from './server.ts';
+import { HandsHub } from './hands.ts';
+import { createComputerTools } from './tools/computer.ts';
 import { UploadStore } from './uploads.ts';
 import { BriefingWorker } from './briefing.ts';
 import { LeaveByWorker } from './leaveby.ts';
@@ -335,8 +337,20 @@ interface Space {
   companions: CompanionManager;
   push?: PushService;
   member?: MemberPolicy;
+  /** Phase 87: this person's hands devices (computer use), shared by their companions. */
+  hands?: HandsHub;
+}
+/** Phase 87: one hands hub per person; a member's works only with the owner's switch on (never on the demo). */
+function handsFor(sp: Space, member: boolean): HandsHub | undefined {
+  if (isDemo) return undefined;
+  return new HandsHub({
+    events: sp.events,
+    allowed: member ? () => settings.get().computerUse?.members === true : () => true,
+    known: () => sp.auth.devices().filter((d) => d.kind === 'hands').map((d) => ({ id: d.id, label: d.label, lastSeen: d.lastSeen })),
+  });
 }
 const ownerSpace: Space = { id: 'owner', dir: dataDir, auth, settings, vault, events, companions };
+ownerSpace.hands = handsFor(ownerSpace, false);
 const memberSpaces = new Map<string, Space>();
 const household = new HouseholdStore(dataDir);
 // Sign-in registries shared by every space (codes are made or approved by a signed-in person).
@@ -626,6 +640,11 @@ function buildCompanion(space: Space, id: string, dir: string): Companion {
   // Phase 49: previews of the web apps her jobs run, and her testing browser.
   if (!isMember) app.previews = previews;
   if (!isMember) app.browsers = browsers;
+  // Phase 87: her hands on this person's computers (src/hands.ts, src/tools/computer.ts).
+  if (space.hands) {
+    app.hands = space.hands;
+    for (const t of createComputerTools(app)) tools.add(t);
+  }
   if (!isMember) app.jobs.onEnd = (job) => {
     previews.jobEnded(job.id, app.jobs);
     // Phase 50: a finished job may have changed files: the code map looks again.
@@ -793,6 +812,7 @@ function buildMemberSpace(member: MemberRecord, dir: string, givenAuth?: OwnerAu
     companions: new CompanionManager(dir),
   };
   space.member = new MemberPolicy(household, member.id, () => space.companions.all().map((c) => c.app));
+  space.hands = handsFor(space, true);
   space.companions.build = (id, d) => buildCompanion(space, id, d);
   space.companions.add(buildCompanion(space, MAIN_ID, dir));
   for (const c of companionDirs(dir)) space.companions.add(buildCompanion(space, c.id, c.dir));
@@ -925,8 +945,8 @@ function spaceByCredential(req: IncomingMessage): Space | undefined {
     const tok = h.slice(7).trim();
     const m = memberOfToken(tok);
     if (m) return memberSpaces.get(m);
-    if (tok.startsWith('sara_dev.')) {
-      const id = tok.slice('sara_dev.'.length).split('.')[0];
+    if (tok.startsWith('sara_dev.') || tok.startsWith('sara_hands.')) {
+      const id = tok.slice(tok.indexOf('.') + 1).split('.')[0];
       for (const sp of memberSpaces.values()) if (sp.auth.hasDevice(id)) return sp;
     }
   }
@@ -1007,6 +1027,9 @@ async function shutdown(): Promise<void> {
   shuttingDown = true;
   for (const c of companions.all()) await c.stop();
   for (const sp of memberSpaces.values()) for (const c of sp.companions.all()) await c.stop().catch(() => {});
+  // Phase 87: the computers' connections close (their apps reconnect when Sara is back).
+  ownerSpace.hands?.closeAll();
+  for (const sp of memberSpaces.values()) sp.hands?.closeAll();
   clearInterval(householdTimer);
   await browsers.closeAll().catch(() => {});
   codemaps.stop();

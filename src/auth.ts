@@ -30,8 +30,10 @@ interface DeviceSession {
    * and lasts until the owner removes it under Devices.
    * Hardening M4: 'home-assistant' = the Home Assistant integration's device token: it may only talk
    * with her in the conversations it made itself (no other conversation, memory, file or setting).
+   * Phase 87: 'hands' = Sara's hands on a computer (the desktop app's computer-use channel): it only
+   * opens the /api/hands WebSocket, never the app's own API (docs/design/COMPUTER_USE.md §3.2).
    */
-  kind?: 'api' | 'home-assistant';
+  kind?: 'api' | 'home-assistant' | 'hands';
 }
 
 interface OwnerFile {
@@ -58,8 +60,8 @@ export interface DeviceView {
   label: string;
   createdAt: string;
   lastSeen: string;
-  /** Phase 52: 'app' = signed in with a device code and a token (terminal, VS Code). Phase 57: 'api' = an API key for another app. M4: 'home-assistant'. */
-  kind: 'browser' | 'app' | 'api' | 'home-assistant';
+  /** Phase 52: 'app' = signed in with a device code and a token (terminal, VS Code). Phase 57: 'api' = an API key for another app. M4: 'home-assistant'. Phase 87: 'hands'. */
+  kind: 'browser' | 'app' | 'api' | 'home-assistant' | 'hands';
 }
 
 /** Hardening L4: browser and app sign-ins kept at most (API keys are capped on their own, at 20). */
@@ -73,6 +75,8 @@ function capSessions(list: DeviceSession[]): DeviceSession[] {
 
 /** Phase 52: device tokens look like `sara_dev.<device id>.<secret>`. */
 export const DEVICE_TOKEN_PREFIX = 'sara_dev.';
+/** Phase 87: Sara's hands on a computer: `sara_hands.<device id>.<secret>` (only /api/hands takes it). */
+export const HANDS_TOKEN_PREFIX = 'sara_hands.';
 
 /** "Chrome on Windows", "Safari on iPhone"… from a User-Agent header. */
 export function deviceLabel(ua = ''): string {
@@ -332,7 +336,7 @@ export class OwnerAuth {
   }
 
   devices(): DeviceView[] {
-    return [...(this.#owner.sessions ?? [])].sort((a, b) => b.lastSeen.localeCompare(a.lastSeen)).map(({ tokenHash, kind, ...d }) => ({ ...d, kind: kind === 'api' || kind === 'home-assistant' ? kind : tokenHash ? 'app' : 'browser' }));
+    return [...(this.#owner.sessions ?? [])].sort((a, b) => b.lastSeen.localeCompare(a.lastSeen)).map(({ tokenHash, kind, ...d }) => ({ ...d, kind: kind === 'api' || kind === 'home-assistant' || kind === 'hands' ? kind : tokenHash ? 'app' : 'browser' }));
   }
 
   /**
@@ -356,10 +360,61 @@ export class OwnerAuth {
     return this.createDeviceToken(label, 'api');
   }
 
-  /** Phase 57: 'api' for an API key, 'app' for a device-code app, 'home-assistant' (M4), undefined for anything else. */
-  deviceKind(id: string): 'api' | 'app' | 'home-assistant' | undefined {
+  /** Phase 57: 'api' for an API key, 'app' for a device-code app, 'home-assistant' (M4), 'hands' (Phase 87), undefined for anything else. */
+  deviceKind(id: string): 'api' | 'app' | 'home-assistant' | 'hands' | undefined {
     const d = this.#owner.sessions?.find((x) => x.id === id);
-    return !d?.tokenHash ? undefined : d.kind === 'api' || d.kind === 'home-assistant' ? d.kind : 'app';
+    return !d?.tokenHash ? undefined : d.kind === 'api' || d.kind === 'home-assistant' || d.kind === 'hands' ? d.kind : 'app';
+  }
+
+  /**
+   * Phase 87: Sara's hands on a computer (docs/design/COMPUTER_USE.md §3.2): made only through the
+   * signed-in page after a fresh confirmation, shown once, hash-only here, listed under Devices as
+   * "Sara's hands on <computer>", 90 days at most (the app renews it before then).
+   */
+  createHandsToken(label: string): { token: string; id: string; expiresAt: string } {
+    const now = this.#now();
+    const id = randomBytes(9).toString('base64url');
+    const secret = randomBytes(32).toString('base64url');
+    const sessions = (this.#owner.sessions ?? []).filter((d) => d.kind === 'api' || Date.parse(d.lastSeen) > now.getTime() - SESSION_TTL_MS);
+    // One computer, one set of hands: a new pairing with the same name replaces the old one.
+    const same = sessions.filter((d) => d.kind === 'hands' && d.label === label.slice(0, 60)).map((d) => d.id);
+    const kept = sessions.filter((d) => !same.includes(d.id));
+    if (kept.filter((d) => d.kind === 'hands').length >= 10) throw new Error('Up to 10 computers can let Sara use them: remove one under Devices first.');
+    kept.push({ id, label: label.slice(0, 60) || "Sara's hands", createdAt: now.toISOString(), lastSeen: now.toISOString(), tokenHash: sha256(secret), kind: 'hands' });
+    this.#owner.sessions = capSessions(kept);
+    this.#save();
+    return { token: `${HANDS_TOKEN_PREFIX}${id}.${secret}`, id, expiresAt: new Date(now.getTime() + DEVICE_TOKEN_MAX_MS).toISOString() };
+  }
+
+  /** Phase 87: the device id of a valid hands token (other tokens and cookies never match). */
+  handsTokenId(token: string | undefined): string | undefined {
+    if (!token?.startsWith(HANDS_TOKEN_PREFIX)) return undefined;
+    const [id, secret, extra] = token.slice(HANDS_TOKEN_PREFIX.length).split('.');
+    if (!id || !secret || extra !== undefined) return undefined;
+    const d = this.#owner.sessions?.find((x) => x.id === id);
+    if (!d?.tokenHash || d.kind !== 'hands' || !safeEqual(sha256(secret), d.tokenHash)) return undefined;
+    const now = this.#now().getTime();
+    if (Date.parse(d.lastSeen) < now - SESSION_TTL_MS) return undefined;
+    if (!(Date.parse(d.createdAt) > now - DEVICE_TOKEN_MAX_MS)) return undefined;
+    if (now - Date.parse(d.lastSeen) > 60 * 60 * 1000) {
+      d.lastSeen = new Date(now).toISOString();
+      this.#save();
+    }
+    return id;
+  }
+
+  /** Phase 87: a fresh secret (and a fresh 90 days) for hands that still hold a valid token. */
+  renewHandsToken(token: string): { token: string; id: string; expiresAt: string } | undefined {
+    const id = this.handsTokenId(token);
+    const d = id ? this.#owner.sessions?.find((x) => x.id === id) : undefined;
+    if (!id || !d) return undefined;
+    const now = this.#now();
+    const secret = randomBytes(32).toString('base64url');
+    d.tokenHash = sha256(secret);
+    d.createdAt = now.toISOString();
+    d.lastSeen = now.toISOString();
+    this.#save();
+    return { token: `${HANDS_TOKEN_PREFIX}${id}.${secret}`, id, expiresAt: new Date(now.getTime() + DEVICE_TOKEN_MAX_MS).toISOString() };
   }
 
   /** Phase 71: whether a device or app sign-in with this id is listed here (routing only; tokens are still checked). */
@@ -382,6 +437,8 @@ export class OwnerAuth {
     if (!id || !secret) return undefined;
     const d = this.#owner.sessions?.find((x) => x.id === id);
     if (!d?.tokenHash || !safeEqual(sha256(secret), d.tokenHash)) return undefined;
+    // Phase 87: a hands token written with the other prefix is still only a hands token.
+    if (d.kind === 'hands') return undefined;
     const now = this.#now().getTime();
     // Phase 57: an API key works until the owner removes it (it can only reach /v1 and /mcp).
     if (d.kind !== 'api') {

@@ -244,6 +244,8 @@ export interface AppContext {
   previews?: import('./preview.ts').PreviewManager;
   /** Phase 49: her testing browser (one per conversation, closed after the turn or when idle). */
   browsers?: import('./browser.ts').BrowserManager;
+  /** Phase 87: Sara's hands on the owner's computers (one hub per person, shared by their companions). */
+  hands?: import('./hands.ts').HandsHub;
   /**
    * Phase 71: set in a household member's space: the models the owner allowed them and their daily
    * limits, checked before every model call (src/household.ts). Unset for the owner.
@@ -939,6 +941,8 @@ export interface AfterTool {
   contradictions?: Contradiction[];
   /** Phase 80: the sandbox try and the owner's choice (kept on the run step). */
   sandbox?: SandboxRecord;
+  /** Phase 87: step thumbnails (hashes in the run's thumbnail table) from her hands. */
+  thumbs?: string[];
 }
 export interface AfterReply {
   step: number;
@@ -1029,7 +1033,7 @@ export function recorderHooks(app: AppContext, rec: RunRecorder): TurnHooks {
       rec.reply(c.messageId);
     },
     afterTool(c) {
-      rec.tool({ id: c.call.id, name: c.call.name, summary: c.summary, args: c.args, status: c.status, output: c.output, ms: c.ms, approval: c.approval, messageId: c.messageId, ...(c.snapshotId ? { snapshotId: c.snapshotId } : {}), ...(c.contradictions?.length ? { contradictions: c.contradictions } : {}), ...(c.sandbox ? { sandbox: c.sandbox } : {}), files: [...new Set([...filesNamed(c.call.name, c.args), ...(c.sandbox?.applied ? [...c.sandbox.applied.written, ...c.sandbox.applied.removed] : [])])].slice(0, 200) });
+      rec.tool({ id: c.call.id, name: c.call.name, summary: c.summary, args: c.args, status: c.status, output: c.output, ms: c.ms, approval: c.approval, messageId: c.messageId, ...(c.snapshotId ? { snapshotId: c.snapshotId } : {}), ...(c.contradictions?.length ? { contradictions: c.contradictions } : {}), ...(c.sandbox ? { sandbox: c.sandbox } : {}), ...(c.thumbs?.length ? { thumbs: c.thumbs } : {}), files: [...new Set([...filesNamed(c.call.name, c.args), ...(c.sandbox?.applied ? [...c.sandbox.applied.written, ...c.sandbox.applied.removed] : [])])].slice(0, 200) });
       // §2.1: a sandbox try the owner discarded is why this step stopped short (the gate).
       if (c.sandbox?.decision === 'discarded') rec.stopped('gate');
       // §2.3: a stop the owner said no to is why this step stopped short.
@@ -1250,6 +1254,10 @@ async function* runTurnInner(app: AppContext, conversationId: string, userText: 
   // Phase 73: her SSH tools work on the owner's real servers: only in the owner's own chats with her
   // (never other apps, MCP, the OpenAI-compatible API, group chats, shared work channels or private chats).
   if (opts.externalApp || opts.group || conv.private || isWorkChannel(conv.channel) || ['api', 'mcp', 'home-assistant', 'alexa'].includes(conv.channel)) tools = tools.filter((t) => !isSshTool(t.spec.name));
+  // Phase 87: her hands on the owner's computer only in the owner's own chats with her (never other
+  // apps, MCP, the OpenAI-compatible API, voice assistants, group chats or shared work channels).
+  // Private conversations keep them, limited to localhost with pictures only to local models.
+  if (opts.externalApp || opts.group || conv.partner || isWorkChannel(conv.channel) || ['api', 'mcp', 'home-assistant', 'alexa'].includes(conv.channel)) tools = tools.filter((t) => !t.spec.name.startsWith('pc_'));
   // Phase 66: group chats get read-only tools only, and only those that run without asking (no approvals mid-round).
   if (opts.group) tools = tools.filter((t) => GROUP_TOOLS.has(t.spec.name) && app.tools.permission(t.spec.name, s.toolPermissions) === 'auto');
   // Private conversations: commands get no network either (nothing leaves the server).
@@ -1831,6 +1839,8 @@ async function* runTurnInner(app: AppContext, conversationId: string, userText: 
       let snapshotNote = '';
       const shown: string[] = [];
       const newProof: string[] = [];
+      // Phase 87: step thumbnails from her hands (kept in the run record by their hash).
+      const thumbs: string[] = [];
       // Phase 80: the sandbox try of this call (if any) and the owner's choice.
       let tried: SandboxResult | undefined;
       let sbRisk: CommandRisk | undefined;
@@ -2020,6 +2030,13 @@ async function* runTurnInner(app: AppContext, conversationId: string, userText: 
               canSee: seesShots(provider, model),
               ...(describeImage ? { describeImage } : {}),
               webAllowed: !conv.private && !privateLocalOn() && app.tools.permission('web_fetch', s.toolPermissions) !== 'never',
+              // Phase 87: pictures of the owner's screen may need a model on their own hardware.
+              modelLocal: provider.config.local === true && !isCloudModelName(model),
+              recordThumb: (img) => {
+                const sha = rec.thumb(img.data, img.mime, step);
+                if (sha) thumbs.push(sha);
+              },
+              ...(rec.on ? { runId: rec.id } : {}),
             });
             if (tried && sbDecision === 'ran') output = `[tried in a sandbox copy first: ${changesLine(tried.changes)}; the owner chose to run it for real]\n${output}`;
           } catch (err) {
@@ -2035,13 +2052,13 @@ async function* runTurnInner(app: AppContext, conversationId: string, userText: 
       output = app.redactor.redact(output + snapshotNote);
       const stored = clip(output, TOOL_RESULT_LIMIT);
       // Phase 75: a result card from the (scrubbed) result and arguments, kept with the message.
-      const card = cardFor({ name: call.name, args: shownArgs, status, output });
+      const card = cardFor({ name: call.name, args: shownArgs, status, output, ...(thumbs.length ? { thumb: thumbs.at(-1)! } : {}) });
       const flagged = turnContradictions.get(call.id);
       const sbRecord = tried && sbDecision && sbRisk ? sandboxRecord(tried, sbRisk, sbDecision, applied) : undefined;
       const toolMsg = store.addMessage(conv.id, 'tool', stored, { toolCallId: call.id, name: call.name, args: shownArgs, summary, status, ms, ...(snapshotId ? { snapshotId } : {}), ...(shown.length ? { images: shown } : {}), ...(card ? { card } : {}), ...(flagged?.length ? { contradiction: flagged[0] } : {}), ...(sbRecord ? { sandbox: sbRecord } : {}), ...(advisoryStop ? { advisory: { ...advisoryStop, ...(advisoryAnswer ? { answer: advisoryAnswer } : {}) } } : {}) });
       receipts.push({ name: call.name, status, args: call.arguments, output });
       // Phase 78 seam 3: the call is done (the recorder keeps the scrubbed result).
-      await hooks.afterTool({ step, call, summary, args: shownArgs, status, output, ms, approval, messageId: toolMsg.id, ...(snapshotId ? { snapshotId } : {}), ...(flagged?.length ? { contradictions: flagged } : {}), ...(sbRecord ? { sandbox: sbRecord } : {}) });
+      await hooks.afterTool({ step, call, summary, args: shownArgs, status, output, ms, approval, messageId: toolMsg.id, ...(snapshotId ? { snapshotId } : {}), ...(flagged?.length ? { contradictions: flagged } : {}), ...(sbRecord ? { sandbox: sbRecord } : {}), ...(thumbs.length ? { thumbs } : {}) });
       if (sbRecord) yield { type: 'sandbox', id: call.id, record: sbRecord };
       yield { type: 'tool_result', id: call.id, name: call.name, status, output: clip(output, UI_OUTPUT_LIMIT), ms, ...(snapshotId ? { snapshotId } : {}), ...(card ? { card } : {}) };
       for (const img of pendingImages) yield { type: 'image', id: img };

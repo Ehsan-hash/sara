@@ -18,6 +18,10 @@ export interface WsConnection {
   readonly open: boolean;
   onMessage?: (data: string | Buffer) => void;
   onClose?: (code: number) => void;
+  /** Phase 87: a ping frame (the hands channel's heartbeat); the other side answers with a pong. */
+  ping?(): void;
+  /** Phase 87: when the last frame of any kind (a pong too) arrived, in ms since the epoch. */
+  readonly lastSeen?: number;
 }
 
 /** Rejects an upgrade with a plain HTTP status. */
@@ -42,7 +46,7 @@ export function acceptWebSocket(req: IncomingMessage, socket: Duplex, head: Buff
  * Phase 49: opens a WebSocket to a ws:// address (plain, loopback use: the browser's DevTools
  * endpoint). Our frames are masked as the protocol requires of clients; messages up to `maxMessage`.
  */
-export function connectWebSocket(url: string, opts: { timeoutMs?: number; maxMessage?: number } = {}): Promise<WsConnection> {
+export function connectWebSocket(url: string, opts: { timeoutMs?: number; maxMessage?: number; headers?: Record<string, string> } = {}): Promise<WsConnection> {
   const u = new URL(url);
   if (u.protocol !== 'ws:') return Promise.reject(new Error('Only ws:// addresses are supported.'));
   // Phase 67: the one check before connecting (private local mode allows only this computer).
@@ -57,7 +61,8 @@ export function connectWebSocket(url: string, opts: { timeoutMs?: number; maxMes
       host: u.hostname.replace(/^\[|\]$/g, ''),
       port: Number(u.port || 80),
       path: `${u.pathname}${u.search}`,
-      headers: { Connection: 'Upgrade', Upgrade: 'websocket', 'Sec-WebSocket-Key': key, 'Sec-WebSocket-Version': '13' },
+      // Phase 87: extra headers (the reference hands send their token as Authorization: Bearer).
+      headers: { ...(opts.headers ?? {}), Connection: 'Upgrade', Upgrade: 'websocket', 'Sec-WebSocket-Key': key, 'Sec-WebSocket-Version': '13' },
       timeout: opts.timeoutMs ?? 10_000,
     });
     req.on('upgrade', (res, socket, head) => {
@@ -106,6 +111,15 @@ class Connection implements WsConnection {
     return this.#open;
   }
 
+  #lastSeen = Date.now();
+  get lastSeen(): number {
+    return this.#lastSeen;
+  }
+
+  ping(): void {
+    if (this.#open) this.#frame(0x9, Buffer.alloc(0));
+  }
+
   send(data: string | Buffer): void {
     if (!this.#open) return;
     const payload = typeof data === 'string' ? Buffer.from(data) : data;
@@ -151,6 +165,7 @@ class Connection implements WsConnection {
   }
 
   #data(d: Buffer): void {
+    this.#lastSeen = Date.now();
     this.#buf = this.#buf.length ? Buffer.concat([this.#buf, d]) : d;
     while (this.#open) {
       const b = this.#buf;

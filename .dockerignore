@@ -11,5 +11,6 @@ docs
 android
 ios
 desktop
+!desktop/shared/page-agent.js
 evals
 docs/handoffs

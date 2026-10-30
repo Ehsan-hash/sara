@@ -10,9 +10,9 @@ Sizes: **S** = an evening, **M** = a weekend.
 ## Code
 
 1. **Code map: understand `!` lines in `.gitignore`** (S)
-   Today a negation line (`!keep.log`) is skipped, so a file it would bring back stays out of the
-   map (the safe side). Support it.
-   *Where:* [`src/codemap/ignore.ts`](../src/codemap/ignore.ts) (the `line.startsWith('!')` check),
+   The map follows ordered negation lines such as `!keep.log`, so an explicitly re-included source
+   file can be found without descending into an excluded parent folder.
+   *Where:* [`src/codemap/ignore.ts`](../src/codemap/ignore.ts) (rule parsing and decision order),
    tests in [`test/codemap.test.ts`](../test/codemap.test.ts).
    *Done when:* `!` lines re-include files in the same order git applies them, with tests for a
    re-included file and for a folder that stays ignored.

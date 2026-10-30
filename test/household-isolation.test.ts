@@ -260,7 +260,10 @@ function routeFamilies(): Map<string, Set<string>> {
   return fam;
 }
 /** Owner-only route families (a member gets 403 ownerOnly). Every family must be in one of the two lists. */
-const OWNER_ONLY = ['backups', 'update', 'doctor', 'logs', 'status', 'health', 'access', 'private-local', 'local-models', 'subscriptions', 'mcp', 'bridges', 'github', 'github-watch', 'google', 'home', 'ssh', 'workspaces', 'jobs', 'previews', 'team', 'codemap', 'code-projects', 'starters', 'recipes', 'history-import', 'import', 'model-jobs', 'tools', 'search', 'desktop-apps', 'claim', 'demo', 'public', 'login', 'telegram', 'discord', 'budgets', 'sandbox', 'security-pass', 'findings', 'threat-model', 'evals', 'redteam'];
+const OWNER_ONLY = ['backups', 'update', 'doctor', 'logs', 'status', 'health', 'access', 'private-local', 'local-models', 'subscriptions', 'mcp', 'bridges', 'github', 'github-watch', 'google', 'home', 'ssh', 'workspaces', 'jobs', 'previews', 'team', 'codemap', 'code-projects', 'starters', 'recipes', 'history-import', 'import', 'model-jobs', 'tools', 'search', 'desktop-apps', 'claim', 'demo', 'public', 'login', 'telegram', 'discord', 'budgets', 'sandbox', 'security-pass', 'findings', 'threat-model', 'evals', 'redteam',
+  // Phase 87: computer use. Member routes in src/household.ts, but answered 403 ownerOnly while the
+  // owner's "Let household members use computer use" is off (the default, as here).
+  'hands', 'computer'];
 /**
  * Owner-only paths inside a member family (Phase 83: time-travel in `runs`; a member's run view
  * stays read-only). Each must answer a member 403 ownerOnly.

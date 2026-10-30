@@ -56,13 +56,15 @@ async function fakeCdp() {
           return void setTimeout(() => event('Page.loadEventFired', {}), 20);
         case 'Runtime.evaluate': {
           const e = String(m.params.expression);
-          if (e.includes('scrollIntoView')) {
-            const a = JSON.parse(e.slice(e.lastIndexOf('})(') + 3, -1)) as { field?: boolean; text?: string };
+          // Phase 87: every page read is the shared page agent followed by .call("<fn>", <json>).
+          const fn = /\.call\("(\w+)", ([\s\S]*)\)$/.exec(e);
+          if (fn?.[1] === 'find') {
+            const a = JSON.parse(fn[2]) as { field?: boolean; text?: string };
             if (a.text === 'Missing') return reply({ result: { value: { found: false } } });
             return reply({ result: { value: a.field ? { found: true, desc: 'input#new "New task"' } : { found: true, x: 100.5, y: 40, desc: 'button "Add"', covered: '' } } });
           }
-          if (e.includes('controls.push')) return reply({ result: { value: { title: pageTitle, url: '/', text: 'Todo\n1 item', more: false, controls: ['button "Add" (#add)'], width: 390, scrollWidth: 412 } } });
-          if (e.includes('no_horizontal_scroll')) return reply({ result: { value: [{ ok: true }, { ok: false, detail: 'page 412px wide, window 390px' }] } });
+          if (fn?.[1] === 'read') return reply({ result: { value: { title: pageTitle, url: '/', text: 'Todo\n1 item', more: false, controls: ['button "Add" (#add)'], width: 390, scrollWidth: 412 } } });
+          if (fn?.[1] === 'check') return reply({ result: { value: [{ ok: true }, { ok: false, detail: 'page 412px wide, window 390px' }] } });
           return reply({ result: { value: { title: pageTitle, url: 'http://sara-preview.test/preview/x/' } } });
         }
         case 'Page.captureScreenshot':

@@ -74,6 +74,8 @@ export interface ToolStep {
    * owner's choice, and for an Apply the M3 workspace manifest before and after.
    */
   sandbox?: unknown;
+  /** Phase 87: step thumbnails from her hands (hashes in run_thumbs; GET /api/computer/thumb/<hash>). */
+  thumbs?: string[];
 }
 
 /** Coding mode: the light workspace manifest (risk 3): HEAD and the dirty files' hashes. */
@@ -203,6 +205,9 @@ const parse = <T>(v: unknown, fallback: T): T => {
   }
 };
 
+/** Phase 87: screen thumbnails are kept 30 days (COMPUTER_USE.md §6.5). */
+export const THUMB_DAYS = 30;
+
 export class RunStore {
   readonly #db: DatabaseSync;
   readonly #now: () => Date;
@@ -285,6 +290,19 @@ export class RunStore {
     const cols = (t: string) => new Set((db.prepare(`PRAGMA table_info(${t})`).all() as Row[]).map((r) => String(r.name)));
     if (!cols('runs').has('branch')) db.exec('ALTER TABLE runs ADD COLUMN branch TEXT');
     if (!cols('run_steps').has('inputs_sha')) db.exec('ALTER TABLE run_steps ADD COLUMN inputs_sha TEXT');
+    // Phase 87 (additive): step thumbnails of computer use (320 px JPEGs, redacted on the device),
+    // kept by hash with their run; a shorter retention than the run itself (30 days).
+    db.exec(`CREATE TABLE IF NOT EXISTS run_thumbs (
+      sha TEXT NOT NULL,
+      run_id INTEGER NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
+      step_idx INTEGER NOT NULL DEFAULT 0,
+      mime TEXT NOT NULL,
+      bytes BLOB NOT NULL,
+      created_at TEXT NOT NULL,
+      PRIMARY KEY (sha, run_id)
+    );
+    CREATE INDEX IF NOT EXISTS run_thumbs_sha ON run_thumbs(sha);
+    CREATE INDEX IF NOT EXISTS run_thumbs_created ON run_thumbs(created_at);`);
     db.exec(`CREATE TABLE IF NOT EXISTS run_messages (
       run_id INTEGER NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
       id INTEGER NOT NULL,
@@ -323,6 +341,25 @@ export class RunStore {
     const bytes = deflateRawSync(Buffer.from(text, 'utf8'));
     this.#db.prepare('INSERT OR IGNORE INTO run_blobs (sha, bytes, size) VALUES (?, ?, ?)').run(sha, bytes, Buffer.byteLength(text));
     return { sha, added: bytes.length };
+  }
+
+  /** Phase 87: a step thumbnail (kept with its run). Returns its hash, or undefined when it can't be kept. */
+  putThumb(runId: number, stepIdx: number, data: Buffer, mime: string): string | undefined {
+    if (!runId || !data.length || data.length > 512 * 1024 || (mime !== 'image/jpeg' && mime !== 'image/png')) return undefined;
+    const sha = createHash('sha256').update(data).digest('hex');
+    try {
+      this.#db.prepare('INSERT OR IGNORE INTO run_thumbs (sha, run_id, step_idx, mime, bytes, created_at) VALUES (?, ?, ?, ?, ?, ?)').run(sha, runId, stepIdx, mime, data, this.#now().toISOString());
+      return sha;
+    } catch {
+      return undefined;
+    }
+  }
+
+  /** Phase 87: a step thumbnail by its hash. */
+  thumb(sha: string): { mime: string; data: Buffer } | undefined {
+    if (!/^[0-9a-f]{64}$/.test(sha)) return undefined;
+    const r = this.#db.prepare('SELECT mime, bytes FROM run_thumbs WHERE sha = ? LIMIT 1').get(sha) as { mime: string; bytes: Uint8Array } | undefined;
+    return r ? { mime: r.mime, data: Buffer.from(r.bytes) } : undefined;
   }
 
   blob(sha: string): string | undefined {
@@ -565,6 +602,9 @@ export class RunStore {
         total = this.stats().bytes;
       }
       this.#dropOrphans();
+      // Phase 87: screen thumbnails go after 30 days (or the runs' own setting, if shorter).
+      const thumbDays = cfg.keepDays > 0 ? Math.min(cfg.keepDays, THUMB_DAYS) : THUMB_DAYS;
+      this.#db.prepare('DELETE FROM run_thumbs WHERE created_at < ?').run(new Date(this.#now().getTime() - thumbDays * 86_400_000).toISOString());
     } catch (err) {
       console.warn(`runs: pruning failed: ${(err as Error).message}`);
     }
@@ -793,6 +833,15 @@ export class RunRecorder {
     this.#safe(() => {
       if (!this.#cur()) this.#open({ model: c.model, provider: c.provider, ...(c.purpose ? { label: c.purpose } : {}) });
       this.#cur()!.calls.push(c);
+    });
+  }
+
+  /** Phase 87: keeps a step thumbnail with this run (its hash, or undefined when not recording). */
+  thumb(data: Buffer, mime: string, stepIdx = this.#idx): string | undefined {
+    return this.#safe(() => {
+      const sha = this.#store!.putThumb(this.id, Math.max(0, stepIdx), data, mime);
+      if (sha) this.#bytes += data.length;
+      return sha;
     });
   }
 

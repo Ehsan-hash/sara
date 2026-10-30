@@ -5069,6 +5069,8 @@ function startEvents() {
     window.dispatchEvent(new Event('sara:planner'));
   });
   es.addEventListener('ring', (e) => onRing(JSON.parse(e.data).ring));
+  // Phase 87: her hands on a computer: live-view frames, Stop pressed there, computers coming and going.
+  es.addEventListener('computer', (e) => onComputerEvent(JSON.parse(e.data)));
   // A turn started or ended somewhere else (another device, Telegram, Discord): follow along.
   es.addEventListener('turn', (e) => {
     const { conversationId } = JSON.parse(e.data);
@@ -6381,7 +6383,7 @@ const SETTINGS_ORDER = [
   'models-default', 'models-routes', 'models-providers', 'models-subs', 'models-local',
   'ab-tools', 'ab-search', 'ab-library', 'ab-google', 'ab-home', 'ab-mcp',
   'ab-projects', 'ab-budgets', 'ab-github', 'ab-ssh', 'ab-recipes',
-  'co-phone', 'desktop-app', 'co-telegram', 'co-discord', 'co-apps',
+  'co-phone', 'desktop-app', 'co-computer', 'co-telegram', 'co-discord', 'co-apps',
   'dh-health', 'dh-devices', 'dh-backups', 'dh-data', 'dh-updates', 'dh-usage', 'dh-reports',
   'household', 'account',
 ];
@@ -6515,6 +6517,7 @@ function showSettingsTab(page, opts = {}) {
   if (pick === 'ab-ssh') void loadSsh();
   if (pick === 'ab-library') void loadLibrarySettings();
   if (pick === 'co-apps') void Promise.all([loadOtherApps(), loadAlexa()]);
+  if (pick === 'co-computer') void loadComputer();
   if (pick === 'her-import') void loadImport();
   if (pick === 'models-local') void loadLocalModels();
   if (pick === 'household') void loadHousehold();
@@ -10203,6 +10206,184 @@ if (window.SaraDesktop) {
   $('#dk-quick-try').addEventListener('click', () => void window.SaraDesktop.call('quickAsk').catch(() => {}));
   $('#dk-test').addEventListener('click', () => window.SaraDesktop.call('testNotification', { title: t('Sara'), body: t('Notifications from Sara will look like this.') }));
 }
+
+// ---------- Phase 87: computer use (docs/design/COMPUTER_USE.md §9) ----------
+// The Computer use page (the computers that let her use them, the member switch), the opt-in on this
+// computer in the desktop apps (the hands token goes straight to the app's native part, never kept
+// by this page), and the live view above the composer while she uses a computer for this chat.
+const handsBridge = () => (window.SaraDesktop?.call ? window.SaraDesktop : null);
+async function handsPrefs() {
+  const d = handsBridge();
+  if (!d) return null;
+  const p = await d.call('getPrefs').catch(() => null);
+  return p && p.handsSupported ? p : null;
+}
+async function loadComputer() {
+  const status = $('#cu-status');
+  status.textContent = '';
+  let h;
+  try {
+    h = await api('/hands');
+  } catch (err) {
+    $('#cu-list').replaceChildren();
+    $('#cu-none').hidden = true;
+    $('#cu-this').hidden = $('#cu-get').hidden = $('#cu-owner').hidden = true;
+    status.textContent = err.status === 403 ? t('Ask the owner of this server to switch on computer use for household members.') : err.message;
+    return;
+  }
+  $('#cu-owner').hidden = h.role !== 'owner';
+  $('#cu-members').checked = h.members === true;
+  const p = await handsPrefs();
+  $('#cu-this').hidden = !p;
+  $('#cu-get').hidden = Boolean(p);
+  if (h.downloadUrl) $('#cu-get-link').href = h.downloadUrl;
+  if (p) {
+    $('#cu-optin').checked = p.handsOptIn === true;
+    $('#cu-localonly').checked = p.handsLocalOnly === true;
+    $('#cu-localonly').disabled = p.handsOptIn !== true;
+    $('#cu-this-status').textContent = p.handsOptIn ? (p.handsConnected ? t('On: connected to Sara.') : t('On: connecting…')) : t('Off.');
+  }
+  const list = h.devices ?? [];
+  $('#cu-none').hidden = list.length > 0;
+  $('#cu-list').replaceChildren(
+    ...list.map((d) => {
+      const li = el('li', 'cu-row');
+      const dot = el('span', `cu-dot${d.connected ? ' on' : ''}`);
+      dot.setAttribute('aria-hidden', 'true');
+      const main = el('div', 'cu-row-main');
+      main.append(el('span', 'cu-row-name', d.computer || d.label));
+      const bits = [d.connected ? t('Connected') : t('Not connected')];
+      if (d.app) bits.push(d.app);
+      if (d.browser?.name) bits.push(d.browser.name);
+      if (d.connected && d.optIn && !d.optIn.browser) bits.push(t('switched off there'));
+      if (d.localOnly) bits.push(t('screenshots stay on local models'));
+      if (d.busy) bits.push(t('in use now'));
+      main.append(el('span', 'cu-row-meta', bits.join(' · ')));
+      const out = el('button', 'ghost', t('Sign out'));
+      out.type = 'button';
+      out.addEventListener('click', async () => {
+        if (!confirm(t('Sign {name} out? Sara can no longer use it until it is switched on there again.', { name: d.computer || d.label }))) return;
+        try {
+          await api(`/hands/${encodeURIComponent(d.id)}`, { method: 'DELETE' });
+          await loadComputer();
+        } catch (err) {
+          status.textContent = err.message;
+        }
+      });
+      li.append(dot, main, out);
+      return li;
+    }),
+  );
+}
+$('#cu-members').addEventListener('change', async () => {
+  try {
+    await api('/computer', { method: 'PUT', body: { members: $('#cu-members').checked } });
+    $('#cu-status').textContent = t('Saved');
+  } catch (err) {
+    $('#cu-status').textContent = err.message;
+    $('#cu-members').checked = !$('#cu-members').checked;
+  }
+});
+/** The first-time explainer: resolves true when the owner chose "Turn it on". */
+function computerExplainer() {
+  const dlg = $('#cu-explain');
+  return new Promise((resolve) => {
+    dlg.addEventListener('close', () => resolve(dlg.returnValue === 'yes'), { once: true });
+    dlg.returnValue = '';
+    dlg.showModal();
+    $('#cu-explain-yes').focus();
+  });
+}
+$('#cu-optin').addEventListener('change', async () => {
+  const box = $('#cu-optin');
+  const d = handsBridge();
+  const st = $('#cu-this-status');
+  if (!d) return;
+  const on = box.checked;
+  box.disabled = true;
+  try {
+    if (on) {
+      if (!(await computerExplainer())) {
+        box.checked = false;
+        return;
+      }
+      // §3.3: a server reached without HTTPS on another machine gets the hands only after a warning.
+      if (location.protocol === 'http:' && !/^(localhost|127\.\d+\.\d+\.\d+|\[::1\])$/.test(location.hostname) && !confirm(t('This Sara is reached without HTTPS, so others on your network could see what she sends this computer. Let her use it anyway?'))) {
+        box.checked = false;
+        return;
+      }
+      const p = await handsPrefs();
+      const proof = await confirmProof();
+      const r = await api('/hands/pair', { method: 'POST', body: { ...proof, name: p?.computerName || '' } });
+      const done = await d.call('handsPair', { token: r.token, id: r.id, expiresAt: r.expiresAt });
+      if (done?.error) throw new Error(done.error);
+      st.textContent = t('On: connecting…');
+    } else {
+      const p = await handsPrefs();
+      await d.call('handsOff');
+      if (p?.handsDeviceId) await api(`/hands/${encodeURIComponent(p.handsDeviceId)}`, { method: 'DELETE' }).catch(() => {});
+      st.textContent = t('Off.');
+    }
+  } catch (err) {
+    box.checked = !on;
+    st.textContent = err.name === t('Cancelled') ? '' : err.message;
+  } finally {
+    box.disabled = false;
+    setTimeout(() => void loadComputer(), 1500);
+  }
+});
+$('#cu-localonly').addEventListener('change', async () => {
+  const d = handsBridge();
+  if (!d) return;
+  const r = await d.call('setPref', { key: 'handsLocalOnly', value: $('#cu-localonly').checked }).catch((err) => ({ error: String(err) }));
+  $('#cu-this-status').textContent = r?.error ? r.error : t('Saved');
+});
+
+// The live view: the newest frame of the computer she is using for this conversation (memory only on the server).
+const liveView = { deviceId: '', n: 0, timer: 0, busy: false };
+function hideLiveView() {
+  $('#cu-live').hidden = true;
+  liveView.deviceId = '';
+  liveView.n = 0;
+  clearTimeout(liveView.timer);
+}
+async function onComputerEvent(ev) {
+  if (!ev || typeof ev !== 'object') return;
+  if (ev.stopped || ev.state === 'offline') {
+    if (ev.deviceId === liveView.deviceId) hideLiveView();
+    if (!document.querySelector('[data-page="co-computer"]').hidden) void loadComputer();
+    return;
+  }
+  if (ev.state === 'online' && !document.querySelector('[data-page="co-computer"]').hidden) void loadComputer();
+  if (!ev.frame || ev.conversationId !== state.currentId || liveView.busy) return;
+  liveView.busy = true;
+  try {
+    const f = await api(`/computer/frame/${encodeURIComponent(ev.deviceId)}?after=${ev.deviceId === liveView.deviceId ? liveView.n : 0}`);
+    if (!f.image) return;
+    liveView.deviceId = ev.deviceId;
+    liveView.n = f.n;
+    $('#cu-live-img').src = f.image;
+    $('#cu-live-text').textContent = t('Sara is using the Sara browser on your computer.');
+    $('#cu-live').hidden = false;
+    clearTimeout(liveView.timer);
+    // No new picture for two minutes: the view folds away (the last frame is in Runs).
+    liveView.timer = setTimeout(hideLiveView, 120_000);
+  } catch {
+    /* the next frame tries again */
+  } finally {
+    liveView.busy = false;
+  }
+}
+$('#cu-live-stop').addEventListener('click', async () => {
+  const id = liveView.deviceId;
+  hideLiveView();
+  if (state.streaming) $('#stop')?.click();
+  if (id) await api(`/hands/${encodeURIComponent(id)}/stop`, { method: 'POST', body: {} }).catch(() => {});
+});
+$('#cu-live-big').addEventListener('click', () => {
+  const big = $('#cu-live').classList.toggle('big');
+  $('#cu-live-big').textContent = big ? t('Smaller') : t('Bigger');
+});
 
 // ---------- Phase 68: several Saras in one app ----------
 // The desktop and phone apps keep a list of Sara servers, each with its own sign-in (kept by the

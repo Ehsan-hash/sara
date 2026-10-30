@@ -5,6 +5,29 @@ Format: newest first. Semantic versions since 1.0.0 (before that `0.<phase>.<pat
 
 ## Unreleased
 
+## 2.20.0 (2026-10-30): computer use, step 1: her own browser on your computer (Phase 87)
+
+- **Let Sara use this computer** (the Windows and Mac apps, Settings → Computer use; off by default,
+  explained the first time, confirmed with your sign-in): she opens web pages in **her own browser
+  window** (Edge or Chrome with its own profile: never your browser, tabs or passwords), reads the page
+  and its elements, takes screenshots, and reads console and network errors. Clicking and typing come in
+  the next step.
+- **Live view** above the message box with Bigger and **Stop**; Stop also in the app's menu. Every step
+  is in Runs with a small picture (kept 30 days). Sites you didn't name ask first; her own server's
+  address, local files and browser pages are refused.
+- Pictures go to the model you chose (no approval per picture); *Screenshots only to models on this
+  computer* is optional, and private local mode always keeps them local.
+- A new kind of sign-in for computers (90 days, listed under Devices, sign out any time). Owner only
+  unless *Let household members use computer use* is on (off by default). Never in the demo, other apps,
+  MCP, group or partner chats.
+- No app? The chat shows a card with the download link.
+- One page script (`desktop/shared/page-agent.js`) now serves both the server's testing browser and the
+  apps.
+
+- **Code map ignore rules** (thanks @Ehsan-hash, #23): `.gitignore` negation lines (`!keep.ts`) now
+  bring matching source files back in rule order, nested `.gitignore` files can override their parents,
+  and an excluded parent folder or dependency folder stays out. Fixes #1.
+
 ## 2.19.0 (2026-10-30): red-team mode, and Gmail organizing (harness track complete, Phase 86)
 
 - **Red-team mode:** *Red-team this* (after a coding turn, in Findings → *Red team*, or *Before you ship*

@@ -141,6 +141,7 @@ extension AppDelegate {
     if changing { makeWebView(store: Servers.dataStore(p), for: p.id) }
     openServer(path)
     refreshServerState()
+    if changing { handsSync() }  // Phase 87: the hands follow the Sara in use
   }
 
   /// "Add a Sara…": the address page; the new server gets a store of its own.

@@ -51,6 +51,7 @@ import { createModelsRoutes } from './routes/models.ts';
 import { createHerRoutes } from './routes/her.ts';
 import { createVoiceRoutes } from './routes/voice.ts';
 import { createLiveUpgrade } from './routes/live.ts';
+import { createHandsRoutes, createHandsUpgrade } from './routes/hands.ts';
 
 // Kept exported from here for main.ts and the tests.
 export { clientIp, fromPhoneApp, fromSaraApp, proxyTrust } from './http.ts';
@@ -310,7 +311,7 @@ export function createSaraServer(opts: ServerOptions): Server {
   /** What a demo visitor may change: their own conversations, signing out. Everything else is read-only. */
   const DEMO_WRITES = new Set(['conversations', 'disclosure', 'logout', 'demo', 'reports']);
   /** Security review: routes an app signed in with a device code may not use (sign-in settings, devices, approving apps). */
-  const DEVICE_TOKEN_DENIED = new Set(['devices', 'device', 'security', 'passkey', 'two-step', 'owner-token', 'pair', 'other-apps']);
+  const DEVICE_TOKEN_DENIED = new Set(['devices', 'device', 'security', 'passkey', 'two-step', 'owner-token', 'pair', 'other-apps', 'hands']);
   /**
    * Phase 24 (security review): what a demo visitor may read. Everyone on the demo is "signed in",
    * so owner-only pages (backups, files, health details, accounts, devices…) must be listed out,
@@ -786,6 +787,9 @@ export function createSaraServer(opts: ServerOptions): Server {
   const herRoutes = createHerRoutes(ctx);
   const voiceRoutes = createVoiceRoutes(ctx);
   const homeAssistantApi = createHomeAssistantApi(ctx);
+  // Phase 87: computer use (src/routes/hands.ts); a Stop pressed on the computer stops the turn here.
+  const handsRoutes = createHandsRoutes(ctx);
+  app.hands?.onStop((conversationId) => active.get(conversationId)?.controller.abort());
 
   async function api(req: IncomingMessage, res: ServerResponse, method: string, parts: string[]): Promise<void> {
     const [a, b, c] = parts;
@@ -1105,6 +1109,8 @@ export function createSaraServer(opts: ServerOptions): Server {
     if ((await codingRoutes(req, res, method, parts)) !== NEXT) return;
     // Phase 84: the eval loop (owner-only; src/routes/evals.ts).
     if ((await evalRoutes(req, res, method, parts)) !== NEXT) return;
+    // Phase 87: computer use: the computers, the live view, step thumbnails (src/routes/hands.ts).
+    if ((await handsRoutes(req, res, method, parts)) !== NEXT) return;
 
     // Connections: Google, Home Assistant, chat bridges, Alexa, other apps, reports, the event stream: src/routes/connections.ts.
     if ((await connectionsRoutes(req, res, method, parts)) !== NEXT) return;
@@ -1401,16 +1407,41 @@ export function createSaraServer(opts: ServerOptions): Server {
         throw as400(err);
       }
     }
+    // Phase 87: Sara's hands on this computer (docs/design/COMPUTER_USE.md §3.2). The desktop app's
+    // signed-in page asks for the token after the owner switched on "Let Sara use this computer";
+    // like letting in an app, it needs proof it's really you. The token goes to the app's native
+    // part (DPAPI / Keychain) and is never shown. Members only with the owner's switch on.
+    if (a === 'hands' && (b === 'pair' || b === 'renew') && !c && method === 'POST') {
+      if (opts.demo || !app.hands) throw new HttpError(404, 'Not found');
+      if (opts.member && !app.hands.allowed()) throw new HttpError(403, 'Only the owner of this server can use this.', { ownerOnly: true });
+      const body = await readJson(req);
+      if (b === 'renew') {
+        const r = auth.renewHandsToken(String(body.token ?? ''));
+        if (!r) throw new HttpError(401, 'That computer is no longer signed in: switch "Let Sara use this computer" off and on again.');
+        return send(res, 200, r);
+      }
+      confirmIdentity(body, { passkey: true });
+      const computer = String(body.name ?? '').replace(/[\u0000-\u001f\u007f<>]/g, '').replace(/\s+/g, ' ').trim().slice(0, 40) || 'this computer';
+      try {
+        const r = auth.createHandsToken(`Sara's hands on ${computer}`);
+        app.hands.forgetMissing();
+        return send(res, 200, { ...r, label: `Sara's hands on ${computer}` });
+      } catch (err) {
+        throw as400(err);
+      }
+    }
     if (a === 'devices') {
       const current = auth.sessionId(cookies(req)[SESSION_COOKIE]);
       if (!b && method === 'GET') return send(res, 200, { devices: auth.devices().map((d) => ({ ...d, current: d.id === current })) });
       if (b === 'others' && method === 'DELETE') {
         const n = auth.signOut('others', current);
+        app.hands?.forgetMissing();
         prunePush();
         return send(res, 200, { signedOut: n });
       }
       if (b && method === 'DELETE') {
         const n = auth.signOut(b);
+        app.hands?.forgetMissing();
         prunePush();
         if (b === current) res.setHeader('set-cookie', cookie('', 0));
         return send(res, 200, { signedOut: n });
@@ -1792,6 +1823,9 @@ export function createSaraServer(opts: ServerOptions): Server {
   server.keepAliveTimeout = 65_000;
   server.headersTimeout = 66_000;
   // Live voice calls: /api/live/<conversation id> upgrades to a WebSocket (src/routes/live.ts).
-  server.on('upgrade', createLiveUpgrade(ctx));
+  // Phase 87: /api/hands is the hands channel (src/routes/hands.ts); everything else is a live call.
+  const liveUpgrade = createLiveUpgrade(ctx);
+  const handsUpgrade = createHandsUpgrade(ctx);
+  server.on('upgrade', (req, socket, head) => ((req.url ?? '').split('?')[0] === '/api/hands' ? handsUpgrade : liveUpgrade)(req, socket, head));
   return server;
 }

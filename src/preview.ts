@@ -117,6 +117,19 @@ export class PreviewManager {
   }
 
   /**
+   * Phase 87: does one of her running jobs in `workspace` listen on `port` right now (the same OS
+   * check as previews)? The Sara browser opens such a localhost address without asking.
+   */
+  async jobOwnsPort(port: number, workspace: string, jobs: PreviewJobs | undefined): Promise<boolean> {
+    if (!jobs || !Number.isInteger(port) || port < 1 || port > 65535 || this.#ownPorts().includes(port)) return false;
+    for (const job of jobs.running().filter((j) => j.workspace === workspace)) {
+      const pid = jobs.pidOf(job.id);
+      if (pid && (await this.#owns(pid, port).catch(() => false))) return true;
+    }
+    return false;
+  }
+
+  /**
    * Opens a preview of a port that one of her running jobs in `workspace` listens on. Without a
    * port, the newest port her jobs' output mentions is tried.
    */

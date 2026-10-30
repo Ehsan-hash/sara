@@ -27,6 +27,16 @@ export interface ToolContext {
   describeImage?: (img: { mime: string; data: string }) => Promise<string | undefined>;
   /** Phase 49: the testing browser may open public web addresses (web tools allowed, not private). */
   webAllowed?: boolean;
+  /**
+   * Phase 87: this turn's model runs on the owner's own hardware (a local provider, not an Ollama
+   * cloud model). Pictures of the owner's screen marked "local models only" (and everything in
+   * private local mode) go to the model only when this is true.
+   */
+  modelLocal?: boolean;
+  /** Phase 87: a step thumbnail for the run record (320 px JPEG, already redacted on the device). */
+  recordThumb?: (img: { mime: string; data: Buffer }) => void;
+  /** Phase 87: the run this call belongs to (sent to the hands with each op). */
+  runId?: number;
 }
 
 export interface Tool {

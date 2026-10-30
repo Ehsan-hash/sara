@@ -52,9 +52,11 @@
 #include "resource.h"
 #include "page-logo.h"
 #include "toast.h"
+#include "hands.h"
 #include <propkey.h>
 #include <propvarutil.h>
 #include <set>
+#include <mutex>
 
 using Microsoft::WRL::Callback;
 using Microsoft::WRL::ComPtr;
@@ -81,7 +83,7 @@ static const UINT_PTR kRemoveTimer = 7;
 static const UINT_PTR kNowTimer = 8;            // Phase 75 stage 2: "Now" in the tray menu, every 45 s
 static const int kHotkeyId = 1;                 // the quick-ask shortcut (RegisterHotKey)
 enum MenuId {
-  ID_OPEN = 100, ID_LOGIN, ID_QUIT, ID_CHANGE, ID_SETTINGS, ID_HELP, ID_ASK, ID_HEADER, ID_SHORTCUT_OFF, ID_SENDTO,
+  ID_OPEN = 100, ID_LOGIN, ID_QUIT, ID_CHANGE, ID_SETTINGS, ID_HELP, ID_ASK, ID_HEADER, ID_SHORTCUT_OFF, ID_SENDTO, ID_HANDS_STOP, ID_HANDS_OFF,
   ID_SERVER0 = 200, ID_NOW0 = 300, ID_ALLOW0 = 340, ID_DENY0 = 380, ID_SHORTCUT0 = 420
 };
 static const size_t kNowMax = 10;
@@ -412,6 +414,7 @@ static std::wstring profileFor(const std::wstring& url) {
   return id;
 }
 static void updateTrayTip();
+static void handsSync();
 /** Makes it the one in use (the address is also kept in "server", as before 1.8). */
 static void activate(const std::wstring& id) {
   Profile p = loadProfile(id);
@@ -422,6 +425,7 @@ static void activate(const std::wstring& id) {
   setIni(L"servers", L"active", id);
   setPref(L"server", p.url);
   updateTrayTip();
+  handsSync();  // Phase 87: Sara's hands follow the server in use
 }
 /** The one server saved before 1.8 becomes profile s1, with its sign-in, with nothing to do. */
 static void migrateProfiles() {
@@ -442,6 +446,7 @@ static void forgetProfile(const std::wstring& id) {
     if (x != id) keep.push_back(x);
   setProfileIds(keep);
   WritePrivateProfileStringW((L"server." + id).c_str(), nullptr, nullptr, iniPath().c_str());
+  if (id == g_profile) sarahands::stop();  // Phase 87: its hands token went with it
 }
 static std::wstring serversJson() {
   std::wstring out = L"{\"servers\":[";
@@ -1020,6 +1025,61 @@ static std::string quickAskHtml() {
   HGLOBAL g = r ? LoadResource(g_inst, r) : nullptr;
   const char* p = g ? static_cast<const char*>(LockResource(g)) : nullptr;
   return p ? std::string(p, SizeofResource(g_inst, r)) : std::string("<!doctype html><p>Quick ask is missing from this build.</p>");
+}
+
+// ---------- Phase 87: Sara's hands on this computer (src/hands.cpp, docs/design/COMPUTER_USE.md) ----------
+// Per server: "Let Sara use this computer" (handsOn), its hands token (DPAPI, this Windows user only),
+// the device id and "Screenshots only to models on this computer". Off until the owner switches it on
+// in Settings → Computer use (the page gets the token from the server after confirming it's them).
+static std::wstring handsSection() { return L"server." + g_profile; }
+static bool handsOn() { return !g_profile.empty() && getIni(handsSection(), L"handsOn") == L"1"; }
+static std::string pageAgentJs() {
+  HRSRC r = FindResourceW(g_inst, MAKEINTRESOURCEW(IDR_PAGEAGENT), RT_RCDATA);
+  HGLOBAL g = r ? LoadResource(g_inst, r) : nullptr;
+  const char* p = g ? static_cast<const char*>(LockResource(g)) : nullptr;
+  std::string s = p ? std::string(p, SizeofResource(g_inst, r)) : std::string();
+  while (!s.empty() && (s.back() == '\n' || s.back() == '\r' || s.back() == ' ' || s.back() == ';')) s.pop_back();
+  return s;
+}
+static std::wstring computerName() {
+  wchar_t n[256];
+  DWORD len = 256;
+  if (GetComputerNameExW(ComputerNamePhysicalDnsHostname, n, &len)) return n;
+  return L"this computer";
+}
+static std::wstring handsBrowserProfile() {
+  std::wstring dir = dataDir() + L"\\hands-browser";
+  CreateDirectoryW(dir.c_str(), nullptr);
+  return dir + L"\\" + (g_profile.empty() ? L"s1" : g_profile);
+}
+/** Starts or stops the hands for the server in use, as its settings say. */
+static void handsSync() {
+  if (!handsOn() || g_server.empty()) return sarahands::stop();
+  std::string token = sarahands::unprotect(getIni(handsSection(), L"handsToken"));
+  if (token.rfind("sara_hands.", 0) != 0) return sarahands::stop();
+  sarahands::Host h;
+  h.server = g_server;
+  h.token = token;
+  h.computer = computerName();
+  h.profileDir = handsBrowserProfile();
+  h.pageAgent = pageAgentJs();
+  h.appVersion = std::wstring(L"Sara for Windows ") + kVersion;
+  h.localOnly = getIni(handsSection(), L"handsLocalOnly") == L"1";
+  h.log = [](const std::wstring& line) {
+    static std::mutex m;
+    std::lock_guard<std::mutex> l(m);
+    logLine(line);
+  };
+  sarahands::start(h);
+}
+static void handsOff() {
+  sarahands::stop();
+  for (const wchar_t* k : {L"handsOn", L"handsToken", L"handsId", L"handsExpires"}) setIni(handsSection(), k, L"");
+}
+static std::wstring handsPrefsJson() {
+  return std::wstring(L",\"handsSupported\":true,\"handsOptIn\":") + (handsOn() ? L"true" : L"false") + L",\"handsLocalOnly\":" + (getIni(handsSection(), L"handsLocalOnly") == L"1" ? L"true" : L"false") +
+         L",\"handsConnected\":" + (sarahands::connected() ? L"true" : L"false") + L",\"handsDeviceId\":\"" + jsonEscape(getIni(handsSection(), L"handsId")) + L"\",\"handsError\":\"" +
+         jsonEscape(sarahands::lastError()) + L"\",\"handsBrowser\":" + (sarahands::browserPath().empty() ? L"false" : L"true") + L",\"computerName\":\"" + jsonEscape(computerName()) + L"\"";
 }
 
 // Her face for the tray menu: the page's PNG, decoded and scaled with WIC (premultiplied alpha).
@@ -1860,6 +1920,11 @@ static void trayMenu() {
   }
   AppendMenuW(m, MF_STRING, ID_OPEN, L"Open Sara");
   AppendMenuW(m, MF_STRING | needsServer, ID_SETTINGS, L"Settings…");
+  // Phase 87: Stop her on this computer, and switch "Let Sara use this computer" off.
+  if (handsOn()) {
+    AppendMenuW(m, MF_STRING | (sarahands::connected() ? 0 : MF_GRAYED), ID_HANDS_STOP, L"Stop Sara on this computer");
+    AppendMenuW(m, MF_STRING, ID_HANDS_OFF, L"Don't let Sara use this computer");
+  }
   AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
   // Phase 68: the saved servers (✓ the one in use); switching keeps every sign-in.
   HMENU saras = CreatePopupMenu();
@@ -2234,7 +2299,7 @@ static std::wstring prefsJson() {
          L",\"server\":\"" + jsonEscape(g_server) + L"\",\"theme\":\"" + g_themePref + L"\",\"titlebar\":" + std::to_wstring(g_customFrame ? kTitlebarDip : 0) +
          // Phase 75 stage 2: the quick-ask shortcut, the choices, and whether another app has it.
          L",\"quickAskShortcut\":\"" + shortcutId() + L"\",\"quickAskShortcutLabel\":\"" + shortcutLabel() + L"\",\"quickAskShortcutFree\":" + (g_shortcutTaken ? L"false" : L"true") +
-         L",\"quickAskShortcuts\":" + shortcutsJson() + L",\"sendTo\":" + (sendToOn() ? L"true" : L"false") + L",\"toasts\":" + (g_toastOk ? L"true" : L"false") + L"}";
+         L",\"quickAskShortcuts\":" + shortcutsJson() + L",\"sendTo\":" + (sendToOn() ? L"true" : L"false") + L",\"toasts\":" + (g_toastOk ? L"true" : L"false") + handsPrefsJson() + L"}";
 }
 
 static void onMessage(const std::wstring& json, const std::wstring& source) {
@@ -2319,8 +2384,36 @@ static void onMessage(const std::wstring& json, const std::wstring& source) {
     } else if (key == L"startAtLogin") setStartAtLogin(on);
     else if (key == L"sendTo") setSendTo(on);  // Phase 75 stage 3: "Send to → Sara" in Explorer
     else if (key == L"keepRunning" || key == L"notifications") setPref(key.c_str(), on ? L"1" : L"0");
+    else if (key == L"handsLocalOnly") {
+      // Phase 87: "Screenshots only to models on this computer" (the server hears it at once).
+      setIni(handsSection(), L"handsLocalOnly", on ? L"1" : L"0");
+      sarahands::setLocalOnly(on);
+    }
     else return reply(id, L"null", L"Unknown setting");
     return reply(id, prefsJson());
+  }
+  // Phase 87: "Let Sara use this computer". The page made the hands token after the owner confirmed
+  // it's them; it is kept here with DPAPI and never given back to any page.
+  if (kind == L"handsPair") {
+    std::string token = toUtf8(m[L"token"]);
+    if (token.rfind("sara_hands.", 0) != 0 || token.size() > 300) return reply(id, L"null", L"That isn't a hands token.");
+    std::wstring sealed = sarahands::protect(token);
+    SecureZeroMemory(token.data(), token.size());
+    if (sealed.empty()) return reply(id, L"null", L"Windows couldn't keep the token safe.");
+    setIni(handsSection(), L"handsToken", sealed);
+    setIni(handsSection(), L"handsId", m[L"id"]);
+    setIni(handsSection(), L"handsExpires", m[L"expiresAt"]);
+    setIni(handsSection(), L"handsOn", L"1");
+    handsSync();
+    return reply(id, prefsJson());
+  }
+  if (kind == L"handsOff") {
+    handsOff();
+    return reply(id, prefsJson());
+  }
+  if (kind == L"handsStop") {
+    sarahands::pressStop();
+    return reply(id, L"true");
   }
   if (kind == L"testNotification") {
     g_pendingConv.clear();
@@ -2685,6 +2778,7 @@ static LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
       return 0;
     case WM_DESTROY:
       UnregisterHotKey(h, kHotkeyId);
+      sarahands::stop();  // Phase 87: the connection and the Sara browser close with the app
       saratoast::unregisterActivator();
       KillTimer(h, kNowTimer);
       closeQuickAskWebView();
@@ -2757,6 +2851,8 @@ static LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
         case ID_ASK: showQuickAsk(); break;
         case ID_SHORTCUT_OFF: setShortcut(L"off"); break;
         case ID_SENDTO: setSendTo(!sendToOn()); break;
+        case ID_HANDS_STOP: sarahands::pressStop(); break;
+        case ID_HANDS_OFF: handsOff(); break;
         default:
           if (LOWORD(wp) >= ID_NOW0 && LOWORD(wp) < ID_NOW0 + kNowMax) {
             size_t i = LOWORD(wp) - ID_NOW0;

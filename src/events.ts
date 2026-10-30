@@ -35,6 +35,8 @@ export type HubEvent = (
   | { type: 'findings'; conversationId: string | null; workspace: string | null; summary?: unknown; findingId?: number }
   /** Phase 84: an eval moved on (a run finished, the judge, the result). */
   | { type: 'eval'; id: number; status: string; progress?: unknown }
+  /** Phase 87: Sara's hands on a computer: online/offline, a new live-view frame, Stop pressed there. */
+  | { type: 'computer'; deviceId: string; state?: 'online' | 'offline'; frame?: number; conversationId?: string; stopped?: boolean; by?: string; ev?: string }
 ) & {
   /** Phase 31: which companion it came from (set by her CompanionHub). */
   companion?: string;

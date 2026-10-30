@@ -595,6 +595,29 @@ ROADMAP/ROADMAP.public, THREAT_MODEL and SECURITY updates in the same release.
   `hands-ref` drives a fixture app with a console error and an HTTP 500 that `pc_browser_logs`
   reports; conformance script passes against the Windows app on the dev PC and the Mac app on the
   Mac; a localhost job opened without a card, an unknown site asks once.
+- **Built (2026-10-30).** Server: `src/hands.ts` (`HandsHub`), `src/routes/hands.ts` (`/api/hands`
+  WS + `/api/hands`, `/api/computer`, frames, `/api/computer/thumb/<sha>`), pairing and renewal in
+  `src/server.ts` (`POST /api/hands/pair` with the Phase 52 confirmation, `POST /api/hands/renew`),
+  `hands` token kind in `src/auth.ts` (`sara_hands.<id>.<secret>`, refused by `deviceTokenId`, `/v1`
+  and other apps), `src/tools/computer.ts` (`pc_devices`, `pc_browser_open/navigate/look/read/tabs/
+  logs/request`), `src/computer-policy.ts` (look/navigate rows), step thumbnails in the new
+  `run_thumbs` table (30 days), the `computer` and `hands-install` cards, the member switch
+  (`settings.computerUse.members`, off), `src/hands-ref.ts`, `scripts/hands-conformance.ts`,
+  `desktop/shared/page-agent.js` (also the testing browser's reader now), Windows `hands.cpp`, Mac
+  `Hands.swift`, Settings → Computer use (opt-in, explainer, local-only pictures, computers list,
+  member switch), the live view above the composer, `test/phase87.test.ts`. Conformance: 42/42 for
+  `hands-ref`, the Windows app and the Mac app.
+- **Deviations (CU1).** The Sara browser profile is per Sara server (`hands-browser/<server id>`
+  under the app's data folder), not one `Browser` folder, so two Saras never share site logins. The
+  page agent runs with `Runtime.evaluate` of the fixed file plus `.call("<name>", <JSON>)` in an
+  isolated world (no other expression), instead of `Runtime.callFunctionOn`. `b.snapshot` is one
+  DOM-based mode (no `mode:'ax'` yet); `b.screenshot` has no `full`/`marks` yet (CU2). The look/
+  navigate rows run in the tool's `prepare()` (ask → the normal card), not yet as a `gate()` kind in
+  TurnHooks. The device indicator is the tray / menu bar item (**Stop Sara on this computer**) plus the
+  chat's live view; the always-visible "Sara is looking" badge and the stop hotkey come with CU2.
+  The apps don't renew the token yet (the server's `POST /api/hands/renew` exists): after 90 days
+  the owner switches it off and on. Plain-HTTP non-loopback servers get a confirm() warning in the
+  page, not a native one. Downloads/uploads folders are CU2/CU3.
 
 ### Phase 88 · 2.21.0 · CU2: browser actions with approvals, indicator, Stop, takeover
 - `pc_browser_click/type/select/keys/scroll/upload/downloads`, `ApprovalHow 'task'`, always-ask

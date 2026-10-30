@@ -45,6 +45,8 @@ done
 iconutil -c icns build/Sara.iconset -o "$APP/Resources/Sara.icns"
 # Phase 75 stage 2: the quick-ask page, shared with the Windows app (QuickAsk.swift loads it).
 cp ../shared/quick-ask.html "$APP/Resources/quick-ask.html"
+# Phase 87: the page agent the Sara browser reads pages with (the same file as the server's).
+cp ../shared/page-agent.js "$APP/Resources/page-agent.js"
 
 # Node: both official builds, checked, merged into one universal program (+ npm for her commands).
 mkdir -p "$CACHE"
@@ -68,6 +70,8 @@ lipo -info "$N/bin/node"
 S="$APP/Resources/server"
 mkdir -p "$S"
 cp -R "$ROOT/src" "$ROOT/web" "$ROOT/persona" "$ROOT/templates" "$S/"
+# Phase 87: the shared page agent (her testing browser reads pages with it too).
+mkdir -p "$S/desktop/shared" && cp "$ROOT/desktop/shared/page-agent.js" "$S/desktop/shared/"
 cp "$ROOT/package.json" "$ROOT/LICENSE" "$S/"
 find "$S" -name '.DS_Store' -delete
 

@@ -144,6 +144,11 @@ export interface Settings {
    * (Off / Ask me (default) / Always), attacker scripts per run, its own token budget and time limit.
    */
   redteam?: Partial<import('./redteam.ts').RedTeamSettings>;
+  /**
+   * Phase 87 (computer use, docs/design/COMPUTER_USE.md §0.7): server-wide choices. `members`: household
+   * members may let Sara use their OWN computers (off by default; owner only).
+   */
+  computerUse?: { members?: boolean };
   /** Discord bridge (Phase 6). Bot token lives in the vault (bridge:discord). */
   discord?: Partial<DiscordSettings>;
   /** Automatic backups (Phase 6). */

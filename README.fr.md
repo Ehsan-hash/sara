@@ -14,7 +14,7 @@ vous choisissez, dans une seule app pour le web, Windows, Mac et le téléphone.
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="License: MIT"></a>
   <img src="https://img.shields.io/badge/node-%E2%89%A5%2024-339933" alt="Node 24 or newer">
   <img src="https://img.shields.io/badge/runtime%20dependencies-0-brightgreen" alt="Zero runtime dependencies">
-  <img src="https://img.shields.io/badge/tests-1129%20passing-brightgreen" alt="1129 tests passing">
+  <img src="https://img.shields.io/badge/tests-1143%20passing-brightgreen" alt="1143 tests passing">
   <a href="docs/RESULTS.md"><img src="https://img.shields.io/badge/HumanEval%20pass%401-96.3%25-informational" alt="HumanEval pass@1 96.3%"></a>
   <a href="https://github.com/farena-ai/sara/releases/latest"><img src="https://img.shields.io/github/v/release/farena-ai/sara?label=release" alt="Latest release"></a>
   <a href="https://github.com/farena-ai/sara/pkgs/container/sara"><img src="https://img.shields.io/badge/docker-amd64%20%7C%20arm64-2496ED" alt="Docker image for amd64 and arm64"></a>
@@ -28,7 +28,7 @@ vous choisissez, dans une seule app pour le web, Windows, Mac et le téléphone.
   <sub>Une vraie session avec un modèle local (qwen3.8 27B sur Ollama, une RTX 5090) sur un serveur de test jetable, dans le thème Nuit : elle remonte le moral de son interlocuteur, écrit une petite app et son test pendant que le modèle les transmet, demande avant d'exécuter une commande, repère un vrai bug grâce à un test qui échoue et le corrige jusqu'à ce que les 7 tests passent. Images choisies dans l'enregistrement ; rien n'y a été retouché.</sub>
 </p>
 
-> **État :** 2.19, licence MIT, avec trente versions riches en nouveautés depuis la 1.0 (toutes
+> **État :** 2.20, licence MIT, avec trente et une versions riches en nouveautés depuis la 1.0 (toutes
 > ci-dessous). De la 2.5 à la 2.8, toute l'app a changé de look. L'[app Android](https://play.google.com/store/apps/details?id=com.backstagecoding.sara)
 > est sur Google Play ; l'app iPhone et la version Mac App Store arrivent dès qu'Apple les aura
 > approuvées. Lisez [docs/DISCLOSURES.md](docs/DISCLOSURES.md) avant d'utiliser ou de partager Sara.
@@ -70,6 +70,7 @@ qui citent la page · le [mode local privé](docs/PRIVATE_LOCAL.md) · les [conv
 
 | Version | Ce que vous y gagnez |
 |---|---|
+| **2.20** · Utilisation de l'ordinateur, étape 1 | Avec l'app Windows ou Mac, **elle ouvre des pages web dans sa propre fenêtre de navigateur sur votre ordinateur** (son propre profil, jamais votre navigateur ni vos mots de passe), les lit, fait des captures et lit les erreurs de console et réseau : dites « mon app sur localhost est cassée » et elle regarde. Désactivé tant que vous n'activez pas *Laisser Sara utiliser cet ordinateur* ; vue en direct dans le chat avec Arrêter ; chaque étape dans Exécutions avec une image. Cliquer et taper arrivent ensuite. [Le plan](docs/design/COMPUTER_USE.md) |
 | **2.19** · Mode red team | **Avant la mise en ligne, elle essaie de casser son propre travail :** dans une copie isolée, elle lance vos tests, démarre votre app et envoie des entrées malformées et limites à chaque point d'entrée, vérifie les réglages par défaut dangereux et laisse le modèle de code écrire de petits scripts d'attaque qui ne peuvent atteindre que cette app isolée. Un modèle relecteur plus fort ne garde que les pannes reproductibles, avec l'entrée, la sortie et la ligne de code citées. Puis **Réparer ce qui a cassé** sur une branche locale. Aussi dans 2.19 : **ranger Gmail** (archiver, marquer comme lu, libellés, corbeille… par recherche ou date, compte d'abord, Annuler). [Comment ça marche](docs/design/HARNESS_TRACK.md) |
 | **2.18** · Elle se souvient d'elle-même | **Elle se souvient sans qu'on le lui demande quand la situation s'y prête :** la même erreur revient dans ce projet (« la dernière fois, la correction était… »), une commande qui a déjà échoué ici, un fichier sur lequel vous avez pris une décision, une tâche proche d'une autre dont elle a tiré une leçon. Les leçons ne viennent que de ce qui s'est vraiment passé (la ligne d'erreur et la modification qui l'a corrigée, citées). Chaque note dit d'où elle vient et avec quelle certitude, 2 au plus par étape, et *Pas utile* lui apprend. [Comment ça marche](docs/design/HARNESS_TRACK.md) |
 | **2.17** · Évaluations sur votre propre travail | **Quel réglage est vraiment meilleur pour vous ?** Choisissez jusqu'à 3 variantes (modèle, estompage de la mémoire, mode bac à sable, budget) et elle rejoue vos dernières vraies tâches avec chacune, dans des copies isolées. Chaque essai est noté sur vos tests, votre réaction, les constats, les tokens, le temps et le coût, plus un juge optionnel qui doit citer. Un gagnant n'est annoncé que si un test des signes le confirme (« +18 % sur 20 de vos tâches de code, p=0,01 »), avec la comparaison de chaque paire comme preuve. Sinon : *pas de gagnant net*. [Comment ça marche](docs/design/HARNESS_TRACK.md) |
@@ -295,8 +296,8 @@ qu'aucun test ne vérifiait. Ce qu'elle apporte aujourd'hui, c'est la manière d
 lance les tests, demande avant les étapes risquées, montre ce qui a tourné), pas un meilleur score
 sur ces jeux. Détails, résultats par tâche et comment relancer : [docs/RESULTS.md](docs/RESULTS.md).
 
-En plus, `npm run check` : une vérification des types et 1141 tests automatiques avec un faux modèle
-scripté (sans réseau, sans GPU) : 1129 passent sous Windows, et les 8 autres sont des tests
+En plus, `npm run check` : une vérification des types et 1154 tests automatiques avec un faux modèle
+scripté (sans réseau, sans GPU) : 1143 passent sous Windows, et les 8 autres sont des tests
 d'isolation propres à Linux, exécutés sur un serveur Linux.
 
 ## Comparaison

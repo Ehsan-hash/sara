@@ -191,7 +191,39 @@ function search(c) {
   return card;
 }
 
-const DRAW = { weather, task, reminder, note, calendar, test, job, home, photo, search, gmail: gmailResult };
+/** Phase 87: a page in the Sara browser on the owner's computer, with the step's small picture. */
+function computer(c) {
+  const title = c.action === 'look' ? t('Looked at a page on your computer') : c.action === 'navigate' ? t('Moved in the Sara browser') : t('Opened in the Sara browser');
+  const card = shell('computer', 'monitor', title, c.problems ? 'bad' : '');
+  card.append(el('p', 'rc-main', c.title || c.url));
+  if (/^https?:\/\//i.test(c.url ?? '')) card.append(el('p', 'rc-url', c.url));
+  if (c.computer) card.append(el('p', 'rc-meta', t('On {computer}', { computer: c.computer })));
+  if (c.problems) card.append(el('p', 'rc-meta', t('Problems: {what}', { what: c.problems })));
+  if (/^[0-9a-f]{64}$/.test(c.thumb ?? '')) {
+    const img = el('img', 'rc-thumb');
+    img.alt = t('Small picture of the page');
+    img.loading = 'lazy';
+    img.src = `/api/computer/thumb/${c.thumb}`;
+    card.append(img);
+  }
+  return card;
+}
+
+/** Phase 87: no computer connected yet: how to let her use one (web-only users). */
+function handsInstall(c) {
+  const card = shell('hands-install', 'monitor', t('Let Sara use your computer'));
+  card.append(el('p', 'rc-meta', t('Install the Sara app for Windows or Mac and switch on "Let Sara use this computer" in it. Phones can watch and stop her, but can\u2019t be driven.')));
+  if (/^https:\/\//i.test(c.url ?? '')) {
+    const a = el('a', 'button-link', t('Download the Sara app'));
+    a.href = c.url;
+    a.target = '_blank';
+    a.rel = 'noopener noreferrer';
+    card.append(a);
+  }
+  return card;
+}
+
+const DRAW = { weather, task, reminder, note, calendar, test, job, home, photo, search, gmail: gmailResult, computer, 'hands-install': handsInstall };
 
 /** One element per card; the file cards of a reply become one "Files changed" card. */
 export function renderCards(cards) {

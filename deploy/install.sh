@@ -230,6 +230,9 @@ for item in src web persona templates package.json package-lock.json; do
   rm -rf "${APP_DIR:?}/$item"
   cp -r "$SRC_DIR/$item" "$APP_DIR/"
 done
+# Phase 87: the shared page agent her testing browser reads pages with (also in the desktop apps).
+rm -rf "${APP_DIR:?}/desktop" && mkdir -p "$APP_DIR/desktop/shared"
+cp "$SRC_DIR/desktop/shared/page-agent.js" "$APP_DIR/desktop/shared/"
 SRC_OWNER="$(stat -c %u "$SRC_DIR")"
 if [[ -d "$SRC_DIR/.git" ]] && command -v git >/dev/null; then
   git -C "$SRC_DIR" rev-parse --short HEAD > "$APP_DIR/REVISION" 2>/dev/null || rm -f "$APP_DIR/REVISION"

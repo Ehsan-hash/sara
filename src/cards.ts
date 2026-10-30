@@ -17,9 +17,17 @@ export type Card =
   | { kind: 'home'; entity: string; service: string; name?: string; state?: string }
   | { kind: 'photo'; caption: string }
   | { kind: 'search'; query: string; results: { title: string; url: string; host: string }[] }
-  | { kind: 'gmail'; id: string; action: string; done: number; failed: number; total: number; query: string; link?: string; label?: string; stopped?: boolean; undoOf?: string };
+  | { kind: 'gmail'; id: string; action: string; done: number; failed: number; total: number; query: string; link?: string; label?: string; stopped?: boolean; undoOf?: string }
+  /** Phase 87: a page in the Sara browser on the owner's computer (with the step's thumbnail hash). */
+  | { kind: 'computer'; action: 'open' | 'navigate' | 'look'; url: string; title: string; computer?: string; problems?: string; thumb?: string }
+  /** Phase 87: no computer connected: "Get the app" (COMPUTER_USE.md §9.4). */
+  | { kind: 'hands-install'; url: string };
 
-export type CardInput = { name: string; args: Record<string, unknown>; status: 'ok' | 'error' | 'denied'; output: string };
+/** Phase 87: where the desktop apps are downloaded (the install card for web-only users). */
+export const APPS_PAGE = 'https://github.com/farena-ai/sara/releases/latest';
+
+/** `thumb`: Phase 87, the hash of the step's thumbnail (her hands' tools). */
+export type CardInput = { name: string; args: Record<string, unknown>; status: 'ok' | 'error' | 'denied'; output: string; thumb?: string };
 
 const MAX = 200;
 const cut = (s: unknown, n = MAX): string => {
@@ -38,8 +46,23 @@ export function cardFor(input: CardInput): Card | undefined {
   }
 }
 
-function build({ name, args, output }: CardInput): Card | undefined {
+function build({ name, args, output, thumb }: CardInput): Card | undefined {
   switch (name) {
+    case 'pc_devices':
+      return output.startsWith('No computer is connected') ? { kind: 'hands-install', url: APPS_PAGE } : undefined;
+    case 'pc_browser_open': {
+      const m = /^Opened (\S+) in the Sara browser on (.+?)(?: \(HTTP \d+\))?\. Title: (.*?)\. Tab /.exec(output);
+      const p = /Problems on the page so far: ([^(]+)/.exec(output);
+      return m ? { kind: 'computer', action: 'open', url: cut(m[1], 300), title: cut(m[3], 120), computer: cut(m[2], 60), ...(p ? { problems: cut(p[1], 120) } : {}), ...(thumb ? { thumb } : {}) } : undefined;
+    }
+    case 'pc_browser_navigate': {
+      const m = /now on (\S+) \((.*?)\)\./.exec(output);
+      return m ? { kind: 'computer', action: 'navigate', url: cut(m[1], 300), title: cut(m[2], 120), ...(thumb ? { thumb } : {}) } : undefined;
+    }
+    case 'pc_browser_look': {
+      const m = /\n(.*?) — (\S+)\nOn the page/.exec(output);
+      return m ? { kind: 'computer', action: 'look', url: cut(m[2], 300), title: cut(m[1], 120), ...(thumb ? { thumb } : {}) } : undefined;
+    }
     case 'shell':
       return shellCard(arg(args, 'command'), output);
     case 'web_fetch':

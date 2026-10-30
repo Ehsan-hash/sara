@@ -1431,6 +1431,10 @@
       "Talk to her on Discord too.",
       "phone"
     ],
+    "co-computer": [
+      "Let her look at and read web pages on this computer, in her own browser window: off until you turn it on, and you can stop her any time.",
+      "computer"
+    ],
     "dh-health": [
       "How you reach her (the address to open on your phone, with a QR code), and is everything working? Checks the database, every model, backups and more, and says what to do when something’s wrong.",
       "trouble"

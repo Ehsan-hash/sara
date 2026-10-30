@@ -308,7 +308,7 @@ export function memberDirs(dataDir: string, h: HouseholdStore): { member: Member
  * Settings only the owner has (server, accounts, bridges, tools, imports). A member's settings never
  * contain them, and a member's change never writes them.
  */
-export const OWNER_SETTINGS: readonly (keyof Settings)[] = ['providers', 'prices', 'mcpServers', 'search', 'offsite', 'backup', 'discord', 'telegram', 'home', 'githubWatch', 'helpers', 'teamLimits', 'jobBudget', 'turnBudgets', 'sandboxGate', 'securityPass', 'threatModel', 'redteam', 'evalSchedule', 'shellNetwork', 'modelLists', 'modelAutoSwitch', 'safetyClassifier', 'claimJudge', 'toolPermissions', 'alexa', 'presence', 'libraryLimits'];
+export const OWNER_SETTINGS: readonly (keyof Settings)[] = ['providers', 'prices', 'mcpServers', 'search', 'offsite', 'backup', 'discord', 'telegram', 'home', 'githubWatch', 'helpers', 'teamLimits', 'jobBudget', 'turnBudgets', 'sandboxGate', 'securityPass', 'threatModel', 'redteam', 'computerUse', 'evalSchedule', 'shellNetwork', 'modelLists', 'modelAutoSwitch', 'safetyClassifier', 'claimJudge', 'toolPermissions', 'alexa', 'presence', 'libraryLimits'];
 
 /**
  * A member's settings: their own file, with the owner's providers (for the server code that runs
@@ -512,6 +512,9 @@ export const MEMBER_ROUTES: ReadonlySet<string> = new Set([
   'settings', 'providers', 'usage', 'export', 'push', 'phone', 'safety', 'other-apps',
   // Phase 72: their own Alexa links (codes and unlinking in their space; the skill id stays the owner's)
   'alexa',
+  // Phase 87: computer use on their OWN computers. The routes answer 403 ownerOnly unless the owner
+  // switched on "Let household members use computer use" (src/routes/hands.ts checks it each time).
+  'hands', 'computer',
 ]);
 
 /** Families a member may write to only partly: GET-only for members. */

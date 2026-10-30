@@ -264,7 +264,7 @@
 <h3 id="code-map">Her map of your code</h3>
 <ul>
   <li>For every workspace she works in, she keeps a <strong>map</strong>: each source file, its functions, classes and types (with line numbers), and what imports what. It reads TypeScript and JavaScript, Python, Go, Rust, Java, Kotlin, C#, C and C++ (and Markdown headings) with simple rules of her own, so an unusual layout can be missed.</li>
-  <li>It stays up to date by itself: after she writes or edits files, after a job finishes, and with a quick look every few minutes while you work there. Only changed files are read again. Folders like <code>node_modules</code>, <code>.git</code>, <code>dist</code>, <code>build</code> and <code>vendor</code>, files in <code>.gitignore</code>, pictures and other binary files, and files over 1 MB are left out.</li>
+  <li>It stays up to date by itself: after she writes or edits files, after a job finishes, and with a quick look every few minutes while you work there. Only changed files are read again. Folders like <code>node_modules</code>, <code>.git</code>, <code>dist</code>, <code>build</code> and <code>vendor</code>, files in <code>.gitignore</code>, pictures and other binary files, and files over 1 MB are left out. An ordered <code>!</code> line can bring a source file back, but it cannot make the map enter an excluded parent folder or dependency folder.</li>
   <li>She uses it with her code tools (<code>code_map</code>, <code>code_find</code>, <code>code_refs</code>, <code>code_deps</code>) to find her way before reading files, so she reads less and gets to the right file sooner.</li>
   <li>See it yourself on the project page, tab <strong>Map</strong>: the folder tree with sizes and how many names each file has; click a file for its functions and classes and its imports both ways; search by name, by words, or by what the code does. Searching by meaning uses the <em>Meaning search</em> job in <em>Settings → Models → Which model does what</em> (for example <code>nomic-embed-text</code> on Ollama); without it, word search still works.</li>
   <li>The map is a cache in Sara's data folder (<code>cache/codemap</code>): backups leave it out because it is rebuilt from the files.</li>
@@ -575,6 +575,16 @@
   <li><strong>No theater:</strong> every break is sent again in a fresh copy and must break the same way, and the Reviewing model must cite the input, what happened and the code line, all checked by code. Anything else is dropped and listed under <em>Dropped</em>.</li>
   <li><strong>Fix what broke</strong> makes one local fix branch: the Coding model may only fix those breaks, the same inputs are sent again and must now get an answer, the tests must pass and the other checks must not find more. You choose <em>Apply</em>, <em>Keep</em> or <em>Discard</em>; nothing is pushed. A fixed break becomes a lesson she remembers in that project.</li>
   <li><em>Settings → Abilities → Coding projects → Red-team before shipping</em>: <em>Ask me</em> (default) offers <em>Red-team first</em> when you ask her to push, open a PR or publish; <em>Always</em> runs it first; <em>Off</em>.</li>
+</ul>
+
+<h2 id="computer">Let Sara use your computer</h2>
+<p>With the Sara app for Windows or Mac, Sara can open web pages in her own browser window on your computer, read them, take screenshots and read console and network errors: handy when your web app is broken. She can't click or type there yet.</p>
+<ul>
+<li>It's off until you switch on <b>Let Sara use this computer</b> in the app (Settings → Computer use). The first time it explains what she can do and asks you to confirm it's you.</li>
+<li>She uses her own browser window with its own profile: never your browser, tabs or passwords. You can watch, and Stop her in the chat, from the app's menu, or by switching it off.</li>
+<li>Sites you didn't name ask you first. Pictures go to the model you chose, unless you switch on <b>Screenshots only to models on this computer</b>; private local mode always keeps them local.</li>
+<li>Every step is in Runs with a small picture. Household members can use it on their own computers only if the owner allows it.</li>
+<li>No app? The chat shows a card with the download link; phones can watch and stop her, but can't be driven.</li>
 </ul>
 
 <h2 id="together">Things to do together</h2>

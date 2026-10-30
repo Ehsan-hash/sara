@@ -273,6 +273,10 @@
       <div id="demo-bar" class="offrecord-bar" hidden>👋 <strong>Demo.</strong> Conversations here aren't saved and disappear after a few hours; please don't share personal information. On your own server Sara also remembers, plans, codes and connects to your mail, calendar and phone.</div>
       <div id="offrecord-bar" class="offrecord-bar" hidden>🕶 <strong>Off the record.</strong> Nothing here is saved: she won't remember it, it isn't in backups, and it's gone when you close it or the server restarts. No tools or photos here. <button id="offrecord-end" type="button" class="ghost small">Close it now</button></div>
       <div id="jobs-strip" class="jobs-strip" hidden></div>
+      <div id="cu-live" class="cu-live" role="region" aria-label="Live view" hidden>
+        <img id="cu-live-img" class="cu-live-img" alt="What Sara sees in the Sara browser">
+        <div class="cu-live-bar"><span id="cu-live-text" class="cu-live-text"></span> <button id="cu-live-big" type="button" class="ghost small">Bigger</button> <button id="cu-live-stop" type="button" class="danger small">Stop</button></div>
+      </div>
       <div id="together-bar" class="offrecord-bar" hidden><span id="together-now"></span> <button id="together-end" type="button" class="ghost small">End</button></div>
       <div id="attachments" class="attachments" hidden></div>
       <form id="composer">
@@ -1487,6 +1491,28 @@
       <p class="small"><button id="dk-test" type="button" class="ghost">Show a test notification</button> <button id="dk-server" type="button" class="ghost">Your Saras…</button> <button type="button" class="tip" data-tip="Add another server to this app and switch between them without signing out. Notifications, the microphone and files you pick go to the one in use.">?</button> <span id="dk-status" class="muted small"></span></p>
       <p id="dk-version" class="muted small"></p>
         </section>
+        <section class="settings-page" data-page="co-computer" data-group="Connections" data-title="Computer use" hidden>
+      <p class="muted small">Sara can use a browser on your own computer to look at your web apps and sites: open pages, read them, take screenshots and check console errors. She can't click or type there yet. It works through the Sara app for Windows or Mac and is off until you switch it on there.</p>
+      <div id="cu-this" class="cu-this" hidden>
+        <h3>This computer</h3>
+        <label class="row"><input id="cu-optin" type="checkbox" data-noauto> Let Sara use this computer <button type="button" class="tip" data-tip="Off by default. On: Sara may open her own browser window here (its own profile, never yours) to look at pages and read their errors. You see everything she does and can stop it any time.">?</button></label>
+        <label class="row"><input id="cu-localonly" type="checkbox" data-noauto> Screenshots only to models on this computer <button type="button" class="tip" data-tip="Pictures of this screen then go only to a model on your own hardware (like Ollama). With a cloud model she works from the page's text instead. Private local mode always does this.">?</button></label>
+        <p class="small"><span id="cu-this-status" class="muted small" role="status"></span></p>
+      </div>
+      <div id="cu-get" class="cu-get" hidden>
+        <h3>Get the app</h3>
+        <p class="muted small">To let Sara use your computer, install the Sara app for Windows or Mac, sign in, and switch on "Let Sara use this computer" in it. Phones can watch and stop her, but can't be driven.</p>
+        <p class="small"><a id="cu-get-link" class="button-link" href="https://github.com/farena-ai/sara/releases/latest" target="_blank" rel="noopener noreferrer">Download the Sara app</a></p>
+      </div>
+      <h3>Your computers</h3>
+      <ul id="cu-list" class="cu-list"></ul>
+      <p id="cu-none" class="muted small" hidden>No computer lets Sara use it yet.</p>
+      <div id="cu-owner" hidden>
+        <h3>Household</h3>
+        <label class="row"><input id="cu-members" type="checkbox"> Let household members use computer use <button type="button" class="tip" data-tip="Off by default. On: people in your household can let Sara use their own computers from their own Sara app. Never yours: each person's computers are only theirs.">?</button></label>
+      </div>
+      <p id="cu-status" class="muted small" role="status"></p>
+        </section>
         <section class="settings-page" data-page="her-companions" data-group="Her" data-title="Companions" hidden>
       <p class="muted small">You can have more than one companion on this server. Each has her own name, character, look, voice, conversations and memories. They share your sign-in, devices, keys, models, tools and backups. Switch between them with ⇄ at the top of the sidebar.</p>
       <ul id="cmp-list" class="cmp-list"></ul>
@@ -2607,6 +2633,19 @@
       <label>Anything to add? (optional) <textarea id="report-note" rows="2" maxlength="1000"></textarea></label>
       <label class="row"><input id="report-dev" type="checkbox" checked> Also send it to the app's developer (only this reply, the reason and your note)</label>
       <p class="small"><button id="report-send" type="button">Report</button> <span id="report-status" class="muted" role="status"></span></p>
+    </form>
+  </dialog>
+  <!-- Phase 87: the first time "Let Sara use this computer" is switched on -->
+  <dialog id="cu-explain" class="proof-dlg" aria-labelledby="cu-explain-title">
+    <form method="dialog" class="proof-form">
+      <h3 id="cu-explain-title">Let Sara use this computer?</h3>
+      <ul class="cu-explain-list">
+        <li>She opens her own browser window here, with its own profile: never your browser, your tabs or your passwords.</li>
+        <li>For now she only looks: opens pages, reads them, takes screenshots and reads console and network errors. She can't click or type yet.</li>
+        <li>Sites you didn't name ask you first. Screenshots go to the model you chose, unless you keep them on this computer.</li>
+        <li>Every step is in Runs with a small picture. Stop her any time with Stop in the chat or in the app.</li>
+      </ul>
+      <div class="proof-actions"><button id="cu-explain-no" type="submit" value="no" class="ghost">Not now</button><button id="cu-explain-yes" type="submit" value="yes">Turn it on</button></div>
     </form>
   </dialog>
   <!-- Confirm it's you (owner proof for API keys, approving apps, passkeys and two-step) -->

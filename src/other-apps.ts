@@ -95,7 +95,10 @@ export function callerOf(req: IncomingMessage, auth: OwnerAuth): Caller | undefi
   if (!m || !m[1].startsWith(DEVICE_TOKEN_PREFIX)) return undefined;
   const id = auth.deviceTokenId(m[1]);
   if (!id) return undefined;
-  return { id, label: auth.deviceLabelOf(id) ?? DEFAULT_APP_NAME, kind: auth.deviceKind(id) ?? 'app' };
+  const kind = auth.deviceKind(id) ?? 'app';
+  // Phase 87: a hands token is never another app's key (deviceTokenId refuses it already).
+  if (kind === 'hands') return undefined;
+  return { id, label: auth.deviceLabelOf(id) ?? DEFAULT_APP_NAME, kind };
 }
 
 export const CORS_HEADERS = 'authorization, content-type, x-sara-conversation, x-sara-history, x-sara-companion, mcp-protocol-version, mcp-method, mcp-name, mcp-session-id, last-event-id, openai-organization, openai-project, x-stainless-arch, x-stainless-lang, x-stainless-os, x-stainless-package-version, x-stainless-runtime, x-stainless-runtime-version, x-stainless-retry-count, x-stainless-timeout';

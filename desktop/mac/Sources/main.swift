@@ -190,6 +190,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
     quick?.registerShortcut(tell: true)
     quick?.ensure()
     statusItem.menu = statusMenu()
+    handsSync()  // Phase 87: Sara's hands, if this Mac lets her
 
     UNUserNotificationCenter.current().delegate = self
     // Phase 75 stage 3: the kinds with buttons; permission is asked the first time there's something to show.
@@ -349,6 +350,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
     let m = NSMenu()
     m.addItem(withTitle: "Open Sara", action: #selector(openFromMenu), keyEquivalent: "")
     m.addItem(withTitle: "Settings…", action: #selector(openSettings), keyEquivalent: "")
+    // Phase 87: Stop her on this Mac, and switch "Let Sara use this computer" off.
+    if prefs.bool(forKey: "hands.\(Servers.activeId ?? "").on") {
+      m.addItem(withTitle: "Stop Sara on this Mac", action: #selector(handsStopFromMenu), keyEquivalent: "")
+      m.addItem(withTitle: "Don't let Sara use this Mac", action: #selector(handsOffFromMenu), keyEquivalent: "")
+    }
     m.addItem(.separator())
     addSubmenus(to: m)
     m.addItem(.separator())
@@ -396,6 +402,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
   @objc func quit() {
     quitting = true
     NSApp.terminate(nil)
+  }
+  /// Phase 87: the hands connection and the Sara browser close with the app.
+  func applicationWillTerminate(_ note: Notification) {
+    let h = Hands.shared
+    Hands.shared = nil
+    h?.stop()
+    h?.browser.close()
   }
 
   func setStartAtLogin(_ on: Bool) {
@@ -519,9 +532,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
       case "startAtLogin": setStartAtLogin(on)
       case "keepRunning": prefs.set(on, forKey: "keepRunning")
       case "notifications": prefs.set(on, forKey: "notifications")
+      case "handsLocalOnly":
+        // Phase 87: "Screenshots only to models on this computer" (the server hears it at once).
+        prefs.set(on, forKey: "hands.\(Servers.activeId ?? "").localOnly")
+        Hands.shared?.tellLocalOnly(on)
       default: return replyHandler(nil, "Unknown setting")
       }
       replyHandler(prefsDict(), nil)
+    // Phase 87: "Let Sara use this computer". The page made the hands token after the owner confirmed
+    // it's them; it goes to the Keychain and is never given back to any page.
+    case "handsPair":
+      let token = body["token"] as? String ?? ""
+      guard token.hasPrefix("sara_hands."), token.count < 300, let sid = Servers.activeId else { return replyHandler(nil, "That isn't a hands token.") }
+      guard HandsKeychain.save(token, account: sid) else { return replyHandler(nil, "The Keychain couldn't keep the token.") }
+      prefs.set(true, forKey: "hands.\(sid).on")
+      prefs.set(body["id"] as? String ?? "", forKey: "hands.\(sid).deviceId")
+      handsSync()
+      replyHandler(prefsDict(), nil)
+    case "handsOff":
+      handsOff()
+      replyHandler(prefsDict(), nil)
+    case "handsStop":
+      Hands.shared?.pressStop()
+      replyHandler(true, nil)
     case "testNotification":
       postNotification(title: body["title"] as? String ?? "Sara", body: body["body"] as? String ?? "", conv: "")
       replyHandler(true, nil)
@@ -564,8 +597,43 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
                             "theme": Shell.themePref, "titlebar": Int(macTitlebar)]
     // Phase 75 stage 2: the quick-ask shortcut, the choices, and whether another app has it.
     for (k, v) in quick?.prefs_ ?? [:] { d[k] = v }
+    // Phase 87: "Let Sara use this computer" for the Sara in use (Hands.swift).
+    let sid = Servers.activeId ?? ""
+    d["handsSupported"] = true
+    d["handsOptIn"] = prefs.bool(forKey: "hands.\(sid).on")
+    d["handsLocalOnly"] = prefs.bool(forKey: "hands.\(sid).localOnly")
+    d["handsConnected"] = Hands.shared?.connected ?? false
+    d["handsDeviceId"] = prefs.string(forKey: "hands.\(sid).deviceId") ?? ""
+    d["handsError"] = Hands.shared?.lastError ?? ""
+    d["handsBrowser"] = HandsBrowser.find() != nil
+    d["computerName"] = Host.current().localizedName ?? "this Mac"
     return d
   }
+
+  // MARK: Phase 87: Sara's hands on this Mac
+  /// Starts or stops the hands for the Sara in use, as its settings say.
+  func handsSync() {
+    Hands.shared?.stop()
+    Hands.shared = nil
+    guard let sid = Servers.activeId, let s = server, prefs.bool(forKey: "hands.\(sid).on"), let token = HandsKeychain.load(account: sid), token.hasPrefix("sara_hands.") else { return }
+    let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent(Bundle.main.bundleIdentifier ?? "Sara")
+    let agentURL = Bundle.main.url(forResource: "page-agent", withExtension: "js")
+    var agent = (agentURL.flatMap { try? String(contentsOf: $0, encoding: .utf8) } ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+    while agent.hasSuffix(";") { agent.removeLast() }
+    let h = Hands(server: s, token: token, computer: Host.current().localizedName ?? "this Mac", profileDir: support.appendingPathComponent("hands-browser/\(sid)"),
+                  pageAgent: agent, version: "Sara for Mac \(appVersion)", localOnly: prefs.bool(forKey: "hands.\(sid).localOnly"))
+    Hands.shared = h
+    h.start()
+  }
+  func handsOff() {
+    Hands.shared?.stop()
+    Hands.shared = nil
+    guard let sid = Servers.activeId else { return }
+    HandsKeychain.delete(account: sid)
+    for k in ["on", "deviceId"] { prefs.removeObject(forKey: "hands.\(sid).\(k)") }
+  }
+  @objc func handsStopFromMenu() { Hands.shared?.pressStop() }
+  @objc func handsOffFromMenu() { handsOff() }
 
   // MARK: notifications
   func postNotification(title: String, body: String, conv: String) {

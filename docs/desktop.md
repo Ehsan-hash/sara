@@ -163,6 +163,32 @@ Inno Setup 6 (build time only, unpacked in portable mode inside `third_party/`),
 files (`src`, `web`, `persona`, `package.json`, `LICENSE`) with the two programs and `sara.cmd`, and
 compiles `desktop/windows/installer/sara.iss`.
 
+### Sara's hands (Phase 87, computer use CU1)
+
+Both apps carry Sara's hands (docs/design/COMPUTER_USE.md): Windows in `desktop/windows/src/hands.cpp`
+(WinHTTP WebSocket, DPAPI, the Sara browser launched with `CreateProcess` and the DevTools pipe on
+the C runtime's inherited handles 3 and 4; `winhttp` is linked in `CMakeLists.txt`), Mac in
+`desktop/mac/Sources/Hands.swift` (`URLSessionWebSocketTask`, Keychain, `posix_spawn` with the pipe
+on fds 3 and 4). Both bundle `desktop/shared/page-agent.js` (Windows: RCDATA `IDR_PAGEAGENT` in
+`sara.rc`; Mac: `Contents/Resources/page-agent.js`, copied by `build.sh`). Nothing new to install.
+
+- **Settings → Computer use** in the app: **Let Sara use this computer** (off by default; the first
+  time explains what it does, then asks for proof it's you, like letting in an app). The page asks
+  the server for a `hands` token and gives it to the app, which keeps it (DPAPI / Keychain) and never
+  gives it back. **Screenshots only to models on this computer** keeps pictures on local models.
+- The Sara browser is Edge (Windows) or Chrome, then Edge, then Chromium (Mac), visible, with its own
+  profile per Sara (`%LOCALAPPDATA%\Sara\hands-browser\<server id>` /
+  `~/Library/Application Support/<bundle id>/hands-browser/<server id>`), never the user's.
+- The tray / menu bar menu has **Stop Sara on this computer** and **Don't let Sara use this
+  computer** while it's on. Quitting the app closes the connection and the Sara browser.
+- Check an app's hands: `node scripts/hands-conformance.ts --server <url> --token-file <owner token
+  file> --device <computer name>` (42 checks: the command set, refusals on the device, logs, pictures,
+  deadlines). For a Mac reached over SSH, forward the server and a fixture port with `ssh -R` and pass
+  `--fixture-port`.
+- Testing the Windows app next to an installed one: build with `-DSARA_TEST_HOOKS=ON` and start it
+  with `SARA_DESKTOP_TEST_DIR` (its own data folder, profile, lock and Sara browser profile). On the
+  Mac, a copy with another bundle id has its own preferences, WebKit data and Keychain item.
+
 ### Sara-Setup.exe: her server and the app together (Phase 46c)
 
 What the Windows installer puts on the computer (details for owners: docs/INSTALL.md → Windows):

@@ -9,7 +9,7 @@
 // all its traffic goes through a guard (src/browser-guard.ts) that lets it reach only previews,
 // plus public sites when web access is allowed. It closes after the turn or 5 idle minutes.
 import { spawn, type ChildProcess } from 'node:child_process';
-import { chownSync, existsSync, mkdtempSync, readdirSync, rmSync, statSync } from 'node:fs';
+import { chownSync, existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { BrowserGuard, PREVIEW_HOST } from './browser-guard.ts';
@@ -193,92 +193,21 @@ export const launchBrowser: Launcher = async (info, sandbox, guardPort) => {
 
 export const VIEWPORTS = { desktop: { width: 1280, height: 800, mobile: false }, phone: { width: 390, height: 844, mobile: true } } as const;
 
-// ---- Scripts run in the page by Sara's own code (fixed text; arguments go in as JSON). ----
-// They only read the page or find an element and its position; clicks and typing are real input
-// events sent through the DevTools protocol.
-const VISIBLE = `const vis = (el) => { const r = el.getBoundingClientRect(); const s = getComputedStyle(el); return r.width > 0 && r.height > 0 && s.visibility !== 'hidden' && s.display !== 'none' && Number(s.opacity) !== 0; };
-  const name = (e) => (e.getAttribute('aria-label') || e.innerText || e.value || e.title || e.getAttribute('placeholder') || e.getAttribute('alt') || '').replace(/\\s+/g, ' ').trim();
-  const desc = (e) => { const t = e.tagName.toLowerCase(); const n = name(e).slice(0, 60); return (e.id ? t + '#' + e.id : t) + (n ? ' "' + n + '"' : ''); };`;
-
-const FIND_SCRIPT = `(a) => {
-  ${VISIBLE}
-  let el = null;
-  if (a.selector) {
-    try { const all = [...document.querySelectorAll(a.selector)]; el = all.find(vis) || all[0] || null; } catch (e) { if (!a.text) return { error: 'That is not a valid CSS selector.' }; }
-  }
-  if (!el && a.text) {
-    const want = a.text.replace(/\\s+/g, ' ').trim().toLowerCase();
-    const pool = a.field ? 'input, textarea, select, [contenteditable=""], [contenteditable=true]' : 'button, a, [role=button], [role=link], [role=tab], [role=menuitem], [role=checkbox], input[type=submit], input[type=button], input[type=checkbox], input[type=radio], summary, label, [onclick]';
-    const cands = [...document.querySelectorAll(pool)].filter(vis);
-    const labelOf = (e) => { const l = e.id && document.querySelector('label[for="' + CSS.escape(e.id) + '"]'); return ((l && l.innerText) || (e.closest('label') && e.closest('label').innerText) || e.getAttribute('aria-label') || e.getAttribute('placeholder') || e.name || '').replace(/\\s+/g, ' ').trim().toLowerCase(); };
-    const key = (e) => (a.field ? labelOf(e) : name(e).toLowerCase());
-    el = cands.find((e) => key(e) === want) || cands.find((e) => key(e).includes(want)) || null;
-    if (!el && !a.field) {
-      const leaves = [...document.querySelectorAll('body *')].filter((e) => !e.children.length && vis(e));
-      const t = (e) => (e.textContent || '').replace(/\\s+/g, ' ').trim().toLowerCase();
-      el = leaves.find((e) => t(e) === want) || leaves.find((e) => t(e).includes(want)) || null;
-    }
-  }
-  if (!el) return { found: false };
-  el.scrollIntoView({ block: 'center', inline: 'center' });
-  const r = el.getBoundingClientRect();
-  const x = r.left + r.width / 2, y = r.top + r.height / 2;
-  const top = document.elementFromPoint(x, y);
-  const covered = top && top !== el && !el.contains(top) && !top.contains(el) ? desc(top) : '';
-  if (a.focus) {
-    el.focus();
-    if (el.select && el.tagName !== 'SELECT') el.select();
-    if (el.tagName === 'SELECT' && a.value !== undefined) {
-      const want = String(a.value).toLowerCase();
-      const o = [...el.options].find((o) => o.text.trim().toLowerCase() === want || o.value.toLowerCase() === want);
-      if (!o) return { found: true, desc: desc(el), error: 'No option "' + a.value + '" in that list.' };
-      el.value = o.value; el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true }));
-      return { found: true, desc: desc(el), selected: o.text.trim() };
-    }
-  }
-  return { found: true, x, y, desc: desc(el), covered, disabled: Boolean(el.disabled) };
-}`;
-
-const READ_SCRIPT = `(a) => {
-  ${VISIBLE}
-  let root = document.body;
-  if (a.selector) { try { root = document.querySelector(a.selector); } catch (e) { return { error: 'That is not a valid CSS selector.' }; } if (!root) return { error: 'Nothing matches ' + a.selector + '.' }; }
-  const text = (root.innerText || '').replace(/\\n{3,}/g, '\\n\\n').trim();
-  const hint = (e) => { const t = e.tagName.toLowerCase(); if (e.id) return '#' + e.id; if (e.name) return t + '[name="' + e.name + '"]'; return t; };
-  const controls = [];
-  for (const e of root.querySelectorAll('a[href], button, [role=button], input, textarea, select, summary')) {
-    if (controls.length >= 50) break;
-    if (!vis(e) || (e.type === 'hidden')) continue;
-    const t = e.tagName.toLowerCase();
-    const kind = t === 'a' ? 'link' : t === 'input' ? 'input:' + (e.type || 'text') : t === 'select' ? 'list' : t === 'textarea' ? 'text box' : 'button';
-    const label = (e.labels && e.labels[0] && e.labels[0].innerText) || name(e);
-    const extra = t === 'a' ? ' → ' + (e.getAttribute('href') || '').slice(0, 80) : (t === 'input' || t === 'textarea') && e.type !== 'password' && e.value ? ' = "' + String(e.value).slice(0, 40) + '"' : t === 'select' && e.selectedOptions[0] ? ' = "' + e.selectedOptions[0].text.trim().slice(0, 40) + '"' : '';
-    controls.push(kind + ' "' + String(label).replace(/\\s+/g, ' ').trim().slice(0, 60) + '" (' + hint(e) + ')' + extra + (e.disabled ? ' [disabled]' : ''));
-  }
-  return { title: document.title, url: location.pathname + location.search, text: text.slice(0, a.max || 6000), more: text.length > (a.max || 6000), controls, width: innerWidth, scrollWidth: document.documentElement.scrollWidth };
-}`;
-
-const CHECK_SCRIPT = `(checks) => {
-  ${VISIBLE}
-  const body = (document.body && document.body.innerText || '').toLowerCase();
-  const q = (s) => { try { return [...document.querySelectorAll(s)]; } catch (e) { return null; } };
-  return checks.map((c) => {
-    const t = String(c.text || '').toLowerCase();
-    switch (c.type) {
-      case 'text_visible': return { ok: body.includes(t) };
-      case 'text_absent': return { ok: !body.includes(t) };
-      case 'element_exists': { const l = q(c.selector); return l ? { ok: l.length > 0, detail: l.length + ' found' } : { ok: false, detail: 'bad selector' }; }
-      case 'element_visible': { const l = q(c.selector); return l ? { ok: l.some(vis), detail: l.length + ' found, ' + l.filter(vis).length + ' visible' } : { ok: false, detail: 'bad selector' }; }
-      case 'element_hidden': { const l = q(c.selector); return l ? { ok: !l.some(vis) } : { ok: false, detail: 'bad selector' }; }
-      case 'count_at_least': { const l = q(c.selector); return l ? { ok: l.length >= Number(c.count || 1), detail: l.length + ' found' } : { ok: false, detail: 'bad selector' }; }
-      case 'title_contains': return { ok: document.title.toLowerCase().includes(t), detail: 'title: ' + document.title.slice(0, 80) };
-      case 'url_contains': return { ok: (location.pathname + location.search).toLowerCase().includes(t), detail: location.pathname };
-      case 'no_horizontal_scroll': { const w = document.documentElement.scrollWidth; return { ok: w <= innerWidth + 1, detail: 'page ' + w + 'px wide, window ' + innerWidth + 'px' }; }
-      case 'input_value': { const l = q(c.selector); const v = l && l[0] ? String(l[0].value) : null; return { ok: v !== null && v.toLowerCase().includes(t), detail: v === null ? 'not found' : 'value: ' + v.slice(0, 60) }; }
-      default: return { ok: false, detail: 'unknown check' };
-    }
-  });
-}`;
+// ---- The page agent: Sara's one fixed script for reading pages (desktop/shared/page-agent.js) ----
+// Phase 87: the scripts that used to live here moved into the shared page agent, the same file the
+// Windows and Mac apps' Sara browser and the reference hands run, so there is one implementation.
+// It only reads the page or finds an element and its position; clicks and typing are real input
+// events sent through the DevTools protocol. Arguments go in as JSON; nothing else is evaluated.
+export const PAGE_AGENT_PATH = join(import.meta.dirname, '..', 'desktop', 'shared', 'page-agent.js');
+let pageAgentText: string | undefined;
+/** The page agent's source (one expression; read once). */
+export function pageAgentSource(): string {
+  return (pageAgentText ??= readFileSync(PAGE_AGENT_PATH, 'utf8').trim().replace(/;\s*$/, ''));
+}
+/** The one expression evaluated in a page: the agent, then one of its named functions with JSON arguments. */
+export function pageAgentCall(fn: 'find' | 'read' | 'check' | 'snapshot' | 'text', args: unknown): string {
+  return `(${pageAgentSource()}).call(${JSON.stringify(fn)}, ${JSON.stringify(args ?? {})})`;
+}
 
 export const CHECK_TYPES = ['text_visible', 'text_absent', 'element_exists', 'element_visible', 'element_hidden', 'count_at_least', 'title_contains', 'url_contains', 'no_horizontal_scroll', 'input_value', 'no_errors'] as const;
 export type Check = { type: (typeof CHECK_TYPES)[number]; text?: string; selector?: string; count?: number };
@@ -351,8 +280,9 @@ export class BrowserSession {
     }
   }
 
-  async #eval<T>(script: string, arg: unknown): Promise<T> {
-    const r = (await this.cdp.send('Runtime.evaluate', { expression: `(${script})(${JSON.stringify(arg)})`, returnByValue: true, awaitPromise: false }, this.sessionId)) as { result?: { value?: T }; exceptionDetails?: { text?: string } };
+  async #eval<T>(fn: 'find' | 'read' | 'check' | 'info', arg: unknown): Promise<T> {
+    const expression = fn === 'info' ? '({ title: document.title, url: location.href })' : pageAgentCall(fn, arg);
+    const r = (await this.cdp.send('Runtime.evaluate', { expression, returnByValue: true, awaitPromise: false }, this.sessionId)) as { result?: { value?: T }; exceptionDetails?: { text?: string } };
     if (r.exceptionDetails) throw new Error(`The page couldn't be read: ${r.exceptionDetails.text ?? 'script error'}`);
     return r.result?.value as T;
   }
@@ -372,7 +302,7 @@ export class BrowserSession {
     if (nav.errorText) return { url, title: '', status: 0, error: nav.errorText };
     await loaded;
     await settle(400);
-    const info = await this.#eval<{ title: string; url: string }>('() => ({ title: document.title, url: location.href })', null);
+    const info = await this.#eval<{ title: string; url: string }>('info', null);
     return { url: info.url, title: info.title, status: this.#status };
   }
 
@@ -399,7 +329,7 @@ export class BrowserSession {
   }
 
   async #find(a: Record<string, unknown>): Promise<{ found?: boolean; x?: number; y?: number; desc?: string; covered?: string; disabled?: boolean; error?: string; selected?: string }> {
-    return this.#eval(FIND_SCRIPT, a);
+    return this.#eval('find', a);
   }
 
   /** Clicks an element (CSS selector, or its visible text) with real mouse events. */
@@ -436,12 +366,12 @@ export class BrowserSession {
   }
 
   read(selector?: string, max = 6000): Promise<{ title: string; url: string; text: string; more: boolean; controls: string[]; width: number; scrollWidth: number; error?: string }> {
-    return this.#eval(READ_SCRIPT, { selector: selector || '', max });
+    return this.#eval('read', { selector: selector || '', max });
   }
 
   async check(checks: Check[]): Promise<{ ok: boolean; detail?: string }[]> {
     const page = checks.filter((c) => c.type !== 'no_errors');
-    const results = page.length ? await this.#eval<{ ok: boolean; detail?: string }[]>(CHECK_SCRIPT, page) : [];
+    const results = page.length ? await this.#eval<{ ok: boolean; detail?: string }[]>('check', page) : [];
     let i = 0;
     return checks.map((c) => (c.type === 'no_errors' ? { ok: this.errors.length === 0, detail: this.errors.length ? this.errors.slice(0, 5).join(' | ') : 'none' } : results[i++]));
   }

@@ -54,6 +54,8 @@ cp build/Release/Sara.exe build/Release/SaraService.exe "$STAGE/"
 cp "$NODE_DIR/node.exe" "$STAGE/node/"
 cp "$NODE_DIR/LICENSE" "$STAGE/node/LICENSE.txt"
 cp -r "$ROOT/src" "$ROOT/web" "$ROOT/persona" "$ROOT/templates" "$STAGE/server/"
+# Phase 87: the shared page agent (her testing browser reads pages with it too).
+mkdir -p "$STAGE/server/desktop/shared" && cp "$ROOT/desktop/shared/page-agent.js" "$STAGE/server/desktop/shared/"
 cp "$ROOT/package.json" "$ROOT/LICENSE" "$STAGE/server/"
 mkdir -p "$STAGE/server/docs"
 cp "$ROOT/docs/INSTALL.md" "$ROOT/docs/desktop.md" "$STAGE/server/docs/"

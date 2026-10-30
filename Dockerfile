@@ -44,6 +44,8 @@ COPY src ./src
 COPY web ./web
 COPY persona ./persona
 COPY templates ./templates
+# Phase 87: the shared page agent her testing browser reads pages with (also in the desktop apps).
+COPY desktop/shared/page-agent.js ./desktop/shared/page-agent.js
 
 # Root on purpose, but not a full root: the server starts as the container's root only so it can
 # run her commands (shell, MCP servers) as the separate "sara-tools" user, which can't read Sara's
