@@ -1337,6 +1337,11 @@ function renderMessages(messages, opts = {}) {
         b.classList.add('imported');
         b.prepend(el('span', 'msg-from muted small', `${IMPORTED_NAMES[m.meta.importedFrom] ?? t('Another assistant')} ${t('said (imported)')}`));
       }
+      // Phase 83: an answer taken from a branch ("Use this answer") says it is a re-run.
+      if (m.role === 'assistant' && m.meta?.rerun) {
+        b.classList.add('rerun');
+        b.prepend(el('span', 'msg-from muted small', t('Re-run from step {n} (a branch of an earlier reply)', { n: Number(m.meta.rerun.fromStep ?? 0) + 1 })));
+      }
       // Phase 66: who said it, in a group chat (her face, name and colour).
       if (m.role === 'assistant' && m.meta?.speaker) speakerHeader(b, m.meta.speaker);
       if (m.meta?.unverified) flagClaims(b, m.meta.unverified);

@@ -710,6 +710,71 @@ after coding turns*. Tests: `test/phase82.test.ts`; eval: `scripts/eval-threat.t
   `<ws>--branch-<n>` and the original untouched; memory override (exclude note 7) shows up in
   `memory_picks`; private conversations fork as private.
 
+**As built (2.16.0, Phase 83).** Deviations from the plan above, each for a reason:
+
+- **One module, no fork of the conversation.** The plan's `src/branch.ts` + `forkConversation` +
+  `<ws>--branch-<n>` became `src/replay.ts` (the runner, M9 reuses it) and `src/run-diff.ts` (pure:
+  word/line diff, run comparison, summary line). A branch does NOT copy the conversation into a
+  new one: the turn runs against a scratch in-memory `Store` holding the conversation up to step N
+  with the same message ids, so a branch never shows up in the conversation list, search, recall,
+  memory extraction or the other conversations. Its messages are kept with its run in the new
+  `run_messages` table (migration only adds). *Use this answer* appends the branch's final answer
+  to the real conversation with `meta.rerun = { runId, fromRun, fromStep }` (the page labels it
+  "Re-run from step n"). Chosen over a hidden branch conversation because every list, search and
+  export would otherwise need a filter, and a missed one leaks the branch.
+- **What is rebuilt, and how exactness is checked.** Step N = the system prompt from its blob, the
+  stored messages of the step's id range through the same `buildHistory` the turn used plus the app
+  notes recorded with the step, the step's memory picks, and the step's model. Each step now stores
+  `inputsSha` (`inputsHash`: role, content, tool calls, tool call id, image sizes; scrubbed); the
+  rebuild compares it and the sheet says "Rebuilt exactly as it was sent" or lists what changed
+  since (older steps recorded before the hash say so). Tool results of steps < N are the stored tool
+  messages in the range: served, never run again (test: a side-effect counter stays at 0).
+- **Edits:** the owner's message (`resume` replaces the last owner message in the scratch copy),
+  one or more tool results (scrubbed like any tool output), memory notes in (`selectMemories` with
+  `override.include`) or out (removed from the stored block), and the model (only configured
+  providers; private conversations only local models). The plan's "a tool's permission" and "the
+  budget" edits were not built as sheet fields: approvals are asked live on the branch anyway, and
+  the budget is the normal M4 budget (`replayRun(..., { budget })` for M9). *Replay unchanged* runs
+  the step with no edit as the control; the sheet and the diff say models don't answer the same way
+  twice.
+- **Workspace.** The recorder now waits for the previous step's git manifest before a step's tools
+  run (`rec.settled()`, coding conversations only), so a step's `workspace_ref` is the state its
+  model saw. A coding branch works in `<data>/cache/branch-runs/<run>/`: `git clone --shared
+  --no-checkout` of the real repo (read-only there), checkout of the recorded HEAD with
+  `core.autocrlf=false`, remotes removed; tracked files clean in the real workspace and unchanged
+  since that commit are copied byte for byte (so line endings match whatever the owner's git
+  settings are; without this a control replay on Windows failed every `edit_file`); then the dirty
+  files whose sha256 still matches. Everything that could not be restored is listed (moved-on HEAD,
+  changed/removed dirty files, unrecorded dirty files, ignored files, dependency folders, shell
+  commands before the manifest). Non-git workspaces get a copy as they are now, and say so. The M5
+  sandbox gate's "Apply"/"Run for real" act on the branch copy. *Apply its files to my project*
+  writes only files the real workspace has not changed since the branch started (conflicts are
+  listed, never overwritten). Old copies are swept when a branch starts (`sweepBranchCopies`); *Discard the copy* deletes one.
+- **Unchanged layers:** approvals, the plan check (M2), the sandbox gate (M5), the budget (M4) and the
+  safety layer run as in any turn; at most two branches run at once.
+- **Off the record** turns have no run, so nothing to branch; a branch of a private conversation is
+  private (local models only). All branch routes are owner-only (`BRANCH_ACTIONS` inside the members'
+  `runs` family: 403 `ownerOnly`); a member's Run view stays read-only.
+- **Routes:** `GET /api/runs/:id/steps/:n/branch` (what the sheet needs: exactness, prior tool
+  results, picks, models, workspace notes), `POST /api/runs/:id/branch {fromStep, edits, budget}` (SSE: `branch` with the new run id, the turn's events, `branch_done` with the outcome),
+  `GET /api/runs/:id/diff/:other`, `POST /api/runs/:id/use|apply|discard|stop`.
+- **Diff:** per step side by side (steps before the fork collapse to "the same in both"), model,
+  tokens in/out, cost, time, tool calls with args and status, files (original by hashes; the branch
+  by a unified diff of the copy vs the step's ref), the answers word by word (Myers, capped so a
+  long answer can't stall the server), memory picks only on one side, and a summary line ("4 more
+  steps · 94% more tokens · different file edits in src/math.js · a different answer").
+- **Tests:** `test/phase83.test.ts` (8): byte-exact rebuild, served tool results, every edit, the
+  coding copy at the recorded HEAD in a temp git repo (real workspace untouched, Apply conflicts),
+  approvals/budget/safety, off-the-record and members, private branches + diff helpers, speed
+  (2.4 ms to rebuild a step of a 2,000-message conversation). `test/household-isolation.test.ts`
+  owner-only sub-paths.
+
+**Hooks for M9:** `replayRun(app, runId, { fromStep, edits, model, budget, sandbox: { keep }, signal, hooks, onEvent })`
+returns `{ runId, status, answer, steps, tokens, usd, files, exact, summary }` headless (no SSE, no page); `compareRuns` / `diffRuns` +
+`summaryLine` score two runs; `rebuildStep` gives the inputs without running anything.
+**Hooks for M10:** `BranchEvent`s are plain objects (a background job can record them), and a
+branch's `run_messages` are what a nightly comparison would read.
+
 ### M9 · Phase 84 · 2.17.0: eval loop
 
 - **Ships:** in a project, write what "done" means: test command, assertions on files, expected

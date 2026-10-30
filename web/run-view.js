@@ -1,5 +1,6 @@
 // Phase 78 (harness track M3): the Run view. Opened from \"Show the run\" on a reply's step line
-// (web/steps.js). Read only (branching from a step is M8): each step with its time, model, tokens
+// (web/steps.js). Phase 83 (M8): each step of a reply has \"Branch from here\" (web/branch-view.js);
+// a branch shows where it came from and compares with its original; a run lists its branches. Each step with its time, model, tokens
 // and cost, the tools it ran (status, approval, files, output), the memory notes that went in (ids,
 // sureness and why, never their text: no memory is fetched here), plan-check findings, and in
 // coding conversations git HEAD with the dirty files. \"What was sent\" loads that step's prompt
@@ -9,6 +10,7 @@ import { locale, t } from './naming.js';
 import { icon } from './icons.js';
 import { fmtDuration, stepWords } from './steps.js';
 import { budgetMeter } from './budget-view.js';
+import { editWords, openBranchSheet, openDiffSheet } from './branch-view.js';
 
 const el = (tag, cls, text) => {
   const e = document.createElement(tag);
@@ -116,7 +118,7 @@ function section(title, ...children) {
   return box;
 }
 
-function stepCard(run, step, api, named) {
+function stepCard(run, step, api, named, branchable, ctx) {
   const d = el('details', `run-step${step.stopped ? ' stopped' : ''}`);
   const s = el('summary', 'run-step-head');
   const n = el('span', 'run-step-n', String(step.idx + 1));
@@ -141,6 +143,16 @@ function stepCard(run, step, api, named) {
   // Filled on first open (lists can be long).
   d.addEventListener('toggle', () => {
     if (!d.open || body.childElementCount) return;
+    // Phase 83: carry on from this step with something changed (a new run; this one stays).
+    if (branchable && step.systemSha && !step.label) {
+      const row = el('div', 'run-branch-row');
+      const b = el('button', 'ghost small run-branch');
+      b.type = 'button';
+      b.append(runGlyph('branch'), el('span', '', t('Branch from here')));
+      b.addEventListener('click', () => void openBranchSheet(run, step, ctx));
+      row.append(b, el('span', 'muted small', t('Change your message, a result, a note or the model, and see what she does then.')));
+      body.append(row);
+    }
     if (step.calls.length) {
       const ul = el('ul', 'run-calls');
       for (const c of step.calls) {
@@ -239,11 +251,25 @@ export async function openRunView(runId, { api, named = () => '' }) {
     return;
   }
   const { run, steps } = data;
+  const ctx = { api, named, openRun: (id) => void openRunView(id, { api, named }) };
   const head = el('div', 'run-head');
   const h = el('h2', 'run-title');
   h.append(runGlyph('compass', 'run-icon big'), document.createTextNode(t('The run')));
   head.append(h, el('p', 'muted small', [KIND[run.kind]?.() ?? run.kind, dayTime(run.startedAt), STATUS[run.status]?.() ?? run.status, data.conversation?.title && !run.title ? `“${data.conversation.title}”` : ''].filter(Boolean).join(' · ')));
   if (run.title) head.append(el('p', 'run-ask', run.title));
+  // Phase 83: a branch says where it came from and what changed, and compares with its original.
+  if (run.parentRunId) {
+    const ban = el('div', 'run-branch-banner');
+    ban.append(runGlyph('branch'), el('span', '', t('A branch from step {n} of an earlier run', { n: (run.branchedFromStep ?? 0) + 1 })), el('span', 'muted small', editWords(run.branch?.edits ?? []).join(' · ')));
+    const cmp = el('button', 'ghost small', t('Compare with the original'));
+    cmp.type = 'button';
+    cmp.addEventListener('click', () => void openDiffSheet(run.parentRunId, run.id, ctx));
+    const up = el('button', 'ghost small', t('Open the original'));
+    up.type = 'button';
+    up.addEventListener('click', () => void openRunView(run.parentRunId, { api, named }));
+    ban.append(cmp, up);
+    head.append(ban);
+  }
   const calls = steps.flatMap((s) => s.calls);
   const stats = el('div', 'run-stats');
   stats.append(
@@ -266,13 +292,34 @@ export async function openRunView(runId, { api, named = () => '' }) {
     stats.append(c);
   }
   const list = el('ol', 'run-steps');
+  const branchable = run.kind === 'turn' && run.status !== 'running' && !data.running;
+  // A branch's own steps start at the step it was made from; the ones before are its original's.
   for (const s of steps) {
     const li = el('li', '');
-    li.append(stepCard(run, s, api, named));
+    li.append(stepCard(run, s, api, named, branchable, ctx));
     list.append(li);
   }
-  const note = el('p', 'muted small run-foot', t('Read only. Secrets are hidden in what is kept here. Kept as long as Settings → Data & health → Health says.'));
-  body.replaceChildren(head, stats, steps.length ? list : el('p', 'muted', t('No steps were recorded for this run.')), note);
+  // Phase 83: the branches made from this run.
+  let branchBox = null;
+  if (data.branches?.length) {
+    branchBox = el('div', 'run-sec run-branches');
+    const ul = el('ul', 'run-branch-list');
+    for (const x of data.branches) {
+      const li = el('li', 'run-branch-item');
+      li.append(runGlyph('branch'), el('span', '', `${t('From step {n}', { n: (x.branchedFromStep ?? 0) + 1 })} · ${editWords(x.edits).join(' · ')}`), el('span', 'muted small', [STATUS[x.status]?.() ?? x.status, `${tokens(x.tokensIn + x.tokensOut)} ${t('tokens')}`, dayTime(x.startedAt)].join(' · ')));
+      const cmp = el('button', 'ghost small', t('Compare'));
+      cmp.type = 'button';
+      cmp.addEventListener('click', () => void openDiffSheet(run.id, x.id, ctx));
+      const open = el('button', 'ghost small', t('Open'));
+      open.type = 'button';
+      open.addEventListener('click', () => void openRunView(x.id, { api, named }));
+      li.append(cmp, open);
+      ul.append(li);
+    }
+    branchBox.append(el('h4', 'run-sec-h', t('Branches')), ul);
+  }
+  const note = el('p', 'muted small run-foot', branchable ? t('Secrets are hidden in what is kept here. Branch from a step to try something else: this run stays as it is. Kept as long as Settings → Data & health → Health says.') : t('Read only. Secrets are hidden in what is kept here. Kept as long as Settings → Data & health → Health says.'));
+  body.replaceChildren(...[head, stats, steps.length ? list : el('p', 'muted', t('No steps were recorded for this run.')), branchBox, note].filter(Boolean));
   // A single step opens by itself.
   if (steps.length === 1) list.querySelector('details')?.setAttribute('open', '');
 }

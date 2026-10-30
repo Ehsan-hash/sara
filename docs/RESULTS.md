@@ -603,6 +603,23 @@ line.
   isolated on this PC) passed, Apply wrote only `lib/files.js`; nothing was committed on `main` or
   pushed.
 
+## Time-travel (Phase 83)
+
+- Rebuilding a step's inputs (system prompt blob, history range, memory picks) takes **2.4 ms** in a
+  2,000-message conversation (`test/phase83.test.ts`, the speed test).
+- Live (2026-10-30, Windows, local models through Ollama, a throwaway git project): a coding turn
+  by `gemma4:12b` read two files, fixed `total()`, ran `node --test` (5 steps). Three branches from step 3:
+  - an edited `read_file` result + `ornith:9b`: 9 steps, 94 % more tokens, a different edit path
+    (one failed `edit_file`, then the same fix); the shell commands it tried were denied;
+  - *Replay unchanged* before the byte-for-byte restore: 13 steps. Every `edit_file` failed because
+    the copy's checkout had other line endings than the real files (fixed: clean files are copied
+    byte for byte, checkout without line-ending conversion);
+  - *Replay unchanged* after the fix: 5 steps, 54.8k vs 54.7k tokens, the same edit and test, an answer
+    worded differently. That is the control run doing its job.
+  The rebuild said "Rebuilt exactly as it was sent." The real workspace kept only the original
+  turn's edit. The conversation gained a message only on *Use this answer*, labelled "Re-run from
+  step 3".
+
 ## Code map
 
 `scripts/eval-codemap.ts` copies Sara's own code into a workspace and asks 8 "where is…?"

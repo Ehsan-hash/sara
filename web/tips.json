@@ -1264,6 +1264,26 @@
     "fnd-source": [
       "Code checks: her security pass. Known vulnerabilities: dependencies (OSV.dev). Sandbox tries: what a command did in a copy. Your decisions: plans that went against something you decided.",
       "security"
+    ],
+    "br-prompt": [
+      "Your message as she will read it on the branch. Change a word or the whole ask; leave it as it is to change something else.",
+      "time-travel"
+    ],
+    "br-tool": [
+      "A result she saw from a step before this one (served from the record, nothing runs again). Pick one to give her a different result.",
+      "time-travel"
+    ],
+    "br-tool-out": [
+      "What that tool tells her on the branch instead (for example a test that now passes, or an error). Secrets you paste are hidden like any tool output.",
+      "time-travel"
+    ],
+    "br-note-add": [
+      "A note's number from her Memory page: it goes in on the branch as if she had remembered it.",
+      "time-travel"
+    ],
+    "br-model": [
+      "The model she uses from this step on. Only models you have set up; private conversations only show models on your own hardware.",
+      "time-travel"
     ]
   },
   "pages": {

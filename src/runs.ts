@@ -99,6 +99,8 @@ export interface StepInfo {
   policyId?: string;
   /** A label for steps that aren't a chat-loop pass (\"Coder: write the tests\", \"Job #4\"). */
   label?: string;
+  /** Phase 83: sha256 of the history + notes sent (scrubbed), so a replay can say whether it rebuilt them exactly. */
+  inputsSha?: string;
 }
 
 export interface RunSettings {
@@ -149,6 +151,8 @@ export interface RunView {
   policy: Record<string, unknown> | null;
   /** Phase 79: the task's budget (a job's, a team task's limits, a turn's with how it ended). */
   budget: Record<string, unknown> | null;
+  /** Phase 83 (M8): a branch's record (what was changed, the workspace copy, what couldn't be restored). */
+  branch: Record<string, unknown> | null;
 }
 
 export interface StepView {
@@ -176,6 +180,17 @@ export interface StepView {
   stopped: string | null;
   replyMessageId: number | null;
   extra: string[];
+  /** Phase 83: hash of the history + notes sent (null for steps recorded before 2.16). */
+  inputsSha: string | null;
+}
+
+/** Phase 83: one message of a branch, kept in the run record (never in the conversation). */
+export interface RunMessage {
+  id: number;
+  role: string;
+  content: string;
+  createdAt: string;
+  meta?: Record<string, unknown>;
 }
 
 const j = (v: unknown) => (v === undefined || v === null ? null : JSON.stringify(v));
@@ -265,6 +280,21 @@ export class RunStore {
       bytes BLOB NOT NULL,
       size INTEGER NOT NULL
     );`);
+    // Phase 83 (M8, additive): a branch's record, the hash of what a step was sent, and the
+    // messages of a branch (kept with its run, never in the conversation).
+    const cols = (t: string) => new Set((db.prepare(`PRAGMA table_info(${t})`).all() as Row[]).map((r) => String(r.name)));
+    if (!cols('runs').has('branch')) db.exec('ALTER TABLE runs ADD COLUMN branch TEXT');
+    if (!cols('run_steps').has('inputs_sha')) db.exec('ALTER TABLE run_steps ADD COLUMN inputs_sha TEXT');
+    db.exec(`CREATE TABLE IF NOT EXISTS run_messages (
+      run_id INTEGER NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
+      id INTEGER NOT NULL,
+      role TEXT NOT NULL,
+      content TEXT NOT NULL,
+      meta TEXT,
+      created_at TEXT NOT NULL,
+      PRIMARY KEY (run_id, id)
+    );
+    CREATE INDEX IF NOT EXISTS runs_parent ON runs(parent_run_id);`);
     // Runs that were open when the server stopped did not finish.
     try {
       db.prepare("UPDATE runs SET status = 'interrupted', ended_at = COALESCE(ended_at, ?) WHERE status = 'running'").run(now().toISOString());
@@ -312,8 +342,8 @@ export class RunStore {
     const msgIds = s.tools.map((t) => t.messageId).filter((x): x is number => Boolean(x));
     const bytes = (calls?.length ?? 0) + (tools?.length ?? 0) + (files?.length ?? 0) + (contra?.length ?? 0) + (extra?.length ?? 0) + (picks?.length ?? 0) + 300;
     this.#db
-      .prepare('INSERT INTO run_steps (run_id, idx, at, label, model, provider, system_sha, history_from_id, history_to_id, extra, memory_picks, policy_id, calls, tool_calls, tool_message_ids, files_touched, contradictions, tokens_in, tokens_out, usd, unpriced, unreported, ms, stopped, reply_message_id, bytes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
-      .run(runId, idx, at, info.label?.slice(0, 200) ?? null, s.model ?? info.model ?? null, s.provider ?? info.provider ?? null, sha, info.historyFromId ?? null, info.historyToId ?? null, extra, picks, info.policyId ?? null, calls, tools, msgIds.length ? JSON.stringify(msgIds) : null, files, contra, sum.in, sum.out, sum.usd, sum.unpriced, sum.unreported, sum.ms, s.stopped ?? null, s.replyMessageId ?? null, bytes);
+      .prepare('INSERT INTO run_steps (run_id, idx, at, label, model, provider, system_sha, history_from_id, history_to_id, extra, memory_picks, policy_id, calls, tool_calls, tool_message_ids, files_touched, contradictions, tokens_in, tokens_out, usd, unpriced, unreported, ms, stopped, reply_message_id, bytes, inputs_sha) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+      .run(runId, idx, at, info.label?.slice(0, 200) ?? null, s.model ?? info.model ?? null, s.provider ?? info.provider ?? null, sha, info.historyFromId ?? null, info.historyToId ?? null, extra, picks, info.policyId ?? null, calls, tools, msgIds.length ? JSON.stringify(msgIds) : null, files, contra, sum.in, sum.out, sum.usd, sum.unpriced, sum.unreported, sum.ms, s.stopped ?? null, s.replyMessageId ?? null, bytes, info.inputsSha ?? null);
     return bytes;
   }
 
@@ -369,6 +399,7 @@ export class RunStore {
       bytes: Number(r.bytes),
       policy: parse<Record<string, unknown> | null>(r.policy, null),
       budget: parse<Record<string, unknown> | null>(r.budget, null),
+      branch: parse<Record<string, unknown> | null>(r.branch, null),
     };
   }
 
@@ -400,6 +431,7 @@ export class RunStore {
       stopped: (r.stopped as string | null) ?? null,
       replyMessageId: r.reply_message_id === null ? null : Number(r.reply_message_id),
       extra: parse<string[]>(r.extra, []),
+      inputsSha: (r.inputs_sha as string | null | undefined) ?? null,
     };
   }
 
@@ -424,10 +456,51 @@ export class RunStore {
     return r ? this.#step(r) : undefined;
   }
 
-  /** The run a message belongs to (its reply or one of its steps' replies). */
+  /** The run a message belongs to (its reply or one of its steps' replies). Branches never (their ids are their own). */
   forMessage(messageId: number): RunView | undefined {
-    const r = (this.#db.prepare('SELECT * FROM runs WHERE reply_message_id = ? OR user_message_id = ? ORDER BY id DESC LIMIT 1').get(messageId, messageId) ?? this.#db.prepare('SELECT r.* FROM runs r JOIN run_steps s ON s.run_id = r.id WHERE s.reply_message_id = ? ORDER BY r.id DESC LIMIT 1').get(messageId)) as Row | undefined;
+    const r = (this.#db.prepare('SELECT * FROM runs WHERE (reply_message_id = ? OR user_message_id = ?) AND parent_run_id IS NULL ORDER BY id DESC LIMIT 1').get(messageId, messageId) ?? this.#db.prepare('SELECT r.* FROM runs r JOIN run_steps s ON s.run_id = r.id WHERE s.reply_message_id = ? AND r.parent_run_id IS NULL ORDER BY r.id DESC LIMIT 1').get(messageId)) as Row | undefined;
     return r ? this.#run(r) : undefined;
+  }
+
+  // ---- Phase 83 (M8): branches ----
+  /** The branches made from a run (newest first). */
+  branches(parentId: number): RunView[] {
+    return (this.#db.prepare('SELECT * FROM runs WHERE parent_run_id = ? ORDER BY id DESC LIMIT 50').all(parentId) as Row[]).map((r) => this.#run(r));
+  }
+
+  /** A branch's record (merged into what is there). */
+  setBranch(id: number, patch: Record<string, unknown>): void {
+    try {
+      const cur = this.get(id)?.branch ?? {};
+      this.#db.prepare('UPDATE runs SET branch = ? WHERE id = ?').run(JSON.stringify({ ...cur, ...patch }), id);
+    } catch {
+      /* pruned meanwhile */
+    }
+  }
+
+  /** A branch's messages, kept with its run (one transaction; texts over 20,000 characters clipped). */
+  putMessages(runId: number, msgs: { id: number; role: string; content: string; createdAt: string; meta?: Record<string, unknown> }[]): number {
+    const ins = this.#db.prepare('INSERT OR REPLACE INTO run_messages (run_id, id, role, content, meta, created_at) VALUES (?, ?, ?, ?, ?, ?)');
+    let bytes = 0;
+    this.#db.exec('BEGIN');
+    try {
+      for (const m of msgs) {
+        const content = m.content.length > 20_000 ? `${m.content.slice(0, 20_000)}\n[… ${m.content.length - 20_000} more characters]` : m.content;
+        const meta = m.meta ? JSON.stringify(m.meta) : null;
+        bytes += content.length + (meta?.length ?? 0) + 40;
+        ins.run(runId, m.id, m.role, content, meta, m.createdAt);
+      }
+      this.#db.prepare('UPDATE runs SET bytes = bytes + ? WHERE id = ?').run(bytes, runId);
+      this.#db.exec('COMMIT');
+    } catch (err) {
+      this.#db.exec('ROLLBACK');
+      throw err;
+    }
+    return bytes;
+  }
+
+  runMessages(runId: number): RunMessage[] {
+    return (this.#db.prepare('SELECT * FROM run_messages WHERE run_id = ? ORDER BY id').all(runId) as Row[]).map((r) => ({ id: Number(r.id), role: String(r.role), content: String(r.content), createdAt: String(r.created_at), ...(r.meta ? { meta: parse<Record<string, unknown>>(r.meta, {}) } : {}) }));
   }
 
   /** For the health line: how many runs and how much room they take (rows + blobs). */
@@ -680,6 +753,11 @@ export class RunRecorder {
     return this.#steps.at(-1);
   }
 
+  /** Phase 83: a branch's steps go on from the step it was made from (its first step is `idx`). */
+  startAt(idx: number): void {
+    if (this.#idx === -1 && Number.isInteger(idx) && idx > 0) this.#idx = idx - 1;
+  }
+
   /** Opens a step (and ends the one before). */
   startStep(info: StepInfo): number {
     return this.#safe(() => this.#open(info)) ?? -1;
@@ -867,6 +945,20 @@ export class RunRecorder {
 /** The history a step saw, rebuilt from the stored messages (for the step detail view). */
 export function historyRange<T extends { id: number }>(messages: T[], fromId: number | null, toId: number | null): T[] {
   return messages.filter((m) => (fromId === null || fromId === 0 || m.id >= fromId) && (toId === null || m.id <= toId));
+}
+
+/**
+ * Phase 83: one hash of what a step was sent after its system prompt (history + the app's notes):
+ * role, text, tool calls and tool ids, pictures by size only. The recorder stores it; a replay
+ * hashes what it rebuilt the same way, so \"rebuilt exactly\" is checked, not assumed.
+ */
+export function inputsHash(messages: readonly ChatMessage[]): string {
+  const h = createHash('sha256');
+  for (const m of messages) {
+    const x = m as ChatMessage & { toolCalls?: unknown; toolCallId?: string; images?: { data?: string }[] };
+    h.update(`${m.role}\u0000${typeof m.content === 'string' ? m.content : JSON.stringify(m.content ?? '')}\u0000${x.toolCalls ? JSON.stringify(x.toolCalls) : ''}\u0000${x.toolCallId ?? ''}\u0000${(x.images ?? []).map((i) => String(i.data?.length ?? 0)).join(',')}\u0001`);
+  }
+  return h.digest('hex').slice(0, 32);
 }
 
 /** A hash of the tool set offered (the run policy, so M9 can compare tool sets). */

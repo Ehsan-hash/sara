@@ -43,6 +43,7 @@
   <a href="#clients">In your terminal and editor</a>
   <a href="#usage">Usage and costs</a>
   <a href="#runs">Show the run</a>
+  <a href="#time-travel">Branch from a step</a>
   <a href="#sandbox">Commands tried in a sandbox first</a>
   <a href="#security">Security pass and fix branches</a>
   <a href="#threat-model">Threat model and the fix pass</a>
@@ -505,7 +506,16 @@
   <li>In coding conversations each step notes the git commit and a fingerprint of every changed file (no copies). Elsewhere a step points at the undo point taken before it.</li>
   <li>Off-the-record conversations are never recorded. Private conversations are recorded on your server only, like the rest. Each person in a household sees only their own runs; the demo keeps none for visitors.</li>
   <li>Choose how long runs are kept in <em>Settings → Data &amp; health → Health</em> (30 days, 90 days, a year, or until deleted; 90 by default; the oldest go first above 200 MB), see how much room they take, or <strong>Delete run history</strong>. Backups include runs; the data export only with <em>Include run history</em> ticked.</li>
-  <li>The Run view is read only for now: branching from a step comes later.</li>
+  <li>A reply's steps can be tried again with something changed: see <a href="#time-travel">Branch from a step</a>.</li>
+</ul>
+
+<h2 id="time-travel">Branch from a step</h2>
+<ul>
+  <li>In <strong>Show the run</strong>, open a step of a reply and choose <strong>Branch from here</strong>. Change your message, a result she saw from an earlier step, the notes she remembered (untick one, or add one by its number) or the model, then <strong>Run the branch</strong>.</li>
+  <li>She carries on from that step with exactly what that step was sent: her instructions as kept, the conversation up to then and the results of the steps before, served from the record (nothing runs again). Your approvals, budgets, the plan check, the sandbox and the safety checks work as in any reply.</li>
+  <li>In coding conversations she works in a copy of your project at the commit of that step, with the uncommitted files that are still as they were (what can't be restored is listed). Your project changes only if you choose <strong>Apply its files to my project</strong>, and files you changed since are left alone.</li>
+  <li>The branch is a run of its own; your conversation stays as it was. Then you see both side by side: steps, tokens and cost, tool calls, files, the answers word by word. <strong>Use this answer</strong> adds the branch's answer to the conversation, marked as a re-run.</li>
+  <li>Models don't answer the same way twice, so a difference can be chance. <strong>Replay unchanged</strong> runs the step again with nothing changed, to show how much a reply varies. Off-the-record replies are never kept, so they can't be branched; branching is for the owner only.</li>
 </ul>
 
 <h2 id="budgets">Budgets for her replies</h2>

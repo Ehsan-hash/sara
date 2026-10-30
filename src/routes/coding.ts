@@ -6,7 +6,9 @@ import { buildHistory, resolveChain } from '../chat.ts';
 import { historyRange, KEEP_DAY_CHOICES, runSettings } from '../runs.ts';
 import { DEFAULT_SANDBOX_GATE, mergeSandboxGate, SANDBOX_GATE_MODES, SANDBOX_SIZE_CHOICES, SANDBOX_TIME_CHOICES, sandboxGateSettings } from '../sandbox-run.ts';
 import { DEFAULT_TURN_BUDGETS, mergeTurnBudgets, MINUTE_CHOICES, STEP_CHOICES, TOKEN_CHOICES, turnBudgetSettings, USD_CHOICES } from '../budget.ts';
-import { as400, HttpError, readJson, send, validWorkspace } from '../http.ts';
+import { as400, HttpError, readJson, SECURITY_HEADERS, send, validWorkspace } from '../http.ts';
+import { applyBranch, branchInfo, branchRun, compareRuns, discardCopy, ReplayError, runningBranches, useAnswer, type BranchEdits, type BranchEvent } from '../replay.ts';
+import { summaryLine } from '../run-diff.ts';
 import { trOwner } from '../i18n.ts';
 import { checkIssues, cleanWatch, type OpenIssue, openIssues, startFromIssue, watchSettings } from '../issues.ts';
 import { netFetch, privateLocalOn } from '../net-guard.ts';
@@ -226,14 +228,112 @@ export function createCodingRoutes(ctx: RouteCtx): RouteHandler {
         return send(res, 200, { removed, stats: statsView() });
       }
       const id = Number(b);
-      if (!b || !/^\d{1,12}$/.test(b) || method !== 'GET') throw new HttpError(404, 'No such run.');
+      if (!b || !/^\d{1,12}$/.test(b)) throw new HttpError(404, 'No such run.');
+      // Phase 83 (harness M8): time-travel. Branch from a step (streamed like a turn), compare two
+      // runs, use a branch's answer, apply its files, discard its copy, stop it. Owner-only (a
+      // member gets 403 from memberRouteCheck's BRANCH_ACTIONS; their run view stays read-only).
+      const asHttp = (err: unknown): never => {
+        if (err instanceof ReplayError) throw new HttpError(err.status, err.key, err.params ? { params: err.params } : undefined);
+        throw err;
+      };
+      if (method === 'POST' && c === 'branch' && !parts[3]) {
+        const body = await readJson(req);
+        const fromStep = Number(body.fromStep);
+        if (!Number.isInteger(fromStep) || fromStep < 0) throw new HttpError(400, 'Which step to branch from (fromStep, counted from 0).');
+        const e = (body.edits && typeof body.edits === 'object' ? body.edits : {}) as Record<string, unknown>;
+        const ids = (v: unknown) => (Array.isArray(v) ? v.map(Number).filter((x) => Number.isInteger(x) && x > 0).slice(0, 50) : []);
+        const mem = e.memory && typeof e.memory === 'object' ? (e.memory as Record<string, unknown>) : undefined;
+        const model = e.model && typeof e.model === 'object' ? (e.model as Record<string, unknown>) : undefined;
+        const edits: BranchEdits = {
+          ...(typeof e.message === 'string' ? { message: e.message } : {}),
+          ...(Array.isArray(e.toolResults) ? { toolResults: (e.toolResults as Record<string, unknown>[]).slice(0, 20).filter((x) => x && typeof x.callId === 'string' && typeof x.output === 'string').map((x) => ({ callId: String(x.callId), output: String(x.output) })) } : {}),
+          ...(mem ? { memory: { include: ids(mem.include), exclude: ids(mem.exclude) } } : {}),
+          ...(model && typeof model.providerId === 'string' && typeof model.model === 'string' ? { model: { providerId: model.providerId, model: model.model } } : {}),
+        };
+        const budget = body.budget === null ? null : body.budget && typeof body.budget === 'object' ? cleanBudget(body.budget) : undefined;
+        const gen = branchRun(app, id, { fromStep, edits, ...(budget !== undefined ? { budget: budget ?? null } : {}) });
+        // The first event decides the answer: a refusal is a plain HTTP error, anything else streams.
+        let first: IteratorResult<BranchEvent>;
+        try {
+          first = await gen.next();
+        } catch (err) {
+          return asHttp(err);
+        }
+        res.writeHead(200, { 'content-type': 'text/event-stream; charset=utf-8', 'cache-control': 'no-store', 'x-accel-buffering': 'no', connection: 'keep-alive', ...SECURITY_HEADERS });
+        const write = (ev: BranchEvent) => {
+          if (!res.destroyed && !res.writableEnded) res.write(`event: ${ev.type}\ndata: ${JSON.stringify(ev)}\n\n`);
+        };
+        const heartbeat = setInterval(() => {
+          if (!res.destroyed && !res.writableEnded) res.write(': ping\n\n');
+        }, 15_000);
+        // The branch goes on if the page closes (it is a run of its own; Stop ends it).
+        try {
+          if (!first.done) write(first.value);
+          for (;;) {
+            let n: IteratorResult<BranchEvent>;
+            try {
+              n = await gen.next();
+            } catch (err) {
+              write({ type: 'error', message: (err as Error).message });
+              break;
+            }
+            if (n.done) break;
+            write(n.value);
+          }
+        } finally {
+          clearInterval(heartbeat);
+          if (!res.writableEnded) res.end();
+        }
+        return;
+      }
+      if (method === 'POST' && (c === 'use' || c === 'apply' || c === 'discard' || c === 'stop') && !parts[3]) {
+        await readJson(req).catch(() => ({}));
+        if (c === 'stop') {
+          const ctl = runningBranches(app).get(id);
+          if (!ctl) throw new HttpError(404, 'That branch is not running.');
+          ctl.abort(new Error('stopped'));
+          return send(res, 200, { stopped: true });
+        }
+        try {
+          if (c === 'use') {
+            const r0 = runs.get(id);
+            if (r0?.conversationId && active.has(r0.conversationId)) throw new HttpError(409, me('Sara is still working on this conversation. Wait for her or press Stop.'), { errorKey: 'Sara is still working on this conversation. Wait for her or press Stop.' });
+            const msg = useAnswer(app, id);
+            app.events?.publish({ type: 'message', conversationId: msg.conversationId, message: { id: msg.id, role: msg.role, content: msg.content, createdAt: msg.createdAt, meta: msg.meta ?? {} }, reason: 'reply' });
+            return send(res, 200, { message: msg });
+          }
+          if (c === 'apply') return send(res, 200, applyBranch(app, id));
+          discardCopy(app, id);
+          return send(res, 200, { ok: true });
+        } catch (err) {
+          return asHttp(err);
+        }
+      }
+      if (method !== 'GET') throw new HttpError(404, 'No such run.');
       const run = runs.get(id);
       if (!run) throw new HttpError(404, 'No such run.');
       if (!c) {
         // The run and its steps (tool outputs clipped further for the list; the step detail has more).
         const steps = runs.steps(id).map((s) => ({ ...s, tools: s.tools.map((t) => ({ ...t, output: t.output.length > 600 ? `${t.output.slice(0, 600)}…` : t.output })) }));
         const conv = run.conversationId ? app.store.getConversation(run.conversationId) : undefined;
-        return send(res, 200, { run, steps, conversation: conv ? { id: conv.id, title: conv.title, mode: conv.mode, private: conv.private, workspace: conv.workspace } : null });
+        // Phase 83: its branches, and for a branch the parent (the page lines them up).
+        const branches = runs.branches(id).map((x) => ({ id: x.id, status: x.status, startedAt: x.startedAt, branchedFromStep: x.branchedFromStep, steps: x.steps, tokensIn: x.tokensIn, tokensOut: x.tokensOut, edits: x.branch?.edits ?? [], model: x.branch?.model ?? null, running: runningBranches(app).has(x.id) }));
+        return send(res, 200, { run, steps, branches, running: runningBranches(app).has(id), conversation: conv ? { id: conv.id, title: conv.title, mode: conv.mode, private: conv.private, workspace: conv.workspace } : null });
+      }
+      if (c === 'diff' && parts[3] && /^\d{1,12}$/.test(parts[3]) && !parts[4]) {
+        try {
+          const d = compareRuns(app, id, Number(parts[3]));
+          return send(res, 200, { ...d, line: summaryLine(d) });
+        } catch (err) {
+          return asHttp(err);
+        }
+      }
+      if (c === 'steps' && parts[3] !== undefined && parts[4] === 'branch' && !parts[5]) {
+        try {
+          return send(res, 200, branchInfo(app, id, Number(parts[3])));
+        } catch (err) {
+          return asHttp(err);
+        }
       }
       if (c === 'steps' && parts[3] !== undefined && !parts[4]) {
         const n = Number(parts[3]);
@@ -244,7 +344,9 @@ export function createCodingRoutes(ctx: RouteCtx): RouteHandler {
         const system = step.systemSha ? (runs.blob(step.systemSha) ?? null) : null;
         let history: { id?: number; role: string; content: string; toolCalls?: unknown }[] = [];
         if (run.conversationId && step.historyToId) {
-          const msgs = historyRange(app.store.messages(run.conversationId), step.historyFromId, step.historyToId);
+          // Phase 83: a branch's messages are in its run record, not the conversation.
+          const source = run.parentRunId ? runs.runMessages(run.id).map((m) => ({ ...m, conversationId: run.conversationId!, role: m.role as 'user' })) : app.store.messages(run.conversationId);
+          const msgs = historyRange(source, step.historyFromId, step.historyToId);
           history = buildHistory(msgs).messages.map((m) => ({ role: m.role, content: m.content.length > 8000 ? `${m.content.slice(0, 8000)}\n[… ${m.content.length - 8000} more characters]` : m.content, ...(m.role === 'assistant' && m.toolCalls?.length ? { toolCalls: m.toolCalls } : {}) }));
         }
         // Chat mode: the files a step's shell changed, from its undo snapshot and the next one.

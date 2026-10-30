@@ -81,7 +81,7 @@ import { metered } from './usage.ts';
 import { cutOtherSpeakers, GROUP_TOOLS, isGroupChannel, otherLine, ownerLine, stripLeadTag } from './group.ts';
 import { cardFor, type Card } from './cards.ts';
 import { cardOf, checkPlan, contradictionNote, contradictSettings, declinedOutput, gateAct, judgePrompt, judgeSaysNo, type Contradiction, type ContradictionCard } from './contradict.ts';
-import { filesNamed, RunRecorder, toolSetHash } from './runs.ts';
+import { filesNamed, inputsHash, RunRecorder, toolSetHash } from './runs.ts';
 import { budgetSummaryFallback, quickIsCheaper, turnBudgetFor, turnBudgetSettings, TurnMeter, type Budget, type BudgetState, type ModelCallPlan } from './budget.ts';
 import { billingOf, findPrice, priceTable } from './usage.ts';
 import type { SecurityPass } from './security/pass.ts';
@@ -811,6 +811,31 @@ export interface TurnOptions {
    * the run and the reply.
    */
   budgetMore?: Budget;
+  /**
+   * Phase 83 (harness M8): this turn re-runs a recorded one from a step (src/replay.ts). The store
+   * is the branch's own scratch copy of the conversation up to that step (the caller makes it), so
+   * the turn answers the last owner message again (`resume`) with the recorded inputs instead of
+   * building new ones: the system prompt as stored (with the memory notes edited when asked), the
+   * memory picks, the app's notes after the history, and the workspace copy restored to that step.
+   * Approvals, the plan check, the sandbox gate, the budget and the safety layer run as usual;
+   * things that would write outside the branch (undo snapshots, the code map, memory use marks,
+   * dates marked as mentioned, the drift check, the security pass) are left out.
+   */
+  replay?: ReplayInputs;
+}
+
+/** Phase 83: what a replayed turn starts from (see TurnOptions.replay). */
+export interface ReplayInputs {
+  /** The system prompt for every step of the branch (the recorded one, notes edited if asked). */
+  system: string;
+  /** The recorded notes after the history at the step branched from (only the first step gets them). */
+  extra: string[];
+  /** The memory picks (meta.memoryPicks / the step's picks). */
+  injection?: Injection;
+  /** Coding: the branch's workspace copy (never the real workspace). */
+  workspaceDir?: string;
+  /** The owner's message was rewritten on the branch (the crisis check shows its help again). */
+  messageEdited?: boolean;
 }
 
 /**
@@ -965,8 +990,10 @@ export function recorderHooks(app: AppContext, rec: RunRecorder): TurnHooks {
         lastClean = app.redactor.redact(raw);
       }
       const extra = c.extra.map((x) => app.redactor.redact(x).slice(0, 4000));
+      // Phase 83: one hash of the history + notes sent, so a replay can prove it rebuilt them.
+      const inputsSha = inputsHash(c.messages.slice(1));
       rec.overheadMs += performance.now() - t0;
-      rec.startStep({ model: c.model, provider: c.provider.config.label, system: lastClean, historyFromId: c.historyFromId, historyToId: c.historyToId, extra, ...(c.memoryPicks?.length ? { memoryPicks: c.memoryPicks } : {}), ...(c.policyId ? { policyId: c.policyId } : {}) });
+      rec.startStep({ model: c.model, provider: c.provider.config.label, system: lastClean, historyFromId: c.historyFromId, historyToId: c.historyToId, extra, inputsSha, ...(c.memoryPicks?.length ? { memoryPicks: c.memoryPicks } : {}), ...(c.policyId ? { policyId: c.policyId } : {}) });
     },
     afterReply(c) {
       rec.reply(c.messageId);
@@ -1136,7 +1163,7 @@ async function* runTurnInner(app: AppContext, conversationId: string, userText: 
   }
   if (opts.group) safetyNotes.push(opts.group.note);
   if (detectCrisis(text) || label === 'CRISIS' || opts.group?.crisis) {
-    if (!opts.resume && !opts.group) {
+    if ((!opts.resume || opts.replay?.messageEdited) && !opts.group) {
       store.recordSafetyEvent('crisis_referral', conv.id);
       store.addMessage(conv.id, 'notice', `crisis:${CRISIS_RESOURCES}`);
       yield { type: 'notice', kind: 'crisis', text: CRISIS_RESOURCES };
@@ -1199,7 +1226,8 @@ async function* runTurnInner(app: AppContext, conversationId: string, userText: 
   const sandbox: SandboxInfo = { ...app.sandbox, network: conv.private || privateLocalOn() ? false : (s.shellNetwork ?? true) };
   let wsDir = '';
   try {
-    wsDir = workspaceDir(app.rootDir ?? app.dataDir, conv.workspace);
+    // Phase 83: a branch works in its own copy of the workspace, never the real one.
+    wsDir = opts.replay?.workspaceDir ?? workspaceDir(app.rootDir ?? app.dataDir, conv.workspace);
   } catch (err) {
     yield { type: 'error', message: (err as Error).message };
     return;
@@ -1216,7 +1244,11 @@ async function* runTurnInner(app: AppContext, conversationId: string, userText: 
   const budget = s.historyBudgetChars ?? HISTORY_BUDGET_CHARS;
   // Hardening M3: what another app's turn may draw on (notes from conversations it may know about).
   const appSafe = opts.externalApp ? (m: { conversationId: string | null }) => !m.conversationId || sharedWithApps(store.getConversation(m.conversationId)) : undefined;
-  if (app.memory && memCfg.enabled && !conv.partner) {
+  if (opts.replay) {
+    // Phase 83: the recorded (or edited) picks; nothing is marked as used on a branch.
+    injection = opts.replay.injection;
+    usedMarked = true;
+  } else if (app.memory && memCfg.enabled && !conv.partner) {
     const visible = store.messages(conv.id).filter((m) => !isForgotten(m) && (m.role === 'user' || m.role === 'assistant' || m.role === 'tool'));
     const kept = buildHistory(store.messages(conv.id), budget).firstKeptId;
     const oldestHistoryId = kept || (visible.at(-HISTORY_LIMIT)?.id ?? visible[0]?.id ?? 0);
@@ -1383,7 +1415,7 @@ async function* runTurnInner(app: AppContext, conversationId: string, userText: 
   // Phase 81 (harness M6): the install check (a pinned, known-vulnerable version stops with the
   // "Known vulnerability" card; only with live advisories on, never in private conversations) and,
   // in coding conversations, the security pass started in the background after the final reply.
-  const security = app.security && !opts.group && !conv.partner && !opts.externalApp && !external ? app.security : undefined;
+  const security = app.security && !opts.group && !conv.partner && !opts.externalApp && !external && !opts.replay ? app.security : undefined;
   const securityHook: TurnHooks | undefined = security
     ? {
         async beforeTool(c) {
@@ -1418,14 +1450,14 @@ async function* runTurnInner(app: AppContext, conversationId: string, userText: 
   const memPolicy = decayPolicy(memCfg).id;
   rec.setPolicy({ memoryPolicy: memPolicy, model: `${provider.config.id}/${model}`, tools: toolSetHash(tools.map((t) => t.spec.name)), mode: conv.mode, ...(conv.private ? { private: true } : {}) });
   // Phase 12: a date that's today is in her prompt now, so she won't text about it separately later.
-  if (!conv.partner && app.memory && memCfg.enabled) {
+  if (!conv.partner && app.memory && memCfg.enabled && !opts.replay) {
     const today = localDate(now.toISOString(), s.timeZone);
     for (const u of app.memory.upcoming(today, 0)) if (u.memory.mentionedOn !== today) app.memory.markMentioned(u.memory.id, today);
   }
   // Phase 44: what's in her library, what was shared in this chat, and passages for this message.
-  const libraryText = conv.partner || !app.library ? undefined : await librarySection(app, conv, text).catch((err: Error) => (console.warn(`library: ${err.message}`), undefined));
+  const libraryText = conv.partner || !app.library || opts.replay ? undefined : await librarySection(app, conv, text).catch((err: Error) => (console.warn(`library: ${err.message}`), undefined));
   let projectText: string | undefined;
-  if (conv.mode === 'coding' && app.projects) {
+  if (conv.mode === 'coding' && app.projects && !opts.replay) {
     try {
       projectText = projectSection(app.projects.get(conv.workspace));
     } catch (err) {
@@ -1433,11 +1465,15 @@ async function* runTurnInner(app: AppContext, conversationId: string, userText: 
     }
   }
   // Phase 50: recipes she saved that fit this request (coding conversations, up to two).
-  const recipesText = conv.mode === 'coding' && !conv.partner && app.recipes && tools.some((t) => t.spec.name === 'recipe_use') ? await recipesSection(app, conv.workspace, text).catch(() => undefined) : undefined;
+  const recipesText = conv.mode === 'coding' && !conv.partner && app.recipes && !opts.replay && tools.some((t) => t.spec.name === 'recipe_use') ? await recipesSection(app, conv.workspace, text).catch(() => undefined) : undefined;
   // Phase 34: a reply that drifted out of character leaves a one-time nudge for this one.
-  const nudge = !conv.partner && driftMode(app) !== 'off' ? app.drift?.pending(conv.id) : undefined;
+  const nudge = !conv.partner && driftMode(app) !== 'off' && !opts.replay ? app.drift?.pending(conv.id) : undefined;
+  // Phase 83: a branch keeps the recorded system prompt (byte for byte); a safety note this turn
+  // needs that the recorded prompt lacks (the rewritten message is a crisis, Adult mode is off now)
+  // is added after it: the safety layer is never replayed from the record.
+  const replaySystem = opts.replay ? opts.replay.system + (safetyNotes.some((n) => !opts.replay!.system.includes(n)) ? `\n\n## Important for this reply\n${safetyNotes.filter((n) => !opts.replay!.system.includes(n)).map((n) => `- ${n}`).join('\n')}` : '') : '';
   for (let step = 0; step < maxSteps; step++) {
-    const system = buildSystemPrompt(app.persona, {
+    const system = opts.replay ? replaySystem : buildSystemPrompt(app.persona, {
       now,
       timeZone: s.timeZone,
       ownerName: conv.partner ?? s.ownerName,
@@ -1514,7 +1550,14 @@ async function* runTurnInner(app: AppContext, conversationId: string, userText: 
     }
     // Phase 77: what the plan check found (flags she should mention).
     for (const n of contradictNotes.splice(0)) messages.push({ role: 'system', content: n });
-    if (opts.resume && !opts.budgetMore && step === 0 && hist.messages.at(-1)?.role === 'assistant') {
+    // Phase 83: the notes the recorded step had after its history (a correction, plan-check flags,
+    // \"continue\"), unless the loop made the same one itself (the long-conversation note).
+    if (opts.replay && step === 0) {
+      const inHist = new Set<ChatMessage>(hist.messages);
+      const have = new Set(messages.slice(1).filter((m) => !inHist.has(m)).map((m) => m.content));
+      for (const x of opts.replay.extra) if (!have.has(x)) messages.push(x.startsWith('[Note from the app') ? { role: 'user', content: x } : { role: 'system', content: x });
+    }
+    if (opts.resume && !opts.replay && !opts.budgetMore && step === 0 && hist.messages.at(-1)?.role === 'assistant') {
       messages.push({ role: 'user', content: '[Note from the app: your last reply was cut off (stopped, an error, or a restart). Continue from exactly where it stopped. Do not repeat what you already wrote and do not apologize; just carry on.]' });
     }
     // Phase 78 seam 1: right before the model call (the recorder opens its step here).
@@ -1704,6 +1747,10 @@ async function* runTurnInner(app: AppContext, conversationId: string, userText: 
 
     // Phase 77: what the plan check found for this step's calls (kept on this step's reply as `contradictions`).
     const turnContradictions = plan.byCall;
+    // Phase 83: the previous step's workspace manifest (git status in the background) is finished
+    // before this step's tools can change files, so it is the state after that step (time-travel
+    // restores branches from it). A few ms per step, coding conversations only.
+    if (rec.workspaceDir) await rec.settled();
     for (const call of calls) {
       const tool = app.tools.get(call.name);
       const summary = app.redactor.redact(tool?.summarize(call.arguments) ?? call.name);
@@ -1856,7 +1903,7 @@ async function* runTurnInner(app: AppContext, conversationId: string, userText: 
           status = 'denied';
           output = signal.aborted ? 'Cancelled.' : stopFor ? declinedOutput(stopFor, ownerWord) : advisoryStop ? declinedInstallOutput(advisoryStop) : 'The owner declined this action.';
         } else {
-          if (SNAPSHOT_TOOLS.has(call.name) && conv.mode !== 'coding') {
+          if (SNAPSHOT_TOOLS.has(call.name) && conv.mode !== 'coding' && !opts.replay) {
             try {
               snapshotId = app.snapshots.take(conv.workspace, wsDir, summary, conv.id).id;
             } catch (err) {
@@ -1890,7 +1937,7 @@ async function* runTurnInner(app: AppContext, conversationId: string, userText: 
       }
       const ms = Date.now() - started;
       // Phase 50: files may have changed: the code map looks again (in the background).
-      if (status !== 'denied' && CHANGES_FILES(call.name)) app.codemap?.touch(wsDir);
+      if (status !== 'denied' && CHANGES_FILES(call.name) && !opts.replay) app.codemap?.touch(wsDir);
       // Scrub before it is stored, shown or sent back to the model.
       output = app.redactor.redact(output + snapshotNote);
       const stored = clip(output, TOOL_RESULT_LIMIT);
@@ -1947,7 +1994,7 @@ async function* runTurnInner(app: AppContext, conversationId: string, userText: 
   const finalReply = lastAssistantId ? store.messages(conv.id).find((m) => m.id === lastAssistantId) : undefined;
   if (finalReply?.content.trim() && !finalReply.meta?.blocked) {
     const count = store.messages(conv.id).filter((m) => m.role === 'assistant' && m.content.trim()).length;
-    if (shouldCheck(app, conv, count)) app.driftWork = checkReply(app, conv, text, finalReply.id, finalReply.content);
+    if (!opts.replay && shouldCheck(app, conv, count)) app.driftWork = checkReply(app, conv, text, finalReply.id, finalReply.content);
   }
   yield { type: 'done', messageId: lastAssistantId };
 }

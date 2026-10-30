@@ -585,6 +585,75 @@ dialog.run-view { width: min(920px, 94vw); max-height: 88vh; }
   .run-step-chips { justify-content: flex-start; }
 }
 
+/* ---------- Phase 83: time-travel (Branch from here, the branch sheet, original vs branch; web/branch-view.js) ---------- */
+.run-branch-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
+.run-branch { display: inline-flex; align-items: center; gap: 6px; min-height: var(--tap); }
+.run-branch .run-icon, .br-btn-icon { width: 16px; height: 16px; color: var(--accent-text); display: inline-flex; }
+.br-btn-icon svg { width: 100%; height: 100%; }
+.run-branch-banner { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding: 8px 12px; border-radius: var(--r-card); background: var(--accent-soft); color: var(--accent-text); }
+.run-branch-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.run-branch-item { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; padding: 6px 8px; border-radius: var(--r-control); background: var(--surface-1); overflow-wrap: anywhere; }
+dialog.branch-sheet { width: min(1040px, 96vw); }
+.branch-body { gap: var(--s-3); }
+.br-edit, .br-live, .br-diff { display: grid; gap: var(--s-3); grid-template-columns: minmax(0, 1fr); min-width: 0; }
+.br-edit[hidden], .br-live[hidden], .br-diff[hidden] { display: none; }
+.br-edit label { display: grid; gap: 4px; }
+.br-edit textarea { width: 100%; font-family: var(--font-mono); font-size: var(--fs-small); }
+.br-notes-box { border: 1px solid var(--hairline); border-radius: var(--r-card); padding: 8px 12px 12px; display: grid; gap: 8px; min-width: 0; }
+.br-notes { display: grid; gap: 4px; }
+.br-note { display: grid; grid-template-columns: auto auto minmax(0, 1fr); align-items: center; gap: 8px; padding: 6px 8px; border-radius: var(--r-control); background: var(--surface-1); min-height: var(--tap); }
+.br-note-id { font-weight: 600; color: var(--text-1); white-space: nowrap; }
+.br-note-text { color: var(--text-2); overflow-wrap: anywhere; }
+.br-go { display: flex; flex-wrap: wrap; gap: 8px; }
+.br-warn { color: var(--warn); }
+.br-problem { color: var(--warn); }
+.br-live-head, .br-summary { display: flex; align-items: center; gap: 10px; margin: 0; }
+.br-notes-live { display: grid; gap: 2px; }
+.br-notes-live p { margin: 0; }
+.br-reply { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--text-1); }
+.br-reply:empty { display: none; }
+.br-cards { display: grid; gap: var(--s-2); }
+.br-approval { display: grid; gap: 8px; padding: 10px 12px; border: 1px solid var(--warn); border-radius: var(--r-card); background: var(--warn-soft); }
+.br-approval p { margin: 0; }
+.br-approval-q { font-weight: 600; color: var(--text-1); }
+.br-notice { margin: 0; padding: 6px 10px; border-radius: var(--r-control); background: var(--surface-2); }
+.br-summary { padding: 10px 12px; border-radius: var(--r-card); background: var(--glass-fill); border: 1px solid var(--hairline); box-shadow: var(--elev-1); }
+.br-summary-line { margin: 0; font-weight: 600; color: var(--text-1); }
+.br-grid { display: grid; grid-template-columns: minmax(80px, auto) minmax(0, 1fr) minmax(0, 1fr); gap: 4px 12px; align-items: baseline; }
+.br-col-h { font-size: var(--fs-small); text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-3); }
+.br-num { font-variant-numeric: tabular-nums; color: var(--text-1); }
+.br-steps, .br-files, .br-answers, .br-mem { display: grid; gap: 6px; min-width: 0; }
+.br-step { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 10px; align-items: start; padding: 8px; border-radius: var(--r-card); background: var(--surface-1); border: 1px solid var(--hairline); }
+.br-step > .run-step-n { grid-area: auto; }
+.br-step.differs { border-color: var(--accent-solid); }
+.br-step.shared { background: transparent; }
+.br-shared { margin: 4px 0 0; }
+.br-pair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px; min-width: 0; }
+.br-cell { display: grid; gap: 4px; align-content: start; min-width: 0; padding: 6px 8px; border-radius: var(--r-control); background: var(--surface-0); }
+.br-cell p { margin: 0; }
+.br-cell-meta { color: var(--text-2); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.br-side { color: var(--text-3); text-transform: uppercase; letter-spacing: 0.06em; }
+.br-tool > summary, .br-file > summary, .br-wordsd > summary { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; cursor: pointer; min-height: 32px; overflow-wrap: anywhere; }
+.br-tool.error, .br-tool.denied { border-left: 3px solid var(--danger); padding-left: 6px; }
+.br-file { padding: 4px 8px; border-radius: var(--r-control); background: var(--surface-1); }
+.br-file.differs { border-left: 3px solid var(--warn); }
+.br-udiff .add { color: var(--success); }
+.br-udiff .del { color: var(--danger); }
+.br-text { white-space: pre-wrap; overflow-wrap: anywhere; color: var(--text-1); }
+.br-words { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.br-words ins { background: var(--success-soft); color: var(--success); text-decoration: none; }
+.br-words del { background: var(--danger-soft); color: var(--danger); }
+.br-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.br-actions button { display: inline-flex; align-items: center; gap: 6px; }
+.msg.rerun .msg-from { color: var(--accent-text); }
+@media (max-width: 760px) {
+  dialog.branch-sheet[open] { width: 100vw; height: 100dvh; max-height: 100dvh; margin: 0; border-radius: 0; padding-top: var(--safe-t); }
+  .br-pair { grid-template-columns: minmax(0, 1fr); }
+  .br-grid { grid-template-columns: minmax(70px, auto) minmax(0, 1fr) minmax(0, 1fr); gap: 4px 8px; }
+  .br-note { grid-template-columns: auto minmax(0, 1fr); }
+  .br-note-text { grid-column: 1 / -1; }
+}
+
 /* ---------- Phase 79: budgets (meter on the step line and in the Run view, "Budget reached" card, Settings) ---------- */
 .budget-meter { display: inline-flex; align-items: center; gap: 6px; min-width: 0; color: var(--text-2); font-size: var(--fs-meta); font-variant-numeric: tabular-nums; }
 .steps-sum .budget-meter { margin-inline-start: auto; padding-inline-start: 8px; }

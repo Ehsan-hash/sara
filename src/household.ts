@@ -516,6 +516,8 @@ export const MEMBER_ROUTES: ReadonlySet<string> = new Set([
 
 /** Families a member may write to only partly: GET-only for members. */
 const MEMBER_READ_ONLY: ReadonlySet<string> = new Set(['providers', 'setup', 'safety', 'usage']);
+/** Phase 83: the run routes that branch, compare or change something (owner-only inside the member family `runs`). */
+export const BRANCH_ACTIONS: ReadonlySet<string> = new Set(['branch', 'diff', 'use', 'apply', 'discard', 'stop']);
 /** While being removed: only what's needed to take their data and leave. */
 const LEAVING_ROUTES: ReadonlySet<string> = new Set(['session', 'logout', 'household', 'export']);
 
@@ -532,6 +534,8 @@ export function memberRouteCheck(rec: MemberRecord | undefined, method: string, 
   if (MEMBER_READ_ONLY.has(a) && method !== 'GET') return { status: 403, message: en('Only the owner of this server can use this.'), ownerOnly: true };
   // Household admin is the owner's; a member only has their own account (me…).
   if (a === 'household' && b !== 'me') return { status: 403, message: en('Only the owner of this server can use this.'), ownerOnly: true };
+  // Phase 83: time-travel (branch, compare, use, apply, discard, stop) is the owner's; a member's run view stays read-only.
+  if (a === 'runs' && ((parts[2] && BRANCH_ACTIONS.has(parts[2])) || parts[4] === 'branch')) return { status: 403, message: en('Only the owner of this server can use this.'), ownerOnly: true };
   const l = rec.limits;
   if (!l.voice && (a === 'live' || a === 'calls' || (a === 'voice' && method !== 'GET') || a === 'video')) return { status: 403, message: en('Voice is switched off for you on this server. Ask the owner.') };
   if (!l.pictures && ((a === 'look' && method !== 'GET') || a === 'photos')) return { status: 403, message: en('Pictures from her are switched off for you on this server. Ask the owner.') };

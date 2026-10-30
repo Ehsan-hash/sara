@@ -88,7 +88,7 @@ version's details are in the [changelog](../CHANGELOG.md).
 | 80 | Sandbox gate: her code runs in a throwaway copy before it touches your workspace | ✅ 2.13 |
 | 81 | Security pass: code checks, secret scan and live dependency advisories, with a fix branch for each finding | ✅ 2.14 |
 | 82 | Threat-model second pass: a dedicated pass that fixes the risky spots it finds in her new code | ✅ 2.15 |
-| 83 | Time-travel: rewind a run to any step, change one thing, branch | 2.16 |
+| 83 | Time-travel: rewind a run to any step, change one thing, branch | ✅ 2.16 |
 | 84 | Eval loop: define "done", rerun her, see which prompt, tools or memory setting won, with evidence | 2.17 |
 | 85 | Active recall: she brings up what worked last time when a task looks like an earlier one | 2.18 |
 | 86 | Red-team mode: before shipping, she tries to break her own app inside the sandbox and fixes what broke | 2.19 |

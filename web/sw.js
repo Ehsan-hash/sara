@@ -13,15 +13,17 @@ const OFFLINE = '/offline.html';
 //   Phase 80 had caches.open('sara-shell-v13'); every older cache is deleted below.
 // v15 (Phase 82): the threat model (findings-view.js: the Threat model tab and card, "Fix these").
 //   Phase 81 had caches.open('sara-shell-v14'); every older cache is deleted below.
+// v16 (Phase 83): time-travel (branch-view.js: Branch from here, the branch sheet, original vs branch).
+//   Phase 82 had caches.open('sara-shell-v15'); every older cache is deleted below.
 const SHELL = [OFFLINE, '/offline.css', '/offline.js', '/theme.css', '/theme-boot.js', '/icon-192.png'];
 
 self.addEventListener('install', (event) => {
-  event.waitUntil(caches.open('sara-shell-v15').then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));
+  event.waitUntil(caches.open('sara-shell-v16').then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));
 });
 
 self.addEventListener('activate', (event) => {
-  // Every older cache goes (sara-shell-v14 from Phase 81, sara-shell-v13 from Phase 80, sara-shell-v12 from Phase 79, sara-shell-v11 from Phase 78, sara-shell-v10 from Phase 77 and before).
-  event.waitUntil(caches.keys().then((keys) => Promise.all(keys.filter((k) => k !== 'sara-shell-v15').map((k) => caches.delete(k)))).then(() => self.clients.claim()));
+  // Every older cache goes (sara-shell-v15 from Phase 82, sara-shell-v14 from Phase 81, sara-shell-v13 from Phase 80, sara-shell-v12 from Phase 79, sara-shell-v11 from Phase 78, sara-shell-v10 from Phase 77 and before).
+  event.waitUntil(caches.keys().then((keys) => Promise.all(keys.filter((k) => k !== 'sara-shell-v16').map((k) => caches.delete(k)))).then(() => self.clients.claim()));
 });
 
 self.addEventListener('fetch', (event) => {

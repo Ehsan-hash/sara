@@ -462,6 +462,33 @@
   <dialog id="run-view" class="run-view" aria-label="The run">
     <div class="settings-body run-body"></div>
   </dialog>
+  <!-- Phase 83: branch from a step of a run (time-travel), web/branch-view.js -->
+  <dialog id="branch-sheet" class="run-view branch-sheet" aria-label="Branch from a step">
+    <form method="dialog" class="settings-body run-body branch-body" data-nodirty>
+      <h2 class="run-title"><span id="br-title">Branch from here</span></h2>
+      <div id="br-edit" class="br-edit">
+        <p class="muted small">She carries on from this step with what you change; the steps before it come from the record and don't run again. The original stays as it is, and nothing goes into the conversation unless you choose Use this answer.</p>
+        <p id="br-exact" class="small" role="status"></p>
+        <label>Your message <textarea id="br-prompt" rows="3"></textarea></label>
+        <label>A result she saw <select id="br-tool"></select></label>
+        <label id="br-tool-row" hidden>What it says instead <textarea id="br-tool-out" rows="5"></textarea></label>
+        <fieldset class="br-notes-box">
+          <legend>Notes she remembered <button type="button" class="tip" data-tip="Ticked notes go in as they did. Untick one to take it out; give a note's number to put one in (her Memory page shows the numbers).">?</button></legend>
+          <div id="br-notes" class="br-notes"></div>
+          <label>Put in another note (its number) <input id="br-note-add" type="number" min="1" step="1" inputmode="numeric"></label>
+        </fieldset>
+        <label>Model <select id="br-model"></select></label>
+        <p id="br-ws" class="muted small"></p>
+        <p class="muted small">Models don't answer the same way twice (sampling, updates on the provider's side). Replay unchanged runs the step again with nothing changed, so you can see how much a reply varies by chance.</p>
+        <div class="add-row br-go">
+          <button id="br-run" type="button">Run the branch</button>
+          <button id="br-same" type="button" class="ghost">Replay unchanged</button>
+        </div>
+      </div>
+      <div id="br-live" class="br-live" hidden></div>
+      <div id="br-diff" class="br-diff" hidden></div>
+    </form>
+  </dialog>
   <dialog id="compare-dialog" aria-label="Find the best model">
     <div class="settings-body compare">
       <h2>Find the best model: <span id="cmpx-job"></span></h2>

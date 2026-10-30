@@ -261,8 +261,33 @@ function routeFamilies(): Map<string, Set<string>> {
 }
 /** Owner-only route families (a member gets 403 ownerOnly). Every family must be in one of the two lists. */
 const OWNER_ONLY = ['backups', 'update', 'doctor', 'logs', 'status', 'health', 'access', 'private-local', 'local-models', 'subscriptions', 'mcp', 'bridges', 'github', 'github-watch', 'google', 'home', 'ssh', 'workspaces', 'jobs', 'previews', 'team', 'codemap', 'code-projects', 'starters', 'recipes', 'history-import', 'import', 'model-jobs', 'tools', 'search', 'desktop-apps', 'claim', 'demo', 'public', 'login', 'telegram', 'discord', 'budgets', 'sandbox', 'security-pass', 'findings', 'threat-model'];
+/**
+ * Owner-only paths inside a member family (Phase 83: time-travel in `runs`; a member's run view
+ * stays read-only). Each must answer a member 403 ownerOnly.
+ */
+const OWNER_ONLY_SUBPATHS: [string, string][] = [
+  ['POST', '/api/runs/1/branch'],
+  ['GET', '/api/runs/1/diff/2'],
+  ['POST', '/api/runs/1/use'],
+  ['POST', '/api/runs/1/apply'],
+  ['POST', '/api/runs/1/discard'],
+  ['POST', '/api/runs/1/stop'],
+  ['GET', '/api/runs/1/steps/0/branch'],
+];
 /** Families not exercised by the generic loop (sign-out or streams) and checked on their own. */
 const SKIP = new Set(['logout', 'events', 'health', 'login', 'claim', 'demo', 'public']);
+
+test('owner-only paths inside member families (time-travel): members get 403 ownerOnly, the owner reaches them', async () => {
+  for (const p of [ana, ben]) {
+    for (const [method, path] of OWNER_ONLY_SUBPATHS) {
+      const r = await call(p, method, path, method === 'GET' ? undefined : { fromStep: 0 });
+      assert.equal(r.status, 403, `${p.name} ${method} ${path}`);
+      assert.equal(r.json.ownerOnly, true, `${p.name} ${method} ${path}`);
+    }
+  }
+  // The owner gets past the gate (no such run here: 404, never 403).
+  for (const [method, path] of OWNER_ONLY_SUBPATHS) assert.notEqual((await call(owner, method, path.replace('/1/', '/999999/'), method === 'GET' ? undefined : { fromStep: 0 })).status, 403, path);
+});
 
 test('every route family: no person ever gets another person\'s data', async () => {
   const fam = routeFamilies();

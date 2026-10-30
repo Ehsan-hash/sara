@@ -5,6 +5,22 @@ Format: newest first. Semantic versions since 1.0.0 (before that `0.<phase>.<pat
 
 ## Unreleased
 
+## 2.16.0 (2026-10-30): time-travel, branch from any step (harness track, Phase 83)
+
+- **Branch from here** on any step of a recorded turn (Run view): edit her message, a tool result, the
+  notes she remembered (in or out) or the model, then *Run the branch*. Step N's inputs are rebuilt
+  exactly as they were sent (checked against a stored hash); earlier tool results come from the record
+  and are never re-run. *Replay unchanged* is the control run (models aren't fully deterministic).
+- Branches are separate runs (they never add to your conversation); **Use this answer** adds the answer
+  marked *Re-run from step n*.
+- **Coding branches** work in a copy at the recorded commit (changed files restored when they still
+  match); your workspace is untouched until **Apply**, which never overwrites a file you changed since.
+- **Side-by-side diff:** steps, model, tokens, cost, time, tool calls, file diffs, the answer word by word,
+  notes used, and a summary line.
+- Approvals, plan checks, the sandbox gate, budgets and the safety layer all apply to branches. Owner
+  only; off-the-record turns can't be replayed.
+- For developers: `replayRun()` (headless, used by the coming eval loop), `/api/runs/:id/branch`, `/diff/:other`.
+
 ## 2.15.0 (2026-10-30): the threat model and a fix-only second pass (harness track, Phase 82)
 
 - **Threat modeling after coding turns:** she finds the entry points of the changed code (Express, Koa,
