@@ -1,0 +1,7 @@
+{
+  "title": "Python command-line tool",
+  "description": "A Python command-line tool with no packages: argparse, --help, exit codes, reading files or standard input, JSON output, and unittest tests.",
+  "language": "Python",
+  "test": "python3 -m unittest",
+  "run": "python3 cli.py --help"
+}

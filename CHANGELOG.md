@@ -5,6 +5,18 @@ Format: newest first. Semantic versions since 1.0.0 (before that `0.<phase>.<pat
 
 ## Unreleased
 
+## 2.8.2 (2026-10-30): first community contributions
+
+Thanks to [@Ehsan-hash](https://github.com/Ehsan-hash), Sara's first outside contributor:
+
+- **Python command-line starter:** "make me a Python command-line tool" now starts from a tested,
+  package-free template (`argparse`, files or standard input, JSON output, exit codes, `unittest`).
+  On Windows the starter's commands use `python` instead of `python3`. ([#21](https://github.com/farena-ai/sara/pull/21))
+- **`sara doctor` and Run full check** say whether the testing browser was found, and how to install it
+  when it's missing. It only looks; it never starts or downloads one. ([#20](https://github.com/farena-ai/sara/pull/20))
+- **Weather example tool:** describes all the weather codes Open-Meteo documents (freezing drizzle and
+  rain, snow grains, snow showers, heavy thunderstorms) instead of showing numbers. ([#22](https://github.com/farena-ai/sara/pull/22))
+
 ## 2.8.1 (2026-10-29): She remembered stays folded
 
 - **Privacy:** *She remembered* in her panel starts folded, showing only how many notes she used. Her notes

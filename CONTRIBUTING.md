@@ -10,7 +10,8 @@ bridges, characters, MCP servers, languages and starter templates.
 
 ## Set up
 
-You need **Node 24 or newer** and git. Python 3 is only needed for the coding benchmark.
+You need **Node 24 or newer** and git. Python 3 is needed for the Python starter tests and the
+coding benchmark.
 
 ```sh
 git clone https://github.com/farena-ai/sara.git

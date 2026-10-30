@@ -16,6 +16,7 @@ import type { Vault } from './vault.ts';
 import { localVoiceMissing, localVoiceSupported } from './platform.ts';
 import { noSandboxNote, type SandboxInfo } from './tools/sandbox.ts';
 import type { ToolRegistry } from './tools/registry.ts';
+import { findBrowser, type BrowserInfo } from './browser.ts';
 
 export interface DoctorCheck {
   name: string;
@@ -36,6 +37,8 @@ export interface DoctorDeps {
   /** The owner's tool choices are checked against it (shell without a sandbox and without asking). */
   tools?: ToolRegistry;
   platform?: NodeJS.Platform;
+  /** Finds the optional browser used to test web previews. */
+  browser?: () => BrowserInfo;
 }
 
 export async function runDoctor(d: DoctorDeps): Promise<DoctorCheck[]> {
@@ -46,6 +49,9 @@ export async function runDoctor(d: DoctorDeps): Promise<DoctorCheck[]> {
 
   const major = Number(process.versions.node.split('.')[0]);
   add('Node.js', major >= 24 ? 'ok' : 'fail', `${process.version}${major >= 24 ? '' : ' (Sara needs 24 or newer)'}`);
+
+  const browser = d.browser?.() ?? findBrowser(d.platform);
+  add('Testing browser', browser.found ? 'ok' : 'warn', browser.found ? `${browser.name ?? 'Browser'} found at ${browser.path ?? 'configured path'}` : `not found. ${browser.how}`);
 
   // Data folder: exists, private, room to grow.
   try {

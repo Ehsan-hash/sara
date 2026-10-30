@@ -59,6 +59,9 @@ service: `'ask'`. Anything experimental: `'never'`, so the owner opts in.
 The example, [`examples/tools/weather-tool.ts`](../examples/tools/weather-tool.ts), looks up the
 current weather from the free Open-Meteo API. The core of it:
 
+The example describes every weather condition currently documented by Open-Meteo. Its test uses an
+injected fake fetch, so the checks do not call a live service.
+
 ```ts
 import { str, ToolError } from '../../src/tools/types.ts';
 import type { Tool } from '../../src/tools/types.ts';
@@ -204,7 +207,7 @@ legally required and is translated in [`src/i18n.ts`](../src/i18n.ts).
 
 ## Add a starter template
 
-When the owner says "build me a Telegram bot / landing page / API / command-line tool", she starts
+When the owner says "build me a Telegram bot / landing page / API / command-line tool / Python CLI", she starts
 from a small tested template in [`templates/starters/`](../templates/starters/), copies it into the
 workspace with the `starter_create` tool, and runs its tests as a background job before she
 changes anything. A starter is a folder with:
@@ -212,13 +215,16 @@ changes anything. A starter is a folder with:
 | File | Purpose |
 |---|---|
 | `starter.json` | `title`, `description` (she reads it to pick one), `language`, `test` (command), `run` (command) |
-| `README.md`, the code, `test/` | A small project that works and whose tests pass. `__PROJECT_NAME__` anywhere in a text file is replaced with the folder name. |
+| `README.md`, the code, `test/` | A small project that works and whose tests pass. `__PROJECT_NAME__` anywhere in a text file is replaced with the folder name. Python starters can use `unittest` from the standard library. |
 | `CUSTOMISE.md` | Short notes for her: where the real work goes, which commands to run after a change |
 
 The example [`examples/starters/word-counter/`](../examples/starters/word-counter/) is a complete
 one. Copy the folder into `templates/starters/` to offer it; `test/examples.test.ts` shows how it is
 listed, copied and tested (`listStarters()` and `copyStarter()` in [`src/starters.ts`](../src/starters.ts)).
 Keep starters dependency-free where you can, so their tests run without a network.
+
+The built-in Python command-line starter in [`templates/starters/python-cli/`](../templates/starters/python-cli/)
+uses `argparse`, keeps pure work in `lib.py`, and tests it with `python3 -m unittest`.
 
 ## Add a model provider
 

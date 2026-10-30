@@ -81,7 +81,11 @@ try {
   first = true; // an empty repository: this is its first commit
 }
 if (!first && !run('git', ['status', '--porcelain'], repoDir)) throw new Error('Nothing changed since the last public release.');
-git(['commit', '--quiet', '-m', first ? `Sara ${version}` : `Sara ${version}\n\nSee CHANGELOG.md.`], repoDir);
+// Outside contributors whose pull requests went into this release get a Co-authored-by trailer, so
+// GitHub credits them: SARA_PUBLIC_COAUTHORS="Name <id+login@users.noreply.github.com>; …".
+const coauthors = (process.env.SARA_PUBLIC_COAUTHORS ?? '').split(';').map((s) => s.trim()).filter((s) => /^[^<>\n]+ <[^<>\s@]+@[^<>\s]+>$/.test(s));
+const trailers = coauthors.length ? `\n\n${coauthors.map((c) => `Co-authored-by: ${c}`).join('\n')}` : '';
+git(['commit', '--quiet', '-m', first ? `Sara ${version}` : `Sara ${version}\n\nSee CHANGELOG.md.${trailers}`], repoDir);
 git(['tag', '-a', tag, '-m', `Sara ${version}`], repoDir);
 
 // 4. A last look at what this commit carries: author and committer must be the no-reply identity.

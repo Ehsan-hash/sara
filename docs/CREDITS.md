@@ -40,6 +40,14 @@ The default portrait and expressions of "Sara" were made for this project with G
 (xAI). Pictures of your own companion are made on your own account and belong to you, under the
 picture service's terms.
 
+## Contributors
+
+People who sent changes to Sara, newest first:
+
+- [@Ehsan-hash](https://github.com/Ehsan-hash): the Python command-line starter, the testing browser in
+  `sara doctor`, and every weather code in the example tool (2.8.2; [#20](https://github.com/farena-ai/sara/pull/20),
+  [#21](https://github.com/farena-ai/sara/pull/21), [#22](https://github.com/farena-ai/sara/pull/22)).
+
 ## Thanks
 
 To everyone behind the projects above.

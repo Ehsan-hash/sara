@@ -13,7 +13,7 @@ prueba software en un entorno aislado, en tu propio servidor y con los modelos q
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="License: MIT"></a>
   <img src="https://img.shields.io/badge/node-%E2%89%A5%2024-339933" alt="Node 24 or newer">
   <img src="https://img.shields.io/badge/runtime%20dependencies-0-brightgreen" alt="Zero runtime dependencies">
-  <img src="https://img.shields.io/badge/tests-924%20passing-brightgreen" alt="924 tests passing">
+  <img src="https://img.shields.io/badge/tests-928%20passing-brightgreen" alt="928 tests passing">
   <a href="docs/RESULTS.md"><img src="https://img.shields.io/badge/HumanEval%20pass%401-96.3%25-informational" alt="HumanEval pass@1 96.3%"></a>
   <a href="https://github.com/farena-ai/sara/releases/latest"><img src="https://img.shields.io/github/v/release/farena-ai/sara?label=release" alt="Latest release"></a>
   <a href="https://github.com/farena-ai/sara/pkgs/container/sara"><img src="https://img.shields.io/badge/docker-amd64%20%7C%20arm64-2496ED" alt="Docker image for amd64 and arm64"></a>
@@ -205,8 +205,8 @@ prueba comprobaba. Lo que aporta hoy es la forma de trabajar (ejecuta las prueba
 antes de pasos arriesgados, muestra lo que se ejecutó), no una puntuación más alta en estos
 conjuntos. Detalles, resultados por tarea y cómo repetirlo: [docs/RESULTS.md](docs/RESULTS.md).
 
-Además, `npm run check`: una comprobación de tipos y 932 pruebas automáticas con un modelo falso
-programado (sin red, sin GPU): 924 pasan en Windows y las otras 8 son pruebas del aislamiento solo
+Además, `npm run check`: una comprobación de tipos y 936 pruebas automáticas con un modelo falso
+programado (sin red, sin GPU): 928 pasan en Windows y las otras 8 son pruebas del aislamiento solo
 para Linux, que se ejecutan en un servidor Linux.
 
 ## Cómo se compara Sara
