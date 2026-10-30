@@ -5,6 +5,26 @@ Format: newest first. Semantic versions since 1.0.0 (before that `0.<phase>.<pat
 
 ## Unreleased
 
+## 2.13.0 (2026-10-30): sandbox first (harness track, Phase 80)
+
+- **Risky commands are tried in a throwaway copy of the workspace first** in coding chats and team
+  tasks: deletes, installs, scripts, network. Read-only commands (ls, cat, git status, grep…) pass
+  straight through; git's own commit/push/checkout keep the normal approval.
+- **Isolation:** Linux uses the existing bubblewrap sandbox (the copy is the only writable place, home
+  hidden, no network unless allowed); macOS the Seatbelt profile; Windows Docker (only an image already
+  on the PC, never pulled) or WSL2 if present, otherwise **a copy only, clearly labelled *not
+  isolated***: it watches the real workspace, a canary file, Sara's data and home folders, and always
+  asks before applying.
+- **The *Ran in a sandbox* card** shows the result, the files added/changed/removed, and anything
+  nasty: writes outside the copy, mass deletes, programs left running (stopped), git hooks or shell
+  settings files (never applied), new executables, network attempts, time-outs. Then **Apply to my
+  workspace** (exactly the diff, recorded on the run), **Discard** or **Run for real**.
+- Settings → Coding → *Try commands in a sandbox first*: Off / Only risky commands (default) / Every
+  command; network for tries, the largest copy and a time limit.
+- **Safety:** on Windows the try only ever stops programs that started after it began; a command
+  can't trick it into closing anything that was already running.
+- A 2,000-file project copies in about a second.
+
 ## 2.12.0 (2026-10-30): budgets she keeps (harness track, Phase 79)
 
 - **One budget for every task** (tokens, dollars, steps, minutes): chat turns, background jobs and team

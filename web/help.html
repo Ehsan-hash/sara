@@ -43,6 +43,7 @@
   <a href="#clients">In your terminal and editor</a>
   <a href="#usage">Usage and costs</a>
   <a href="#runs">Show the run</a>
+  <a href="#sandbox">Commands tried in a sandbox first</a>
   <a href="#library">Her library</a>
   <a href="#chatapps">Telegram and Discord</a>
   <a href="#together">Things to do together</a>
@@ -513,6 +514,16 @@
   <li>A small meter on the step line (and in <strong>Show the run</strong>) shows how much of the budget a reply used.</li>
   <li>On a subscription (a ChatGPT, Claude or Grok sign-in) or a model on your own computer, a dollar limit can't be counted: there's no price per token. Tokens, steps and time still apply. Time spent waiting for your OK doesn't count.</li>
   <li>A budget never skips a safety check or an approval: tools that ask first still ask, and her summary is checked like any reply. Background jobs and team tasks keep their own budgets (above).</li>
+</ul>
+
+<h2 id="sandbox">Commands tried in a sandbox first</h2>
+<ul>
+  <li>In coding conversations (and for her team's helpers), a command that could change your project first runs in a <strong>throwaway copy</strong> of the workspace. Read-only commands such as <code>ls</code>, <code>cat</code> or <code>git status</code> pass straight through; commands that write, install, delete, use the network or run a script are tried first.</li>
+  <li>The card <strong>Ran in a sandbox</strong> shows the command, its result and time, the files it added, changed or removed, and anything worth a look: writes outside the copy, many files deleted, git hooks, network use, programs left running (they are stopped), running out of time.</li>
+  <li>You choose: <strong>Apply to my workspace</strong> writes only those file changes into your project (a file you changed meanwhile is left alone), <strong>Discard</strong> throws the copy away, <strong>Run for real</strong> runs the command in your workspace as before. A clean try of a tool you let run on its own is applied by itself when the computer can isolate it.</li>
+  <li>How isolated a try is depends on the computer: on Linux <strong>bubblewrap</strong> and on a Mac the <strong>macOS sandbox</strong> keep the rest of the computer read-only, your home folder hidden and the network off. On Windows it uses <strong>Docker</strong> (with its image already downloaded) or <strong>WSL2</strong> with bubblewrap if they are there; otherwise the copy is <strong>not isolated</strong>: writes outside it are watched and flagged, she asks before trying a command that asks first, and nothing is applied until you choose.</li>
+  <li>Change it in <em>Settings → Abilities → Coding projects</em>: only risky commands (the default), every command, or off; network for tries (off by default); the largest copy and the time limit. Dependency folders such as <code>node_modules</code> are never copied: they are shared read-only where the computer can, otherwise left out of the copy.</li>
+  <li>Approvals, tools you switched off, the check against your decisions and budgets work as before: the try never replaces them.</li>
 </ul>
 
 <h2 id="together">Things to do together</h2>

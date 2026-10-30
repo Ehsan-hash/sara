@@ -652,6 +652,12 @@ export function createSaraServer(opts: ServerOptions): Server {
         turn.status = 'running';
         turn.detail = ev.summary;
         break;
+      case 'sandbox_running':
+        // Phase 80: the command is being tried in a throwaway copy first.
+        turn.approvals.delete(ev.id);
+        turn.status = 'running';
+        turn.detail = 'trying it in a sandbox copy';
+        break;
       case 'tool_result':
         turn.approvals.delete(ev.id);
         turn.status = 'thinking';

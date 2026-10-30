@@ -56,6 +56,7 @@ import { appInfo } from './health.ts';
 import { DiscordBridge } from './bridges/discord.ts';
 import { McpManager } from './tools/mcp.ts';
 import { detectSandbox, lockDataDir, type SandboxInfo, type SandboxPreference } from './tools/sandbox.ts';
+import { detectIsolation, SandboxGate, sandboxGateSettings, sweepSandboxRuns, type Isolation, type SandboxGateSettings } from './sandbox-run.ts';
 import { accessInfo, adminHint, localVoiceMissing, localVoiceSupported } from './platform.ts';
 import { statusReport } from './status.ts';
 import { tailscaleStatus } from './tailscale.ts';
@@ -336,6 +337,31 @@ const browsers = new BrowserManager({ sandbox: () => sandbox, previews, sweep: t
 // Phase 50: the code maps of the workspaces (one per workspace, shared like the workspaces; a
 // rebuildable cache, so backups leave it out). Meaning search uses the first companion's job.
 const codemaps = new CodeMaps({ cacheDir: join(dataDir, 'cache', 'codemap'), target: () => embedTarget(companions.main.app) });
+// Phase 80 (harness M5): risky commands try a throwaway copy first (src/sandbox-run.ts). Copies live
+// in <data>/cache/sandbox-runs (left-overs from a restart are swept now); the isolation available
+// (bubblewrap, the macOS sandbox, Docker or WSL2 on Windows, else the copy only) is looked up once,
+// in the background, and shared by every companion.
+const sandboxRunsDir = join(dataDir, 'cache', 'sandbox-runs');
+try {
+  const wsRoot = join(dataDir, 'workspaces');
+  sweepSandboxRuns(sandboxRunsDir, existsSync(wsRoot) ? readdirSync(wsRoot).map((n) => join(wsRoot, n)) : []);
+} catch (err) {
+  console.warn(`sandbox: could not clear old tries: ${(err as Error).message}`);
+}
+const isolationCache = new Map<string, Isolation>();
+const sharedIsolation = (base: SandboxInfo, g: SandboxGateSettings): Isolation => {
+  const key = `${base.mode}|${g.dockerImage}`;
+  if (!isolationCache.has(key)) isolationCache.set(key, detectIsolation(base, g));
+  return isolationCache.get(key)!;
+};
+setTimeout(() => {
+  try {
+    const iso = sharedIsolation(sandbox, sandboxGateSettings(settings.get()));
+    console.log(`Sandbox tries: ${iso.driver}${iso.isolated ? ' (isolated)' : ' (copy only, not isolated)'}`);
+  } catch {
+    /* looked up on first use */
+  }
+}, 2000).unref();
 let healthHistory: HealthHistory | undefined;
 let bridges: AppContext['bridges'];
 // Phase 59: a new server nobody has signed in to can be set up in the browser for a while after
@@ -482,6 +508,7 @@ function buildCompanion(space: Space, id: string, dir: string): Companion {
     tools,
     approvals: new ApprovalBroker(),
     sandbox,
+    sandboxGate: new SandboxGate(sandboxRunsDir, sandbox, () => sandboxGateSettings(settingsC.get()), sharedIsolation),
     ...(isMember ? {} : { mcp }),
     redactor,
     snapshots: new SnapshotStore(space.dir),

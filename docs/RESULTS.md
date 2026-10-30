@@ -518,6 +518,32 @@ What the live runs changed (each now pinned by a test in `test/phase79.test.ts`)
   The text she wrote next to her last tool calls is not taken as her answer.
 - **Cost of the meter:** about 0.007 ms per step (150 steps with a 60-message history, in the test suite).
 
+## Sandbox tries (Phase 80)
+
+Risky commands in coding conversations first run in a throwaway copy (`src/sandbox-run.ts`). The
+cost of a try on the dev PC (Windows 11, Node 24, NTFS: no reflink, so files are copied; copy-only
+mode), from `test/phase80.test.ts` "performance" (2,000 small source files, 40 folders):
+
+| Copy | Copy time | Whole try (copy, hash before/after, run `echo`, compare, watch, clean up) |
+|---|---|---|
+| Filtered copy (`.gitignore`, no `.git`) | **0.9 s** | 1.7–2.6 s |
+| Git worktree (`--no-checkout`, filled from the real files, index refreshed) | **1.5 s** | 2.3–3.2 s |
+
+Besides the copy, a try hashes the copy before and after the command and takes a size/time
+listing of the real workspace twice (the watch); the command itself took 0.04–0.1 s here.
+Copy-on-write file systems (APFS, Btrfs, XFS, ReFS) clone instead of copying.
+
+**Live check** (throwaway server, `gemma4:12b` on Ollama, a coding conversation, this PC = copy-only
+mode, no Docker, WSL not installed):
+
+| Command she ran (test scripts written by the tester) | What the card showed | Choice | Real workspace |
+|---|---|---|---|
+| `sh cleanup.sh`: deletes the 6 notes, writes one file beside its folder and one in Sara's data folder | *Not isolated*; exit 0 in 0.2 s; −6; *Changed files outside the copy* (both paths); *Deleted many files* (6 of 9) | Discard | unchanged; the copy removed |
+| `sh add-line.sh`: one line added to README, one new file | *Not isolated*; +1 ~1; nothing unusual | Apply | exactly those 2 files written; recorded on the run step with the decision |
+
+Not measured on this PC: bubblewrap, the macOS sandbox, Docker and WSL2 (the bubblewrap tests in
+`test/phase80.test.ts` run on the Linux server).
+
 ## Code map
 
 `scripts/eval-codemap.ts` copies Sara's own code into a workspace and asks 8 "where is…?"

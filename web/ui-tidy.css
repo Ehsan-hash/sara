@@ -426,3 +426,57 @@ dialog:not(.settings-dialog) .settings-body > :is(.error, p[role="status"]):empt
   #messages > .contradict-flag { margin-left: 48px; max-width: calc(100% - 48px); }
   .approval-contradict .row button { flex: 1 1 auto; }
 }
+
+/* Phase 80: commands tried in a sandbox copy first (the card's section, the line under a step, Settings). */
+.approval-sandbox { border-color: color-mix(in srgb, var(--info) 45%, var(--hairline-strong)); }
+.sbx { display: grid; gap: 6px; grid-template-columns: minmax(0, 1fr); padding: 10px 12px; border-radius: var(--r-control); background: var(--surface-2); border: 1px solid var(--hairline); }
+.sbx.sbx-flagged { border-color: color-mix(in srgb, var(--warn) 50%, var(--hairline)); background: color-mix(in srgb, var(--warn-soft) 55%, var(--surface-2)); }
+.sbx p { margin: 0; }
+.sbx-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; }
+.sbx-icon, .sbx-chip-icon, .sbx-finding-icon { display: inline-grid; place-items: center; flex: none; }
+.sbx-icon svg.ic { width: 18px; height: 18px; }
+.sbx-chip-icon svg.ic, .sbx-finding-icon svg.ic { width: 14px; height: 14px; }
+.sbx-chip { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: var(--r-pill); font-size: var(--fs-small); border: 1px solid var(--hairline-strong); }
+.sbx-chip.sbx-isolated { color: var(--success); background: var(--success-soft); border-color: color-mix(in srgb, var(--success) 40%, transparent); }
+.sbx-chip.sbx-open { color: var(--warn); background: var(--warn-soft); border-color: color-mix(in srgb, var(--warn) 45%, transparent); }
+.sbx-cmd { margin: 0; padding: 6px 8px; border-radius: var(--r-control); background: var(--surface-1); font-family: var(--font-mono); font-size: var(--fs-small); white-space: pre-wrap; overflow-wrap: anywhere; max-height: 9em; overflow: auto; }
+.sbx-result.sbx-pass { color: var(--success); }
+.sbx-result.sbx-fail { color: var(--warn); }
+.sbx-sum { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; font-family: var(--font-mono); }
+.sbx-label { font-family: var(--font-ui); color: var(--text-2); }
+.sbx-add { color: var(--success); }
+.sbx-mod { color: var(--info); }
+.sbx-del { color: var(--danger); }
+.sbx-files summary, .sbx-out summary { cursor: pointer; color: var(--text-2); font-size: var(--fs-small); }
+.sbx-list { margin: 2px 0 4px; padding-inline-start: 18px; list-style: none; font-family: var(--font-mono); font-size: var(--fs-small); overflow-wrap: anywhere; max-height: 12em; overflow: auto; }
+.sbx-list-head { margin-top: 4px; color: var(--text-2); }
+.sbx-findings { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; grid-template-columns: minmax(0, 1fr); }
+.sbx-finding { display: grid; gap: 2px; padding: 6px 8px; border-radius: var(--r-control); background: var(--surface-1); border-inline-start: 3px solid var(--hairline-strong); min-width: 0; }
+.sbx-finding.sev-high, .sbx-finding.sev-block { border-inline-start-color: var(--danger); }
+.sbx-finding.sev-medium { border-inline-start-color: var(--warn); }
+.sbx-finding.sev-low, .sbx-finding.sev-info { border-inline-start-color: var(--info); }
+.sbx-finding-head { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
+.sbx-finding.sev-high .sbx-finding-icon, .sbx-finding.sev-block .sbx-finding-icon { color: var(--danger); }
+.sbx-finding.sev-medium .sbx-finding-icon { color: var(--warn); }
+.sbx-sev { color: var(--text-3); }
+.sbx-finding-files { font-family: var(--font-mono); overflow-wrap: anywhere; color: var(--text-2); }
+.sbx-quote { display: block; padding: 4px 6px; border-radius: var(--r-control); background: var(--surface-2); font-family: var(--font-mono); overflow-wrap: anywhere; white-space: pre-wrap; }
+.sbx-clean { color: var(--success); }
+.sbx-out pre { margin: 4px 0 0; max-height: 14em; overflow: auto; font-family: var(--font-mono); font-size: var(--fs-small); white-space: pre-wrap; overflow-wrap: anywhere; }
+.sbx-note { color: var(--text-2); }
+.sbx-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.sbx-first { display: flex; gap: 6px; align-items: flex-start; margin: 4px 0; color: var(--text-2); }
+.sbx-first.sbx-open { color: var(--warn); }
+.sbx-flag { align-self: flex-start; display: flex; gap: 8px; align-items: flex-start; max-width: min(720px, 85%); padding: 6px 10px; border-radius: 10px; background: var(--surface-1); border: 1px dashed var(--hairline-strong); font-size: 13px; }
+.sbx-flag.sbx-flagged { border-color: color-mix(in srgb, var(--warn) 55%, transparent); background: var(--warn-soft); }
+#messages > .sbx-flag { margin-left: 60px; max-width: min(640px, calc(100% - 60px)); }
+.sbx-flag-body { display: flex; flex-wrap: wrap; gap: 2px 10px; align-items: baseline; min-width: 0; }
+.sbx-flag-head { font-weight: 600; }
+.sbx-warn { color: var(--warn); }
+#sbx-isolation.sbx-warn strong { color: var(--warn); }
+.team-sbx { display: grid; gap: 6px; grid-template-columns: minmax(0, 1fr); width: 100%; }
+@media (max-width: 720px) {
+  #messages > .sbx-flag { margin-left: 48px; max-width: calc(100% - 48px); }
+  .sbx-actions button { flex: 1 1 auto; }
+  .sbx { padding: 8px 10px; }
+}

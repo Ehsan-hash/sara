@@ -29,6 +29,7 @@ import { initNav, relabelNav, revealNav, setMore } from './nav.js';
 import { emptyState, initTidy, overflowMenu } from './tidy.js';
 import { addStep, finishStep, hasSteps, memoryStep, runLink, runStep, setBudget, stepLine, waitStep } from './steps.js';
 import { budgetCard, budgetMeter, fillBudgetSelect, overrideNote } from './budget-view.js';
+import { sandboxButtons, sandboxFirstNote, sandboxFlag, sandboxSection, teamSandboxRow } from './sandbox-view.js';
 import { openRunView } from './run-view.js';
 import { renderCard, renderCards } from './result-cards.js';
 import { initLook, setContextRing, setLookBusy, showHeadChips } from './look.js';
@@ -1302,6 +1303,8 @@ function renderMessages(messages, opts = {}) {
     }
     // Phase 77: flags and finished stops of her plan check (`meta.contradictions`), under that step.
     if (m.role === 'assistant' && Array.isArray(m.meta?.contradictions)) for (const c of m.meta.contradictions) if (c?.note && c.status !== 'open') els.push(contradictionFlag(c));
+    // Phase 80: a command tried in a sandbox copy first (what it did and what you chose).
+    if (m.role === 'tool' && m.meta?.sandbox?.decision) els.push(sandboxFlag({ ...m.meta.sandbox, callId: m.meta.toolCallId }));
     if (m.role === 'tool') {
       addStep((turn.steps ??= newSteps()), { id: m.meta?.toolCallId, name: m.meta?.name, summary: m.meta?.summary ?? m.meta?.name, args: m.meta?.args, status: m.meta?.status ?? 'ok', output: m.content, ms: m.meta?.ms, snapshotId: m.meta?.snapshotId });
       const card = (m.meta?.status ?? 'ok') === 'ok' ? m.meta?.card : null;
@@ -1767,6 +1770,14 @@ async function runStream(path, body, userBubble) {
           const node = contradictionFlag(ev.item);
           if (old) old.replaceWith(node);
           else place(node);
+        } else if (ev.type === 'sandbox_running') {
+          // Phase 80: the command is being tried in a throwaway copy first.
+          document.querySelector(`.approval[data-call="${CSS.escape(ev.id)}"]`)?.remove();
+          if (steps) runStep(steps, ev.id);
+          setActivity('running', t('trying it in a sandbox copy'));
+        } else if (ev.type === 'sandbox') {
+          // Phase 80: what the try showed and what you chose, under her step.
+          place(sandboxFlag({ ...ev.record, callId: ev.id }));
         } else if (ev.type === 'tool_running') {
           document.querySelector(`.approval[data-call="${CSS.escape(ev.id)}"]`)?.remove();
           if (steps) runStep(steps, ev.id);
@@ -2141,9 +2152,18 @@ function approvalCard(ev, block) {
       title.textContent = err.message;
     }
   };
+  // Phase 80: "Ran in a sandbox": what the try did in a throwaway copy; Apply / Discard / Run for real.
+  if (ev.sandbox) {
+    title.textContent = t('Ran in a sandbox: apply it to your workspace?');
+    title.dataset.raw = '';
+    card.classList.add('approval-sandbox');
+    card.append(title, sandboxSection(ev.sandbox), sandboxButtons(ev.sandbox, decide));
+    if (block) block.open = false;
+    return card;
+  }
   const yes = document.createElement('button');
   yes.type = 'button';
-  yes.textContent = c ? t('Do it anyway') : ev.budget ? t('Keep going') : t('Allow');
+  yes.textContent = c ? t('Do it anyway') : ev.budget ? t('Keep going') : ev.sandboxFirst ? t('Try it in a copy') : t('Allow');
   yes.addEventListener('click', () => decide(true, c ? 'override' : undefined));
   const no = document.createElement('button');
   no.type = 'button';
@@ -2160,7 +2180,7 @@ function approvalCard(ev, block) {
     row.append(upd);
     card.classList.add('approval-contradict');
   }
-  card.append(title, ...(c ? [contradictionSection(c)] : []), ...(ev.budget ? [budgetMeter(ev.budget)] : []), what, row);
+  card.append(title, ...(c ? [contradictionSection(c)] : []), ...(ev.budget ? [budgetMeter(ev.budget)] : []), what, ...(ev.sandboxFirst ? [sandboxFirstNote(ev.sandboxFirst)] : []), row);
   if (card.classList.contains('approval-tidy')) {
     if (TOOL_WORDS[ev.name]) title.after(el('p', 'approval-about muted small', t(TOOL_WORDS[ev.name])));
     row.append(el('span', 'tool-raw approval-raw', ev.name));
@@ -4173,6 +4193,44 @@ async function saveRuns() {
   await api('/runs/settings', { method: 'PUT', body: { keepDays: Number($('#runs-keep').value) } });
   void loadRuns();
 }
+// ---------- Phase 80: "Try commands in a sandbox first" (Settings → Abilities → Coding projects) ----------
+async function loadSandboxGate(recheck = false) {
+  let r;
+  try {
+    r = await api(`/sandbox${recheck ? '?recheck=1' : ''}`);
+  } catch {
+    $('#sbx-form').hidden = true;
+    return;
+  }
+  $('#sbx-form').hidden = false;
+  $('#sbx-mode').value = r.mode;
+  $('#sbx-network').checked = r.network;
+  const fill = (sel, values, cur, word) => {
+    sel.replaceChildren(...values.map((v) => new Option(word(v), String(v))));
+    sel.value = String(cur);
+  };
+  fill($('#sbx-size'), r.choices.maxMB, r.maxMB, (v) => (v >= 1000 ? `${v / 1000} GB` : `${v} MB`));
+  fill($('#sbx-time'), r.choices.timeLimitS, r.timeLimitS, (v) => (v >= 120 ? t('{n} minutes', { n: v / 60 }) : t('{n} seconds', { n: v })));
+  const iso = r.isolation;
+  const found = iso.found ? [iso.found.docker ? (iso.found.dockerImage ? t('Docker found') : t('Docker found, but its image isn\'t downloaded')) : t('no Docker'), iso.found.wsl ? (iso.found.wslBwrap ? t('WSL2 found') : t('WSL2 found, without bubblewrap')) : t('no WSL2')].join(' · ') : '';
+  const line = $('#sbx-isolation');
+  const how = {
+    bwrap: () => t('bubblewrap: only the copy is writable; no network unless you allow it.'),
+    seatbelt: () => t('the macOS sandbox: only the copy is writable; no network unless you allow it.'),
+    docker: () => t('Docker: only the copy is mounted; no network unless you allow it.'),
+    wsl: () => t('WSL2 with bubblewrap: only the copy is writable; no network unless you allow it.'),
+    copy: () => t('commands run in a copy, but could still reach other files here. Writes outside the copy are watched and flagged, and nothing is applied until you choose.'),
+  }[iso.driver] ?? (() => '');
+  line.replaceChildren(el('strong', '', iso.isolated ? t('On this computer: isolated') : t('On this computer: not isolated')), document.createTextNode(` — ${how()}${found ? ` (${found})` : ''}`));
+  line.classList.toggle('sbx-warn', !iso.isolated);
+  $('#sbx-form').dataset.loaded = '1';
+}
+async function saveSandboxGate() {
+  // Only values read from the server go back (never a list's first choice by accident).
+  if (!$('#sbx-form').dataset.loaded) return;
+  await api('/sandbox', { method: 'PUT', body: { mode: $('#sbx-mode').value, network: $('#sbx-network').checked, maxMB: Number($('#sbx-size').value), timeLimitS: Number($('#sbx-time').value) } });
+}
+$('#sbx-recheck').addEventListener('click', () => void loadSandboxGate(true));
 // ---------- Phase 79: per-reply budgets (Settings → Abilities → Budgets) ----------
 const BUDGET_KINDS = ['coding', 'chat'];
 const BUDGET_LINES = ['tokens', 'steps', 'usd', 'minutes'];
@@ -6240,6 +6298,7 @@ function showSettingsTab(page, opts = {}) {
   if (pick === 'dh-updates') void loadUpdates();
   if (pick === 'ab-recipes') void loadRecipes();
   if (pick === 'ab-budgets') void loadBudgets();
+  if (pick === 'ab-projects') void loadSandboxGate();
   if (pick === 'ab-ssh') void loadSsh();
   if (pick === 'ab-library') void loadLibrarySettings();
   if (pick === 'co-apps') void Promise.all([loadOtherApps(), loadAlexa()]);
@@ -6414,6 +6473,7 @@ const SETTINGS_SAVERS = {
   'dh-usage': [saveUsage],
   'dh-health': [saveRuns],
   'ab-budgets': [saveBudgets],
+  'ab-projects': [saveSandboxGate],
 };
 const settingsChanged = new Set();
 /** Notes which Settings page an edit was made on (programmatic fills call this themselves). */
@@ -10110,6 +10170,18 @@ async function renderTeamDetail() {
   }
   // Approvals waiting for you.
   const approvals = v.approvals.map((ap) => {
+    // Phase 80: a helper's command tried in a sandbox copy: Apply / Discard / Run for real.
+    if (ap.sandbox) {
+      const row = el('div', 'team-approval');
+      row.append(el('span', '', `✋ ${ap.helper}`));
+      row.append(
+        teamSandboxRow(ap, async (approved, how) => {
+          await api(`/approvals/${ap.id}`, { method: 'POST', body: { approved, how } }).catch(() => {});
+          void renderTeamDetail();
+        }),
+      );
+      return row;
+    }
     const row = el('div', 'team-approval');
     row.append(el('span', '', `✋ ${ap.helper} ${t('wants to')}: ${ap.summary}`));
     for (const [label, yes] of [[t('Allow'), true], [t('Decline'), false]]) {

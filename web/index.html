@@ -1852,6 +1852,18 @@
       <p class="muted small">What she knows about the code in each workspace: how to build and test it, its layout and rules, and the notes she keeps (decisions, conventions, commands). She looks again by herself every hour; coding conversations and her team use it.</p>
       <div class="add-row"><label>Workspace <select id="pj-ws"></select></label><button id="pj-refresh" type="button" class="ghost">Look again</button></div>
       <div id="pj-list" class="pj-list"></div>
+      <div id="sbx-form">
+      <h3>Try commands in a sandbox first</h3>
+      <p class="muted small">Before a command changes your project, she can run it in a throwaway copy and show you what it did: files added, changed or deleted, writes outside the project, network use, programs left running. Then you choose: apply the changes, discard them, or run it for real.</p>
+      <p id="sbx-isolation" class="small" role="status"></p>
+      <label>Try commands in a sandbox first <select id="sbx-mode"><option value="risky">Only risky commands</option><option value="every">Every command</option><option value="off">Off</option></select></label>
+      <label class="row"><input id="sbx-network" type="checkbox"> Let tries use the network</label>
+      <div class="bud-grid">
+        <label>Largest copy <select id="sbx-size"></select></label>
+        <label>Time limit for a try <select id="sbx-time"></select></label>
+      </div>
+      <div class="add-row"><button id="sbx-recheck" type="button" class="ghost small">Look again</button></div>
+      </div>
         </section>
         <section class="settings-page" data-page="ab-budgets" data-group="Abilities" data-title="Budgets" data-owner-only hidden>
       <div id="ab-budgets-form">

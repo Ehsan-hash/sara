@@ -391,6 +391,99 @@ step line (`web/steps.js`), retention on Settings → Data & health → Health.
   the copy is deleted afterwards; on Windows the gate says plainly there is no OS isolation and asks
   first (pure test of the decision).
 
+**As built (Phase 80, 2026-10-30):** `src/sandbox-run.ts` (classify → copy → run → observe →
+apply/discard), the gate at the approval point of `runTurnInner` and `TeamManager.#tool`,
+`web/sandbox-view.js` (the card, the outcome line, the team row), Settings → Abilities → Coding
+projects → *Try commands in a sandbox first*.
+
+- **When:** the `shell` tool in coding conversations and team helpers' runs. Settings `sandboxGate`:
+  *Only risky commands* (default on every platform, §7 #1), *Every command*, *Off*; network for tries
+  (off), largest copy (100 / 500 / 2,000 MB), time limit (1 / 2 / 5 / 10 minutes);
+  `GET/PUT /api/sandbox` (owner-only, refused on the demo; `?recheck=1` looks for Docker/WSL2 again).
+  Risky is decided in code (`classifyCommand`): writes (redirections, `cp/mv/touch/sed -i/tee`…),
+  installs (npm/pnpm/yarn/pip/uv/cargo/go/gem/… and system package managers), deletes (`rm`,
+  `find -delete`, `git clean`), network (`curl/wget/ssh/npx`…), scripts (interpreters, build/test
+  tools, `./x`, pipes into a shell, command substitution, any unknown program) and system
+  (`kill/taskkill/sudo/systemctl`…). Read-only commands (`ls`, `cat`, `grep`, `git status/log/diff`,
+  `sed -n`, `npm ls`…) pass straight through. Git's own repository commands (commit, push, checkout
+  of a branch, merge, reset) also pass through to the normal approval and the M2 plan check: a copy
+  can't hand them back.
+- **The copy** (`makeCopy`, in `<data>/cache/sandbox-runs/<id>/ws`, swept at start-up): a detached
+  `git worktree --no-checkout` filled byte for byte with the tracked and new (not ignored) files,
+  index set to HEAD and refreshed, when the workspace is the top of a repository with a commit and at
+  most 500 uncommitted files; else a filtered copy honouring `.gitignore` (nested files, negation,
+  anchors, `**`) and `.git/info/exclude`, without `.git`. Dependency and cache folders
+  (`SNAPSHOT_SKIP` plus `.pnpm-store`, `.tox`, `.turbo`, …) are never copied: bound read-only under
+  bubblewrap / Docker / WSL2, linked read-only under the macOS sandbox, left out (and said so) in
+  copy-only mode. Files are cloned with `COPYFILE_FICLONE` (reflink where the file system can,
+  else a copy), never hard-linked. A size cap and 50,000 files; over it nothing runs and the card
+  offers only Discard / Run for real.
+- **Isolation per platform** (`detectIsolation`): Linux = the existing bubblewrap profile
+  (`runCommand` with the copy as `/workspace`, rest read-only, home and data hidden, no network
+  unless allowed); macOS = the existing Seatbelt profile with the copy as the only writable place;
+  Windows = Docker when the daemon runs AND the image (`node:24-slim` by default) is already there
+  (`--network none`, `--cap-drop ALL`, only the copy mounted; never pulled), else WSL2 with
+  bubblewrap inside, else **copy only, labelled not isolated** (§7 #1). Docker's 'user' mode
+  (`SARA_TOOLS_USER`) is copy-only too (the tools user can write the real workspace) but still runs
+  as that user.
+- **Observations** (`SandboxFinding`, the §2.5 shape with `source: 'sandbox'`): files added /
+  changed / removed (sha256 of the copy before and after; Sara's own home files left out), writes
+  outside the copy (copy-only mode: a size+mtime watch of the real workspace including
+  `.git/HEAD|config|refs|hooks`, a canary file beside the copy, new entries in the run folder, the
+  workspaces folder, Sara's data folder and the home folder; isolated modes: the refused write's
+  output line, quoted), many files deleted (≥ 20, or ≥ 5 and half), `.git/hooks` / `.git/config` /
+  `.husky` written (never applied), shell/tool settings files (`.bashrc`, `.npmrc`, …), new
+  executables, network attempts seen in the output (tries get `PRIVATE_LOCAL_ENV` proxies in
+  copy-only mode), processes left running (bubblewrap: counted in its own process space; Git Bash:
+  the shell's MSYS process group, stopped by Windows pid; POSIX copy mode: the process group),
+  time-outs, long runs, dependency folders missing. Quotes are checked against the output
+  (`checkedFindings`: the "no theater" rule).
+- **The gate** (§2.3): with OS isolation the try runs at once and its card is the approval; a clean
+  try of a tool set to *Allowed* is applied by itself (recorded as `auto-applied`). Without
+  isolation, a tool that asks first asks BEFORE the try ("Try it in a copy", the normal card with
+  a not-isolated note), and the result ALWAYS asks. The card: *Ran in a sandbox*, the isolation chip,
+  the command, exit code and time, +/~/− with the file lists, the findings, the output, and *Apply
+  to my workspace* / *Discard* / *Run for real* (`ApprovalBroker.decide(id, approved, 'apply' |
+  'discard' | 'real')`; a plain Allow from a bridge or an older app applies, Deny discards). The
+  contradiction stop (M2) comes first; `never` never reaches the gate; the budget (M4) is untouched.
+- **Apply** writes exactly the diff (added/changed files copied back, removed ones deleted), never
+  into `.git`, `.husky` or dependency folders, never through a link, and leaves alone a file that
+  changed in the real workspace since the try started (a conflict, listed). It records the M3
+  `workspaceRef` (HEAD + dirty hashes) before and after on the tool step.
+- **Recorded:** the tool message's `meta.sandbox` and the run step's tool entry carry the
+  `SandboxRecord` (card + decision + applied files + refs); a discarded try marks the step
+  `stopped='gate'`; the step's `files` include the applied paths.
+- **API for M6/M7/M11:** `runInSandbox(workspaceDir, command, { cacheDir, base, isolation, network,
+  timeoutMs, signal, maxBytes, keep, watch })` → `SandboxResult { copy, run, changes, findings,
+  verdict, isolation }` (the copy goes at once unless `keep`); `applySandbox` / `discardSandbox`;
+  `classifyCommand`; `detectIsolation`; `SandboxGate.plan()` for another approval point.
+- **Measured:** a 2,000-file repository is copied in 0.9 s (filtered copy) / 1.5 s (worktree) and a
+  whole try (copy, hashes, run, compare) takes 1.7–3.2 s on the Windows dev PC
+  ([RESULTS.md](../RESULTS.md#sandbox-tries-phase-80)).
+- **Deviations:**
+  1. `findings` is still not a table: the Finding-shaped objects ride on the tool message and the
+     run step (as M2 did); M6 creates the table and can copy them.
+  2. Only `shell` is gated. `start_job` (long, background, often a server) and `delegate_task`
+     keep their approvals; jobs aren't routed through the sandbox (design: "long runs go through
+     `JobManager`").
+  3. Git's repository commands pass through to the normal approval (a copy can't hand them back).
+  4. *Run for real* is the explicit approval on the sandbox card itself (no second card); with no
+     isolation and a tool that asks first, the normal card comes before the try, so such a command
+     takes two OKs.
+  5. A clean, isolated try of an *Allowed* tool is applied by itself instead of always asking
+     (§2.3 `allow`); a finding, *Ask me first* or copy-only mode always shows the card.
+  6. No `scratch` bind option in `src/tools/sandbox.ts`: the copy IS the bound workspace, plus
+     read-only binds for dependency folders and the real `.git` of a worktree.
+  7. Docker and WSL2 drivers are built and unit-tested (argument builders, detection) but were not
+     run for real: neither is installed on the dev PC (Windows 11, WSL not installed, no Docker).
+  8. Copy-only mode detects writes outside only where it looks (the real workspace, around the
+     copy, the data and home folders' top level); deeper writes elsewhere aren't seen. It is
+     labelled "not isolated" for that reason.
+- **Hooks left:** M6 runs its dependency/static checks on `SandboxResult.changes` and can gate an
+  install through `SandboxGate.plan`; M7/M11 call `runInSandbox` with `keep: false` and fold
+  `findings` into their own; M8 restores a branch with the same copy code (`makeCopy`); M9 runs each
+  variant in its own copy.
+
 ### M6 · Phase 81 · 2.14.0: security pass + live advisories + fix branch
 
 - **Ships:** after a coding run changes files, a security pass runs in the background: built-in

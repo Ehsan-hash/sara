@@ -14,7 +14,7 @@ per il web, Windows, Mac e telefono.
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="License: MIT"></a>
   <img src="https://img.shields.io/badge/node-%E2%89%A5%2024-339933" alt="Node 24 or newer">
   <img src="https://img.shields.io/badge/runtime%20dependencies-0-brightgreen" alt="Zero runtime dependencies">
-  <img src="https://img.shields.io/badge/tests-986%20passing-brightgreen" alt="986 tests passing">
+  <img src="https://img.shields.io/badge/tests-1014%20passing-brightgreen" alt="1014 tests passing">
   <a href="docs/RESULTS.md"><img src="https://img.shields.io/badge/HumanEval%20pass%401-96.3%25-informational" alt="HumanEval pass@1 96.3%"></a>
   <a href="https://github.com/farena-ai/sara/releases/latest"><img src="https://img.shields.io/github/v/release/farena-ai/sara?label=release" alt="Latest release"></a>
   <a href="https://github.com/farena-ai/sara/pkgs/container/sara"><img src="https://img.shields.io/badge/docker-amd64%20%7C%20arm64-2496ED" alt="Docker image for amd64 and arm64"></a>
@@ -28,7 +28,7 @@ per il web, Windows, Mac e telefono.
   <sub>Una sessione reale con un modello locale (qwen3.8 27B su Ollama, una RTX 5090) su un server di prova usa e getta, nel tema Notte: tira su il morale di chi le scrive, scrive una piccola app e il suo test mentre il modello li trasmette, chiede prima di eseguire un comando, scopre un vero bug con un test che fallisce e lo corregge finché tutti e 7 i test passano. Fotogrammi scelti dalla registrazione; nulla al loro interno è stato modificato.</sub>
 </p>
 
-> **Stato:** 2.12, licenza MIT, con ventitré versioni ricche di novità dalla 1.0 (tutte qui sotto).
+> **Stato:** 2.13, licenza MIT, con ventiquattro versioni ricche di novità dalla 1.0 (tutte qui sotto).
 > Dalla 2.5 alla 2.8 tutta l'app ha cambiato aspetto. L'[app Android](https://play.google.com/store/apps/details?id=com.backstagecoding.sara)
 > è su Google Play; l'app per iPhone e la versione del Mac App Store arriveranno appena Apple le
 > approverà. Leggi [docs/DISCLOSURES.md](docs/DISCLOSURES.md) prima di usare o condividere Sara.
@@ -69,6 +69,7 @@ citano la pagina · la [modalità locale privata](docs/PRIVATE_LOCAL.md) · le [
 
 | Versione | Cosa ottieni |
 |---|---|
+| **2.13** · Prima nella sandbox | **I comandi rischiosi girano prima in una copia usa e getta del tuo progetto.** Cancellazioni, installazioni, script e accessi alla rete avvengono nella copia (dentro bubblewrap su Linux, Seatbelt su macOS, Docker o WSL2 su Windows se li hai). La scheda **Eseguito in una sandbox** mostra cosa è cambiato e cosa è sospetto: file cancellati in massa, scritture fuori dalla copia, programmi rimasti attivi, hook di git. Poi *Applica al mio spazio di lavoro*, *Scarta* o *Esegui davvero*. [Come funziona](docs/design/HARNESS_TRACK.md) |
 | **2.12** · Budget che rispetta | **Un limite vero, non un resoconto:** le attività di codice hanno un budget (200k token / 40 passi di default, dollari facoltativi). Vicino al limite passa al tuo modello rapido, riduce i giri di strumenti, poi riassume cosa è fatto e cosa manca, e si ferma. Andare oltre richiede il tuo **Continua con altro**. Le attività in background e di squadra usano lo stesso budget. [Come funziona](docs/design/HARNESS_TRACK.md) |
 | **2.11** · Istantanee di ogni esecuzione | **Ogni passo del suo lavoro viene registrato:** quale modello, il prompt, ogni chiamata a strumento e il suo risultato (senza segreti), i file toccati (nei progetti di codice l'HEAD di git e i file modificati), le note usate, i conflitti incontrati, token, costo e tempo. **Mostra l'esecuzione**, sotto ogni risposta, fa vedere tutto passo per passo. Conservate 90 giorni di default; niente lascia il tuo server. La base per budget, viaggio nel tempo e valutazioni. [Come funziona](docs/design/HARNESS_TRACK.md) |
 | **2.10** · Confronta i suoi piani con i tuoi | **Prima di agire, confronta il passo con quello che hai deciso.** Le hai detto «mai push su main», «test prima di ogni push», «usa pnpm» o «non toccare la configurazione di produzione»? Un passo previsto che va contro **si ferma su una scheda** che cita la tua decisione, con *Fallo lo stesso*, *No* o *Aggiorna la nota*. Nella chat di tutti i giorni lo menziona soltanto. Le regole sono verificate nel codice (niente supposizioni) e può solo aggiungere uno stop, mai toglierlo. [Come funziona](docs/design/HARNESS_TRACK.md) |
@@ -280,8 +281,8 @@ uno SPEC che nessun test controllava. Quello che aggiunge oggi è il modo di lav
 chiede prima dei passi rischiosi, mostra cosa è stato eseguito), non un punteggio più alto su questi
 insiemi. Dettagli, risultati per compito e come rieseguirlo: [docs/RESULTS.md](docs/RESULTS.md).
 
-In più, `npm run check`: un controllo dei tipi e 995 test automatici con un finto modello guidato
-da script (senza rete, senza GPU): 986 passano su Windows e gli altri 8 sono test dell'isolamento
+In più, `npm run check`: un controllo dei tipi e 1026 test automatici con un finto modello guidato
+da script (senza rete, senza GPU): 1014 passano su Windows e gli altri 8 sono test dell'isolamento
 solo per Linux, eseguiti su un server Linux.
 
 ## Il confronto

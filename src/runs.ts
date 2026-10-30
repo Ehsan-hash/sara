@@ -68,6 +68,11 @@ export interface ToolStep {
   /** Chat mode: the undo snapshot taken before it. */
   snapshotId?: string;
   messageId?: number;
+  /**
+   * Phase 80: the sandbox try (src/sandbox-run.ts SandboxRecord): isolation, diff, findings, the
+   * owner's choice, and for an Apply the M3 workspace manifest before and after.
+   */
+  sandbox?: unknown;
 }
 
 /** Coding mode: the light workspace manifest (risk 3): HEAD and the dirty files' hashes. */

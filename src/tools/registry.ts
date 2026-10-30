@@ -64,9 +64,11 @@ interface Pending {
 /**
  * Phase 77: how the owner answered a card that said "This goes against something you decided":
  * Do it anyway ('override'), Don't ('deny') or Update the note ('update'). Plain cards have none.
+ * Phase 80: a "Ran in a sandbox" card: Apply to my workspace ('apply'), Discard ('discard') or Run
+ * for real ('real'). A plain Allow on that card (bridges, older apps) applies the diff.
  */
-export type ApprovalHow = 'override' | 'deny' | 'update';
-export const APPROVAL_HOWS: readonly ApprovalHow[] = ['override', 'deny', 'update'];
+export type ApprovalHow = 'override' | 'deny' | 'update' | 'apply' | 'discard' | 'real';
+export const APPROVAL_HOWS: readonly ApprovalHow[] = ['override', 'deny', 'update', 'apply', 'discard', 'real'];
 
 /** Holds tool calls waiting for the owner's approve/deny click. */
 export class ApprovalBroker {
@@ -99,9 +101,10 @@ export class ApprovalBroker {
   decide(id: string, approved: boolean, how?: ApprovalHow): boolean {
     const p = this.#pending.get(id);
     if (!p) return false;
-    // \"Update the note\" and \"Don't\" never run the call, whatever `approved` says.
+    // \"Update the note\", \"Don't\" and \"Discard\" never run the call, whatever `approved` says;
+    // \"Apply\" and \"Run for real\" are the owner's explicit yes.
     if (how) this.#how.set(id, how);
-    p.resolve(how === 'update' || how === 'deny' ? false : approved);
+    p.resolve(how === 'update' || how === 'deny' || how === 'discard' ? false : how === 'apply' || how === 'real' ? true : approved);
     return true;
   }
 

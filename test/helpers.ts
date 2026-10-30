@@ -26,7 +26,18 @@ export const ROOT = resolve(import.meta.dirname, '..');
 
 export function tempDir(): { dir: string; cleanup: () => void } {
   const dir = mkdtempSync(join(tmpdir(), 'sara-test-'));
-  return { dir, cleanup: () => rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }) };
+  return {
+    dir,
+    cleanup: () => {
+      try {
+        rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+      } catch (err) {
+        // Windows: a child process that is still exiting can hold the folder for a moment longer.
+        // It's a temp folder; leaving it is harmless and isn't what the test checks.
+        if (process.platform !== 'win32' || !/EPERM|EBUSY/.test(String((err as NodeJS.ErrnoException).code ?? err))) throw err;
+      }
+    },
+  };
 }
 
 export const text = (...parts: string[]): StreamEvent[] => parts.map((t) => ({ type: 'text', text: t }));

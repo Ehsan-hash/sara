@@ -1204,6 +1204,26 @@
     "bud-on-limit": [
       "Wrap up: at the limit she writes a short summary of what's done and what's left, with a Continue with more button. Ask me: you get a card first; Keep going gives the same budget again.",
       "budgets"
+    ],
+    "sbx-mode": [
+      "Only risky commands: anything that writes, installs, deletes, uses the network or runs a script tries a throwaway copy first; ls, cat, git status pass straight through. Every command: all of them. Off: commands run as before.",
+      "sandbox"
+    ],
+    "sbx-network": [
+      "Off (safer): tries get no network, so installs and downloads fail in the copy and show up as \"tried to reach the network\". On: tries may download. Private local mode always keeps it off.",
+      "sandbox"
+    ],
+    "sbx-size": [
+      "The biggest project she copies for a try, without dependency folders like node_modules and ignored files. A bigger project isn't tried: you get the card with Run for real or Discard. Example: 500 MB.",
+      "sandbox"
+    ],
+    "sbx-time": [
+      "How long a try may run before it is stopped and flagged. A server or a watcher never ends by itself, so it gets stopped here. Example: 2 minutes.",
+      "sandbox"
+    ],
+    "sbx-recheck": [
+      "Looks again for what can isolate tries on this computer: bubblewrap (Linux), the macOS sandbox, or Docker with its image already downloaded or WSL2 with bubblewrap (Windows). Nothing is installed.",
+      "sandbox"
     ]
   },
   "pages": {

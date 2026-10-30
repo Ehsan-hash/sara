@@ -118,6 +118,12 @@ export interface Settings {
    * (tokens, steps, optional $ and minutes, on/off), the quick-model step and what happens at the limit.
    */
   turnBudgets?: Partial<Omit<import('./budget.ts').TurnBudgetSettings, 'coding' | 'chat'>> & { coding?: Partial<import('./budget.ts').TurnLimits>; chat?: Partial<import('./budget.ts').TurnLimits> };
+  /**
+   * Phase 80: "Try commands in a sandbox first" (Settings → Abilities → Coding projects): off, only
+   * risky commands (default) or every command; network for tries, the size and time limits, and the
+   * Docker image used on Windows when Docker is present.
+   */
+  sandboxGate?: Partial<import('./sandbox-run.ts').SandboxGateSettings>;
   /** Discord bridge (Phase 6). Bot token lives in the vault (bridge:discord). */
   discord?: Partial<DiscordSettings>;
   /** Automatic backups (Phase 6). */

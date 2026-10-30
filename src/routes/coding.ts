@@ -4,6 +4,7 @@ import { closeSync, existsSync, openSync, readdirSync, readSync, statSync } from
 import { join } from 'node:path';
 import { buildHistory, resolveChain } from '../chat.ts';
 import { historyRange, KEEP_DAY_CHOICES, runSettings } from '../runs.ts';
+import { DEFAULT_SANDBOX_GATE, mergeSandboxGate, SANDBOX_GATE_MODES, SANDBOX_SIZE_CHOICES, SANDBOX_TIME_CHOICES, sandboxGateSettings } from '../sandbox-run.ts';
 import { DEFAULT_TURN_BUDGETS, mergeTurnBudgets, MINUTE_CHOICES, STEP_CHOICES, TOKEN_CHOICES, turnBudgetSettings, USD_CHOICES } from '../budget.ts';
 import { as400, HttpError, readJson, send, validWorkspace } from '../http.ts';
 import { trOwner } from '../i18n.ts';
@@ -39,6 +40,19 @@ export function createCodingRoutes(ctx: RouteCtx): RouteHandler {
       const s = app.settings.get();
       const quick = s.routes?.quick;
       return send(res, 200, { ...turnBudgetSettings(s), choices: { tokens: TOKEN_CHOICES, steps: STEP_CHOICES, usd: USD_CHOICES, minutes: MINUTE_CHOICES }, quickSet: Boolean(quick && s.providers.some((p) => p.id === quick.providerId)), defaults: DEFAULT_TURN_BUDGETS });
+    }
+    // Phase 80: "Try commands in a sandbox first" (Settings → Abilities → Coding projects). Owner-only
+    // (members follow the owner's: OWNER_SETTINGS); the demo refuses (not in DEMO_READS). `?recheck=1`
+    // looks for Docker / WSL2 again.
+    if (a === 'sandbox' && !b) {
+      const gate = app.sandboxGate;
+      if (!gate) throw new HttpError(404, 'Sandbox tries are not available here.');
+      if (method === 'PUT') {
+        const body = await readJson(req);
+        app.settings.update({ sandboxGate: mergeSandboxGate(sandboxGateSettings(app.settings.get()), body) });
+      } else if (method !== 'GET') throw new HttpError(405, 'Method not allowed');
+      const iso = gate.isolation(new URL(req.url ?? '/', 'http://x').searchParams.get('recheck') === '1');
+      return send(res, 200, { ...sandboxGateSettings(app.settings.get()), choices: { mode: SANDBOX_GATE_MODES, maxMB: SANDBOX_SIZE_CHOICES, timeLimitS: SANDBOX_TIME_CHOICES }, defaults: DEFAULT_SANDBOX_GATE, isolation: { driver: iso.driver, isolated: iso.isolated, label: iso.label, ...(iso.found ? { found: iso.found } : {}) }, platform: process.platform });
     }
     if (a === 'runs') {
       const runs = app.runs;

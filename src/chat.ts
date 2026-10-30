@@ -51,6 +51,7 @@ import type { ApprovalBroker, ToolRegistry } from './tools/registry.ts';
 import { checkClaims, confirmClaims, correctionNote, JUDGE_KINDS, judgedClaim, unsureClaims, type Claim, type Receipt } from './receipts.ts';
 import type { Redactor } from './redact.ts';
 import { SNAPSHOT_TOOLS, type SnapshotStore } from './snapshots.ts';
+import { applySandbox, changesLine, discardSandbox, gateVerdict, sandboxCard, sandboxOutput, sandboxRecord, type ApplyResult, type CommandRisk, type SandboxCard, type SandboxDecision, type SandboxGate, type SandboxPlan, type SandboxRecord, type SandboxResult } from './sandbox-run.ts';
 import { datesNote, followUps, followUpsNote, selectMemories, type Injection, type MemoryStore } from './memory.ts';
 import { autoRecall, lastTimeNote, sharedOwnerFacts, sharedWithApps } from './recall.ts';
 import { checkReply, driftMode, shouldCheck } from './drift.ts';
@@ -96,6 +97,11 @@ export interface AppContext {
   tools: ToolRegistry;
   approvals: ApprovalBroker;
   sandbox: SandboxInfo;
+  /**
+   * Phase 80 (harness M5): risky commands in coding conversations and team runs try a throwaway
+   * copy first (src/sandbox-run.ts). Optional: bare test apps and callers without it run as before.
+   */
+  sandboxGate?: SandboxGate;
   /** MCP server connections (optional in tests). */
   mcp?: McpManager;
   /** Secret scrubbing for tool output and arguments. */
@@ -233,7 +239,11 @@ export type ChatEvent =
   /** Phase 63: a tool call the model is still writing (throttled; see src/tool-stream.ts). Shown only, never run. */
   | ToolBuilding
   /** Phase 77: `contradiction` = the card's \"This goes against something you decided\" section (a stop). */
-  | { type: 'approval'; approvalId: string; id: string; name: string; summary: string; args: Record<string, unknown>; contradiction?: ContradictionCard; budget?: BudgetState }
+  | { type: 'approval'; approvalId: string; id: string; name: string; summary: string; args: Record<string, unknown>; contradiction?: ContradictionCard; budget?: BudgetState; sandbox?: SandboxCard; sandboxFirst?: { label: string; isolated: boolean } }
+  /** Phase 80: the command is being tried in a throwaway copy (the sandbox gate). */
+  | { type: 'sandbox_running'; id: string; label: string; isolated: boolean }
+  /** Phase 80: what the sandbox try showed and what the owner chose (Apply / Discard / Run for real). */
+  | { type: 'sandbox'; id: string; record: SandboxRecord }
   /** Phase 79: the turn's budget (the step line's meter, a rung of the ladder, the limit reached). */
   | { type: 'budget'; state: BudgetState }
   /** Phase 77: a planned call may go against a decision; not stopped, she mentions it (also every stop's outcome). */
@@ -836,6 +846,12 @@ export interface BeforeToolResult {
   events?: ChatEvent[];
   /** Stop for the owner's OK because of this finding (the approval card's section). */
   stopFor?: Contradiction;
+  /**
+   * Phase 80: try the command in a throwaway copy first. The approval point runs it after any stop
+   * above (contradiction) and the owner's OK when there is no OS isolation; its card (Apply /
+   * Discard / Run for real) is then the approval.
+   */
+  sandbox?: SandboxPlan;
 }
 export interface AfterTool {
   step: number;
@@ -850,6 +866,8 @@ export interface AfterTool {
   snapshotId?: string;
   messageId: number;
   contradictions?: Contradiction[];
+  /** Phase 80: the sandbox try and the owner's choice (kept on the run step). */
+  sandbox?: SandboxRecord;
 }
 export interface AfterReply {
   step: number;
@@ -900,6 +918,7 @@ function joinHooks(list: (TurnHooks | undefined)[]): Required<Omit<TurnHooks, 'b
         if (!r) continue;
         if (r.events?.length) out.events = [...(out.events ?? []), ...r.events];
         out.stopFor ??= r.stopFor;
+        out.sandbox ??= r.sandbox;
       }
       return out;
     },
@@ -934,7 +953,9 @@ export function recorderHooks(app: AppContext, rec: RunRecorder): TurnHooks {
       rec.reply(c.messageId);
     },
     afterTool(c) {
-      rec.tool({ id: c.call.id, name: c.call.name, summary: c.summary, args: c.args, status: c.status, output: c.output, ms: c.ms, approval: c.approval, messageId: c.messageId, ...(c.snapshotId ? { snapshotId: c.snapshotId } : {}), ...(c.contradictions?.length ? { contradictions: c.contradictions } : {}), files: filesNamed(c.call.name, c.args) });
+      rec.tool({ id: c.call.id, name: c.call.name, summary: c.summary, args: c.args, status: c.status, output: c.output, ms: c.ms, approval: c.approval, messageId: c.messageId, ...(c.snapshotId ? { snapshotId: c.snapshotId } : {}), ...(c.contradictions?.length ? { contradictions: c.contradictions } : {}), ...(c.sandbox ? { sandbox: c.sandbox } : {}), files: [...new Set([...filesNamed(c.call.name, c.args), ...(c.sandbox?.applied ? [...c.sandbox.applied.written, ...c.sandbox.applied.removed] : [])])].slice(0, 200) });
+      // §2.1: a sandbox try the owner discarded is why this step stopped short (the gate).
+      if (c.sandbox?.decision === 'discarded') rec.stopped('gate');
       // §2.3: a stop the owner said no to is why this step stopped short.
       if (c.contradictions?.some((x) => x.act === 'stop' && x.answer && x.answer !== 'override')) rec.stopped('contradiction');
     },
@@ -1327,7 +1348,20 @@ async function* runTurnInner(app: AppContext, conversationId: string, userText: 
     afterReply: (c) => meter.afterReply(c),
     afterTool: (c) => meter.afterTool(c),
   };
-  const hooks = joinHooks([budgetHook, planHook, recorderHooks(app, rec), opts.hooks]);
+  // Phase 80 (harness M5): risky commands in coding conversations try a throwaway copy first. The
+  // hook only plans the try; the approval point below runs it after the plan check's stop and any
+  // OK needed first, so approvals, 'never', the plan check and the budget all still apply.
+  const gitName = app.persona.name && app.persona.name !== 'Sara' ? app.persona.name : undefined;
+  const sandboxHook: TurnHooks | undefined =
+    app.sandboxGate && conv.mode === 'coding' && !opts.group && !conv.partner
+      ? {
+          beforeTool(c) {
+            const plan = app.sandboxGate!.plan({ tool: c.call.name, args: c.call.arguments, coding: true, permission: c.permission, workspaceDir: wsDir, network: sandbox.network, ...(gitName ? { gitName } : {}) });
+            return plan ? { sandbox: plan } : undefined;
+          },
+        }
+      : undefined;
+  const hooks = joinHooks([budgetHook, planHook, sandboxHook, recorderHooks(app, rec), opts.hooks]);
   // Phase 78: what the run is made of (M9 compares runs by these).
   const memPolicy = decayPolicy(memCfg).id;
   rec.setPolicy({ memoryPolicy: memPolicy, model: `${provider.config.id}/${model}`, tools: toolSetHash(tools.map((t) => t.spec.name)), mode: conv.mode, ...(conv.private ? { private: true } : {}) });
@@ -1630,6 +1664,12 @@ async function* runTurnInner(app: AppContext, conversationId: string, userText: 
       let snapshotNote = '';
       const shown: string[] = [];
       const newProof: string[] = [];
+      // Phase 80: the sandbox try of this call (if any) and the owner's choice.
+      let tried: SandboxResult | undefined;
+      let sbRisk: CommandRisk | undefined;
+      let sbDecision: SandboxDecision | undefined;
+      let applied: ApplyResult | undefined;
+      let sbError = '';
 
       const set = tool ? app.tools.permission(call.name, s.toolPermissions) : 'never';
       // Phase 73: a few commands always ask first, even when the owner lets the tool run on its own.
@@ -1659,10 +1699,14 @@ async function* runTurnInner(app: AppContext, conversationId: string, userText: 
         const pre = await hooks.beforeTool({ step, call, summary, args: shownArgs, permission: permission === 'ask' ? 'ask' : 'auto', messageId: saved.id });
         for (const ev of pre.events ?? []) yield ev;
         const stopFor = pre.stopFor;
-        if (permission === 'ask' || stopFor) {
+        const gate = pre.sandbox;
+        // Phase 80: with an isolated sandbox try, the try's card is the approval; without isolation
+        // (Windows copy mode) a tool that asks first still asks before the try.
+        const firstCard = Boolean(stopFor) || (permission === 'ask' && (!gate || gate.askFirst));
+        if (firstCard) {
           const { id, decision } = app.approvals.request(conv.id, signal);
           const stops = (turnContradictions.get(call.id) ?? []).filter((c) => c.act === 'stop');
-          yield { type: 'approval', approvalId: id, id: call.id, name: call.name, summary, args: shownArgs, ...(stopFor ? { contradiction: cardOf(stopFor, stops.filter((c) => c !== stopFor)) } : {}) };
+          yield { type: 'approval', approvalId: id, id: call.id, name: call.name, summary, args: shownArgs, ...(stopFor ? { contradiction: cardOf(stopFor, stops.filter((c) => c !== stopFor)) } : {}), ...(gate ? { sandboxFirst: { label: gate.isolation.label, isolated: gate.isolation.isolated } } : {}) };
           allowed = await decision;
           approval = allowed ? 'allowed' : 'denied';
           const how = app.approvals.takeHow(id);
@@ -1677,9 +1721,71 @@ async function* runTurnInner(app: AppContext, conversationId: string, userText: 
             store.updateMessageMeta(saved.id, { contradictions: [...turnContradictions.values()].flat() });
             for (const c of stops) yield { type: 'contradiction', id: call.id, item: c };
           }
-          if (allowed) yield { type: 'tool_running', id: call.id, name: call.name, summary };
+          if (allowed && !gate) yield { type: 'tool_running', id: call.id, name: call.name, summary };
+        } else if (gate) allowed = true;
+        if (allowed && gate) {
+          // Phase 80: the try in a throwaway copy, then Apply / Discard / Run for real.
+          yield { type: 'sandbox_running', id: call.id, label: gate.isolation.label, isolated: gate.isolation.isolated };
+          try {
+            tried = await gate.run(signal);
+            sbRisk = gate.risk;
+          } catch (err) {
+            // The try itself failed (not the command): nothing ran; the normal approval decides.
+            console.warn(`sandbox try: ${(err as Error).message}`);
+          }
+          if (tried) {
+            const verdict = gateVerdict(tried, permission === 'ask' && !firstCard ? 'ask' : 'auto');
+            if (signal.aborted) {
+              discardSandbox(tried);
+              sbDecision = 'cancelled';
+              allowed = false;
+            } else if (verdict.act === 'allow') {
+              sbDecision = 'auto-applied';
+            } else {
+              const { id, decision } = app.approvals.request(conv.id, signal);
+              const waitFrom = Date.now();
+              yield { type: 'approval', approvalId: id, id: call.id, name: call.name, summary, args: shownArgs, sandbox: sandboxCard(tried, gate.risk) };
+              const ok = await decision;
+              meter?.waited(Date.now() - waitFrom);
+              const how = app.approvals.takeHow(id);
+              approval = ok ? 'allowed' : 'denied';
+              if (!ok) {
+                discardSandbox(tried);
+                sbDecision = signal.aborted ? 'cancelled' : 'discarded';
+                allowed = false;
+              } else if (how === 'real') {
+                // Run for real: the owner's explicit choice on the card; the copy goes.
+                discardSandbox(tried);
+                sbDecision = 'ran';
+                yield { type: 'tool_running', id: call.id, name: call.name, summary };
+              } else sbDecision = 'applied';
+            }
+            if (sbDecision === 'applied' || sbDecision === 'auto-applied') {
+              try {
+                applied = await applySandbox(tried);
+              } catch (err) {
+                status = 'error';
+                sbDecision = 'cancelled';
+                sbError = `Error: ${(err as Error).message}`;
+              }
+            }
+          } else if (permission === 'ask' && !firstCard) {
+            // No try was possible: fall back to the plain approval.
+            const { id, decision } = app.approvals.request(conv.id, signal);
+            yield { type: 'approval', approvalId: id, id: call.id, name: call.name, summary, args: shownArgs };
+            allowed = await decision;
+            approval = allowed ? 'allowed' : 'denied';
+            app.approvals.takeHow(id);
+            if (allowed) yield { type: 'tool_running', id: call.id, name: call.name, summary };
+          }
         }
-        if (!allowed) {
+        if (sbError) {
+          output = sbError;
+        } else if (tried && sbDecision && sbDecision !== 'ran') {
+          // Applied (only the diff), discarded or cancelled: the command never ran in the workspace.
+          if (sbDecision !== 'applied' && sbDecision !== 'auto-applied') status = 'denied';
+          output = sandboxOutput(tried, sbDecision, applied);
+        } else if (!allowed) {
           status = 'denied';
           output = signal.aborted ? 'Cancelled.' : stopFor ? declinedOutput(stopFor, ownerWord) : 'The owner declined this action.';
         } else {
@@ -1708,6 +1814,7 @@ async function* runTurnInner(app: AppContext, conversationId: string, userText: 
               ...(describeImage ? { describeImage } : {}),
               webAllowed: !conv.private && !privateLocalOn() && app.tools.permission('web_fetch', s.toolPermissions) !== 'never',
             });
+            if (tried && sbDecision === 'ran') output = `[tried in a sandbox copy first: ${changesLine(tried.changes)}; the owner chose to run it for real]\n${output}`;
           } catch (err) {
             status = 'error';
             output = err instanceof ToolError ? `Error: ${err.message}` : `Error: ${(err as Error).message}`;
@@ -1723,10 +1830,12 @@ async function* runTurnInner(app: AppContext, conversationId: string, userText: 
       // Phase 75: a result card from the (scrubbed) result and arguments, kept with the message.
       const card = cardFor({ name: call.name, args: shownArgs, status, output });
       const flagged = turnContradictions.get(call.id);
-      const toolMsg = store.addMessage(conv.id, 'tool', stored, { toolCallId: call.id, name: call.name, args: shownArgs, summary, status, ms, ...(snapshotId ? { snapshotId } : {}), ...(shown.length ? { images: shown } : {}), ...(card ? { card } : {}), ...(flagged?.length ? { contradiction: flagged[0] } : {}) });
+      const sbRecord = tried && sbDecision && sbRisk ? sandboxRecord(tried, sbRisk, sbDecision, applied) : undefined;
+      const toolMsg = store.addMessage(conv.id, 'tool', stored, { toolCallId: call.id, name: call.name, args: shownArgs, summary, status, ms, ...(snapshotId ? { snapshotId } : {}), ...(shown.length ? { images: shown } : {}), ...(card ? { card } : {}), ...(flagged?.length ? { contradiction: flagged[0] } : {}), ...(sbRecord ? { sandbox: sbRecord } : {}) });
       receipts.push({ name: call.name, status, args: call.arguments, output });
       // Phase 78 seam 3: the call is done (the recorder keeps the scrubbed result).
-      await hooks.afterTool({ step, call, summary, args: shownArgs, status, output, ms, approval, messageId: toolMsg.id, ...(snapshotId ? { snapshotId } : {}), ...(flagged?.length ? { contradictions: flagged } : {}) });
+      await hooks.afterTool({ step, call, summary, args: shownArgs, status, output, ms, approval, messageId: toolMsg.id, ...(snapshotId ? { snapshotId } : {}), ...(flagged?.length ? { contradictions: flagged } : {}), ...(sbRecord ? { sandbox: sbRecord } : {}) });
+      if (sbRecord) yield { type: 'sandbox', id: call.id, record: sbRecord };
       yield { type: 'tool_result', id: call.id, name: call.name, status, output: clip(output, UI_OUTPUT_LIMIT), ms, ...(snapshotId ? { snapshotId } : {}), ...(card ? { card } : {}) };
       for (const img of pendingImages) yield { type: 'image', id: img };
       for (const img of newProof) yield { type: 'proof', id: img };

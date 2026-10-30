@@ -317,7 +317,10 @@ function renderApprovals() {
         warn.dataset.raw = '';
         row.insertBefore(warn, row.children[1] ?? null);
       }
-      btns.append(mirror(yes, 'small', against ? yes?.textContent ?? t('Allow') : t('Allow')), mirror(no, 'ghost small', against ? no?.textContent ?? t('Deny') : t('Deny')), show);
+      // Phase 80: a sandbox card mirrors Apply to my workspace / Discard (Run for real stays on the
+      // chat card: Show in the chat), and "Try it in a copy" keeps its own words.
+      const own = Boolean(against) || card.classList.contains('approval-sandbox') || Boolean(card.querySelector('.sbx-first'));
+      btns.append(mirror(yes, 'small', own ? yes?.textContent ?? t('Allow') : t('Allow')), mirror(no, 'ghost small', own ? no?.textContent ?? t('Deny') : t('Deny')), show);
       row.append(btns);
       return row;
     }),

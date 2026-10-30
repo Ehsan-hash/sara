@@ -7,6 +7,7 @@ import { randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import { type AppContext, fallbackAfterMs, promptChars, OFFSERVER_TOOL, resolveChain, SlowModelError, streamWithin } from './chat.ts';
 import { cardOf, checkPlan, contradictSettings, gateAct, type Contradiction } from './contradict.ts';
+import { applySandbox, changesLine, discardSandbox, gateVerdict, sandboxCard, sandboxOutput, sandboxRecord, type ApplyResult, type CommandRisk, type SandboxDecision, type SandboxResult } from './sandbox-run.ts';
 import { complete } from './life.ts';
 import { memorySettings } from './memory-worker.ts';
 import { buildSystemPrompt, SAFETY_BOUNDARIES } from './persona.ts';
@@ -190,6 +191,8 @@ export interface PendingApproval {
   summary: string;
   /** Phase 77: the call goes against a decision (the card's extra section). */
   contradiction?: import('./contradict.ts').ContradictionCard;
+  /** Phase 80: the helper's command ran in a sandbox copy first (Apply / Discard / Run for real). */
+  sandbox?: import('./sandbox-run.ts').SandboxCard;
 }
 
 const MAX_HELPER_ROUNDS = 25;
@@ -918,10 +921,15 @@ CREATE INDEX IF NOT EXISTS team_log_task ON team_log(task_id, id);
     const summary = app.redactor.redact(tool?.summarize(call.arguments) ?? call.name);
     const permission = tool ? app.tools.permission(call.name, app.settings.get().toolPermissions) : 'never';
     let status: Receipt['status'] = 'ok';
-    let output: string;
     const t0 = Date.now();
     let asked = false;
     let stopSeen: Contradiction | undefined;
+    // Phase 80: the sandbox try (if any) and what the owner chose.
+    let tried: SandboxResult | undefined;
+    let triedRisk: CommandRisk | undefined;
+    let triedDecision: SandboxDecision | undefined;
+    let triedApplied: ApplyResult | undefined;
+    let output = '';
     if (!tool || !tools.some((t) => t.spec.name === call.name)) {
       status = 'denied';
       output = `${helper.name} doesn't have the ${call.name} tool.`;
@@ -945,12 +953,16 @@ CREATE INDEX IF NOT EXISTS team_log_task ON team_log(task_id, id);
           console.warn(`plan check (team): ${(err as Error).message}`);
         }
       }
-      let allowed = permission === 'auto' && !stopFor;
+      // Phase 80 (harness M5): helpers' risky commands try a throwaway copy first, like hers.
+      const network = app.settings.get().shellNetwork ?? true;
+      const gate = app.sandboxGate?.plan({ tool: call.name, args: call.arguments, coding: true, permission: permission === 'ask' ? 'ask' : 'auto', workspaceDir: wsDir, network, ...(app.persona.name && app.persona.name !== 'Sara' ? { gitName: app.persona.name } : {}) });
+      const firstCard = Boolean(stopFor) || (permission === 'ask' && (!gate || gate.askFirst));
+      let allowed = (permission === 'auto' && !stopFor) || (!firstCard && Boolean(gate));
       stopSeen = stopFor;
-      if (permission === 'ask' || stopFor) {
+      if (firstCard) {
         asked = true;
         const { id, decision } = app.approvals.request(task.conversationId, signal);
-        const shown = stopFor ? `${summary} (goes against what you decided: "${stopFor.note}")` : summary;
+        const shown = stopFor ? `${summary} (goes against what you decided: "${stopFor.note}")` : gate ? `${summary} (tried in a throwaway copy first${gate.isolation.isolated ? '' : ', not isolated on this computer'})` : summary;
         run.approvals.set(id, { id, stepId: step.id, helper: helper.name, tool: call.name, summary: shown, ...(stopFor ? { contradiction: cardOf(stopFor) } : {}) });
         this.#note(task.id, step.id, `Waiting for your OK: ${shown}`);
         allowed = await decision;
@@ -963,15 +975,68 @@ CREATE INDEX IF NOT EXISTS team_log_task ON team_log(task_id, id);
         }
         this.#note(task.id, step.id, allowed ? (stopFor ? 'You said do it anyway.' : 'You said yes.') : 'Not allowed.');
       }
-      if (!allowed) {
+      let decided: SandboxDecision | undefined;
+      let applied: ApplyResult | undefined;
+      if (allowed && gate) {
+        this.#note(task.id, step.id, `${helper.name} tries it in a throwaway copy first: ${summary}`);
+        try {
+          tried = await gate.run(signal);
+          triedRisk = gate.risk;
+        } catch (err) {
+          console.warn(`sandbox try (team): ${(err as Error).message}`);
+        }
+        if (tried) {
+          const verdict = gateVerdict(tried, permission === 'ask' && !firstCard ? 'ask' : 'auto');
+          if (signal.aborted) decided = 'cancelled';
+          else if (verdict.act === 'allow') decided = 'auto-applied';
+          else {
+            asked = true;
+            const { id, decision } = app.approvals.request(task.conversationId, signal);
+            const shown = `${summary} (ran in a sandbox: ${changesLine(tried.changes)}${tried.findings.filter((f) => f.severity !== 'info' && f.severity !== 'low').map((f) => `; ${f.title}`).join('')}. Allow applies it.)`;
+            run.approvals.set(id, { id, stepId: step.id, helper: helper.name, tool: call.name, summary: shown, sandbox: sandboxCard(tried, gate.risk) });
+            this.#note(task.id, step.id, `Waiting for your OK: ${shown}`);
+            const ok = await decision;
+            const how = app.approvals.takeHow(id);
+            run.approvals.delete(id);
+            decided = !ok ? (signal.aborted ? 'cancelled' : 'discarded') : how === 'real' ? 'ran' : 'applied';
+            this.#note(task.id, step.id, decided === 'discarded' ? 'You discarded the sandbox try.' : decided === 'ran' ? 'You said run it for real.' : decided === 'applied' ? 'You applied the sandbox try.' : 'Cancelled.');
+          }
+          if (decided === 'applied' || decided === 'auto-applied') {
+            try {
+              applied = await applySandbox(tried);
+            } catch (err) {
+              decided = 'cancelled';
+              status = 'error';
+              output = `Error: ${(err as Error).message}`;
+            }
+          } else discardSandbox(tried);
+          triedDecision = decided;
+          triedApplied = applied;
+          if (decided !== 'ran') allowed = false;
+        } else if (permission === 'ask' && !firstCard) {
+          asked = true;
+          const { id, decision } = app.approvals.request(task.conversationId, signal);
+          run.approvals.set(id, { id, stepId: step.id, helper: helper.name, tool: call.name, summary });
+          allowed = await decision;
+          app.approvals.takeHow(id);
+          run.approvals.delete(id);
+        }
+      }
+      if (tried && decided && decided !== 'ran') {
+        if (status !== 'error') {
+          if (decided !== 'applied' && decided !== 'auto-applied') status = 'denied';
+          output = sandboxOutput(tried, decided, applied);
+        }
+      } else if (!allowed) {
         status = 'denied';
         output = signal.aborted ? 'Cancelled.' : stopFor ? `The owner declined this action: it goes against what they decided: "${stopFor.note}".` : 'The owner declined this action.';
       } else {
         this.#note(task.id, step.id, `${helper.name}: ${summary}`);
         try {
-          output = await tool.run(call.arguments, { workspaceDir: wsDir, signal, sandbox: { ...app.sandbox, network: app.settings.get().shellNetwork ?? true }, conversationId: task.conversationId, companionName: app.persona.name });
+          output = await tool.run(call.arguments, { workspaceDir: wsDir, signal, sandbox: { ...app.sandbox, network }, conversationId: task.conversationId, companionName: app.persona.name });
           // Claude Code / Grok Build run as a background job: wait for its report.
           if (call.name === 'delegate_task') output = await this.#awaitJob(output, signal);
+          if (tried && decided === 'ran') output = `[tried in a sandbox copy first: ${changesLine(tried.changes)}; the owner chose to run it for real]\n${output}`;
         } catch (err) {
           status = 'error';
           output = `Error: ${err instanceof ToolError ? err.message : (err as Error).message}`;
@@ -979,7 +1044,9 @@ CREATE INDEX IF NOT EXISTS team_log_task ON team_log(task_id, id);
       }
     }
     output = app.redactor.redact(output);
-    run.rec.tool({ id: call.id, name: call.name, summary, args: app.redactor.redactValue(call.arguments), status, output, ms: Date.now() - t0, approval: asked ? (status === 'denied' ? 'denied' : 'allowed') : status === 'denied' ? 'refused' : 'auto', files: filesNamed(call.name, call.arguments), ...(stopSeen ? { contradictions: [stopSeen] } : {}) });
+    const sbRecord = tried && triedRisk && triedDecision ? sandboxRecord(tried, triedRisk, triedDecision, triedApplied) : undefined;
+    run.rec.tool({ id: call.id, name: call.name, summary, args: app.redactor.redactValue(call.arguments), status, output, ms: Date.now() - t0, approval: asked ? (status === 'denied' ? 'denied' : 'allowed') : status === 'denied' ? 'refused' : 'auto', files: filesNamed(call.name, call.arguments), ...(stopSeen ? { contradictions: [stopSeen] } : {}), ...(sbRecord ? { sandbox: sbRecord } : {}) });
+    if (sbRecord?.decision === 'discarded') run.rec.stopped('gate');
     return { receipt: { name: call.name, status, args: call.arguments, output } };
   }
 
