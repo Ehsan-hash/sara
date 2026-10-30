@@ -10,6 +10,7 @@ replies stay out of the repository).
 |---|---|---|---|---|
 | HumanEval, through her agent loop (tools, runs her own tests) | qwen3.8 27B (local) | **158/164** (pass@1 96.3%) | 2026-10-27 | `node scripts/bench-coding.ts` |
 | HumanEval, same model with no tools (baseline) | qwen3.8 27B (local) | **161/164** (pass@1 98.2%) | 2026-10-27 | `node scripts/bench-coding.ts --mode raw` |
+| MBPP sanitized, official held-out test split (257 tasks) | not run | not scored | pending | `node scripts/bench-coding.ts --set mbpp` |
 | Repository tasks (14 original multi-file tasks, hidden tests), through her agent loop | qwen3.8 27B (local) | **11/14** (both runs) | 2026-10-28 | `node scripts/bench-tasks.ts --mode agent` |
 | Repository tasks, same model with every file in one prompt, no tools (baseline) | qwen3.8 27B (local) | **12/14** (both runs) | 2026-10-28 | `node scripts/bench-tasks.ts --mode raw` |
 | Real-size projects (3 original projects, 22–36 files, hidden tests), through her agent loop | qwen3.8 27B (local) | **2/3 and 3/3** after the fix below (0/3 before it) | 2026-10-28 | `node scripts/bench-tasks.ts --tier projects --mode agent` |
@@ -96,11 +97,22 @@ Re-run it:
 node scripts/bench-coding.ts --model <ollama model>               # all 164, through her agent loop
 node scripts/bench-coding.ts --model <ollama model> --mode raw    # baseline: one reply, no tools
 node scripts/bench-coding.ts --limit 20 --minutes 30              # a quick partial run
+node scripts/bench-coding.ts --set mbpp                              # sanitized MBPP held-out test split
 ```
 
 It needs Python 3 on the PATH (`--python` to pick one) and an OpenAI-compatible server
 (`--ollama <url>`). It runs the code the model writes on your computer without a sandbox, so use a
-machine where that's fine. Results go to `evals/results/<date>-coding-<mode>.json`.
+machine where that's fine. HumanEval results go to `evals/results/<date>-coding-<mode>.json`; MBPP
+results use `evals/results/<date>-coding-mbpp-<mode>.json` so the benchmark sets cannot mix.
+
+### Sanitized MBPP
+
+The optional `--set mbpp` run downloads the sanitized MBPP JSON from [Google Research](https://github.com/google-research/google-research/tree/master/mbpp)
+and selects the official held-out test IDs 11 through 510, which contains 257 tasks. Each model
+prompt contains only the task description and the required function signature. Hidden imports and
+assertions run afterward in a separate temporary folder, so the prompt does not contain the
+reference solution or test code. MBPP is described in the [MBPP paper](https://arxiv.org/abs/2108.07732)
+and the dataset is licensed CC BY 4.0. No MBPP score is reported here yet.
 
 ## Repository tasks: multi-file coding
 

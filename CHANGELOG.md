@@ -5,6 +5,9 @@ Format: newest first. Semantic versions since 1.0.0 (before that `0.<phase>.<pat
 
 ## Unreleased
 
+- **Optional sanitized MBPP benchmark:** `scripts/bench-coding.ts --set mbpp` runs the official
+  held-out test split separately from the existing HumanEval benchmark.
+
 ## 2.20.0 (2026-10-30): computer use, step 1: her own browser on your computer (Phase 87)
 
 - **Let Sara use this computer** (the Windows and Mac apps, Settings → Computer use; off by default,

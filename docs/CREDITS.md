@@ -23,6 +23,7 @@ terms; check the upstream page for the exact text before redistributing anything
 | Piece | Used for | Downloaded by | License / terms |
 |---|---|---|---|
 | [HumanEval](https://github.com/openai/human-eval) (OpenAI) | The public coding benchmark in [docs/RESULTS.md](RESULTS.md) | `scripts/bench-coding.ts`, cached in `outputs/bench-cache/` | MIT |
+| [MBPP sanitized](https://github.com/google-research/google-research/tree/master/mbpp) (Google Research), described in the [MBPP paper](https://arxiv.org/abs/2108.07732) | Optional sanitized coding benchmark in [docs/RESULTS.md](RESULTS.md) | `scripts/bench-coding.ts`, cached in `outputs/bench-cache/` | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/), [dataset licensing](https://github.com/google-research/google-research#readme) |
 
 ## Online services Sara calls (only when you use the feature)
 
