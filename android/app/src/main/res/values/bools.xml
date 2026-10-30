@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The phone's own light/dark setting, for the web view's prefers-color-scheme (the page's
+     "Follow the system" theme), whichever theme the app's own screens use. -->
+<resources>
+    <bool name="system_light">true</bool>
+</resources>

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Android 12+ splash: her icon on the Night (or Day) background, no white flash. Android 13+
+         remembers the theme the page showed last (MainActivity → setSplashScreenTheme). -->
+    <style name="Sara" parent="SaraNight1">
+        <item name="android:windowSplashScreenBackground">@color/sara_bg</item>
+        <item name="android:windowSplashScreenIconBackgroundColor">@color/sara_panel_2</item>
+    </style>
+    <style name="Sara.Day" parent="SaraDay1">
+        <item name="android:windowSplashScreenBackground">@color/sara_day_bg</item>
+        <item name="android:windowSplashScreenIconBackgroundColor">@color/sara_bg</item>
+    </style>
+</resources>

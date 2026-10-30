@@ -8,7 +8,7 @@
 //
 // Today is a view over the chat column (a non-modal <dialog id="today">), not a window: the
 // sidebar, her panel and the phone's bottom bar stay usable beside it. It keeps its old ids and
-// deep link (/#view=today, Alt+T); the app still opens on the last conversation.
+// deep link (/#view=today, Alt+T). Since 2.7.1 the app opens on Today (web/start-view.js).
 import { locale, t } from './naming.js';
 
 const $ = (sel) => document.querySelector(sel);
@@ -378,9 +378,11 @@ async function renderWork() {
 }
 
 /**
- * Your home: a few Home Assistant devices and their state. Changing one goes through her (Ask Sara
- * fills the message box), so the approval rule for smart-home actions (\"ask me first\" by default)
- * still applies; there is no switch here that would skip it.
+ * Your home: a few Home Assistant devices and their state. 2.7.1 (owner decision): lights, switches,
+ * fans and blinds get a real switch (the owner pressing it is the owner acting, so no approval card;
+ * the server decides what may switch here: canSwitch, src/home-switch.ts). Everything else (locks,
+ * alarms, garage doors, thermostats…) keeps Ask Sara, which goes through her approval rule for
+ * smart-home actions. Owner only, never on the demo.
  */
 async function renderHome() {
   const tile = $('#td-home');
@@ -415,7 +417,11 @@ async function renderHome() {
     name.dataset.raw = '';
     name.title = e.name;
     const st = el('p', 'td-dev-state', stateWords(e));
-    card.append(name, st, btn('td-dev-ask ghost small', t('Ask Sara'), () => askAbout(e)));
+    st.setAttribute('aria-live', 'polite');
+    if (e.canSwitch) {
+      card.classList.add('has-switch');
+      card.append(homeSwitch(e, card, st), name, st);
+    } else card.append(name, st, btn('td-dev-ask ghost small', t('Ask Sara'), () => askAbout(e)));
     grid.append(card);
   }
   const choose = el('details', 'td-home-choose');
@@ -439,8 +445,47 @@ async function renderHome() {
     picks.append(lab);
   }
   choose.append(picks, el('p', 'muted small', t('Up to six, saved on this device.')));
-  tile.querySelector('.td-body').replaceChildren(grid, el('p', 'td-foot muted small', t('Changes go through her, so your approval settings for smart-home actions still apply.')), choose);
+  tile.querySelector('.td-body').replaceChildren(grid, el('p', 'td-foot muted small', t('The switches work right away. Locks, alarms, doors and the rest go through her, so your approval settings still apply.')), choose);
   return 'shown';
+}
+/** On, open or unlocked: the lit look and a switch that is on. */
+const isOnState = (state) => ['on', 'open', 'opening', 'unlocked'].includes(String(state ?? ''));
+const unreachable = (state) => ['unavailable', 'unknown', ''].includes(String(state ?? ''));
+/**
+ * A real on/off switch for one device: no confirm, the result shows under the name (the state the
+ * server read back from Home Assistant after the change), or the reason it didn't work.
+ */
+function homeSwitch(e, card, st) {
+  const sw = btn('td-dev-switch');
+  sw.setAttribute('role', 'switch');
+  sw.setAttribute('aria-label', e.name);
+  const show = (state) => {
+    e.state = state;
+    sw.setAttribute('aria-checked', String(isOnState(state)));
+    sw.disabled = unreachable(state);
+    card.classList.toggle('on', isOnState(state));
+    st.textContent = stateWords(e);
+  };
+  show(e.state);
+  sw.addEventListener('click', async () => {
+    const to = isOnState(e.state) ? 'off' : 'on';
+    sw.disabled = true;
+    card.classList.remove('failed');
+    st.textContent = t('Switching…');
+    try {
+      const r = await ctx.api(`/home/entities/${encodeURIComponent(e.id)}/toggle`, { method: 'POST', body: { to } });
+      show(r.state);
+      if (isOnState(r.state) !== (to === 'on')) {
+        card.classList.add('failed');
+        st.textContent = t('It still says: {state}', { state: stateWords(e) });
+      }
+    } catch (err) {
+      show(e.state);
+      card.classList.add('failed');
+      st.textContent = err.message;
+    }
+  });
+  return sw;
 }
 function stateWords(e) {
   const s = String(e.state ?? '');

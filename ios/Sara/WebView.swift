@@ -17,15 +17,24 @@ struct WebView: UIViewRepresentable {
         config.applicationNameForUserAgent = "Mobile/15E148 Safari/604.1 SaraPhone/1"
         let ucc = WKUserContentController()
         ucc.addUserScript(WKUserScript(source: Coordinator.bridge(appLock: AppModel.appLockOn, canLock: AppModel.canLock, places: PlacesManager.shared.state, servers: Servers.json(active: model.activeId)), injectionTime: .atDocumentStart, forMainFrameOnly: true))
+        ucc.addUserScript(WKUserScript(source: Coordinator.lookScript, injectionTime: .atDocumentEnd, forMainFrameOnly: true))
         ucc.add(context.coordinator, name: "sara")
         config.userContentController = ucc
 
-        let web = WKWebView(frame: .zero, configuration: config)
+        let web = SaraWebView(frame: .zero, configuration: config)
         web.navigationDelegate = context.coordinator
         web.uiDelegate = context.coordinator
+        // No white flash: until the page draws, and behind it when it scrolls, the theme's colour.
         web.isOpaque = false
-        web.backgroundColor = UIColor(red: 0.071, green: 0.063, blue: 0.086, alpha: 1)
+        web.backgroundColor = model.look.uiBg
         web.scrollView.backgroundColor = web.backgroundColor
+        web.underPageBackgroundColor = web.backgroundColor
+        // The page draws under the status bar and home indicator itself (viewport-fit=cover and
+        // env(safe-area-inset-*)): no automatic insets on top, so nothing is padded twice.
+        web.scrollView.contentInsetAdjustmentBehavior = .never
+        // The page is an app shell (its own lists scroll): no rubber band around the whole page.
+        web.scrollView.bounces = false
+        web.scrollView.alwaysBounceVertical = false
         #if DEBUG
         if #available(iOS 16.4, *) { web.isInspectable = true }
         #endif
@@ -109,9 +118,30 @@ struct WebView: UIViewRepresentable {
             """
         }
 
+        /// The app's own script in each page (not the page's): tells the app the theme the page shows
+        /// (html[data-theme], from web/theme-boot.js and the page's appearance settings) and the
+        /// colour at its top edge, for the status bar. Checked when the theme changes and once a second.
+        static let lookScript = """
+        (function(){if(window.__saraLook)return;var H=window.webkit&&window.webkit.messageHandlers&&window.webkit.messageHandlers.sara;if(!H)return;
+        var last='';function hex(n){n=Math.max(0,Math.min(255,Math.round(n)));return(n<16?'0':'')+n.toString(16)}
+        function parse(c){if(!c)return null;var m=c.match(/-?[\\d.]+/g);if(!m||m.length<3)return null;var k=/^color\\(/.test(c)?255:1;return[+m[0]*k,+m[1]*k,+m[2]*k,m.length>3?+m[3]:1]}
+        function at(y,base){var e=document.elementFromPoint(innerWidth/2,y),L=[];while(e&&e.nodeType===1){var c=parse(getComputedStyle(e).backgroundColor);if(c&&c[3]>0){L.push(c);if(c[3]>=1)break}e=e.parentElement}
+        var d=document.querySelector('dialog[open]');try{if(d&&d.matches(':modal')){var r=d.getBoundingClientRect();if(y<r.top||y>r.bottom){var b=parse(getComputedStyle(d,'::backdrop').backgroundColor);if(b&&b[3]>0)L.unshift(b)}}}catch(x){}
+        var o=base.slice();for(var i=L.length-1;i>=0;i--){var a=L[i][3];o=[o[0]*(1-a)+L[i][0]*a,o[1]*(1-a)+L[i][1]*a,o[2]*(1-a)+L[i][2]*a]}return'#'+hex(o[0])+hex(o[1])+hex(o[2])}
+        function send(){var R=document.documentElement,day=R.getAttribute('data-theme')==='light',m=document.querySelector('meta[name="theme-color"]'),base=day?[250,247,245]:[15,13,23];
+        if(m&&/^#[0-9a-f]{6}$/i.test(m.content))base=[parseInt(m.content.slice(1,3),16),parseInt(m.content.slice(3,5),16),parseInt(m.content.slice(5,7),16)];
+        var top=at(1,base),k=day+'|'+top;if(k===last)return;last=k;H.postMessage({cmd:'look',theme:day?'day':'night',top:top})}
+        function safe(){try{send()}catch(e){}}window.__saraLook=safe;setInterval(function(){if(!document.hidden)safe()},1000);addEventListener('resize',safe);
+        try{new MutationObserver(safe).observe(document.documentElement,{attributes:true,attributeFilter:['data-theme','class']})}catch(e){}safe()})();
+        """
+
         func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
             guard let body = message.body as? [String: Any], let cmd = body["cmd"] as? String else { return }
             switch cmd {
+            case "look":
+                // Only from her server's own pages (not the app's offline card).
+                guard message.frameInfo.isMainFrame, message.frameInfo.securityOrigin.host == serverHost else { return }
+                model.pageLook(theme: body["theme"] as? String ?? "night", top: body["top"] as? String ?? "")
             case "changeServer": model.changeServer()
             // Phase 68: the page's ⇄ menu (names and hosts only reach the page).
             case "useServer":
@@ -178,24 +208,41 @@ struct WebView: UIViewRepresentable {
 
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
             model.saveCookies()
+            #if DEBUG
+            // Test runs: -SaraTestJS <script> runs once in the first page that finishes loading.
+            if let js = UserDefaults.standard.string(forKey: "SaraTestJS"), !Self.testJSDone {
+                Self.testJSDone = true
+                webView.evaluateJavaScript(js, completionHandler: nil)
+            }
+            #endif
         }
+
+        #if DEBUG
+        static var testJSDone = false
+        #endif
 
         func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
             let e = error as NSError
             if e.code == NSURLErrorCancelled { return }
             let server = model.server ?? ""
             let host = server.components(separatedBy: "://").last ?? server
-            // The same card as the desktop apps' "Can't reach your Sara" page, in the web app's colours.
+            // The same card as the web's and the desktop apps' "Can't reach your Sara" page, in the
+            // new look's Night or Day colours (whichever the page showed last).
+            let day = model.look.day
+            model.topDark = !day
+            let tokens = day
+                ? "--bg:#faf7f5;--card:#ffffff;--line:rgba(46,22,54,.16);--text:#221a2a;--muted:#5e5469;--btn:linear-gradient(135deg,#b8436a,#7a50d2);--quiet:#f4eef1;--glow1:rgba(155,107,255,.07);--glow2:rgba(224,96,126,.06);--shadow:0 2px 6px rgba(60,30,70,.08),0 18px 44px rgba(60,30,70,.14)"
+                : "--bg:#0f0d17;--card:#17141f;--line:rgba(255,255,255,.14);--text:#f1edf7;--muted:#aea6bd;--btn:linear-gradient(135deg,#a8456d,#6d48c4);--quiet:#1e1a29;--glow1:rgba(155,107,255,.10);--glow2:rgba(224,96,126,.08);--shadow:0 18px 48px rgba(0,0,0,.5)"
             let html = """
-            <!doctype html><meta name="viewport" content="width=device-width,initial-scale=1">
+            <!doctype html><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
             <style>
-            :root{--bg:#121016;--panel:#1b1820;--text:#eee9f3;--muted:#a49cae;--accent:#e0789a;--border:#322b3a;--on-accent:#1a0f14}
+            :root{\(tokens);color-scheme:\(day ? "light" : "dark")}
             *{box-sizing:border-box}html,body{height:100%;margin:0}
-            body{background:var(--bg);color:var(--text);font:17px/1.45 -apple-system,system-ui,sans-serif;display:grid;place-items:center;padding:20px;-webkit-user-select:none}
-            .c{width:100%;max-width:440px;background:var(--panel);border:1px solid var(--border);border-radius:20px;padding:26px 22px 22px}
-            h1{font-size:24px;line-height:1.2;margin:0 0 10px}p{color:var(--muted);margin:0 0 12px}b{color:var(--text)}.small{font-size:14px}
-            a{display:block;text-align:center;text-decoration:none;font-weight:600;padding:13px 16px;border-radius:12px;margin-top:10px}
-            .p{background:var(--accent);color:var(--on-accent);margin-top:20px}.g{border:1px solid var(--border);color:var(--text)}
+            body{background:radial-gradient(1200px 600px at 70% -10%,var(--glow1),transparent 60%),radial-gradient(900px 500px at 0% 110%,var(--glow2),transparent 60%),var(--bg);color:var(--text);font:17px/1.45 -apple-system,system-ui,sans-serif;display:grid;place-items:center;padding:max(20px,env(safe-area-inset-top)) 20px max(20px,env(safe-area-inset-bottom));-webkit-user-select:none}
+            .c{width:100%;max-width:440px;background:var(--card);border:1px solid var(--line);border-radius:22px;padding:28px 24px 24px;box-shadow:var(--shadow)}
+            h1{font-size:24px;line-height:1.2;font-weight:650;letter-spacing:-.02em;margin:0 0 10px}p{color:var(--muted);margin:0 0 12px}b{color:var(--text)}.small{font-size:14px}
+            a{display:flex;align-items:center;justify-content:center;min-height:48px;text-decoration:none;font-weight:600;padding:0 16px;border-radius:12px;margin-top:10px}
+            .p{background:var(--btn);color:#fff;margin-top:20px}.g{background:var(--quiet);border:1px solid var(--line);color:var(--text)}
             </style>
             <div class=c><h1>Can't reach your Sara</h1>
             <p><b>\(htmlEscape(host))</b> isn't answering. Check your connection, that the address is right, and that Sara is running there.</p>
@@ -249,4 +296,29 @@ struct WebView: UIViewRepresentable {
 func htmlEscape(_ s: String) -> String {
     s.replacingOccurrences(of: "&", with: "&amp;").replacingOccurrences(of: "<", with: "&lt;")
         .replacingOccurrences(of: ">", with: "&gt;").replacingOccurrences(of: "'", with: "&#39;").replacingOccurrences(of: "\"", with: "&quot;")
+}
+
+/// The web view. It keeps the phone's own light/dark setting even while the app's screens follow
+/// the page's theme for the status bar (AppModel.applyStatusStyle), so the page's "Follow the
+/// system" theme (prefers-color-scheme) still works.
+final class SaraWebView: WKWebView {
+    private var watching: UITraitChangeRegistration?
+
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        followSystemStyle()
+        // The window keeps the system's traits (only the root view controller follows the page),
+        // so it tells us when the phone switches between light and dark while the app is open.
+        if watching == nil, let window {
+            watching = window.registerForTraitChanges([UITraitUserInterfaceStyle.self]) { [weak self] (_: UIWindow, _: UITraitCollection) in
+                self?.followSystemStyle()
+            }
+        }
+    }
+
+    func followSystemStyle() {
+        guard let window else { return }
+        let style = window.traitCollection.userInterfaceStyle
+        if overrideUserInterfaceStyle != style { overrideUserInterfaceStyle = style }
+    }
 }

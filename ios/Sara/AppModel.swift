@@ -39,6 +39,45 @@ final class AppModel: ObservableObject {
     /// A server being removed that wasn't in use: opened first, then signed out there.
     var pendingRemove: String?
 
+    // MARK: the new look (2.7)
+
+    /// Night or Day: the theme the page showed last (the app's own screens, first paint).
+    @Published var look = Look.saved
+    /// The page's top edge is dark (light status bar text over it).
+    @Published var topDark = !Look.saved.day
+
+    /// Light status bar text: over the page's top edge, or over the app's own screens.
+    var statusDark: Bool { screen == .web && server != nil ? topDark : !look.day }
+
+    /// Light or dark status bar text (and the app's own screens' alerts) through the root view
+    /// controller; the window keeps the system's style.
+    func applyStatusStyle() {
+        let style: UIUserInterfaceStyle = statusDark ? .dark : .light
+        for case let scene as UIWindowScene in UIApplication.shared.connectedScenes {
+            for w in scene.windows {
+                guard let vc = w.rootViewController, vc.overrideUserInterfaceStyle != style else { continue }
+                vc.overrideUserInterfaceStyle = style
+                vc.setNeedsStatusBarAppearanceUpdate()
+            }
+        }
+    }
+
+    /// The page's report (the app's look script in WebView.swift): its theme and top-edge colour.
+    func pageLook(theme: String, top: String) {
+        let day = theme == "day"
+        if day != look.day {
+            UserDefaults.standard.set(day ? "day" : "night", forKey: "look")
+            look = day ? .dayLook : .night
+            if let web {
+                web.backgroundColor = look.uiBg
+                web.scrollView.backgroundColor = look.uiBg
+                web.underPageBackgroundColor = look.uiBg
+            }
+        }
+        let dark = !(UIColor(page: top) ?? look.uiBg).isLight
+        if dark != topDark { topDark = dark }
+    }
+
     // MARK: app lock (Phase 18)
 
     /// With the lock on, Face ID (or the passcode) is needed after this long away.
@@ -55,6 +94,11 @@ final class AppModel: ObservableObject {
     private var awayAt: Date?
 
     func scene(_ phase: ScenePhase) {
+        // The phone's light/dark setting may have changed while away: the page follows it.
+        if phase == .active {
+            (web as? SaraWebView)?.followSystemStyle()
+            applyStatusStyle()
+        }
         guard Self.appLockOn else {
             locked = false
             covered = false

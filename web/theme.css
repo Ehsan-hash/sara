@@ -5,6 +5,18 @@
    screen follows the theme. Contrast: every text pair below meets WCAG AA (4.5:1) on the
    surfaces it is used on; muted text is checked against the raised surfaces too. */
 
+/* 2.7.1: the safe areas in one place (web/viewport.js explains the iPhone cases). The top is the
+   status bar / notch when the page draws under it (an iPhone home-screen icon added before 2.7.1,
+   the iPhone and Android apps); the native Windows/Mac apps use their own title bar strip
+   (--titlebar), so no top inset there. A short iPhone home-screen view ends above the home
+   indicator, so no bottom inset there. */
+:root {
+  --safe-t: env(safe-area-inset-top, 0px);
+  --safe-b: env(safe-area-inset-bottom, 0px);
+}
+html.shell { --safe-t: 0px; }
+html.ios-short-view { --safe-b: 0px; }
+
 :root,
 :root[data-theme="dark"] {
   color-scheme: dark;

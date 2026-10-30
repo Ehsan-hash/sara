@@ -1,21 +1,56 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- The new look (web/theme.css): Night (the default) and Day. The app starts in the theme the page
+     showed last (MainActivity), so its own screens, dialogs, the splash and the moment before the
+     page draws all match it. The bars are see-through: the page (or the app's own screen) colours
+     them, and the app picks light or dark icons for what is under them. -->
 <resources>
-    <!-- The web app's dark colours (web/style.css, values/colors.xml), so the app's own screens,
-         dialogs and the moment before the page loads match it. -->
-    <style name="Sara" parent="@android:style/Theme.Material.NoActionBar">
+    <style name="SaraNight0" parent="@android:style/Theme.Material.NoActionBar">
         <item name="android:colorPrimary">@color/sara_panel</item>
         <item name="android:colorAccent">@color/sara_accent</item>
         <item name="android:colorControlActivated">@color/sara_accent</item>
-        <item name="android:textColorHighlight">#66E0789A</item>
+        <item name="android:textColorHighlight">#66E0607E</item>
         <item name="android:statusBarColor">@color/sara_bg</item>
         <item name="android:navigationBarColor">@color/sara_bg</item>
         <item name="android:windowBackground">@color/sara_bg</item>
+        <item name="android:windowLightStatusBar">false</item>
         <item name="android:alertDialogTheme">@style/Sara.Dialog</item>
     </style>
+    <style name="SaraDay0" parent="@android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:colorPrimary">@color/sara_day_panel</item>
+        <item name="android:colorAccent">@color/sara_day_accent</item>
+        <item name="android:colorControlActivated">@color/sara_day_accent</item>
+        <item name="android:textColorHighlight">#40B8436A</item>
+        <item name="android:statusBarColor">@color/sara_day_bg</item>
+        <item name="android:navigationBarColor">@color/sara_day_bg</item>
+        <item name="android:windowBackground">@color/sara_day_bg</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:alertDialogTheme">@style/Sara.Dialog.Day</item>
+    </style>
+    <!-- values-v29 adds the phone's light/dark setting for the web view here. -->
+    <style name="SaraNight1" parent="SaraNight0" />
+    <style name="SaraDay1" parent="SaraDay0" />
+    <!-- values-v31 adds the splash screen colours here. -->
+    <style name="Sara" parent="SaraNight1" />
+    <style name="Sara.Day" parent="SaraDay1" />
+
     <style name="Sara.Dialog" parent="@android:style/Theme.Material.Dialog.Alert">
         <item name="android:colorAccent">@color/sara_accent</item>
         <item name="android:windowBackground">@drawable/dialog_bg</item>
         <item name="android:textColorPrimary">@color/sara_text</item>
         <item name="android:textColorSecondary">@color/sara_muted</item>
+    </style>
+    <style name="Sara.Dialog.Day" parent="@android:style/Theme.Material.Light.Dialog.Alert">
+        <item name="android:colorAccent">@color/sara_day_accent</item>
+        <item name="android:windowBackground">@drawable/dialog_bg_day</item>
+        <item name="android:textColorPrimary">@color/sara_day_text</item>
+        <item name="android:textColorSecondary">@color/sara_day_muted</item>
+    </style>
+    <!-- Laid over the running activity's theme when the page switches between Night and Day, so
+         dialogs opened afterwards match. -->
+    <style name="SaraDialogsNight">
+        <item name="android:alertDialogTheme">@style/Sara.Dialog</item>
+    </style>
+    <style name="SaraDialogsDay">
+        <item name="android:alertDialogTheme">@style/Sara.Dialog.Day</item>
     </style>
 </resources>

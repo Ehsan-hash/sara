@@ -18,7 +18,7 @@ final class Notify {
 
     static final String CHANNEL = "messages";
     static final String KEY_REPLY = "reply";
-    static final int COLOR = 0xFFE0789A;
+    static final int COLOR = 0xFFE0607E;
 
     static NotificationManager manager(Context c) {
         NotificationManager nm = c.getSystemService(NotificationManager.class);

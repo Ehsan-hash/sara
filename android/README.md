@@ -70,12 +70,23 @@ then run `./gradlew assembleRelease`.
 Almost everything you see is the web app. The app itself only draws:
 
 - **Connect to your Sara** (first start) / **Add a Sara** (from ⇄ or a pairing link): the address,
-  an optional pairing code (`XXXX-XXXX-XXXX`), *Connect*, and *Try the demo*. Same colours as the
-  web app (`res/values/colors.xml`).
+  an optional pairing code (`XXXX-XXXX-XXXX`), *Connect*, and *Try the demo*. In the new look's
+  Night (default) or Day colours, whichever the page showed last (`Look.java`, `res/values/colors.xml`).
 - **Can't reach your Sara**: when a saved server doesn't answer: *Try again*, *Add a Sara*, and
   your other Saras one tap away.
 - Dialogs (*Add this Sara?*, *Sign in with a code*, place reminders), the app lock, toasts and
   notifications.
+- The splash (Android 12+): her picture on the Night background, or Day once the page has shown
+  Day (Android 13+ remembers it).
+
+**Bars and safe areas (2.7):** the status and navigation bars are see-through. The app reads the
+page's theme and the colours at its top and bottom edge (its own small script; the page needs no
+bridge call) and picks light or dark bar icons to match; the call screen stays dark in Day too.
+Whether the page draws under the bars itself depends on the phone's web view: once per web view
+version the app checks if `env(safe-area-inset-*)` reaches a page (`viewport-fit=cover`); if it
+does, the page runs edge to edge, otherwise the app keeps it clear of the bars and paints them in
+the page's colours, so nothing is padded twice. The check result is in logcat (`Sara: Safe-area
+check …`). "Follow the system" in the page follows the phone's dark mode.
 - **Notification categories** (phone Settings → Apps → Sara → Notifications): *Messages from
   her*, *Calls from <her name>* (ringing), *Call in progress*, *Instant notifications* (the quiet
   note while they're on).

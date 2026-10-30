@@ -1,13 +1,19 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- The web app's colours (web/style.css), for the app's own screens. -->
+<!-- The new look's colours (web/theme.css; docs/design/NEW_LOOK.md): Night is the default, Day the
+     light theme. The app's own screens draw with Look.java; these are for the themes, dialogs, the
+     splash and the launcher icon's background. -->
 <resources>
-    <color name="sara_bg">#121016</color>
-    <color name="sara_panel">#1B1820</color>
-    <color name="sara_panel_2">#241F2B</color>
-    <color name="sara_text">#EEE9F3</color>
-    <color name="sara_muted">#A49CAE</color>
-    <color name="sara_accent">#E0789A</color>
-    <color name="sara_border">#322B3A</color>
-    <color name="sara_error">#FF8080</color>
-    <color name="sara_on_accent">#1A0F14</color>
+    <color name="sara_bg">#0F0D17</color>
+    <color name="sara_panel">#17141F</color>
+    <color name="sara_panel_2">#1E1A29</color>
+    <color name="sara_text">#F1EDF7</color>
+    <color name="sara_muted">#AEA6BD</color>
+    <color name="sara_accent">#F08AA5</color>
+    <color name="sara_border">#24FFFFFF</color>
+    <color name="sara_day_bg">#FAF7F5</color>
+    <color name="sara_day_panel">#FFFFFF</color>
+    <color name="sara_day_text">#221A2A</color>
+    <color name="sara_day_muted">#5E5469</color>
+    <color name="sara_day_accent">#B8436A</color>
+    <color name="sara_day_border">#E2D8E0</color>
 </resources>

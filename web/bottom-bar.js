@@ -132,6 +132,8 @@ export function initBottomBar(c) {
     const vv = window.visualViewport;
     const shrunk = Boolean(vv) && vv.height < tall * 0.72;
     root.classList.toggle('kb-up', (touch() || shrunk) && typesText(document.activeElement));
+    // 2.7.1: and once the keyboard is gone, the page back at the top (web/viewport.js).
+    window.saraViewport?.settle();
   };
   document.addEventListener('focusin', kb);
   document.addEventListener('focusout', () => setTimeout(kb, 60));

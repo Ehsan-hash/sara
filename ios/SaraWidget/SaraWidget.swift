@@ -90,7 +90,7 @@ struct SaraWidgetView: View {
 
     private var face: some View {
         Group {
-            if let f = entry.face { Image(uiImage: f).resizable().scaledToFill() } else { Color(red: 0.14, green: 0.12, blue: 0.17) }
+            if let f = entry.face { Image(uiImage: f).resizable().scaledToFill() } else { Color(red: 0.118, green: 0.102, blue: 0.161) }
         }
     }
 
@@ -144,7 +144,7 @@ struct SaraWidgetView: View {
                 }
                 Spacer(minLength: 0)
             }
-            .containerBackground(for: .widget) { Color(red: 0.106, green: 0.094, blue: 0.125) }
+            .containerBackground(for: .widget) { Color(red: 0.090, green: 0.078, blue: 0.122) }
         }
     }
 }

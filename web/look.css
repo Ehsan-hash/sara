@@ -239,7 +239,7 @@ html.sara-speaking .head-face { animation: her-pulse 1.3s ease-in-out infinite; 
   .msg-more[aria-expanded="true"] { color: var(--accent-text); }
   .msg > .msg-actions button { min-height: 40px; padding: 2px 12px; }
   /* On touch the actions open as a small sheet above the composer, for the message that's lit. */
-  .msg.show-actions > .msg-actions { position: fixed; z-index: 45; top: auto; left: 10px; right: 10px; bottom: calc(84px + env(safe-area-inset-bottom)); max-width: none; justify-content: center; padding: 6px; border-radius: 18px; box-shadow: var(--shadow-2); }
+  .msg.show-actions > .msg-actions { position: fixed; z-index: 45; top: auto; left: 10px; right: 10px; bottom: calc(84px + var(--safe-b)); max-width: none; justify-content: center; padding: 6px; border-radius: 18px; box-shadow: var(--shadow-2); }
   .msg.her.show-actions::before { opacity: 1; width: 3px; }
   .msg.user.show-actions { box-shadow: 0 0 0 2px var(--accent-text); }
   .msg-actions .msg-meta { flex-basis: 100%; text-align: center; padding: 2px 0 4px; }
@@ -388,7 +388,7 @@ li.step { animation: step-in var(--dur-slow) var(--ease-out) both; }
   position: relative;
   z-index: 5;
   width: min(860px, calc(100% - 24px));
-  margin: 4px auto max(14px, env(safe-area-inset-bottom));
+  margin: 4px auto max(14px, var(--safe-b));
   padding: 5px 6px 5px 16px;
   gap: 2px;
   align-items: flex-end;
@@ -456,7 +456,7 @@ li.step { animation: step-in var(--dur-slow) var(--ease-out) both; }
   .head-chips.folded #conv-settings-btn { width: 100%; padding: 0 12px; }
   .head-chips.folded #conv-summary { display: inline; overflow: hidden; text-overflow: ellipsis; }
   #chat-head .ai-badge { height: 26px; padding: 0 8px; font-size: 11px; }
-  .ctx-sheet { position: fixed; top: auto; right: 8px; left: 8px; bottom: max(10px, env(safe-area-inset-bottom)); width: auto; padding: 16px; border-radius: 18px; }
+  .ctx-sheet { position: fixed; top: auto; right: 8px; left: 8px; bottom: max(10px, var(--safe-b)); width: auto; padding: 16px; border-radius: 18px; }
   #messages { padding: 18px 12px 18px; gap: 12px; }
   .msg.user { max-width: 86%; }
   .msg.assistant.her { margin-left: 36px; max-width: calc(100% - 36px); padding-left: 12px; }
@@ -464,7 +464,7 @@ li.step { animation: step-in var(--dur-slow) var(--ease-out) both; }
   .msg.her > .msg-more { left: -40px; }
   .steps, .rcard, .tool.building, #messages > .tool:not(.building), #messages > .approval, .preview-card { margin-left: 48px; max-width: calc(100% - 48px); }
   .rcard { width: calc(100% - 48px); }
-  #composer { width: calc(100% - 16px); margin-bottom: max(8px, env(safe-area-inset-bottom)); padding: 4px 4px 4px 12px; gap: 0; border-radius: 22px; }
+  #composer { width: calc(100% - 16px); margin-bottom: max(8px, var(--safe-b)); padding: 4px 4px 4px 12px; gap: 0; border-radius: 22px; }
   #composer > button.icon, #composer-plus { width: 40px; height: 40px; }
   #activity, .editing-bar, .offrecord-bar, .jobs-strip, #attachments { width: calc(100% - 16px); }
 }
@@ -499,4 +499,22 @@ html.shell-test.shell-windows .shell-drag::after { content: "—     ☐     ✕
 html.shell-test.shell-mac .shell-drag::before { content: ""; position: absolute; left: 14px; top: calc(50% - 6px); width: 12px; height: 12px; border-radius: 50%; background: #ff5f57; box-shadow: 20px 0 0 #febc2e, 40px 0 0 #28c840; }
 @media (max-width: 760px) {
   html.shell #sidebar { padding-top: 0; }
+}
+
+/* ---------- 2.7.1: below the status bar when the page draws under it (web/viewport.js) ----------
+   --safe-t is 0 in a browser tab, the Windows/Mac apps and new iPhone home-screen icons; it is the
+   status bar / notch in the iPhone and Android apps and on iPhone icons added before 2.7.1. */
+#main { padding-top: var(--safe-t); }
+@media (max-width: 760px) {
+  #sidebar, .preview-pane { padding-top: var(--safe-t); }
+}
+.her-panel.mode-overlay { padding-top: var(--safe-t); }
+@media (max-width: 720px) {
+  dialog:modal:not(.ring, .lightbox, .cmdbar) { margin-top: var(--safe-t); }
+  dialog.settings-dialog:modal { height: calc(100dvh - var(--safe-t)); max-height: calc(100dvh - var(--safe-t)); }
+}
+/* iOS zooms into a text field smaller than 16 px when it gets the focus (viewport.js also stops
+   that on iPhone/iPad); the message box keeps the reader's chosen size, at least 16 px on touch. */
+@media (pointer: coarse) {
+  #input { font-size: max(16px, var(--chat-size, 15px)); }
 }

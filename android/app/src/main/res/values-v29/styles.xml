@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The web view's prefers-color-scheme follows isLightTheme: keep it on the phone's own setting
+         (values-night/bools.xml), so the page's "Follow the system" theme works in the app. -->
+    <style name="SaraNight1" parent="SaraNight0">
+        <item name="android:isLightTheme">@bool/system_light</item>
+        <item name="android:enforceNavigationBarContrast">false</item>
+        <item name="android:enforceStatusBarContrast">false</item>
+    </style>
+    <style name="SaraDay1" parent="SaraDay0">
+        <item name="android:isLightTheme">@bool/system_light</item>
+        <item name="android:windowLightNavigationBar">true</item>
+        <item name="android:enforceNavigationBarContrast">false</item>
+        <item name="android:enforceStatusBarContrast">false</item>
+    </style>
+</resources>

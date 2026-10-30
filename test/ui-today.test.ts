@@ -180,8 +180,9 @@ test('Today: a view over the chat column (not a window), old ids and deep link k
   assert.match(app, /\$\('#open-today'\)\.addEventListener\('click', openToday\);/);
   assert.match(app, /\$\('#brand-today'\)\.addEventListener\('click'/, 'her face and name at the top of the sidebar go to Today');
   assert.match(html, /<button id="brand-today" class="brand" type="button" title="Today \(Alt\+T\)">/);
-  // The app still opens on the last conversation (Today is not forced on start).
-  assert.match(app, /if \(first\) await openConversation\(first\.id\);/);
+  // 2.7.1: the last conversation is still opened underneath (Chat is one tap away), then Today on
+  // top unless a link said where to go (web/start-view.js, test/ui-start-today.test.ts).
+  assert.match(app, /if \(first\) await openConversation\(first\.id\);[\s\S]{0,200}if \(onToday\) void openToday\(\);/);
   // Shortcuts, Esc and the first tour offer treat Today as a view, not a window.
   assert.ok(app.includes("if (document.querySelector('dialog[open]:not(#today)')) return;"));
   assert.match(web('her-panel.js') + todayJs, /dialog\[open\]:not\(#today\)/);
@@ -323,7 +324,7 @@ test('bottom bar: Chat, Today, Planner, More at phone width, 44 px targets, safe
   assert.match(html, /<button id="toggle-sidebar" class="ghost" aria-label="Conversations">☰<\/button>/);
   assert.match(todayCss, /\.bottom-bar \{ display: none; \}\n@media \(max-width: 720px\) \{/);
   const phone = todayCss.slice(todayCss.indexOf('@media (max-width: 720px) {'));
-  assert.match(phone, /env\(safe-area-inset-bottom\)/);
+  assert.match(phone, /padding: 4px max\(6px, env\(safe-area-inset-left\)\) var\(--safe-b\) /, 'above the home indicator (2.7.1: through --safe-b, theme.css)');
   assert.match(phone, /\.bb-btn \{[^}]*min-height: 52px;/, 'taller than 44 px');
   assert.match(phone, /html\.kb-up \.bottom-bar \{ display: none; \}/);
   assert.match(phone, /#main \{ grid-template-rows: minmax\(0, 1fr\) auto; \}/, 'its own row: never over the composer');

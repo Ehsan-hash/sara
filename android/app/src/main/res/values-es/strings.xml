@@ -44,6 +44,7 @@
     <string name="widget_connect">Abre la app para conectarte.</string>
     <string name="widget_sign_in">Abre la app para iniciar sesión.</string>
     <!-- First screen: connect to a Sara (or add another one) -->
+    <string name="ai_companion">Compañía de IA</string>
     <string name="setup_title">Conéctate a tu Sara</string>
     <string name="setup_help">Escribe la dirección con la que abres Sara en el navegador, por ejemplo sara.example.com o 192.168.1.20:7860.</string>
     <string name="setup_add_help">Escribe la dirección de otra Sara. Tus otras Saras siguen con la sesión iniciada.</string>

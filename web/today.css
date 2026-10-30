@@ -22,7 +22,9 @@
   background: var(--page-glow), var(--surface-0);
   overflow: hidden;
 }
-#chat > dialog.today-view[open] { display: block; animation: td-in var(--dur-slow) var(--ease-out) both; }
+/* backwards, not both: a transform still filling after the fade-in would make Today the box that
+   position: fixed children (the tour ring and card) are placed in, off by the sidebar's width. */
+#chat > dialog.today-view[open] { display: block; animation: td-in var(--dur-slow) var(--ease-out) backwards; }
 @keyframes td-in { from { opacity: 0; transform: translateY(6px); } }
 .td-scroll {
   container: today / inline-size;
@@ -224,13 +226,25 @@ html.sara-busy .td-face { animation: her-breathe var(--breathe) ease-in-out infi
 .td-progress::-webkit-progress-value { background: var(--accent-grad); border-radius: 6px; }
 .td-progress::-moz-progress-bar { background: var(--accent-grad); border-radius: 6px; }
 
-/* Home: a few devices; changes go through her */
+/* Home: a few devices; lights, switches, fans and blinds switch here (2.7.1), the rest go through her */
 .td-home-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 120px), 1fr)); gap: 8px; }
 .td-dev { display: grid; gap: 2px; align-content: start; min-width: 0; padding: 10px 12px; border: 1px solid var(--hairline-strong); border-radius: 14px; background: color-mix(in srgb, var(--surface-3) 60%, transparent); }
 .td-dev.on { background: linear-gradient(150deg, color-mix(in srgb, var(--warn) 18%, var(--surface-2)), var(--surface-2)); border-color: color-mix(in srgb, var(--warn) 35%, var(--hairline-strong)); }
 .td-dev-name { margin: 0; font-size: 14px; font-weight: 600; color: var(--text-1); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .td-dev-state { margin: 0; font-size: 12.5px; color: var(--text-2); }
 .td-dev-ask { justify-self: start; margin-top: 4px; }
+.td-dev.has-switch { grid-template-columns: minmax(0, 1fr) auto; column-gap: 8px; }
+.td-dev.has-switch > .td-dev-name, .td-dev.has-switch > .td-dev-state { grid-column: 1; }
+.td-dev.failed .td-dev-state { color: var(--danger); }
+/* The switch: a 44 px target with a 46 x 28 track drawn inside it. */
+.td-dev-switch { grid-column: 2; grid-row: 1 / span 2; align-self: center; position: relative; width: 52px; height: 44px; min-height: 44px; margin: -6px -6px -6px 0; padding: 0; border: 0; border-radius: var(--r-pill); background: none; cursor: pointer; }
+.td-dev-switch:hover { background: none; }
+.td-dev-switch::before { content: ""; position: absolute; left: 3px; top: 8px; width: 46px; height: 28px; border-radius: var(--r-pill); background: var(--surface-3); box-shadow: inset 0 0 0 1px var(--hairline-strong); transition: background var(--dur-fast) var(--ease-out); }
+.td-dev-switch::after { content: ""; position: absolute; left: 6px; top: 11px; width: 22px; height: 22px; border-radius: 50%; background: var(--text-2); box-shadow: var(--shadow-1); transition: transform var(--dur-fast) var(--ease-out), background var(--dur-fast) var(--ease-out); }
+.td-dev-switch[aria-checked="true"]::before { background: var(--accent-grad); box-shadow: none; }
+.td-dev-switch[aria-checked="true"]::after { transform: translateX(18px); background: var(--on-accent); }
+.td-dev-switch:focus-visible { outline: 2px solid var(--accent-solid); outline-offset: 0; }
+.td-dev-switch:disabled { opacity: .45; cursor: default; }
 .td-foot { margin: 0; }
 .td-home-choose summary { cursor: pointer; font-size: 13px; color: var(--accent-text); min-height: 32px; display: flex; align-items: center; }
 .td-home-picks { display: grid; gap: 2px; max-height: 220px; overflow-y: auto; margin: 4px 0; }
@@ -271,14 +285,14 @@ button.brand:focus-visible { outline: 2px solid var(--accent-solid); outline-off
 /* ---------- The phone's bottom bar ---------- */
 .bottom-bar { display: none; }
 @media (max-width: 720px) {
-  :root { --bbar-h: calc(60px + env(safe-area-inset-bottom)); }
+  :root { --bbar-h: calc(60px + var(--safe-b)); }
   #main { grid-template-rows: minmax(0, 1fr) auto; }
   .bottom-bar {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
     position: relative;
     z-index: 8;
-    padding: 4px max(6px, env(safe-area-inset-left)) env(safe-area-inset-bottom) max(6px, env(safe-area-inset-right));
+    padding: 4px max(6px, env(safe-area-inset-left)) var(--safe-b) max(6px, env(safe-area-inset-right));
     border-top: 1px solid var(--hairline-strong);
     background: var(--glass-strong);
     -webkit-backdrop-filter: var(--glass-filter);
@@ -317,7 +331,7 @@ button.brand:focus-visible { outline: 2px solid var(--accent-solid); outline-off
   html:not(.kb-up) #composer { margin-bottom: 8px; }
   /* A window leaves the bar visible below it (a tap there closes the window and goes on). */
   html:not(.kb-up) body:has(> #main:not([hidden])) dialog:modal:not(.ring, .lightbox, .cmdbar, [data-required]) {
-    max-height: calc(100dvh - var(--bbar-h) - 16px);
+    max-height: calc(100dvh - var(--bbar-h) - 16px - var(--safe-t));
     margin-bottom: calc(var(--bbar-h) + 8px);
   }
   html:not(.kb-up) body:has(> #main:not([hidden])) .msg.show-actions > .msg-actions { bottom: calc(84px + var(--bbar-h)); }

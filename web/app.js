@@ -23,6 +23,7 @@ import { appLink, inPhoneApp, phoneKind } from './pair-link.js';
 import { addToMomentsButton, initMoments, loadMoments, openMoments, renderTodayMoments, renderTodayPhotos } from './moments.js';
 import { closeToday, initToday, renderTodayTiles, showToday, todayOpen } from './today.js';
 import { initBottomBar } from './bottom-bar.js';
+import { startsOnToday } from './start-view.js';
 import { initHousehold, joinFromLink, loadAccount, loadHousehold, showPaused } from './household.js';
 import { initNav, relabelNav, revealNav, setMore } from './nav.js';
 import { emptyState, initTidy, overflowMenu } from './tidy.js';
@@ -137,6 +138,9 @@ async function boot() {
   startEvents();
   void api('/settings').then((s) => applyAdminHelp(s.admin), () => {});
   await Promise.all([loadConversations(), loadProviders()]);
+  // 2.7.1: Today first, unless a link says where to go (web/start-view.js). Read before the
+  // conversation link below is taken out of the address.
+  const onToday = startsOnToday({ hash: location.hash, answering: Boolean(sessionStorage.getItem('sara.answer')), wizard: sessionStorage.getItem('sara.openWizard') === '1', demo: Boolean(session.demo) });
   // Opened from a notification: /#c=<conversation id>.
   const fromLink = /#c=([\w-]+)/.exec(location.hash)?.[1];
   if (fromLink) history.replaceState(null, '', '/');
@@ -147,6 +151,8 @@ async function boot() {
     $('#chat-title').textContent = t('Sara');
     renderMessages([]);
   }
+  // The last conversation stays open underneath: Chat is one tap away.
+  if (onToday) void openToday();
   if (session.adultAsk) $('#adult-ask').showModal();
   const setup = await api('/setup').catch(() => ({ done: true }));
   if (!setup.done) openSetup(setup);

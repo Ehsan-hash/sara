@@ -69,7 +69,14 @@ a signed-in page (an outgoing call to a made-up conversation, or a 20-second inc
 
 The app's own screens: **Connect to your Sara** (or **Add a Sara** with one already saved; the
 address, an optional pairing code, *Try the demo*) and **Can't reach your Sara** (*Try again*, *Add
-a Sara*), in the web app's colours. Permission prompts: microphone (calls and voice messages),
+a Sara*), in the new look's Night (default) or Day colours, whichever the page showed last; the
+launch screen is her picture on Night. The page draws under the status bar and home indicator
+itself (`contentInsetAdjustmentBehavior = .never`, so `env(safe-area-inset-*)` reaches it once and
+nothing is padded twice); the keyboard still resizes it. A small script of the app's own reads the
+page's theme and the colour at its top edge, so the status bar text stays readable (the call screen
+is dark in Day too); the web view keeps the phone's own light/dark setting, so the page's *Follow
+the system* theme works. Debug builds also take `-SaraTestJS '"<script>"'` (run once in the first
+page loaded; quote it, launch arguments are read as property lists). Permission prompts: microphone (calls and voice messages),
 camera (photos you share, and video calls only when you turn your camera on), photos (choose /
 save her pictures), location (place reminders; it stays on the iPhone), Face ID (the app lock).
 

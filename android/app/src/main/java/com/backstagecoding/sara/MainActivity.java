@@ -85,9 +85,27 @@ public class MainActivity extends Activity {
     private PermissionRequest pendingPermission;
     private ValueCallback<Uri[]> fileCallback;
 
+    /** Night or Day: the theme the page showed last (the app's own screens, bars and first paint). */
+    private Look look = Look.NIGHT;
+    /**
+     * True while the page draws under the status and navigation bars itself (env(safe-area-inset-*)
+     * reaches it); false: the app keeps the page clear of the bars and paints them in the page's
+     * colours. Edge to edge only when this phone's web view really reports the insets (checked once
+     * per web view version) and the page asks for it (viewport-fit=cover).
+     */
+    private boolean edge;
+    /** The colours at the top and bottom edge of the page (for the bars while the app pads it). */
+    private int barTop, barBottom;
+    /** The page to open once the safe-area check has run (null: no check running). */
+    private String probeThen;
+    private boolean clearHistoryNext;
+
     @Override
     protected void onCreate(Bundle saved) {
+        look = Look.saved(this);
+        if (look.day) setTheme(R.style.Sara_Day);
         super.onCreate(saved);
+        setupWindow();
         applySecureFlag();
         if (handlePairLink(getIntent())) return;
         takeShare(getIntent());
@@ -199,9 +217,12 @@ public class MainActivity extends Activity {
         if (switching) {
             dlg.setOnShowListener(d -> {
                 Button sw = dlg.getButton(android.app.AlertDialog.BUTTON_NEGATIVE);
-                if (sw != null) sw.setTextColor(Color.parseColor("#E5484D"));
+                if (sw != null) sw.setTextColor(look.danger);
                 Button cancel = dlg.getButton(android.app.AlertDialog.BUTTON_POSITIVE);
-                if (cancel != null) cancel.requestFocus();
+                if (cancel != null) {
+                    cancel.setTextColor(look.text1);
+                    cancel.requestFocus();
+                }
             });
         }
         dlg.show();
@@ -222,16 +243,7 @@ public class MainActivity extends Activity {
 
     // ---------- setup ----------
 
-    // The web app's colours (web/style.css; res/values/colors.xml), for the app's own screens.
-    private static final int BG = Color.parseColor("#121016");
-    private static final int PANEL = Color.parseColor("#1B1820");
-    private static final int PANEL_2 = Color.parseColor("#241F2B");
-    private static final int TEXT = Color.parseColor("#EEE9F3");
-    private static final int MUTED = Color.parseColor("#A49CAE");
-    private static final int ACCENT = Color.parseColor("#E0789A");
-    private static final int BORDER = Color.parseColor("#322B3A");
-    private static final int ERROR = Color.parseColor("#FF8080");
-    private static final int ON_ACCENT = Color.parseColor("#1A0F14");
+    // The new look's colours (web/theme.css) for the app's own screens: Look.NIGHT or Look.DAY.
 
     private android.graphics.drawable.GradientDrawable rounded(int fill, int stroke, int radiusDp) {
         android.graphics.drawable.GradientDrawable g = new android.graphics.drawable.GradientDrawable();
@@ -241,18 +253,24 @@ public class MainActivity extends Activity {
         return g;
     }
 
-    /** A main (pink) or quiet (outlined) button, like the web app's. */
+    /** A main (rose → violet) or quiet (outlined) button, like the web app's. */
     private void styleButton(Button b, String label, boolean primary) {
         b.setText(label);
         b.setAllCaps(false);
         b.setTextSize(16);
         b.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
-        b.setTextColor(primary ? ON_ACCENT : TEXT);
+        b.setTextColor(primary ? look.onBtn : look.text1);
         b.setStateListAnimator(null);
         b.setMinHeight(dp(48));
         b.setPadding(dp(18), 0, dp(18), 0);
-        android.graphics.drawable.GradientDrawable g = rounded(primary ? ACCENT : Color.TRANSPARENT, primary ? 0 : BORDER, 12);
-        b.setBackground(new android.graphics.drawable.RippleDrawable(android.content.res.ColorStateList.valueOf(primary ? 0x33000000 : 0x22FFFFFF), g, null));
+        android.graphics.drawable.GradientDrawable g;
+        if (primary) {
+            g = new android.graphics.drawable.GradientDrawable(android.graphics.drawable.GradientDrawable.Orientation.TL_BR, new int[] {look.btnFrom, look.btnTo});
+            g.setCornerRadius(dp(12));
+        } else {
+            g = rounded(look.surface2, look.hairlineStrong, 12);
+        }
+        b.setBackground(new android.graphics.drawable.RippleDrawable(android.content.res.ColorStateList.valueOf(primary ? 0x33FFFFFF : look.ripple), g, null));
     }
 
     private Button button(String label, boolean primary) {
@@ -266,15 +284,22 @@ public class MainActivity extends Activity {
         e.setHint(hint);
         e.setSingleLine(true);
         e.setTextSize(16);
-        e.setTextColor(TEXT);
-        e.setHintTextColor(Color.parseColor("#7A7484"));
-        e.setBackground(rounded(PANEL_2, BORDER, 12));
+        e.setTextColor(look.text1);
+        e.setHintTextColor(look.text3);
+        e.setMinHeight(dp(48));
+        // The web's inputs: a sunken surface with a hairline edge, the accent edge while typing.
+        android.graphics.drawable.StateListDrawable st = new android.graphics.drawable.StateListDrawable();
+        android.graphics.drawable.GradientDrawable focused = rounded(look.surface2, 0, 12);
+        focused.setStroke(dp(2), look.accentText);
+        st.addState(new int[] {android.R.attr.state_focused}, focused);
+        st.addState(new int[0], rounded(look.surface2, look.hairlineStrong, 12));
+        e.setBackground(st);
         e.setPadding(dp(14), dp(12), dp(14), dp(12));
         return e;
     }
 
     private TextView label(String s) {
-        TextView t = text(s, 14, TEXT);
+        TextView t = text(s, 14, look.text1);
         t.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
         t.setPadding(0, dp(16), 0, dp(6));
         return t;
@@ -286,37 +311,98 @@ public class MainActivity extends Activity {
         return lp;
     }
 
-    /** Her picture in a circle, at the top of the app's own screens. */
+    /** Her picture in a circle with the accent ring, and "AI companion" under it (as on Today). */
     private View logo() {
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.HORIZONTAL);
+        box.setGravity(Gravity.CENTER_VERTICAL);
         android.widget.ImageView img = new android.widget.ImageView(this);
-        img.setImageResource(R.drawable.icon);
-        img.setScaleType(android.widget.ImageView.ScaleType.CENTER_CROP);
-        android.graphics.drawable.GradientDrawable circle = new android.graphics.drawable.GradientDrawable();
-        circle.setShape(android.graphics.drawable.GradientDrawable.OVAL);
-        circle.setColor(PANEL_2);
-        img.setBackground(circle);
-        img.setClipToOutline(true);
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(dp(64), dp(64));
-        lp.bottomMargin = dp(18);
-        img.setLayoutParams(lp);
-        return img;
+        img.setImageDrawable(roundFace(dp(64)));
+        img.setContentDescription(getString(R.string.app_name));
+        // The ring: the accent gradient, a thin gap in the card colour, then her picture.
+        android.graphics.drawable.GradientDrawable ring = new android.graphics.drawable.GradientDrawable(android.graphics.drawable.GradientDrawable.Orientation.TL_BR, new int[] {look.accentFrom, look.accentTo});
+        ring.setShape(android.graphics.drawable.GradientDrawable.OVAL);
+        android.graphics.drawable.GradientDrawable gap = new android.graphics.drawable.GradientDrawable();
+        gap.setShape(android.graphics.drawable.GradientDrawable.OVAL);
+        gap.setColor(look.surface1);
+        android.graphics.drawable.LayerDrawable bg = new android.graphics.drawable.LayerDrawable(new android.graphics.drawable.Drawable[] {ring, gap});
+        bg.setLayerInset(1, dp(2), dp(2), dp(2), dp(2));
+        img.setBackground(bg);
+        img.setPadding(dp(4), dp(4), dp(4), dp(4));
+        img.setElevation(dp(6));
+        img.setOutlineProvider(android.view.ViewOutlineProvider.BACKGROUND);
+        box.addView(img, new LinearLayout.LayoutParams(dp(72), dp(72)));
+        TextView chip = text(getString(R.string.ai_companion), 12, look.text2);
+        chip.setBackground(rounded(look.surface2, look.hairlineStrong, 999));
+        chip.setPadding(dp(10), dp(3), dp(10), dp(4));
+        LinearLayout.LayoutParams clp = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        clp.leftMargin = dp(14);
+        box.addView(chip, clp);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        lp.bottomMargin = dp(20);
+        box.setLayoutParams(lp);
+        return box;
+    }
+
+    /** Her picture cut to a circle. */
+    private android.graphics.drawable.Drawable roundFace(int size) {
+        Bitmap src = BitmapFactory.decodeResource(getResources(), R.drawable.icon);
+        Bitmap out = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888);
+        android.graphics.Canvas cv = new android.graphics.Canvas(out);
+        android.graphics.Paint paint = new android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG | android.graphics.Paint.FILTER_BITMAP_FLAG);
+        if (src != null) {
+            android.graphics.BitmapShader sh = new android.graphics.BitmapShader(src, android.graphics.Shader.TileMode.CLAMP, android.graphics.Shader.TileMode.CLAMP);
+            android.graphics.Matrix m = new android.graphics.Matrix();
+            float scale = (float) size / Math.min(src.getWidth(), src.getHeight());
+            m.setScale(scale, scale);
+            m.postTranslate((size - src.getWidth() * scale) / 2f, (size - src.getHeight() * scale) / 2f);
+            sh.setLocalMatrix(m);
+            paint.setShader(sh);
+        } else {
+            paint.setColor(look.surface2);
+        }
+        cv.drawCircle(size / 2f, size / 2f, size / 2f, paint);
+        return new android.graphics.drawable.BitmapDrawable(getResources(), out);
+    }
+
+    /** The page background of the app's own screens: the surface with the web's soft glows. */
+    private android.graphics.drawable.Drawable pageBackground() {
+        int w = getResources().getDisplayMetrics().widthPixels;
+        int h = getResources().getDisplayMetrics().heightPixels;
+        android.graphics.drawable.GradientDrawable violet = new android.graphics.drawable.GradientDrawable();
+        violet.setGradientType(android.graphics.drawable.GradientDrawable.RADIAL_GRADIENT);
+        violet.setColors(new int[] {look.glowViolet, look.glowViolet & 0x00FFFFFF});
+        violet.setGradientCenter(0.75f, 0.0f);
+        violet.setGradientRadius(Math.max(w, h) * 0.6f);
+        android.graphics.drawable.GradientDrawable rose = new android.graphics.drawable.GradientDrawable();
+        rose.setGradientType(android.graphics.drawable.GradientDrawable.RADIAL_GRADIENT);
+        rose.setColors(new int[] {look.glowRose, look.glowRose & 0x00FFFFFF});
+        rose.setGradientCenter(0.0f, 1.0f);
+        rose.setGradientRadius(Math.max(w, h) * 0.5f);
+        return new android.graphics.drawable.LayerDrawable(new android.graphics.drawable.Drawable[] {new android.graphics.drawable.ColorDrawable(look.bg), violet, rose});
     }
 
     /** The app's own screens: a card in the middle (scrolls on small phones and with big text). */
     private LinearLayout screen() {
         LinearLayout card = new LinearLayout(this);
         card.setOrientation(LinearLayout.VERTICAL);
-        card.setBackground(rounded(PANEL, BORDER, 20));
+        card.setBackground(rounded(look.surface1, look.hairlineStrong, 22));
+        card.setElevation(dp(look.day ? 10 : 2));
         card.setPadding(dp(24), dp(26), dp(24), dp(22));
         android.widget.ScrollView scroll = new android.widget.ScrollView(this);
         scroll.setFillViewport(true);
-        scroll.setBackgroundColor(BG);
+        scroll.setBackground(pageBackground());
+        scroll.setClipToPadding(false);
         FrameLayout center = new FrameLayout(this);
         FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(Math.min(dp(480), getResources().getDisplayMetrics().widthPixels - dp(32)), FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.CENTER);
+        lp.topMargin = dp(8);
+        lp.bottomMargin = dp(8);
         center.addView(card, lp);
         scroll.addView(center, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
+        // The screen's background runs under the see-through bars; its content stays clear of them.
         keepClearOfBars(scroll, dp(16));
         setContentView(scroll);
+        paintBars(look.bg, look.bg);
         card.addView(logo());
         return card;
     }
@@ -327,9 +413,8 @@ public class MainActivity extends Activity {
         final Servers.Profile here = Servers.active(this);
         LinearLayout box = screen();
 
-        TextView title = text(getString(here != null ? R.string.servers_add_a_sara : R.string.setup_title), 24, TEXT);
-        title.setTypeface(Typeface.DEFAULT_BOLD);
-        TextView help = text(getString(here != null ? R.string.setup_add_help : R.string.setup_help), 15, MUTED);
+        TextView title = heading(getString(here != null ? R.string.servers_add_a_sara : R.string.setup_title));
+        TextView help = text(getString(here != null ? R.string.setup_add_help : R.string.setup_help), 15, look.text2);
         help.setPadding(0, dp(8), 0, 0);
         help.setLineSpacing(0, 1.15f);
 
@@ -342,10 +427,11 @@ public class MainActivity extends Activity {
         pairCode.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_CHARACTERS | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
         pairCode.setImeOptions(EditorInfo.IME_ACTION_GO);
         pairCode.setTypeface(Typeface.MONOSPACE);
-        TextView codeHelp = text(getString(R.string.setup_code_help), 13, MUTED);
+        TextView codeHelp = text(getString(R.string.setup_code_help), 13, look.text2);
+        codeHelp.setLineSpacing(0, 1.1f);
         codeHelp.setPadding(0, dp(6), 0, 0);
 
-        TextView status = text(error == null ? "" : error, 14, ERROR);
+        TextView status = text(error == null ? "" : error, 14, look.danger);
         status.setPadding(0, dp(12), 0, 0);
         status.setVisibility(error == null ? View.GONE : View.VISIBLE);
 
@@ -355,7 +441,7 @@ public class MainActivity extends Activity {
             if (url.isEmpty()) return;
             go.setEnabled(false);
             status.setVisibility(View.VISIBLE);
-            status.setTextColor(MUTED);
+            status.setTextColor(look.text2);
             status.setText(R.string.setup_checking);
             // Typed without http:// or https://: try https first, then plain http (a server at home).
             String typed = address.getText().toString().trim();
@@ -381,7 +467,7 @@ public class MainActivity extends Activity {
                 runOnUiThread(() -> {
                     go.setEnabled(true);
                     if (finalErr != null) {
-                        status.setTextColor(ERROR);
+                        status.setTextColor(look.danger);
                         status.setText(finalErr);
                         return;
                     }
@@ -410,11 +496,11 @@ public class MainActivity extends Activity {
             box.addView(back, fullWidth(dp(10)));
         } else {
             View line = new View(this);
-            line.setBackgroundColor(BORDER);
+            line.setBackgroundColor(look.hairlineStrong);
             LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(1));
             lp.topMargin = dp(22);
             box.addView(line, lp);
-            TextView demoHelp = text(getString(R.string.setup_demo_help), 13, MUTED);
+            TextView demoHelp = text(getString(R.string.setup_demo_help), 13, look.text2);
             demoHelp.setPadding(0, dp(14), 0, 0);
             box.addView(demoHelp);
             Button demo = button(getString(R.string.setup_demo), false);
@@ -432,10 +518,9 @@ public class MainActivity extends Activity {
     private void showOffline(String server) {
         dropWeb();
         LinearLayout box = screen();
-        TextView title = text(getString(R.string.offline_title), 24, TEXT);
-        title.setTypeface(Typeface.DEFAULT_BOLD);
+        TextView title = heading(getString(R.string.offline_title));
         box.addView(title);
-        TextView msg = text(getString(R.string.offline_message, Servers.host(server)), 15, MUTED);
+        TextView msg = text(getString(R.string.offline_message, Servers.host(server)), 15, look.text2);
         msg.setPadding(0, dp(8), 0, 0);
         msg.setLineSpacing(0, 1.15f);
         box.addView(msg);
@@ -451,7 +536,7 @@ public class MainActivity extends Activity {
         for (Servers.Profile p : Servers.list(this)) {
             if (cur != null && p.id.equals(cur.id)) continue;
             if (first) {
-                TextView others = text(getString(R.string.offline_others), 13, MUTED);
+                TextView others = text(getString(R.string.offline_others), 13, look.text2);
                 others.setPadding(0, dp(18), 0, 0);
                 box.addView(others);
                 first = false;
@@ -466,6 +551,7 @@ public class MainActivity extends Activity {
 
     /** Lets go of the web view (switching servers or showing the setup screen). */
     private void dropWeb() {
+        probeThen = null;
         if (web == null) return;
         WebView old = web;
         web = null;
@@ -502,12 +588,21 @@ public class MainActivity extends Activity {
 
             @Override
             public void onReceivedError(WebView view, WebResourceRequest req, WebResourceError err) {
-                if (req.isForMainFrame()) showOffline(server);
+                if (req.isForMainFrame() && probeThen == null) showOffline(server);
             }
 
             @Override
             public void onPageFinished(WebView view, String url) {
+                if (probeThen != null) {
+                    view.postDelayed(() -> measureProbe(server), 150);
+                    return;
+                }
+                if (clearHistoryNext) {
+                    clearHistoryNext = false;
+                    view.clearHistory();
+                }
                 CookieManager.getInstance().flush();
+                view.evaluateJavascript(LOOK_JS, null);
                 deliverShare();
                 deliverRing();
             }
@@ -545,21 +640,28 @@ public class MainActivity extends Activity {
 
         web.addJavascriptInterface(new Bridge(), "SaraPhone");
         CallService.listener = this::callEvent;
+        // No white flash: the web view and the strips under the bars start in the page's theme.
+        web.setBackgroundColor(look.bg);
         root = new FrameLayout(this);
-        root.setBackgroundColor(BG);
+        barTop = look.bg;
+        barBottom = look.bg;
+        root.setBackground(new BarsDrawable());
         root.addView(web, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
-        // Android 15+ draws apps edge to edge: keep the page clear of the status bar, the
-        // navigation/gesture bar and the keyboard.
-        keepClearOfBars(root, 0);
+        String target = server + (pairPath(intent));
+        Boolean insetsWork = webInsetsWork();
+        edge = Build.VERSION.SDK_INT >= 30 && Boolean.TRUE.equals(insetsWork) && Net.prefs(this).getBoolean("cover:" + Servers.host(server), true);
+        // Android 15+ draws apps edge to edge: the page either draws under the bars itself
+        // (safe-area insets), or the app keeps it clear of the status bar, the navigation/gesture
+        // bar and the keyboard and paints the bars in the page's colours.
+        webInsets(root);
         setContentView(root);
+        paintBars(barTop, barBottom);
         if (lockOn() && locked) {
             locked = false;
             lock();
         }
-        String conv = intent == null ? null : intent.getStringExtra("conv");
-        String pair = intent == null ? null : intent.getStringExtra("pair");
-        boolean demo = intent != null && intent.getBooleanExtra("demo", false);
-        web.loadUrl(server + (pair != null ? "/pair#" + Uri.encode(pair) : demo ? "/?demo=1" : conv != null ? "/#c=" + Uri.encode(conv) : "/"));
+        if (Build.VERSION.SDK_INT >= 30 && insetsWork == null) probe(target);
+        else web.loadUrl(target);
 
         // Notifications: ask once (Android 13+), then check for her messages in the background.
         if (Build.VERSION.SDK_INT >= 33 && !has(Manifest.permission.POST_NOTIFICATIONS)) {
@@ -568,14 +670,241 @@ public class MainActivity extends Activity {
         InboxJob.schedule(this);
     }
 
-    /** Pads a screen so it stays clear of the status bar, gesture bar, cutout and keyboard. */
+    private static String pairPath(Intent intent) {
+        String conv = intent == null ? null : intent.getStringExtra("conv");
+        String pair = intent == null ? null : intent.getStringExtra("pair");
+        boolean demo = intent != null && intent.getBooleanExtra("demo", false);
+        return pair != null ? "/pair#" + Uri.encode(pair) : demo ? "/?demo=1" : conv != null ? "/#c=" + Uri.encode(conv) : "/";
+    }
+
+    // ---------- Bars, safe areas and the page's theme (the new look, 2.7) ----------
+
+    /** See-through status and navigation bars (Android 11+); the screen under them shows through. */
+    @SuppressWarnings("deprecation")
+    private void setupWindow() {
+        android.view.Window w = getWindow();
+        if (Build.VERSION.SDK_INT >= 30) {
+            w.setDecorFitsSystemWindows(false);
+            w.setStatusBarColor(Color.TRANSPARENT);
+            w.setNavigationBarColor(Color.TRANSPARENT);
+            w.setStatusBarContrastEnforced(false);
+            w.setNavigationBarContrastEnforced(false);
+        }
+    }
+
+    /**
+     * The colours under the status bar (top) and navigation bar (bottom), and light or dark icons
+     * to go with them. With the bars see-through (Android 11+) the root's background shows there;
+     * older Android colours the bars themselves.
+     */
+    @SuppressWarnings("deprecation")
+    private void paintBars(int top, int bottom) {
+        barTop = top;
+        barBottom = bottom;
+        android.view.Window w = getWindow();
+        boolean lightTop = Look.isLight(top), lightBottom = Look.isLight(bottom);
+        if (Build.VERSION.SDK_INT >= 30) {
+            android.view.WindowInsetsController c = w.getInsetsController();
+            if (c != null) {
+                int status = android.view.WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS;
+                int nav = android.view.WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS;
+                c.setSystemBarsAppearance((lightTop ? status : 0) | (lightBottom ? nav : 0), status | nav);
+            }
+        } else {
+            w.setStatusBarColor(top);
+            w.setNavigationBarColor(bottom);
+            View d = w.getDecorView();
+            int f = d.getSystemUiVisibility() & ~(View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR | View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR);
+            if (lightTop) f |= View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR;
+            if (lightBottom) f |= View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR;
+            d.setSystemUiVisibility(f);
+        }
+        if (root != null) root.invalidate();
+    }
+
+    /** The web view's root: the page's top colour under the status bar, its bottom colour under the navigation bar. */
+    private final class BarsDrawable extends android.graphics.drawable.Drawable {
+        private final android.graphics.Paint paint = new android.graphics.Paint();
+
+        @Override
+        public void draw(android.graphics.Canvas c) {
+            android.graphics.Rect b = getBounds();
+            int split = root == null ? b.height() / 2 : Math.max(root.getPaddingTop(), b.height() - root.getPaddingBottom());
+            paint.setColor(barTop);
+            c.drawRect(b.left, b.top, b.right, b.top + split, paint);
+            paint.setColor(barBottom);
+            c.drawRect(b.left, b.top + split, b.right, b.bottom, paint);
+        }
+
+        @Override
+        public void setAlpha(int alpha) {
+        }
+
+        @Override
+        public void setColorFilter(android.graphics.ColorFilter cf) {
+        }
+
+        @Override
+        @SuppressWarnings("deprecation")
+        public int getOpacity() {
+            return android.graphics.PixelFormat.OPAQUE;
+        }
+    }
+
+    /** Pads one of the app's own screens so it stays clear of the bars, cutout and keyboard. */
     private static void keepClearOfBars(View v, int extra) {
+        if (Build.VERSION.SDK_INT < 30) {
+            v.setPadding(extra, extra, extra, extra);
+            return; // the system keeps the window clear of the bars (and resizes for the keyboard)
+        }
         v.setOnApplyWindowInsetsListener((view, insets) -> {
             android.graphics.Insets bars = insets.getInsets(android.view.WindowInsets.Type.systemBars() | android.view.WindowInsets.Type.displayCutout());
             android.graphics.Insets ime = insets.getInsets(android.view.WindowInsets.Type.ime());
             view.setPadding(bars.left + extra, bars.top + extra, bars.right + extra, Math.max(bars.bottom, ime.bottom) + extra);
             return android.view.WindowInsets.CONSUMED;
         });
+    }
+
+    /**
+     * The web view's insets. Edge to edge: the page gets the bars as env(safe-area-inset-*) and
+     * draws under them; only the keyboard is kept clear (and the page then gets no bottom inset,
+     * since the navigation bar is behind the keyboard). Otherwise the page is kept clear of all of
+     * them and sees no insets, so nothing is padded twice.
+     */
+    private void webInsets(FrameLayout v) {
+        if (Build.VERSION.SDK_INT < 30) return; // the system keeps the window clear of the bars
+        v.setOnApplyWindowInsetsListener((view, insets) -> {
+            int sb = android.view.WindowInsets.Type.systemBars() | android.view.WindowInsets.Type.displayCutout();
+            android.graphics.Insets bars = insets.getInsets(sb);
+            android.graphics.Insets ime = insets.getInsets(android.view.WindowInsets.Type.ime());
+            boolean keyboard = ime.bottom > bars.bottom;
+            if (!edge) {
+                view.setPadding(bars.left, bars.top, bars.right, Math.max(bars.bottom, ime.bottom));
+                return android.view.WindowInsets.CONSUMED;
+            }
+            view.setPadding(0, 0, 0, keyboard ? ime.bottom : 0);
+            if (!keyboard) return insets;
+            return new android.view.WindowInsets.Builder(insets)
+                    .setInsets(android.view.WindowInsets.Type.systemBars(), android.graphics.Insets.of(bars.left, bars.top, bars.right, 0))
+                    .setInsets(android.view.WindowInsets.Type.displayCutout(), android.graphics.Insets.of(bars.left, bars.top, bars.right, 0))
+                    .setInsets(android.view.WindowInsets.Type.ime(), android.graphics.Insets.NONE)
+                    .build();
+        });
+        v.requestApplyInsets();
+    }
+
+    /** This web view's version, for remembering whether it reports safe-area insets. */
+    private static String webViewVersion() {
+        android.content.pm.PackageInfo p = WebView.getCurrentWebViewPackage();
+        return p == null ? "?" : p.packageName + "@" + p.versionName;
+    }
+
+    /** Does this phone's web view give the page the bars as env(safe-area-inset-*)? null: not checked yet. */
+    private Boolean webInsetsWork() {
+        String saved = Net.prefs(this).getString("webInsets", "");
+        String v = webViewVersion();
+        if (!saved.startsWith(v + "=")) return null;
+        return saved.endsWith("=yes");
+    }
+
+    /** The check (once per web view version): a tiny page edge to edge reads its safe-area insets. */
+    private void probe(String then) {
+        probeThen = then;
+        edge = true;
+        if (root != null) root.requestApplyInsets();
+        web.loadDataWithBaseURL(null, PROBE_HTML, "text/html", "utf-8", null);
+        String mine = then;
+        web.postDelayed(() -> {
+            if (probeThen != null && probeThen.equals(mine)) finishProbe(null); // no answer: keep it clear of the bars
+        }, 2500);
+    }
+
+    private static final String PROBE_HTML = "<!doctype html><meta name=\"viewport\" content=\"width=device-width,initial-scale=1,viewport-fit=cover\">"
+            + "<style>html,body{margin:0;height:100%;background:transparent}#p{position:fixed;left:0;right:0;top:0;bottom:0;"
+            + "padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}</style><div id=\"p\"></div>";
+
+    private void measureProbe(String server) {
+        if (web == null || probeThen == null) return;
+        web.evaluateJavascript("(function(){var s=getComputedStyle(document.getElementById('p'));return JSON.stringify({t:parseFloat(s.paddingTop)||0,b:parseFloat(s.paddingBottom)||0,r:devicePixelRatio||1})})()", result -> {
+            Boolean ok = null;
+            try {
+                JSONObject j = new JSONObject(new JSONArray("[" + result + "]").getString(0));
+                android.view.WindowInsets wi = root == null ? null : root.getRootWindowInsets();
+                if (wi != null && Build.VERSION.SDK_INT >= 30) {
+                    android.graphics.Insets bars = wi.getInsets(android.view.WindowInsets.Type.systemBars() | android.view.WindowInsets.Type.displayCutout());
+                    double r = j.getDouble("r"), t = j.getDouble("t") * r, b = j.getDouble("b") * r;
+                    boolean topOk = bars.top > 0 && Math.abs(t - bars.top) <= Math.max(4, bars.top * 0.25);
+                    boolean bottomOk = bars.bottom == 0 || Math.abs(b - bars.bottom) <= Math.max(4, bars.bottom * 0.25);
+                    ok = topOk && bottomOk;
+                    android.util.Log.i("Sara", "Safe-area check (" + webViewVersion() + "): page top " + t + " px, bottom " + b + " px; bars " + bars.top + "/" + bars.bottom + " px: " + (ok ? "edge to edge" : "kept clear"));
+                }
+            } catch (Exception e) {
+                ok = null;
+            }
+            finishProbe(ok);
+        });
+    }
+
+    private void finishProbe(Boolean ok) {
+        String then = probeThen;
+        if (then == null) return;
+        probeThen = null;
+        if (ok != null) Net.prefs(this).edit().putString("webInsets", webViewVersion() + "=" + (ok ? "yes" : "no")).apply();
+        String server = Net.server(this);
+        edge = Boolean.TRUE.equals(ok) && server != null && Net.prefs(this).getBoolean("cover:" + Servers.host(server), true);
+        if (root != null) root.requestApplyInsets();
+        if (web == null) return;
+        clearHistoryNext = true;
+        web.loadUrl(then);
+    }
+
+    /**
+     * Runs in each page of her server once loaded (the app's own script, not the page's): tells the
+     * app the theme the page shows (html[data-theme], set by web/theme-boot.js and the page's
+     * appearance settings), the colours at its top and bottom edge (for the bars; the call screen
+     * stays dark in Day too) and whether it draws under the bars (viewport-fit=cover). Checked
+     * when the page's theme changes and once a second (cheap: two elementFromPoint calls).
+     */
+    private static final String LOOK_JS = "(function(){if(window.__saraLook)return window.__saraLook();var P=window.SaraPhone;if(!P||!P.look)return;"
+            + "var last='';function hex(n){n=Math.max(0,Math.min(255,Math.round(n)));return(n<16?'0':'')+n.toString(16)}"
+            + "function parse(c){if(!c)return null;var m=c.match(/-?[\\d.]+/g);if(!m||m.length<3)return null;var k=/^color\\(/.test(c)?255:1;"
+            + "return[+m[0]*k,+m[1]*k,+m[2]*k,m.length>3?+m[3]:1]}"
+            + "function at(y,base){var e=document.elementFromPoint(innerWidth/2,y),L=[];while(e&&e.nodeType===1){var c=parse(getComputedStyle(e).backgroundColor);"
+            + "if(c&&c[3]>0){L.push(c);if(c[3]>=1)break}e=e.parentElement}"
+            // An open modal dialog dims the page under it with its ::backdrop.
+            + "var d=document.querySelector('dialog[open]');try{if(d&&d.matches(':modal')){var r=d.getBoundingClientRect();if(y<r.top||y>r.bottom){var k2=parse(getComputedStyle(d,'::backdrop').backgroundColor);if(k2&&k2[3]>0)L.unshift(k2)}}}catch(x){}"
+            + "var o=base.slice();for(var i=L.length-1;i>=0;i--){var a=L[i][3];o=[o[0]*(1-a)+L[i][0]*a,o[1]*(1-a)+L[i][1]*a,o[2]*(1-a)+L[i][2]*a]}"
+            + "return'#'+hex(o[0])+hex(o[1])+hex(o[2])}"
+            + "function send(){var R=document.documentElement,day=R.getAttribute('data-theme')==='light',m=document.querySelector('meta[name=\"theme-color\"]'),"
+            + "base=parse(getComputedStyle(document.body||R).backgroundColor)||(day?[250,247,245]:[15,13,23]);if(base[3]<1)base=day?[250,247,245]:[15,13,23];"
+            + "if(m&&/^#[0-9a-f]{6}$/i.test(m.content))base=[parseInt(m.content.slice(1,3),16),parseInt(m.content.slice(3,5),16),parseInt(m.content.slice(5,7),16)];"
+            + "var v=document.querySelector('meta[name=\"viewport\"]'),cover=!!(v&&/viewport-fit\\s*=\\s*cover/.test(v.content)),"
+            + "top=at(1,base),bot=at(innerHeight-1,base),k=[day,top,bot,cover].join('|');if(k===last)return;last=k;P.look(day?'day':'night',top,bot,cover)}"
+            + "function safe(){try{send()}catch(e){}}window.__saraLook=safe;setInterval(function(){if(!document.hidden)safe()},1000);addEventListener('resize',safe);"
+            + "try{new MutationObserver(safe).observe(document.documentElement,{attributes:true,attributeFilter:['data-theme','class']})}catch(e){}safe()})()";
+
+    /** The page's report (LOOK_JS): theme, edge colours, viewport-fit=cover. */
+    private void pageLook(String theme, String top, String bottom, boolean cover) {
+        if (web == null || probeThen != null) return;
+        boolean day = "day".equals(theme);
+        if (Look.save(this, day)) {
+            look = Look.saved(this);
+            lockView = null;
+            // Dialogs opened from now on, and the splash at the next start (Android 13+), match.
+            getTheme().applyStyle(day ? R.style.SaraDialogsDay : R.style.SaraDialogsNight, true);
+            if (Build.VERSION.SDK_INT >= 33) getSplashScreen().setSplashScreenTheme(day ? R.style.Sara_Day : R.style.Sara);
+            web.setBackgroundColor(look.bg);
+        }
+        paintBars(Look.parse(top, look.bg), Look.parse(bottom, look.bg));
+        String server = Net.server(this);
+        if (server != null && Net.prefs(this).getBoolean("cover:" + Servers.host(server), true) != cover) {
+            Net.prefs(this).edit().putBoolean("cover:" + Servers.host(server), cover).apply();
+        }
+        boolean want = Build.VERSION.SDK_INT >= 30 && Boolean.TRUE.equals(webInsetsWork()) && cover;
+        if (want != edge) {
+            edge = want;
+            if (root != null) root.requestApplyInsets();
+        }
     }
 
     // ---------- Share to her from any app (Phase 18) ----------
@@ -719,11 +1048,11 @@ public class MainActivity extends Activity {
             LinearLayout box = new LinearLayout(this);
             box.setOrientation(LinearLayout.VERTICAL);
             box.setGravity(Gravity.CENTER);
-            box.setBackgroundColor(BG);
+            box.setBackground(pageBackground());
             box.setClickable(true);
-            TextView t = text("🔒", 44, TEXT);
+            TextView t = text("🔒", 44, look.text1);
             t.setGravity(Gravity.CENTER);
-            TextView m = text(getString(R.string.lock_locked), 20, TEXT);
+            TextView m = text(getString(R.string.lock_locked), 20, look.text1);
             m.setGravity(Gravity.CENTER);
             m.setPadding(0, dp(8), 0, dp(20));
             Button b = new Button(this);
@@ -874,6 +1203,12 @@ public class MainActivity extends Activity {
 
     /** What the web app can ask the phone app to do (only Sara's own pages load in this window). */
     final class Bridge {
+        /** From the app's own look script (LOOK_JS): the page's theme and edge colours. */
+        @JavascriptInterface
+        public void look(String theme, String top, String bottom, boolean cover) {
+            runOnUiThread(() -> pageLook(theme, top, bottom, cover));
+        }
+
         /** Asks the home screen to place her widget; false if this launcher can't (then: by hand). */
         @JavascriptInterface
         public boolean addWidget() {
@@ -1164,6 +1499,14 @@ public class MainActivity extends Activity {
         CookieManager.getInstance().flush();
         WidgetProvider.refreshAsync(this);
         super.onPause();
+    }
+
+    /** A screen title: 24 sp, semi-bold with the web's tight letter-spacing. */
+    private TextView heading(String s) {
+        TextView t = text(s, 24, look.text1);
+        t.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
+        t.setLetterSpacing(-0.02f);
+        return t;
     }
 
     private TextView text(String s, int sp, int color) {

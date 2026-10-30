@@ -9,7 +9,7 @@ import { botHourlyCapOf, botTurnLimitOf, cleanBotList, DISCORD_VAULT, discordSet
 import { cleanDiscordIds, cleanTelegramIds } from '../bridges/rules.ts';
 import { TELEGRAM_VAULT, telegramSettings } from '../bridges/telegram.ts';
 import type { TurnOptions } from '../chat.ts';
-import { as400, fromPhoneApp, fromSaraApp, HttpError, readJson, SECURITY_HEADERS, send } from '../http.ts';
+import { as400, fromPhoneApp, fromSaraApp, HttpError, readJson, safeDecode, SECURITY_HEADERS, send } from '../http.ts';
 import { appLanguage } from '../i18n.ts';
 import { netFetch, privateLocalOn } from '../net-guard.ts';
 import { cleanOrigins, otherAppsSettings } from '../other-apps.ts';
@@ -18,7 +18,8 @@ import { DEFAULT_REPORT_INBOX, REASON_LABELS, validReason } from '../reports.ts'
 import { disclosureText } from '../safety.ts';
 import { adultModeOn } from '../settings.ts';
 import { clearTodayCache } from '../today.ts';
-import { cleanHomeUrl, HOME_VAULT } from '../tools/home.ts';
+import { ENTITY_ID, haCall, switchPlan } from '../home-switch.ts';
+import { cleanHomeUrl, HOME_VAULT, type HaState } from '../tools/home.ts';
 import { NEXT, type RouteCtx, type RouteHandler } from './context.ts';
 
 /** Hardening M4: the channel of the conversations the Home Assistant integration makes. */
@@ -247,7 +248,34 @@ export function createConnectionsRoutes(ctx: RouteCtx): RouteHandler {
         if (r instanceof Error || !r.ok) throw new HttpError(502, 'Couldn’t read the list from Home Assistant.');
         const all = (await r.json().catch(() => [])) as { entity_id?: string; state?: string; attributes?: { friendly_name?: unknown } }[];
         const list = (Array.isArray(all) ? all : []).filter((x) => typeof x.entity_id === 'string' && (!want.length || want.includes(x.entity_id.split('.')[0])));
-        return send(res, 200, { entities: list.slice(0, 500).map((x) => ({ id: x.entity_id, name: typeof x.attributes?.friendly_name === 'string' ? x.attributes.friendly_name.slice(0, 80) : x.entity_id, state: String(x.state ?? '').slice(0, 40) })) });
+        // 2.7.1: canSwitch = Today's Home tile may switch it itself (src/home-switch.ts); else Ask Sara.
+        const switchable = (x: (typeof list)[number]) => {
+          const plan = switchPlan(x as HaState);
+          return plan.ok || plan.why === 'unreachable';
+        };
+        return send(res, 200, { entities: list.slice(0, 500).map((x) => ({ id: x.entity_id, name: typeof x.attributes?.friendly_name === 'string' ? x.attributes.friendly_name.slice(0, 80) : x.entity_id, state: String(x.state ?? '').slice(0, 40), canSwitch: switchable(x) })) });
+      }
+      // 2.7.1: Today's Home tile switches a light, switch, fan or blind itself (the owner pressing it;
+      // no approval card). Locks, alarms, garage doors and the like are refused: those keep Ask Sara
+      // (src/home-switch.ts). Members never get here (no 'home' in MEMBER_ROUTES); the demo is refused above.
+      if (b === 'entities' && c && parts[3] === 'toggle' && !parts[4] && method === 'POST') {
+        const body = await readJson(req).catch(() => ({}) as Record<string, unknown>);
+        const id = safeDecode(c);
+        if (!ENTITY_ID.test(id)) throw new HttpError(400, 'An entity id looks like light.kitchen.');
+        if (!base || !token) throw new HttpError(400, 'Connect Home Assistant first.');
+        const before = await haCall<HaState>(base, token, `/api/states/${id}`);
+        if (before.status === 404) throw new HttpError(404, 'Home Assistant has no such device.');
+        if (!before.data) throw new HttpError(502, 'Couldn’t reach Home Assistant.');
+        const want = body.to === 'on' || body.to === 'off' ? body.to : undefined;
+        const plan = switchPlan(before.data, want);
+        if (!plan.ok) throw plan.why === 'unreachable' ? new HttpError(409, 'Home Assistant can’t reach it right now.') : new HttpError(403, 'Ask Sara for this one: it only changes after you say yes.', { askSara: true });
+        const done = await haCall(base, token, `/api/services/${plan.domain}/${plan.service}`, { method: 'POST', body: { entity_id: id } });
+        if (!done.status || done.status >= 400) throw new HttpError(502, 'Home Assistant didn’t make the change.');
+        // Read it back, so the tile shows what really happened.
+        const after = await haCall<HaState>(base, token, `/api/states/${id}`);
+        const now = after.data ?? before.data;
+        const name = typeof now.attributes?.friendly_name === 'string' ? now.attributes.friendly_name.slice(0, 80) : id;
+        return send(res, 200, { id, name, state: String(now.state ?? '').slice(0, 40), was: String(before.data.state ?? '').slice(0, 40), asked: plan.to });
       }
       const view = () => ({ ...presenceSettings(app), connected: Boolean(base && token), log: app.presence?.log ?? [] });
       if (b === 'presence' && !c && method === 'GET') return send(res, 200, view());

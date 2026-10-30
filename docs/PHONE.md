@@ -26,7 +26,8 @@ notifications won't work, and it doesn't work away from home.)
 
 - **The web app (works now, iPhone and Android):** open your Sara address in the phone's browser
   (Safari on iPhone, Chrome on Android). Then *Share → Add to Home Screen* (iPhone) or *menu → Add
-  to Home screen / Install app* (Android). It opens like an app.
+  to Home screen / Install app* (Android). It opens like an app. (An iPhone icon added before 2.7.1
+  leaves an empty strip at the bottom: remove it and add it again.)
 - **The Sara app:** for Android it's on [Google Play](https://play.google.com/store/apps/details?id=com.backstagecoding.sara); the iPhone app is coming to the
   App Store as soon as Apple approves it (until then, use the web app on iPhone). The app adds a
   home-screen widget, notifications from the app itself, and calls from her. The Android app can

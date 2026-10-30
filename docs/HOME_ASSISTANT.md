@@ -104,3 +104,12 @@ With both set up, you can say to a voice satellite "Sara, is the garage door ope
 it through direction 1. Changes she'd make that way need an approval, which Home Assistant
 declines (see above): approve changes in the Sara app, or let Home Assistant's own assistant
 handle device commands and use Sara for conversation.
+
+## Switches on Today (2.7.1)
+
+The Today page's Home tile shows your favourite devices (picked on that device). Lights, switches, fans,
+`input_boolean`s and blinds / shades / shutters / curtains / awnings get an on/off switch: that's you
+acting directly, so there is no approval card. Locks, alarms, climate, media players, garage doors, gates,
+doors, windows and anything whose name sounds like one (garage, gate, door, lock, alarm, siren, security,
+safe, vault) only show their state with *Ask Sara*, so her approval rules apply. Owner only; not on the
+demo. API: `POST /api/home/entities/<entity_id>/toggle` → `{ id, name, state, was }`.

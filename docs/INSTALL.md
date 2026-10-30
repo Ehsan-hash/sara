@@ -653,6 +653,9 @@ systems set it up together with the desktop app. What differs from Linux:
 
 ### Mac
 
+Only the app, for a Sara on another computer or server? Step-by-step guide to hand to someone:
+[MAC_APP_REMOTE.md](MAC_APP_REMOTE.md).
+
 One download, `Sara-<version>.dmg`, holds the Sara app with her server and its own Node inside
 (Apple silicon and Intel, signed and notarized). macOS 13 or newer; no administrator rights are
 needed.

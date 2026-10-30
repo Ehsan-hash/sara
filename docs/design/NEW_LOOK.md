@@ -97,3 +97,12 @@ header there.
 Mandatory safety layer unchanged (AI disclosure screens and notices keep their place and wording); every
 setting keeps a **?** tip; all text through `t()` in six languages; ids, deep links, keyboard shortcuts and
 the tour keep working; 44 px touch targets; screen-reader labels; works at 320 px wide and 200% zoom.
+
+## Polish pass (2.8, planned)
+
+Owner, 2026-10-29: "I like the look but want to do a polish pass to really push up the graphics feel
+another notch." Concepts `outputs/ui-review/concepts/D-polish-desktop.jpg` and `E-polish-phone.jpg`: a slow
+aurora gradient behind the glass (plum, rose, violet; still under reduced motion), a display serif for big
+greetings and headings, layered glass with inner glow edges, her portrait with a luminous mood halo,
+custom line icons instead of emoji in the chrome, small illustrated weather art and progress rings, a
+floating glass bottom bar with a glowing active tab on phones. Keep it calm and readable (AA contrast).

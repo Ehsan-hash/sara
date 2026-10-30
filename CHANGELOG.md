@@ -5,6 +5,22 @@ Format: newest first. Semantic versions since 1.0.0 (before that `0.<phase>.<pat
 
 ## Unreleased
 
+## 2.7.1 (2026-10-29): iPhone home-screen fix, Today first, home switches
+
+- **Fix (iPhone, Sara added to the home screen from Safari):** the top of every screen sat under the clock
+  with an empty strip at the bottom. The page now pads for the status bar everywhere, can't be scrolled
+  out of place, and comes back to the top after the keyboard closes; the message box no longer makes
+  Safari zoom in. **Remove the old home-screen icon and add it again from Safari** to also get the bottom
+  strip back.
+- **Sara opens on Today.** Links to a conversation, notification clicks and `/#view=` still open what they
+  point to; Chat is one tap away.
+- **Home switches on Today:** lights, switches, fans and blinds turn on and off right from the Home tile
+  (`POST /api/home/entities/<id>/toggle`, owner only, never on the demo). Locks, alarms, garage doors,
+  gates and anything that sounds like them keep *Ask Sara*.
+- **Phone apps (next store builds):** setup, pairing, "Can't reach your Sara" and the splash screen in the
+  Night / Day look; status and navigation bars take the page's colours; no white flash; the iPhone app
+  follows the phone's light / dark setting again.
+
 ## 2.7.0 (2026-10-29): the new look, part 3: Today and the apps
 
 - **Today as tiles:** her face, mood and a greeting, then weather (from the briefing's place; hidden when

@@ -28,7 +28,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="@string/app_name"
-            android:textColor="#FFFFFF"
+            android:textColor="#F1EDF7"
             android:textSize="16sp"
             android:textStyle="bold" />
 
@@ -36,7 +36,7 @@
             android:id="@+id/mood"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:textColor="#C58CFF"
+            android:textColor="#F08AA5"
             android:textSize="12sp" />
 
         <TextView
@@ -46,7 +46,7 @@
             android:ellipsize="end"
             android:maxLines="2"
             android:text="Tap to open"
-            android:textColor="#D0CCD8"
+            android:textColor="#AEA6BD"
             android:textSize="13sp" />
     </LinearLayout>
 </LinearLayout>
