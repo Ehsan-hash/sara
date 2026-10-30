@@ -113,6 +113,8 @@ export interface AppContext {
   findings?: FindingStore;
   security?: SecurityPass;
   fixes?: import('./security/fix.ts').FixBranches;
+  /** Phase 82 (harness M7): the threat-model pass after coding turns (src/security/threats.ts). */
+  threats?: import('./security/threats.ts').ThreatPass;
   /** MCP server connections (optional in tests). */
   mcp?: McpManager;
   /** Secret scrubbing for tool output and arguments. */

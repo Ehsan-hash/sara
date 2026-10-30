@@ -5,6 +5,25 @@ Format: newest first. Semantic versions since 1.0.0 (before that `0.<phase>.<pat
 
 ## Unreleased
 
+## 2.15.0 (2026-10-30): the threat model and a fix-only second pass (harness track, Phase 82)
+
+- **Threat modeling after coding turns:** she finds the entry points of the changed code (Express, Koa,
+  Fastify and node:http routes, uploads, message handlers, Flask, FastAPI, Django, Go net/http/gin/chi,
+  the command line) and follows request values across files, at most 4 calls deep, to risky lines:
+  shell, SQL, file paths, outgoing URLs (SSRF), deserializing, HTML, redirects, eval, secrets in
+  responses, unauthenticated state changes, logins without a rate limit. Recognised guards
+  (placeholders, basename / root checks, allowlists, sign-in middleware, limiters, escaping…) count.
+- **No theater:** a threat is kept only with its entry and sink lines quoted verbatim and the path
+  named. The Reviewing model may add threats only on a listed entry, with both quotes checked.
+- **Threat model tab** in Findings: surfaces, trust boundaries, open threats, what changed this turn
+  (also kept as markdown in the data folder).
+- **Fix these:** a second pass whose only job is fixing this turn's threats. One local branch, edits
+  refused outside the threats' functions, the threat rule re-checked, the other checks mustn't find
+  more, your tests run in the sandbox, then Apply / Keep / Discard. Budgeted; never pushes.
+- Settings → Coding → *Threat model after coding turns*: Report and offer the fix pass (default) /
+  Report only / Off. Never in everyday chat.
+- Measured: held-out precision 100 %, recall 92 % ([RESULTS](docs/RESULTS.md)).
+
 ## 2.14.0 (2026-10-30): the security pass (harness track, Phase 81)
 
 - **One findings list** for everything the harness finds (security, advisories, sandbox, plan checks):

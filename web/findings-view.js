@@ -5,6 +5,9 @@
 // Apply to my branch / Keep the branch / Discard), Dismiss or Accept with a reason. Also the small
 // "Security pass" card under a coding reply, the approval card's "Known vulnerability" section and
 // the line under her step after the install check. Server: src/security/*.ts, /api/findings.
+// Phase 82 (M7): threats show their entry point → dangerous line path; the Threat model tab
+// (surfaces, trust boundaries, open threats, what changed; /api/threat-model) and the small
+// "Threat model" card under a coding reply with "Fix these" (the fix-only second pass).
 import { locale, serverText, t } from './naming.js';
 import { icon } from './icons.js';
 
@@ -61,9 +64,42 @@ const RULE = {
   'weak-crypto': [() => t('Weak cryptography for a secret'), () => t('Use a slow password hash (scrypt, bcrypt, argon2), SHA-256 or better for signatures, a secure random source for tokens and an authenticated cipher.')],
   'inner-html': [() => t('HTML built from input'), () => t('Set textContent (or create elements) instead of innerHTML for anything from the user, the address bar or the server.')],
   'debug-on': [() => t('Debug mode switched on in code'), () => t('Read debug mode from the environment and keep it off by default.')],
+  // Phase 82: the threat rules (src/security/threat-graph.ts THREAT_RULES).
+  'threat:shell': [() => t('Outside input reaches a shell command'), () => t('Run a fixed program with an argument list (execFile / spawn without a shell / subprocess with a list) and check the value against what is allowed first.')],
+  'threat:sql': [() => t('Outside input reaches an SQL query'), () => t('Pass the value as a parameter (? / $1 / %s with the values separately) instead of putting it into the query text.')],
+  'threat:path': [() => t('Outside input chooses a file path'), () => t('Keep only the file name (basename), or resolve the path inside the allowed folder and refuse it unless the result still starts with that folder.')],
+  'threat:ssrf': [() => t('Outside input chooses where the server connects'), () => t('Use a fixed host, or check the URL\'s host against an allowlist before the request; never let input pick the address.')],
+  'threat:deserialize': [() => t('Outside input is loaded with an unsafe loader'), () => t('Load outside data as JSON or with a safe loader (yaml.safe_load); pickle, marshal and unserialize can run code from the data.')],
+  'threat:html': [() => t('Outside input is written into HTML'), () => t('Escape the value (or set textContent) before it goes into the page, or send it as JSON.')],
+  'threat:redirect': [() => t('Outside input chooses where a redirect goes'), () => t('Redirect only to local paths (starting with one "/" and not "//") or to an allowlist of addresses.')],
+  'threat:eval': [() => t('Outside input is run as code'), () => t('Never run outside input as code; parse the data (JSON.parse, a small parser) or map it to fixed actions.')],
+  'threat:secret': [() => t('A secret is sent back to the caller'), () => t('Send only the fields the caller needs; keep environment variables, keys and passwords on the server.')],
+  'threat:auth': [() => t('Anyone can reach a change without signing in'), () => t('Add the sign-in check (the middleware or decorator the project uses) to this route, or check the user inside the handler before the change.')],
+  'threat:ratelimit': [() => t('A sign-in route with no rate limit'), () => t('Limit attempts per address and account (express-rate-limit, Flask-Limiter, slowapi, a counter with a lockout) so passwords can\'t be guessed quickly.')],
 };
 const titleOf = (f) => (RULE[f.rule]?.[0] ?? (() => f.title))();
-const adviceOf = (f) => (f.source === 'security' && RULE[f.rule] ? RULE[f.rule][1]() : f.advice);
+const adviceOf = (f) => ((f.source === 'security' || f.source === 'threat') && f.origin !== 'model' && RULE[f.rule] ? RULE[f.rule][1]() : f.advice);
+/** STRIDE categories of threats, in the app language. */
+const CATEGORY = {
+  Spoofing: () => t('Spoofing'),
+  Tampering: () => t('Tampering'),
+  Repudiation: () => t('Repudiation'),
+  'Information disclosure': () => t('Information disclosure'),
+  'Denial of service': () => t('Denial of service'),
+  'Elevation of privilege': () => t('Elevation of privilege'),
+};
+/** Trust boundaries in the threat model summary (src/security/threats.ts threatModelOf). */
+const BOUNDARY = {
+  'network-in': () => t('Network → your server (HTTP routes, uploads)'),
+  'messages-in': () => t('Messages from clients (WebSocket, workers)'),
+  'local-in': () => t('Command line and environment'),
+  outbound: () => t('Your server → other servers'),
+  database: () => t('Your server → database'),
+  files: () => t('Your server → files'),
+  shell: () => t('Your server → commands and code'),
+  deserialize: () => t('Loading serialized data'),
+  'html-out': () => t('Your server → browsers (HTML, redirects)'),
+};
 const REASONS = [
   ['Not a real problem', () => t('Not a real problem')],
   ['Test or example code', () => t('Test or example code')],
@@ -71,7 +107,7 @@ const REASONS = [
   ['Fixed another way', () => t('Fixed another way')],
 ];
 
-const st = { filter: { workspace: '', status: 'open', severity: '', source: '', runId: 0, conversationId: '' }, data: null, open: new Set(), poll: null };
+const st = { filter: { workspace: '', status: 'open', severity: '', source: '', runId: 0, conversationId: '' }, data: null, open: new Set(), poll: null, tab: 'list' };
 
 function sevChip(sev) {
   return el('span', `fnd-sev sev-${sev}`, (SEV[sev] ?? SEV.info)());
@@ -104,7 +140,11 @@ function fixPanel(f, refresh) {
   };
   head.append(el('span', '', (words[fix.state] ?? words.working)()));
   box.append(head);
-  if (fix.recheck) box.append(el('p', `small ${fix.recheck.fixed ? 'fnd-pass' : 'fnd-fail'}`, fix.recheck.fixed ? t('Re-check: the problem is gone ({before} → {after}).', { before: fix.recheck.before, after: fix.recheck.after }) : t('Re-check: still found ({after}).', { after: fix.recheck.after })));
+  if (fix.batch?.results) {
+    const ul = el('ul', 'fnd-batch-list small');
+    for (const [id, r] of Object.entries(fix.batch.results)) ul.append(el('li', r.fixed ? 'fnd-pass' : 'fnd-fail', r.fixed ? t('#{id}: the threat rule no longer finds it', { id }) : t('#{id}: still found', { id })));
+    box.append(ul);
+  } else if (fix.recheck) box.append(el('p', `small ${fix.recheck.fixed ? 'fnd-pass' : 'fnd-fail'}`, fix.recheck.fixed ? t('Re-check: the problem is gone ({before} → {after}).', { before: fix.recheck.before, after: fix.recheck.after }) : t('Re-check: still found ({after}).', { after: fix.recheck.after })));
   if (fix.tests) {
     const tline = !fix.tests.ran ? t('Tests not run: {why}', { why: fix.tests.note ?? '' }) : fix.tests.exitCode === 0 ? t('Tests pass ({command}) in a sandbox copy · {s} s', { command: fix.tests.command, s: (fix.tests.ms / 1000).toLocaleString(locale(), { maximumFractionDigits: 1 }) }) : t('Tests fail ({command}) in a sandbox copy', { command: fix.tests.command });
     box.append(el('p', `small ${fix.tests.ran && fix.tests.exitCode === 0 ? 'fnd-pass' : 'fnd-fail'}`, tline));
@@ -190,7 +230,7 @@ function findingCard(f, refresh) {
   const card = el('article', `fnd-card sev-${f.severity} status-${f.status}`);
   card.dataset.id = String(f.id);
   const head = el('div', 'fnd-head');
-  head.append(glyph(f.source === 'advisory' ? 'shield' : f.source === 'sandbox' ? 'sandbox' : f.source === 'contradiction' ? 'warn' : 'shield'), sevChip(f.severity), el('strong', 'fnd-title', titleOf(f)));
+  head.append(glyph(f.source === 'advisory' ? 'shield' : f.source === 'sandbox' ? 'sandbox' : f.source === 'contradiction' ? 'warn' : f.source === 'threat' ? 'compass' : 'shield'), sevChip(f.severity), el('strong', 'fnd-title', titleOf(f)));
   const meta = el('p', 'fnd-meta small muted');
   meta.append(el('span', '', (SOURCE[f.source] ?? (() => f.source))()));
   if (f.origin === 'model') meta.append(el('span', '', t('found by the Reviewing model, quote checked')));
@@ -199,7 +239,8 @@ function findingCard(f, refresh) {
   meta.append(el('span', '', `#${f.id}`));
   if (f.status !== 'open') meta.append(el('span', `fnd-status st-${f.status}`, (STATUS[f.status] ?? STATUS.open)()));
   card.append(head, meta);
-  if (f.quote) card.append(raw(el('pre', 'fnd-quote', f.quote)));
+  if (f.source === 'threat' && f.meta?.entry) card.append(threatPath(f));
+  else if (f.quote) card.append(raw(el('pre', 'fnd-quote', f.quote)));
   const advice = adviceOf(f);
   if (advice) card.append(el('p', 'small', advice));
   if (f.source === 'advisory' && Array.isArray(f.meta?.vulns)) {
@@ -216,7 +257,9 @@ function findingCard(f, refresh) {
     card.append(ul);
   }
   if (f.reason) card.append(el('p', 'small muted fnd-why', t('Why: {reason}', { reason: f.reason })));
-  if (f.fix && f.fix.state !== 'discarded') card.append(fixPanel(f, refresh));
+  const member = f.fix?.batch && f.fix.batch.lead !== f.id;
+  if (member && f.fix.state !== 'discarded') card.append(el('p', 'small muted fnd-batch', t('In the fix pass with #{id}: its branch and diff are there.', { id: f.fix.batch.lead })));
+  else if (f.fix && f.fix.state !== 'discarded') card.append(fixPanel(f, refresh));
   // While a fix is being made or waits for your choice, its own buttons are the ones that count.
   const fixBusy = f.fix && (f.fix.state === 'working' || f.fix.state === 'ready');
   if (f.status === 'open' && !fixBusy) {
@@ -297,6 +340,7 @@ export async function refreshFindings() {
   $('#fnd-run-label').textContent = st.filter.runId ? t('Only run #{id}', { id: st.filter.runId }) : st.filter.conversationId ? t('Only this conversation') : '';
   $('#fnd-fixall').disabled = !st.filter.workspace || !(open.high + open.block);
   $('#fnd-scan').disabled = !st.filter.workspace && !st.filter.conversationId;
+  if (st.tab === 'threats') return void renderThreatModel();
   const list = $('#fnd-list');
   if (!data.findings.length) {
     list.replaceChildren(el('p', 'muted fnd-empty', st.filter.status === 'open' ? t('Nothing open here. Her security pass checks the files she changes after each coding turn.') : t('No findings match these filters.')));
@@ -308,12 +352,13 @@ export async function refreshFindings() {
 
 /** Opens the Findings window, optionally for one project, run or conversation. */
 export async function openFindings(opts = {}) {
-  st.filter = { workspace: opts.workspace ?? '', status: opts.status ?? 'open', severity: '', source: '', runId: opts.runId ?? 0, conversationId: opts.conversationId ?? '' };
+  st.filter = { workspace: opts.workspace ?? '', status: opts.status ?? 'open', severity: '', source: opts.source ?? '', runId: opts.runId ?? 0, conversationId: opts.conversationId ?? '' };
   $('#fnd-status').value = st.filter.status;
   $('#fnd-severity').value = '';
-  $('#fnd-source').value = '';
+  $('#fnd-source').value = st.filter.source;
   const dlg = $('#findings');
   if (!dlg.open) dlg.showModal();
+  showTab(opts.tab === 'threats' ? 'threats' : 'list');
   await refreshFindings();
 }
 
@@ -361,7 +406,188 @@ export function initFindings() {
     await refreshFindings();
   });
   $('#findings').addEventListener('close', () => clearTimeout(st.poll));
+  $('#fnd-tab-list').addEventListener('click', () => showTab('list'));
+  $('#fnd-tab-threats').addEventListener('click', () => showTab('threats'));
 }
+
+// ---- Phase 82: the threat model ----------------------------------------------------------------
+
+/** A threat's entry point → sink path, each step with its file and line (the quotes are real lines). */
+function threatPath(f) {
+  const box = el('div', 'fnd-threat');
+  const m = f.meta ?? {};
+  const top = el('p', 'small fnd-threat-cat');
+  if (m.category) top.append(el('span', 'fnd-chip', (CATEGORY[m.category] ?? (() => m.category))()));
+  top.append(el('span', 'muted', t('Entry point → dangerous line')));
+  box.append(top);
+  const ol = el('ol', 'fnd-path small');
+  for (const s of Array.isArray(m.path) ? m.path : []) {
+    const li = el('li');
+    li.append(raw(el('span', 'fnd-step', s.label)), raw(el('code', '', `${s.file}:${s.line}`)));
+    ol.append(li);
+  }
+  box.append(ol);
+  if (m.entry?.quote) {
+    box.append(el('p', 'small muted', t('Entry point')));
+    box.append(raw(el('pre', 'fnd-quote', m.entry.quote)));
+  }
+  box.append(el('p', 'small muted', t('Dangerous line')));
+  box.append(raw(el('pre', 'fnd-quote', f.quote ?? '')));
+  return box;
+}
+
+/** "Fix these": the second pass over these open threats (one branch, one diff). */
+async function fixThese(ids, workspace) {
+  return api('/threat-model/fix', { method: 'POST', body: { ids, ...(workspace ? { workspace } : {}) } });
+}
+
+function section(title, ...children) {
+  const s = el('section', 'fnd-tm-section');
+  s.append(el('h3', '', title), ...children);
+  return s;
+}
+
+/** The Threat model tab: surfaces, trust boundaries, open threats, what changed (one project). */
+async function renderThreatModel() {
+  const box = $('#fnd-threats');
+  const ws = st.filter.workspace;
+  if (!ws) return void box.replaceChildren(el('p', 'muted fnd-empty', t('Pick a project to see its threat model.')));
+  let r;
+  try {
+    r = await api(`/threat-model?workspace=${encodeURIComponent(ws)}`);
+  } catch (err) {
+    return void box.replaceChildren(el('p', 'small fnd-fail', err.message));
+  }
+  const m = r.summary;
+  const head = el('div', 'fnd-tm-head');
+  const line = el('p', 'small muted', m ? t('Written {when} from {n} code files. Every threat quotes real lines; nothing was run.', { when: new Date(m.at).toLocaleString(locale()), n: m.files }) : t('No threat model for this project yet. It is written after a coding turn that changes files, or now.'));
+  const row = el('div', 'row fnd-actions');
+  const scan = el('button', 'ghost', t('Check the whole project'));
+  scan.type = 'button';
+  scan.addEventListener('click', async () => {
+    scan.disabled = true;
+    line.textContent = t('Checking…');
+    try {
+      await api('/threat-model/scan', { method: 'POST', body: { workspace: ws } });
+    } catch (err) {
+      line.textContent = err.message;
+    }
+    await renderThreatModel();
+  });
+  row.append(scan);
+  const openIds = (m?.open ?? []).map((o) => o.id);
+  const turnIds = (m?.changed?.ids ?? []).filter((id) => openIds.includes(id));
+  if (r.mode === 'offer' && turnIds.length) {
+    const fx = el('button', '', t('Fix these'));
+    fx.type = 'button';
+    fx.addEventListener('click', async () => {
+      if (!confirm(t('Make one local fix branch for these {n} threats? The Coding model may only fix them: no new features, no refactors. Nothing is pushed; you choose Apply, Keep or Discard.', { n: turnIds.length }))) return;
+      fx.disabled = true;
+      try {
+        await fixThese(turnIds, ws);
+        line.textContent = t('The fix pass started: see its progress in Findings.');
+      } catch (err) {
+        line.textContent = err.message;
+      }
+    });
+    row.append(fx);
+  }
+  head.append(line, row);
+  if (!m) return void box.replaceChildren(head);
+  const surf = el('ul', 'fnd-tm-list small');
+  for (const e of m.entries) {
+    const li = el('li');
+    li.append(raw(el('code', '', e.label)), raw(el('span', 'muted', ` ${e.file}:${e.line}`)));
+    if (e.kind === 'http' || e.kind === 'upload') li.append(el('span', `fnd-chip ${e.authed ? 'chip-ok' : 'chip-warn'}`, e.authed ? t('signed in') : t('no sign-in check seen')));
+    if (e.upload) li.append(el('span', 'fnd-chip', t('file upload')));
+    if (e.kind === 'message') li.append(el('span', 'fnd-chip', t('messages')));
+    if (e.kind === 'cli') li.append(el('span', 'fnd-chip', t('command line')));
+    surf.append(li);
+  }
+  if (!m.entries.length) surf.append(el('li', 'muted', t('No entry points found.')));
+  if (m.envReads) surf.append(el('li', 'muted', t('Environment variables read in {n} places (set by whoever runs the app; no threats from these).', { n: m.envReads })));
+  const bounds = el('ul', 'fnd-tm-list small');
+  for (const b of m.boundaries) {
+    const li = el('li');
+    li.append(el('span', '', (BOUNDARY[b.id] ?? (() => b.id))()), el('span', 'fnd-chip', String(b.count)));
+    bounds.append(li);
+  }
+  const open = el('div', 'fnd-list');
+  for (const o of m.open) {
+    const c = el('article', `fnd-card sev-${o.severity}`);
+    const h = el('div', 'fnd-head');
+    h.append(glyph('shield'), sevChip(o.severity), el('strong', 'fnd-title', (RULE[o.rule]?.[0] ?? (() => o.title))()), raw(el('span', 'muted small', `#${o.id}`)));
+    c.append(h);
+    if (o.category) c.append(el('p', 'small muted', (CATEGORY[o.category] ?? (() => o.category))()));
+    c.append(raw(el('p', 'small fnd-tm-path', o.path || `${o.entry} → ${o.sink}`)));
+    if (o.origin === 'model') c.append(el('p', 'small muted', t('found by the Reviewing model, quote checked')));
+    open.append(c);
+  }
+  if (!m.open.length) open.append(el('p', 'muted small', t('None open.')));
+  const changed = el('p', 'small');
+  changed.textContent = m.changed.files.length ? t('Files this turn: {files}', { files: m.changed.files.join(', ') }) : t('A check you started (the whole project).');
+  const news = el('p', 'small muted', t('New threats: {n} · open from this pass: {open}', { n: m.changed.newIds.length, open: m.changed.ids.length }));
+  box.replaceChildren(head, section(t('Surfaces (entry points)'), surf), section(t('Trust boundaries'), bounds), section(t('Open threats'), open), section(t('What changed this turn'), changed, news));
+}
+
+function showTab(tab) {
+  st.tab = tab;
+  const threats = tab === 'threats';
+  $('#fnd-tab-list').classList.toggle('active', !threats);
+  $('#fnd-tab-threats').classList.toggle('active', threats);
+  $('#fnd-tab-list').setAttribute('aria-selected', String(!threats));
+  $('#fnd-tab-threats').setAttribute('aria-selected', String(threats));
+  $('#findings').classList.toggle('fnd-on-threats', threats);
+  $('#fnd-threats').hidden = !threats;
+  $('#fnd-list').hidden = threats;
+  if (threats) void renderThreatModel();
+  else void refreshFindings();
+}
+
+/** The small card under a coding reply once the threat pass is done (`meta.threats`). */
+export function threatCard(summary, opts = {}) {
+  const n = summary.counts ?? {};
+  const serious = (n.high ?? 0) + (n.block ?? 0);
+  const total = (summary.ids ?? []).length;
+  const box = el('div', `fnd-chat fnd-threat-chat ${serious ? 'fnd-flagged' : total ? 'fnd-some' : 'fnd-clean'}`);
+  box.append(glyph('compass'));
+  const body = el('div', 'fnd-chat-body');
+  body.append(el('strong', '', t('Threat model')));
+  body.append(el('span', 'small', total ? t('Threats: {n} ({serious} serious), each from an entry point to a quoted line', { n: total, serious }) : t('No threats in what she changed.')));
+  const notes = [t('Entry points: {n}', { n: summary.entries ?? 0 })];
+  if (summary.reviewer?.ran) notes.push(t('Reviewing model: {n} added', { n: summary.reviewer.added ?? 0 }));
+  if (summary.error) notes.push(t('The pass stopped: {why}', { why: summary.error }));
+  body.append(el('span', 'small muted', notes.join(' · ')));
+  const msg = el('span', 'small muted');
+  body.append(msg);
+  box.append(body);
+  const row = el('div', 'fnd-chat-actions');
+  if (opts.onOpen) {
+    const b = el('button', 'ghost small', t('Show threat model'));
+    b.type = 'button';
+    b.addEventListener('click', () => opts.onOpen(summary));
+    row.append(b);
+  }
+  if (total && summary.mode === 'offer') {
+    const fx = el('button', 'small', t('Fix these'));
+    fx.type = 'button';
+    fx.addEventListener('click', async () => {
+      fx.disabled = true;
+      try {
+        await fixThese(summary.ids, summary.workspace);
+        msg.textContent = t('The fix pass started: see its progress in Findings.');
+        opts.onFixStarted?.(summary);
+      } catch (err) {
+        msg.textContent = err.message;
+        fx.disabled = false;
+      }
+    });
+    row.append(fx);
+  }
+  if (row.childElementCount) box.append(row);
+  return box;
+}
+
 
 // ---- in the chat ---------------------------------------------------------------------------------
 

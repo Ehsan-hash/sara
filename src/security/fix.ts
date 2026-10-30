@@ -25,6 +25,8 @@ import { readWorkspaceText, type Finding, type FixState } from './findings.ts';
 import { dirtyFiles, git, repoState } from './git.ts';
 import { askModel, jsonIn, securitySettings, walkFiles } from './pass.ts';
 import { checkFile, RULES, type RuleId } from './rules.ts';
+import { regionsFor } from './threat-graph.ts';
+import { analyzeDir, recheckThreat } from './threats.ts';
 
 /** Never copied into the fix worktree or written back by Apply. */
 const NEVER = /(^|\/)(\.git|node_modules|\.venv|venv|__pycache__|target|dist|build)(\/|$)/;
@@ -70,6 +72,35 @@ export function applyEdits(text: string, edits: { find: string; replace: string 
 const FIX_SYSTEM = `You fix ONE security finding in ONE file. Change only what fixes it: no other refactoring, renaming, formatting or new features. Keep the code working and keep its behaviour for normal input.
 Answer with JSON only: {"edits":[{"find":"exact text from the file (a few whole lines)","replace":"the new text"}],"note":"one sentence on what you changed"}
 Each "find" must be copied exactly from the file and appear in it only once.`;
+
+const THREAT_FIX_SYSTEM = `You fix ONLY the listed security threats. This is a fix-only pass: no new features, no refactoring, no renaming, no formatting, no other changes. Keep the code working and keep its behaviour for normal input.
+Change only lines inside the regions given for each file (you may also add an import line). Prefer the smallest change at the dangerous line or the entry point: a parameter instead of string-built SQL, a basename or a root check for paths, an allowlist, escaping, the project's own sign-in check or rate limiter.
+Answer with JSON only: {"edits":[{"file":"path as given","find":"exact text from the file (a few whole lines)","replace":"the new text"}],"note":"one sentence on what you changed"}
+Each "find" must be copied exactly from the file as shown and appear in it only once.`;
+
+/** An import / require line (the fix pass may add these anywhere). */
+const IMPORT_LINE = /^\s*(import\s.+|from\s+\S+\s+import\s.+|(const|let|var)\s+[\w${}\s,:]+=\s*require\(.+\);?|"[\w./-]+"|\w+\s+"[\w./-]+")\s*$/;
+
+/**
+ * Why an edit is outside the threats' regions (undefined = inside): the text it replaces must lie
+ * within one region (a line of slack), unless it only ADDS import lines.
+ */
+export function outsideRegions(text: string, e: { find?: string; replace?: string }, regions: [number, number][]): string | undefined {
+  const norm = (x: string) => x.replace(/\r\n/g, '\n');
+  const t = norm(text);
+  const find = norm(String(e.find ?? ''));
+  const rep = norm(String(e.replace ?? ''));
+  const at = find ? t.indexOf(find) : -1;
+  if (at < 0) return `this text isn't in the file: ${find.slice(0, 120)}`;
+  const fl = find.split('\n').map((l) => l.trim());
+  const added = rep.split('\n').filter((l) => !fl.includes(l.trim()) && l.trim());
+  const kept = fl.every((l) => !l || rep.split('\n').some((r) => r.trim() === l));
+  if (kept && added.length && added.every((l) => IMPORT_LINE.test(l))) return undefined;
+  const start = t.slice(0, at).split('\n').length;
+  const end = start + find.split('\n').length - 1;
+  if (regions.some(([a, b]) => start >= a - 1 && end <= b + 1)) return undefined;
+  return `lines ${start}-${end} are outside the threats' code (only ${regions.map((r) => `${r[0]}-${r[1]}`).join(', ') || 'none'} may change): fix only the threats`;
+}
 
 interface Work {
   promise: Promise<Finding | undefined>;
@@ -147,6 +178,8 @@ export class FixBranches {
     if (!f) throw new Error('Finding not found.');
     const no = this.why(f);
     if (no) throw new Error(no);
+    // Phase 82: a threat is fixed by the threat pass's loop (its rule is the re-check).
+    if (f.source === 'threat') return this.startBatch([id], opts);
     const ws = this.#wsDir(f);
     // An old branch of the same name (a fix kept earlier): this one gets its own name.
     let branch = branchName(id);
@@ -305,10 +338,256 @@ export class FixBranches {
     return store.setFix(f.id, { ...(store.get(f.id)!.fix as FixState), state: 'ready', stage: undefined, baseSha, fixSha, recheck, tests, diff: diff.length > 60_000 ? `${diff.slice(0, 60_000)}\n[… cut]` : diff, files, attempts, tokens, note, endedAt: new Date().toISOString(), ...(rec.on ? { runId: rec.id } : {}) });
   }
 
+  /** The fix branch's worktree from HEAD, with the owner's uncommitted work committed as its base. */
+  #worktree(ws: string, dir: string, branch: string, name: string, what: string): string {
+    mkdirSync(dirname(dir), { recursive: true });
+    const add = git(ws, ['worktree', 'add', '-b', branch, dir, 'HEAD'], { timeout: 120_000 });
+    if (add.status !== 0) throw new Error(`Could not make the fix branch: ${add.err.trim().slice(0, 300)}`);
+    // The owner's uncommitted work (tracked changes and new files) is the fix's base.
+    const dirty = dirtyFiles(ws).filter((p) => !NEVER.test(p));
+    for (const rel of dirty) {
+      const src = join(ws, ...rel.split('/'));
+      try {
+        if (lstatSync(src).isSymbolicLink() || !lstatSync(src).isFile()) continue;
+      } catch {
+        continue;
+      }
+      const dst = join(dir, ...rel.split('/'));
+      mkdirSync(dirname(dst), { recursive: true });
+      copyFileSync(src, dst);
+    }
+    // Deleted files stay deleted on the base too.
+    for (const rel of git(ws, ['ls-files', '--deleted', '-z']).out.split('\0').filter(Boolean)) rmSync(join(dir, ...rel.split('/')), { force: true });
+    if (dirty.length) {
+      git(dir, ['add', '-A', '--', '.'], { name });
+      git(dir, ['commit', '-q', '--no-verify', '-m', `${name}: your uncommitted changes (base for fixing ${what})`], { name });
+    }
+    return git(dir, ['rev-parse', 'HEAD']).out.trim();
+  }
+
+  /** The project's tests in an M5 sandbox copy of the worktree (network off). */
+  async #tests(dir: string, runTests: boolean, signal: AbortSignal): Promise<FixState['tests']> {
+    const app = this.#app;
+    const cmd = runTests ? detectTests(dir) : undefined;
+    const gate = app.sandboxGate;
+    if (cmd && gate) {
+      const iso = gate.isolation();
+      const g = gate.settings();
+      try {
+        const r = await runInSandbox(dir, cmd, { cacheDir: gate.cacheDir, base: app.sandbox, isolation: iso, network: false, timeoutMs: g.timeLimitS * 1000, signal, maxBytes: g.maxMB * 1048576, keep: false, dockerImage: g.dockerImage, preferWorktree: false });
+        const out = r.run?.output ?? r.notRun ?? '';
+        return { command: cmd, ran: Boolean(r.run), exitCode: r.run?.exitCode ?? null, timedOut: r.run?.timedOut ?? false, ms: r.run?.ms ?? 0, output: out.length > 3000 ? `…${out.slice(-3000)}` : out, isolated: iso.isolated, label: iso.label, ...(r.notRun ? { note: r.notRun } : {}) };
+      } catch (err) {
+        return { command: cmd, ran: false, exitCode: null, timedOut: false, ms: 0, output: '', isolated: false, label: '', note: (err as Error).message.slice(0, 300) };
+      }
+    }
+    return cmd ? { command: cmd, ran: false, exitCode: null, timedOut: false, ms: 0, output: '', isolated: false, label: '', note: 'No sandbox here to run the tests in.' } : null;
+  }
+
+  // ---- Phase 82 (harness M7): the threat pass's SECOND pass -----------------------------------------
+
+  /**
+   * "Fix these": the Coding model fixes ONLY these open threats (no features, no refactors) on one
+   * local branch. Its edits must stay inside the threats' regions (the functions on each threat's
+   * path) or only add imports; the threat rule re-checks the worktree, the code checks must not find
+   * anything new, the project's tests run in a sandbox copy, and the owner gets one diff. Only ever
+   * started by the owner; never pushed.
+   */
+  startBatch(ids: number[], opts: { signal?: AbortSignal } = {}): Finding {
+    const store = this.#store();
+    const list = [...new Set(ids)].slice(0, 20).map((i) => store.get(i));
+    if (!list.length || list.some((f) => !f)) throw new Error('Finding not found.');
+    const found = list as Finding[];
+    if (found.some((f) => f.source !== 'threat')) throw new Error('The fix pass is for threats only.');
+    if (new Set(found.map((f) => f.workspace)).size !== 1) throw new Error('These threats are in different projects.');
+    for (const f of found) {
+      const no = this.why(f);
+      if (no) throw new Error(`#${f.id}: ${no}`);
+    }
+    found.sort((a, b) => a.id - b.id);
+    const lead = found[0];
+    const ws = this.#wsDir(lead);
+    let branch = `sara/threat-fix-${lead.id}`;
+    for (let n = 2; git(ws, ['rev-parse', '--verify', '-q', `refs/heads/${branch}`]).status === 0; n++) branch = `sara/threat-fix-${lead.id}-${n}`;
+    const dir = join(this.#root, `t${lead.id}-${randomUUID().slice(0, 8)}`, 'ws');
+    const state: FixState = { state: 'working', branch, startedAt: new Date().toISOString(), stage: 'making the branch', batch: { lead: lead.id, ids: found.map((f) => f.id) } };
+    const marked = this.#setAll(lead, state, branch)!;
+    const promise = (this.#chain = this.#chain.then(() => this.#runBatch(found, ws, dir, branch, opts.signal)).catch((err: Error) => {
+      this.#setAll(lead, { ...(store.get(lead.id)?.fix ?? state), state: 'failed', error: err.message.slice(0, 500), endedAt: new Date().toISOString(), stage: undefined });
+      this.#cleanup(ws, dir, branch, true);
+      return store.get(lead.id);
+    })) as Promise<Finding | undefined>;
+    for (const f of found) this.running.set(f.id, { promise, dir });
+    void promise.finally(() => {
+      for (const f of found) this.running.delete(f.id);
+    });
+    return marked;
+  }
+
+  async #runBatch(list: Finding[], ws: string, dir: string, branch: string, outer?: AbortSignal): Promise<Finding | undefined> {
+    const store = this.#store();
+    const app = this.#app;
+    const lead = list[0];
+    const s = securitySettings(app.settings.get());
+    const signal = outer ? AbortSignal.any([outer, AbortSignal.timeout(15 * 60_000)]) : AbortSignal.timeout(15 * 60_000);
+    const cur = () => store.get(lead.id)!.fix as FixState;
+    const stage = (st: string, extra: Partial<FixState> = {}) => this.#setAll(lead, { ...cur(), stage: st, ...extra });
+    const name = app.persona.name && app.persona.name !== 'Sara' ? app.persona.name : 'Sara';
+    const baseSha = this.#worktree(ws, dir, branch, name, `threats ${list.map((f) => `#${f.id}`).join(', ')}`);
+    stage('asking the Coding model', { baseSha });
+    // The files the threats name (sink and every step of the path), at most 8, and their regions.
+    const files: string[] = [];
+    for (const f of list) {
+      const path = Array.isArray(f.meta.path) ? (f.meta.path as { file: string }[]) : [];
+      for (const p of [f.file!, ...path.map((x) => x.file)]) if (p && !files.includes(p) && !NEVER.test(p) && readWorkspaceText(dir, p) !== undefined) files.push(p);
+    }
+    const original = new Map(files.slice(0, 8).map((p) => [p, readWorkspaceText(dir, p)!]));
+    const regions = new Map<string, [number, number][]>();
+    for (const [p, text] of original) {
+      const lines: number[] = [];
+      for (const f of list) {
+        const path = Array.isArray(f.meta.path) ? (f.meta.path as { file: string; line: number }[]) : [];
+        for (const st of path) if (st.file === p && st.line > 0) lines.push(st.line);
+        if (f.file === p && f.line) lines.push(f.line);
+      }
+      regions.set(p, regionsFor(p, text, [...new Set(lines)]));
+    }
+    const baseAnalysis = analyzeDir(dir);
+    const before = new Map(list.map((f) => [f.id, recheckThreat(f, dir, baseAnalysis).length]));
+    const codeBefore = new Map([...original].map(([p, t]) => [p, checkFile(p, t).length]));
+    const conv: Conversation = (lead.conversationId ? app.store.getConversation(lead.conversationId) : undefined) ?? { id: '', title: 'Fix', providerId: null, model: null, workspace: lead.workspace ?? '', mode: 'coding', private: false, channel: 'web', channelKey: null, partner: null, projectId: null, archivedAt: null, tags: [], createdAt: '', updatedAt: '' };
+    const rec = app.runs && conv.id ? new RunRecorder(app.runs, { kind: 'security', conversationId: conv.id, title: `Fix threats ${list.map((f) => `#${f.id}`).join(', ')}` }) : RunRecorder.none();
+    let chain = resolveChain(app, conv, 'coding');
+    if (rec.on) chain = chain.map((c) => ({ ...c, provider: rec.wrap(c.provider, 'threat fix') }));
+    let attempts = 0;
+    let feedback = '';
+    let note = '';
+    let status: 'ok' | 'budget' = 'ok';
+    let results: Record<string, { before: number; after: number; fixed: boolean }> | undefined;
+    let written: Map<string, string> | undefined;
+    const restore = () => {
+      for (const [p, t] of original) writeFileSync(join(dir, ...p.split('/')), t);
+    };
+    try {
+      while (attempts < 2) {
+        attempts++;
+        const spent = rec.on ? rec.totals().tokens : 0;
+        const threats = list
+          .map((f) => {
+            const m = f.meta as { entry?: { label: string; file: string; line: number; quote: string }; path?: { file: string; line: number; label: string }[]; category?: string };
+            const path = (m.path ?? []).map((x) => `${x.label} (${x.file}:${x.line})`).join(' -> ');
+            return `Threat #${f.id} (${f.rule}, ${m.category ?? ''}): ${f.title}\nEntry point: ${m.entry ? `${m.entry.label} at ${m.entry.file}:${m.entry.line}: ${m.entry.quote}` : '?'}\nPath: ${path}\nThe dangerous line (${f.file}:${f.line}): ${f.quote}\nHow to fix: ${f.advice}`;
+          })
+          .join('\n\n');
+        const shown = [...original]
+          .map(([p, text]) => {
+            const lines = text.split(/\r?\n/);
+            const rg = regions.get(p) ?? [];
+            const from = lines.length > 400 ? Math.max(0, Math.min(...rg.map((r) => r[0])) - 20) : 0;
+            const to = lines.length > 400 ? Math.min(lines.length, Math.max(...rg.map((r) => r[1])) + 20) : lines.length;
+            return `File ${p} — you may change only lines ${rg.map((r) => `${r[0]}-${r[1]}`).join(', ') || '(none)'} (and add imports)${from || to < lines.length ? `; shown: lines ${from + 1}-${to}` : ''}:\n${lines.slice(from, to).map((l, i) => `${String(from + i + 1).padStart(4)}| ${l}`).join('\n')}`;
+          })
+          .join('\n\n');
+        const user = `${threats}\n${feedback ? `\nYour last try was not accepted: ${feedback}\n` : ''}\nThe files, with line numbers (not part of the code):\n\n${shown}`;
+        const prompt = Math.ceil((THREAT_FIX_SYSTEM.length + user.length) / 3.5);
+        const room = s.budgetTokens - spent - prompt;
+        if (room < 300) {
+          status = 'budget';
+          feedback = feedback || 'the fix budget ran out';
+          break;
+        }
+        rec.startStep({ label: `Fix pass try ${attempts}` });
+        const { text } = await askModel(chain, [{ role: 'system', content: THREAT_FIX_SYSTEM }, { role: 'user', content: user }], Math.min(3000, room), signal);
+        const j = jsonIn(text) as { edits?: { file?: string; find: string; replace: string }[]; note?: string } | undefined;
+        const edits = Array.isArray(j?.edits) ? j!.edits.filter((e) => e && typeof e === 'object').slice(0, 20) : [];
+        if (!edits.length) {
+          feedback = 'the answer had no edits';
+          continue;
+        }
+        // Each edit: a file the threats name, inside its regions (or only adding imports).
+        const byFile = new Map<string, { find: string; replace: string }[]>();
+        let bad = '';
+        for (const e of edits) {
+          const p = String(e.file ?? (original.size === 1 ? [...original.keys()][0] : '')).replace(/^\.?\/*/, '');
+          const text = original.get(p);
+          if (text === undefined) {
+            bad = `an edit was for ${p || 'no file'}, which is not one of the threats' files`;
+            break;
+          }
+          const why = outsideRegions(text, e, regions.get(p) ?? []);
+          if (why) {
+            bad = `${p}: ${why}`;
+            break;
+          }
+          byFile.set(p, [...(byFile.get(p) ?? []), { find: String(e.find ?? ''), replace: String(e.replace ?? '') }]);
+        }
+        if (bad) {
+          feedback = bad;
+          continue;
+        }
+        const next = new Map<string, string>();
+        for (const [p, list2] of byFile) {
+          const r = applyEdits(original.get(p)!, list2);
+          if ('error' in r) {
+            bad = `${p}: ${r.error}`;
+            break;
+          }
+          next.set(p, r.text);
+        }
+        if (bad) {
+          feedback = bad;
+          continue;
+        }
+        for (const [p, t] of next) writeFileSync(join(dir, ...p.split('/')), t);
+        // The proof: the threat rule on the whole worktree, and nothing new for the code checks.
+        const after = analyzeDir(dir);
+        const res: Record<string, { before: number; after: number; fixed: boolean }> = {};
+        for (const f of list) {
+          const b = before.get(f.id) ?? 0;
+          const a = recheckThreat(f, dir, after).length;
+          res[String(f.id)] = { before: b, after: a, fixed: a === 0 || a < b };
+        }
+        const worse = [...next].find(([p, t]) => checkFile(p, t).length > (codeBefore.get(p) ?? 0));
+        if (worse) {
+          restore();
+          feedback = `the change added a new problem in ${worse[0]} (the code checks find more than before)`;
+          continue;
+        }
+        if (!Object.values(res).some((r) => r.fixed)) {
+          restore();
+          feedback = `the threat rule still finds ${list.map((f) => `#${f.id}`).join(', ')}`;
+          continue;
+        }
+        results = res;
+        written = next;
+        note = String(j?.note ?? '').slice(0, 300);
+        break;
+      }
+    } finally {
+      rec.close(status === 'budget' ? 'budget' : 'ok');
+    }
+    const tokens = rec.on ? rec.totals().tokens : 0;
+    const total = (key: 'before' | 'after', r = results) => Object.values(r ?? {}).reduce((n, x) => n + x[key], 0);
+    if (!results || !written) {
+      this.#cleanup(ws, dir, branch, true);
+      return this.#setAll(lead, { ...cur(), state: 'failed', stage: undefined, attempts, tokens, error: status === 'budget' ? 'Stopped: the fix budget ran out.' : `No working fix: ${feedback}.`, recheck: { fixed: false, before: [...before.values()].reduce((a, b) => a + b, 0), after: [...before.values()].reduce((a, b) => a + b, 0), remaining: [] }, endedAt: new Date().toISOString(), ...(rec.on ? { runId: rec.id } : {}) });
+    }
+    const remaining = list.filter((f) => !results![String(f.id)].fixed).map((f) => ({ line: f.line ?? 0, quote: f.quote ?? '' }));
+    const recheck = { fixed: remaining.length === 0, before: total('before'), after: total('after'), remaining };
+    stage('running the tests', { recheck, attempts, tokens, note });
+    const tests = await this.#tests(dir, s.runTests, signal);
+    git(dir, ['add', '--', ...written.keys()], { name });
+    git(dir, ['commit', '-q', '--no-verify', '-m', `${name}: fix threats ${list.map((f) => `#${f.id}`).join(', ')}`.slice(0, 200)], { name });
+    const fixSha = git(dir, ['rev-parse', 'HEAD']).out.trim();
+    const diff = git(dir, ['diff', '--no-color', '--no-ext-diff', baseSha, fixSha]).out;
+    const changed = git(dir, ['diff', '--name-only', baseSha, fixSha]).out.split('\n').map((x) => x.trim()).filter(Boolean);
+    return this.#setAll(lead, { ...cur(), state: 'ready', stage: undefined, baseSha, fixSha, recheck, tests, diff: diff.length > 60_000 ? `${diff.slice(0, 60_000)}\n[… cut]` : diff, files: changed, attempts, tokens, note, endedAt: new Date().toISOString(), batch: { ...cur().batch!, results }, ...(rec.on ? { runId: rec.id } : {}) });
+  }
+
   /** Apply to my branch: only the fix's files, never over a file that changed since the fix started. */
   apply(id: number): Finding {
     const store = this.#store();
-    const f = store.get(id);
+    const f = this.#lead(id);
     if (!f?.fix || f.fix.state !== 'ready' || !f.fix.baseSha || !f.fix.fixSha) throw new Error('There is no finished fix to apply.');
     const ws = this.#wsDir(f);
     const dir = this.#dirOf(f);
@@ -345,26 +624,51 @@ export class FixBranches {
     }
     // Applied: the branch and its worktree go (the change is in your files now, uncommitted).
     this.#cleanup(ws, dir, f.fix.branch, true);
-    store.setFix(id, { ...f.fix, state: 'applied', applied: { written, conflicts }, endedAt: new Date().toISOString() });
-    return store.setStatus(id, 'fixed', 'Fixed on a branch and applied to your files')!;
+    if (f.fix.batch) {
+      // The second pass: every threat of the batch the re-check proved fixed is fixed; the others stay open.
+      const endedAt = new Date().toISOString();
+      for (const mid of f.fix.batch.ids) {
+        const m = store.get(mid);
+        if (!m) continue;
+        const r = f.fix.batch.results?.[String(mid)];
+        store.setFix(mid, { ...f.fix, state: 'applied', applied: { written, conflicts }, endedAt });
+        if (r?.fixed && m.status === 'open') store.setStatus(mid, 'fixed', 'Fixed by the threat fix pass and applied to your files');
+      }
+      return store.get(f.id)!;
+    }
+    store.setFix(f.id, { ...f.fix, state: 'applied', applied: { written, conflicts }, endedAt: new Date().toISOString() });
+    return store.setStatus(f.id, 'fixed', 'Fixed on a branch and applied to your files')!;
+  }
+
+  /** A batch member's actions go to the batch's lead finding (it holds the branch and the diff). */
+  #lead(id: number): Finding | undefined {
+    const store = this.#store();
+    const f = store.get(id);
+    const lead = f?.fix?.batch?.lead;
+    return lead && lead !== id ? (store.get(lead) ?? f) : f;
+  }
+
+  /** Sets the same fix state on every finding of a batch (or the one finding). */
+  #setAll(f: Finding, fix: FixState, branch?: string | null): Finding | undefined {
+    const store = this.#store();
+    for (const mid of fix.batch?.ids ?? [f.id]) if (mid !== f.id) store.setFix(mid, fix, branch);
+    return branch === undefined ? store.setFix(f.id, fix) : store.setFix(f.id, fix, branch);
   }
 
   /** Keep the branch: the worktree goes, the local branch stays (merge it when you like). */
   keep(id: number): Finding {
-    const store = this.#store();
-    const f = store.get(id);
+    const f = this.#lead(id);
     if (!f?.fix || f.fix.state !== 'ready') throw new Error('There is no finished fix to keep.');
     this.#cleanup(this.#wsDir(f), this.#dirOf(f), f.fix.branch, false);
-    return store.setFix(id, { ...f.fix, state: 'kept', endedAt: new Date().toISOString() })!;
+    return this.#setAll(f, { ...f.fix, state: 'kept', endedAt: new Date().toISOString() })!;
   }
 
   /** Discard: the worktree and the branch go; the finding stays open. */
   discard(id: number): Finding {
-    const store = this.#store();
-    const f = store.get(id);
+    const f = this.#lead(id);
     if (!f?.fix || (f.fix.state !== 'ready' && f.fix.state !== 'failed' && f.fix.state !== 'kept')) throw new Error('There is no fix to discard.');
     this.#cleanup(this.#wsDir(f), this.#dirOf(f), f.fix.branch, true);
-    return store.setFix(id, { ...f.fix, state: 'discarded', endedAt: new Date().toISOString() }, null)!;
+    return this.#setAll(f, { ...f.fix, state: 'discarded', endedAt: new Date().toISOString() }, null)!;
   }
 
   /** The worktree folder of a finding's fix (from git's own list). */

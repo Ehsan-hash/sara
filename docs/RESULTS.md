@@ -575,6 +575,34 @@ GHSA-f23m-r3pf-42rh medium, fixed 4.18.0; GHSA-xxjr-mmjv-4gpg medium, fixed 4.17
 4.17.21` is also listed (3 advisories fixed in 4.17.23 / 4.18.0). One batch + 6 detail calls, at most
 one in flight, 0.96 s; the same check again came from the cache with no request.
 
+## Threat model (Phase 82)
+
+The deterministic part of the threat pass (`src/security/threat-graph.ts`: entry points, the bounded
+walk entry → sink, the threat rules; no model, no network), scored by `scripts/eval-threat.ts` on
+small seeded multi-file projects written for it: the entry point in one file and the sink in
+another, each project mixing unguarded paths with guarded look-alikes (placeholders, a resolve +
+root check, basename, an allowlist, a fixed host, escaping, a local redirect, a route mounted behind
+the sign-in middleware, a rate limiter). A threat counts only with the right kind on the right sink
+line.
+
+| Set | Projects | Expected | Found | Correct | Precision | Recall |
+|---|---|---|---|---|---|---|
+| Tuning (Express docs, Flask notes, Go service, Koa + WebSocket + CLI) | 4 | 16 | 16 | 16 | **100 %** | **100 %** |
+| Held out (Express routers, Fastify shop, FastAPI files, Django blog, node:http + gin; written after the tuning) | 5 | 12 | 11 | 11 | **100 %** | **91.7 %** |
+
+- First run on the tuning set: precision 71 %, recall 86 %. Changed generally: Flask `<param>` path
+  parts are input, a program with an argument list counts only its name, `.replace('/', '')` makes a
+  path value safe, the rate-limit rule points at the comparison, not the line passing the password.
+  Three expected lines had been left unmarked in the samples (an open redirect, `res.json(process.env)`,
+  a secret env value in a response) and were marked.
+- The held-out miss: a value passed to a callback (`lookupName(req, (name) => fs.readFile(…))`) is
+  not followed. A template rendered from a file (`res.render('page', { html })`) is not judged at all.
+- Live (2026-10-30, Windows, local `gemma4:12b` through Ollama): the threat in a two-file Express-style
+  app was found after the turn with its path; the fix pass made one edit (`path.basename`) in the
+  threat's function on the first try, the threat rule re-check and `npm test` (sandbox copy, not
+  isolated on this PC) passed, Apply wrote only `lib/files.js`; nothing was committed on `main` or
+  pushed.
+
 ## Code map
 
 `scripts/eval-codemap.ts` copies Sara's own code into a workspace and asks 8 "where is…?"

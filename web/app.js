@@ -30,7 +30,7 @@ import { emptyState, initTidy, overflowMenu } from './tidy.js';
 import { addStep, finishStep, hasSteps, memoryStep, runLink, runStep, setBudget, stepLine, waitStep } from './steps.js';
 import { budgetCard, budgetMeter, fillBudgetSelect, overrideNote } from './budget-view.js';
 import { sandboxButtons, sandboxFirstNote, sandboxFlag, sandboxSection, teamSandboxRow } from './sandbox-view.js';
-import { advisoryFlag, advisorySection, initFindings, openFindings, refreshFindings, securityCard } from './findings-view.js';
+import { advisoryFlag, advisorySection, initFindings, openFindings, refreshFindings, securityCard, threatCard } from './findings-view.js';
 import { openRunView } from './run-view.js';
 import { renderCard, renderCards } from './result-cards.js';
 import { initLook, setContextRing, setLookBusy, showHeadChips } from './look.js';
@@ -1369,6 +1369,8 @@ function renderMessages(messages, opts = {}) {
       if (m.role === 'assistant' && !m.meta?.toolCalls?.length) flush();
       // Phase 81: her security pass over the files this turn changed (when it has finished).
       if (m.role === 'assistant' && m.meta?.security && !document.body.classList.contains('demo')) els.push(securityCard(m.meta.security, { onOpen: (sum) => void openFindings(sum.runId ? { runId: sum.runId } : { conversationId: state.currentId }) }));
+      // Phase 82: the threat model of the same turn (entry point → dangerous line), with "Fix these".
+      if (m.role === 'assistant' && m.meta?.threats && !document.body.classList.contains('demo')) els.push(threatCard(m.meta.threats, { onOpen: (sum) => void openFindings({ workspace: sum.workspace, tab: 'threats' }), onFixStarted: (sum) => void openFindings({ workspace: sum.workspace, source: 'threat' }) }));
     }
   }
   flush();
@@ -4271,6 +4273,23 @@ async function saveSecPass() {
   if (!$('#sec-form').dataset.loaded) return;
   await api('/security-pass', { method: 'PUT', body: { mode: $('#sec-mode').value, reviewer: $('#sec-reviewer').checked, advisories: $('#sec-advisories').checked, budgetTokens: Number($('#sec-budget').value), runTests: $('#sec-tests').checked } });
 }
+// ---------- Phase 82: the threat model after coding turns (Settings → Abilities → Coding projects) ----------
+async function loadThreatModel() {
+  let r;
+  try {
+    r = await api('/threat-model');
+  } catch {
+    $('#thr-form').hidden = true;
+    return;
+  }
+  $('#thr-form').hidden = false;
+  $('#thr-mode').value = r.mode;
+  $('#thr-mode').dataset.loaded = '1';
+}
+async function saveThreatModel() {
+  if (!$('#thr-mode').dataset.loaded) return;
+  await api('/threat-model', { method: 'PUT', body: { mode: $('#thr-mode').value } });
+}
 /** The packages live advisories would send (shown before they are switched on). */
 async function loadSecPassPreview() {
   const r = await api('/security-pass?preview=1');
@@ -6385,7 +6404,7 @@ function showSettingsTab(page, opts = {}) {
   if (pick === 'dh-updates') void loadUpdates();
   if (pick === 'ab-recipes') void loadRecipes();
   if (pick === 'ab-budgets') void loadBudgets();
-  if (pick === 'ab-projects') void Promise.all([loadSandboxGate(), loadSecPass()]);
+  if (pick === 'ab-projects') void Promise.all([loadSandboxGate(), loadSecPass(), loadThreatModel()]);
   if (pick === 'ab-ssh') void loadSsh();
   if (pick === 'ab-library') void loadLibrarySettings();
   if (pick === 'co-apps') void Promise.all([loadOtherApps(), loadAlexa()]);
@@ -6560,7 +6579,7 @@ const SETTINGS_SAVERS = {
   'dh-usage': [saveUsage],
   'dh-health': [saveRuns],
   'ab-budgets': [saveBudgets],
-  'ab-projects': [saveSandboxGate, saveSecPass],
+  'ab-projects': [saveSandboxGate, saveSecPass, saveThreatModel],
 };
 const settingsChanged = new Set();
 /** Notes which Settings page an edit was made on (programmatic fills call this themselves). */

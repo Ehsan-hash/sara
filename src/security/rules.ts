@@ -215,8 +215,9 @@ function debugOn(line: string, lang: Lang): boolean {
 
 // ---- routes without the sign-in check others use ------------------------------------------------
 
-const AUTH_WORD = /auth|login|logged|session|token|guard|protect|ensure|require|verify|admin|jwt|passport|signed|isUser|permission|acl/i;
-const PUBLIC_PATH = /^\/?$|login|logout|sign[-_]?(in|up|out)|register|health|status|ping|public|static|assets|webhook|callback|oauth|favicon|robots|sitemap|well-known|docs?$|metrics/i;
+/** Middleware / decorator names that mean "signed in" (also the threat pass, src/security/threats.ts). */
+export const AUTH_WORD = /auth|login|logged|session|token|guard|protect|ensure|require|verify|admin|jwt|passport|signed|isUser|permission|acl/i;
+export const PUBLIC_PATH = /^\/?$|login|logout|sign[-_]?(in|up|out)|register|health|status|ping|public|static|assets|webhook|callback|oauth|favicon|robots|sitemap|well-known|docs?$|metrics/i;
 
 interface RouteHit {
   line: number;

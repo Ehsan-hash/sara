@@ -924,11 +924,15 @@
     <form method="dialog" class="settings-body findings">
       <h2>Findings</h2>
       <p class="muted small">What her checks found in your projects: her security pass after coding turns, known vulnerabilities in dependencies, sandbox tries and plans that went against your decisions. Each one quotes the real line. Fix one on its own local branch, or dismiss or accept it with a reason.</p>
+      <div class="tabs fnd-tabs" role="tablist" aria-label="Show" data-nodirty>
+        <button id="fnd-tab-list" type="button" class="tab active" role="tab" aria-selected="true">Findings</button>
+        <button id="fnd-tab-threats" type="button" class="tab" role="tab" aria-selected="false">Threat model</button>
+      </div>
       <div class="fnd-filters" data-nodirty>
         <label>Project <select id="fnd-ws"></select></label>
         <label>Status <select id="fnd-status"><option value="open">Open</option><option value="fixed">Fixed</option><option value="dismissed">Dismissed</option><option value="accepted">Accepted</option><option value="all">All</option></select></label>
         <label>How serious <select id="fnd-severity"><option value="">Any</option><option value="high">Serious</option><option value="medium">Worth a look</option><option value="low">Minor</option></select></label>
-        <label>From <select id="fnd-source"><option value="">Every check</option><option value="security">Code checks</option><option value="advisory">Known vulnerabilities</option><option value="sandbox">Sandbox tries</option><option value="contradiction">Your decisions</option></select></label>
+        <label>From <select id="fnd-source"><option value="">Every check</option><option value="security">Code checks</option><option value="advisory">Known vulnerabilities</option><option value="sandbox">Sandbox tries</option><option value="contradiction">Your decisions</option><option value="threat">Threat checks</option></select></label>
       </div>
       <p id="fnd-run-chip" class="fnd-run-chip small" hidden><span id="fnd-run-label"></span> <button id="fnd-run-clear" type="button" class="ghost small">Show all</button></p>
       <div class="add-row fnd-tools" data-nodirty>
@@ -937,6 +941,7 @@
       </div>
       <p id="fnd-status-line" class="muted small" role="status"></p>
       <div id="fnd-list" class="fnd-list"></div>
+      <div id="fnd-threats" class="fnd-threats" role="tabpanel" aria-label="Threat model" hidden></div>
     </form>
   </dialog>
 
@@ -1904,6 +1909,11 @@
       <label class="row"><input id="sec-tests" type="checkbox"> Run the project's tests after a fix (in a sandbox copy)</label>
       <p id="sec-status" class="muted small" role="status"></p>
       <div class="add-row"><button id="sec-open" type="button" class="ghost small">Open findings</button></div>
+      </div>
+      <div id="thr-form">
+      <h3>Threat model</h3>
+      <p class="muted small">After a coding turn that changed files, she maps the entry points her change can be reached from (routes, uploads, messages, the command line) and follows them to dangerous lines (commands, SQL, file paths, outgoing requests and more). Each threat quotes its entry point and the line. The fix pass only fixes those threats, on a local branch.</p>
+      <label>Threat model after coding turns <select id="thr-mode"><option value="offer">Report and offer the fix pass</option><option value="report">Report only</option><option value="off">Off</option></select></label>
       </div>
         </section>
         <section class="settings-page" data-page="ab-budgets" data-group="Abilities" data-title="Budgets" data-owner-only hidden>

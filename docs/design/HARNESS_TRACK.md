@@ -602,6 +602,100 @@ the approval card's section), Settings → Abilities → Coding projects → *Se
   route without an auth check in a fixture app → a finding from the **code** part (entry-point
   listing is code; the model only judges).
 
+**As built (Phase 82, 2026-10-30):** `src/security/threat-graph.ts` (the map and the rules, no
+model), `src/security/threats.ts` (`ThreatPass`, the reviewer, the summary, settings),
+`FixBranches.startBatch` in `src/security/fix.ts` (the second pass), `/api/threat-model` in
+`src/routes/coding.ts`, `web/findings-view.js` (Findings → *Threat model* tab, threat paths on the
+cards, the chat card with *Fix these*), Settings → Abilities → Coding projects → *Threat model
+after coding turns*. Tests: `test/phase82.test.ts`; eval: `scripts/eval-threat.ts`.
+
+- **The map** reuses the code map's reader (`src/codemap/extract.ts`: `extract` gives each file's
+  functions with their body ranges and its imports; `scan` blanks strings and comments) over the
+  project's JS/TS, Python and Go files (≤ 400 files, ≤ 512 KB each, tests and dependency folders
+  left out). It does not need the code map's index (`CodeMapStore`) to exist: the pass reads the
+  files itself, so it works in projects the map never indexed. Imports are resolved within the
+  project (relative JS specs with extension/index guesses, Python relative and absolute modules,
+  Go module packages; Go files of one folder share their functions).
+- **Entry points (code):** Express / Koa / Fastify-style `x.get|post|put|patch|delete|all('/p', …)`
+  (inline or named handlers, middleware names read), `http.createServer`, file uploads (multer,
+  `req.file(s)`, `request.files`, `UploadFile`, `request.FILES`), message handlers (`.on('message'
+  | 'data')`, `onmessage`, Socket.IO `@x.on`), Flask/FastAPI decorators (`<param>` path parts and
+  FastAPI parameters are input; `Depends(get_current_user)` counts as sign-in), Django views (`def
+  v(request, …)` in a Django file), Go `HandleFunc`/gin/chi and any `func(w http.ResponseWriter, r
+  *http.Request)`, the command line (`process.argv`, `sys.argv`, `argparse`, `os.Args`, `flag`).
+  Environment reads are listed as a surface, never a threat (the operator sets them).
+- **Sinks:** shell (`exec`/`execSync`, `spawn` with a shell, `os.system`, `subprocess(shell=True)`,
+  `exec.Command("sh","-c",…)`; for an argument list only the program name counts), SQL (a DB call
+  whose query text carries input), file paths, outgoing requests (SSRF), unsafe loaders, HTML out
+  (markup in `res.send`/`render_template_string`/`Markup`/`template.HTML`/`innerHTML`), redirects,
+  eval/`new Function`/`vm`, secrets in responses (the whole env, secret-named env values or
+  constants).
+- **The walk:** from each entry, request values (`req.query`, `request.args`, `r.URL.Query()`, …)
+  are followed through assignments and into project functions (argument → parameter, also via
+  `module.fn(…)`), across files, at most `MAX_HOPS` = 4 calls deep, each function body once per
+  taint shape, ≤ 4,000 lines per entry. A guard on the way makes a value safe for its kinds:
+  sanitizer calls (basename/`secure_filename`/`filepath.Base`, number parsing, escaping,
+  `encodeURIComponent`, `shlex.quote`, `.replace('/', '')`), an `if` that tests the value against
+  an allowlist or pattern (all kinds) or a root/`startsWith` check (paths, redirects), placeholders
+  (the query text carries no input), a fixed scheme+host or local path for URLs, a local path for
+  redirects, `{ root }` / `send_from_directory`.
+- **Two rules without a value:** *auth gap* (a route with no sign-in check, not a public path,
+  mutating or admin-ish, in a project that signs people in somewhere, that reaches a
+  state-changing line: SQL write, file write/delete, shell, ORM delete/update) and *rate limit* (a
+  POST sign-in route that reaches a password check, with no limiter on the route, none applied
+  project-wide and no attempt counter).
+- **Findings:** `source: 'threat'`, rule `threat:<kind>` (11 kinds), STRIDE-ish category, severity
+  (command-line threats are low), file/line/quote = the sink, `meta.entry` (file, line, quote,
+  label), `meta.path` (each step with file and line), hops. `validateThreats` runs `validateQuotes`
+  on the sink and again on the entry quote and requires a path of at least entry + sink; a threat
+  found again keeps its newest path. After a turn only threats whose path touches a changed file
+  are reported; *Check the whole project* reports all.
+- **The Reviewing model** gets the entries (E1, E2, … with their quotes), the sinks reached, the
+  code threats and the diff (the M6 `reviewDiff`, cut to the budget) and may add threats only with
+  a listed entry id, a sink quote found verbatim and a named path (anything else is dropped before
+  or by `validateThreats`); its answer is JSON, it has no tools, private conversations review only
+  on a local model, the security pass's `budgetTokens` is its budget.
+- **The summary** per project: `<data>/threat-models/<project>.md` and `.json` (surfaces,
+  trust boundaries with counts, open threats with their paths, what changed this turn), written
+  after every pass; `GET /api/threat-model?workspace=` serves it to the *Threat model* tab.
+- **The second pass** (`POST /api/threat-model/fix` or *Fix on a branch* on one threat): only
+  open threats of one project; one `sara/threat-fix-<id>` branch in a worktree (the M6 loop's
+  `#worktree`, `#tests`); the Coding model gets a fix-only instruction, the threats with their
+  paths and the files they name with the regions it may change (the functions on the path,
+  `regionsFor`), answers find/replace edits per file; code refuses an edit outside the regions
+  (only adding an import is allowed anywhere) and retries once with the reason; the re-check is
+  the threat rule over the whole worktree (`recheckThreat`; a reviewer's threat: its quoted line is
+  gone), the M6 code checks must not find more than before, the tests run in an M5 sandbox copy;
+  one diff; Apply / Keep / Discard on any threat of the batch act on the whole batch; each threat
+  the re-check proved fixed becomes *fixed*. Budget: the security pass's `budgetTokens` (no
+  override, it stops). Never started by itself; never pushed (the M6 git allowlist).
+- **Setting** `threatModel.mode`: *Report and offer the fix pass* (default) / *Report only* / *Off*;
+  owner-only (`OWNER_SETTINGS`), members and the demo get 403; never in everyday chats, groups,
+  partner or external-app turns (the M6 seam).
+- **Measured:** `scripts/eval-threat.ts` on seeded multi-file projects: tuning set precision 100 %
+  / recall 100 % (16 threats), held-out set 100 % / 91.7 % (12 threats; the miss is a value passed
+  through a callback) ([RESULTS.md](../RESULTS.md#threat-model-phase-82)). Live (2026-10-30, local
+  `gemma4:12b`): a route in `server.js` passing `req.query.name` to `readDoc()` in `lib/files.js`
+  → one threat *GET /doc → readDoc() → file path*; *Fix these* → one try, `path.basename`, re-check
+  passed, `npm test` passed in a copy, Apply wrote only `lib/files.js`.
+- **Deviations:**
+  1. The design names `code_deps` / `code_refs`; the pass uses the code map's extractor directly
+     instead of its index, so it needs no indexing run and sees uncommitted files.
+  2. It is a name-and-shape follower, not a compiler: values through callbacks, object fields set
+     elsewhere, return values used in another function's caller and templates rendered from files
+     are not followed (they are counted as misses in the eval, not hidden).
+  3. Environment variables and command-line input are surfaces of the operator: environment reads
+     make no threats, command-line threats are *low*.
+  4. The second pass returns find/replace edits like the M6 fix (no tools, no commands); the
+     "regions" rule is code, not a prompt request.
+  5. The chat card's *Fix these* is shown from the turn's summary; when the threats were fixed or
+     dismissed since, the server answers that none is open (409), shown on the card.
+  6. Team helpers' runs are not threat-modelled yet (as M6).
+- **Hooks for M11:** entry points (`analyze(...).entries`: kind, label, file, line, method, path,
+  authed, upload) are the probe targets for the robustness catalogue; findings `source: 'redteam'`
+  go through the same `validateQuotes` and `FixBranches.startBatch` (any re-check function plugs
+  into `recheckThreat`'s place); the summary's boundaries list says where to probe.
+
 ### M8 · Phase 83 · 2.16.0: time-travel (branch from a step)
 
 - **Ships:** on any step of a run: "Branch from here". Change one input (your message, the model,

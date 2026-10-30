@@ -45,6 +45,7 @@
   <a href="#runs">Show the run</a>
   <a href="#sandbox">Commands tried in a sandbox first</a>
   <a href="#security">Security pass and fix branches</a>
+  <a href="#threat-model">Threat model and the fix pass</a>
   <a href="#library">Her library</a>
   <a href="#chatapps">Telegram and Discord</a>
   <a href="#together">Things to do together</a>
@@ -535,6 +536,13 @@
   <li><strong>Fix on a branch</strong> makes a local branch <code>sara/fix-…</code> in a separate folder (your checked-out branch and files are not touched), has the Coding model fix only that finding, checks it again and runs the project's tests in a sandbox copy, then shows the diff: <strong>Apply to my branch</strong> writes only those files (a file you changed meanwhile is left alone), <strong>Keep the branch</strong> leaves it for you to merge, <strong>Discard</strong> throws it away. Nothing is ever pushed; pushing or a pull request still asks first.</li>
   <li><strong>Known vulnerabilities</strong> in dependencies are off until you switch them on in <em>Settings → Abilities → Coding projects</em>, which first shows the package list that would be sent. Only package names and versions go to <strong>OSV.dev</strong>, never code; never from private conversations or private local mode. Answers are kept for six hours; offline, it says <em>not checked: offline</em>. Installing a version with a known vulnerability shows a card first: <em>Install anyway</em> is your explicit choice and is recorded.</li>
   <li>These checks look at your own code only and catch common mistakes; they are not a full security audit.</li>
+</ul>
+
+<h2 id="threat-model">Threat model and the fix pass</h2>
+<ul>
+  <li>After a coding turn that changed files, she maps where your app can be reached from (<strong>entry points</strong>: web routes, file uploads, messages, the command line) and follows each one through your own functions to <strong>dangerous lines</strong>: shell commands, SQL, file paths, outgoing requests, unsafe loading of data, HTML, redirects, code that runs input. A route that changes things without a sign-in check, or a sign-in route without a rate limit, counts too.</li>
+  <li>Each <strong>threat</strong> quotes its entry point and the dangerous line and names the path between them; a check on the way (placeholders, keeping only the file name, an allowlist, escaping) counts as safe. The Reviewing model may add threats only from an entry point the code found, with real quotes. <em>Findings → Threat model</em> shows the surfaces, the trust boundaries, the open threats and what changed this turn.</li>
+  <li><strong>Fix these</strong> starts the second pass: the Coding model may only fix those threats (no new features, no refactors), on one local branch; its edits must stay in the code the threats run through, the same check runs again, the tests run in a sandbox copy, and you get one diff to <strong>Apply</strong>, <strong>Keep</strong> or <strong>Discard</strong>. Nothing is pushed. Choose <em>Report and offer the fix pass</em>, <em>Report only</em> or <em>Off</em> in <em>Settings → Abilities → Coding projects</em>.</li>
 </ul>
 
 <h2 id="together">Things to do together</h2>

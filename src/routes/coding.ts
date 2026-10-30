@@ -24,6 +24,7 @@ import { resolveInside, workspaceDir } from '../tools/workspace.ts';
 import { cleanBudget, usageLine } from '../usage.ts';
 import { FINDING_SEVERITIES, FINDING_SOURCES, FINDING_STATUSES, type FindingSeverity, type FindingSource, type FindingStatus } from '../security/findings.ts';
 import { DEFAULT_SECURITY, mergeSecurity, REVIEW_BUDGET_CHOICES, SECURITY_MODES, securitySettings } from '../security/pass.ts';
+import { DEFAULT_THREATS, mergeThreats, THREAT_MODES, threatSettings } from '../security/threats.ts';
 import { NEXT, type RouteCtx, type RouteHandler } from './context.ts';
 
 export function createCodingRoutes(ctx: RouteCtx): RouteHandler {
@@ -73,6 +74,55 @@ export function createCodingRoutes(ctx: RouteCtx): RouteHandler {
       const preview = q.get('preview') === '1' ? sec.previewPackages((existsSync(wsRoot) ? readdirSync(wsRoot, { withFileTypes: true }) : []).filter((e) => e.isDirectory()).map((e) => ({ name: e.name, dir: join(wsRoot, e.name) }))) : undefined;
       return send(res, 200, { ...securitySettings(app.settings.get()), choices: { mode: SECURITY_MODES, budgetTokens: REVIEW_BUDGET_CHOICES }, defaults: DEFAULT_SECURITY, privateLocal: privateLocalOn(), cached: sec.osv.cacheSize(), reviewModel: Boolean(app.settings.get().routes?.review), ...(preview ? { preview } : {}) });
     }
+    // Phase 82 (harness M7): the threat model. GET: its setting (Off / Report only / Report and
+    // offer the fix pass) and, with ?workspace=, the project's last summary (surfaces, boundaries,
+    // open threats, what changed); PUT: the setting. POST scan: check the whole project now. POST
+    // fix: the SECOND pass over the threats named (open threats of one project), started only here,
+    // by the owner. Owner-only like the security pass (members have no coding; OWNER_SETTINGS); the
+    // demo refuses (not in DEMO_READS).
+    if (a === 'threat-model') {
+      const thr = app.threats;
+      if (!thr) throw new HttpError(404, 'The threat model is not available here.');
+      if (!b) {
+        if (method === 'PUT') {
+          const body = await readJson(req);
+          app.settings.update({ threatModel: mergeThreats(threatSettings(app.settings.get()), body) });
+        } else if (method !== 'GET') throw new HttpError(405, 'Method not allowed');
+        const q = new URL(req.url ?? '/', 'http://x').searchParams;
+        const ws = q.get('workspace') ? validWorkspace(q.get('workspace')) : '';
+        const m = ws ? thr.model(ws) : undefined;
+        return send(res, 200, { ...threatSettings(app.settings.get()), choices: { mode: THREAT_MODES }, defaults: DEFAULT_THREATS, ...(ws ? { workspace: ws, summary: m?.model ?? null, markdown: m?.markdown ?? null } : {}) });
+      }
+      if (b === 'scan' && !c && method === 'POST') {
+        const body = await readJson(req);
+        const conv = body.conversationId ? app.store.getConversation(String(body.conversationId)) : undefined;
+        if (body.conversationId && !conv) throw new HttpError(404, 'Conversation not found');
+        if (conv && conv.mode !== 'coding') throw new HttpError(400, 'The threat model is for coding conversations.');
+        const workspace = conv ? conv.workspace : validWorkspace(body.workspace);
+        const wsDir = workspaceDir(rootDir, workspace);
+        const summary = await thr.run({ conversationId: conv?.id ?? null, workspace, wsDir, changed: [], reason: 'ask', private: Boolean(conv?.private) });
+        return send(res, 200, { summary });
+      }
+      if (b === 'fix' && !c && method === 'POST') {
+        const body = await readJson(req);
+        const fixes = app.fixes;
+        const store = app.findings;
+        if (!fixes || !store) throw new HttpError(404, 'The fix loop is not available here.');
+        const ids = Array.isArray(body.ids) ? body.ids.map(Number).filter((x: number) => Number.isInteger(x) && x > 0).slice(0, 20) : [];
+        if (!ids.length) throw new HttpError(400, 'Name the threats to fix (ids).');
+        const workspace = body.workspace ? validWorkspace(body.workspace) : undefined;
+        // Only open threats, all of one project (the one named, when named).
+        const list = ids.map((i: number) => store.get(i)).filter((f): f is NonNullable<typeof f> => Boolean(f && f.source === 'threat' && f.status === 'open' && (!workspace || f.workspace === workspace) && !(f.fix && (f.fix.state === 'working' || f.fix.state === 'ready'))));
+        if (!list.length) throw new HttpError(409, 'None of these threats is open (or each is already on a fix branch).');
+        try {
+          return send(res, 202, { finding: fixes.startBatch(list.map((f) => f.id)), ids: list.map((f) => f.id) });
+        } catch (err) {
+          throw new HttpError(409, (err as Error).message);
+        }
+      }
+      if (method !== 'GET') await readJson(req).catch(() => ({}));
+      throw new HttpError(404, 'Not found');
+    }
     // Phase 81: the findings table (per project and per run), dismiss / accept with a reason, the
     // fix-branch loop (Apply to my branch / Keep the branch / Discard), "Fix all high", "Check now".
     if (a === 'findings') {
@@ -90,7 +140,7 @@ export function createCodingRoutes(ctx: RouteCtx): RouteHandler {
           ...(FINDING_SOURCES.includes(q.get('source') as FindingSource) ? { source: q.get('source') as FindingSource } : {}),
         };
         const list = store.list({ ...filter, status: status === 'all' || FINDING_STATUSES.includes(status as FindingStatus) ? (status as FindingStatus | 'all') : 'open' });
-        return send(res, 200, { findings: list.map((f) => ({ ...f, canFix: app.fixes ? !app.fixes.why(f) : false })), counts: store.counts({ ...(filter.workspace ? { workspace: filter.workspace } : {}), ...(filter.conversationId ? { conversationId: filter.conversationId } : {}), ...(filter.runId ? { runId: filter.runId } : {}) }), workspaces: store.workspaces(), settings: app.security ? securitySettings(app.settings.get()) : null });
+        return send(res, 200, { findings: list.map((f) => ({ ...f, canFix: app.fixes ? !app.fixes.why(f) : false })), counts: store.counts({ ...(filter.workspace ? { workspace: filter.workspace } : {}), ...(filter.conversationId ? { conversationId: filter.conversationId } : {}), ...(filter.runId ? { runId: filter.runId } : {}) }), workspaces: store.workspaces(), settings: app.security ? securitySettings(app.settings.get()) : null, threats: app.threats ? threatSettings(app.settings.get()) : null });
       }
       if (b === 'scan' && !c && method === 'POST') {
         // "Check now" (also the "Only when I ask" mode): the uncommitted files, or the whole project.

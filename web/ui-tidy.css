@@ -533,6 +533,30 @@ dialog:not(.settings-dialog) .settings-body > :is(.error, p[role="status"]):empt
 .fnd-chat.fnd-flagged .fnd-icon { color: var(--danger); }
 .fnd-chat-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1 1 auto; }
 .fnd-chat-body span { overflow-wrap: anywhere; }
+/* Phase 82: the threat model (Findings → Threat model tab, threat paths, the chat card). */
+.fnd-tabs { margin: 0; }
+#findings.fnd-on-threats .fnd-filters > label:not(:first-child), #findings.fnd-on-threats .fnd-tools, #findings.fnd-on-threats #fnd-run-chip, #findings.fnd-on-threats #fnd-status-line { display: none; }
+.fnd-threats { display: grid; gap: 12px; grid-template-columns: minmax(0, 1fr); }
+.fnd-tm-head { display: grid; gap: 6px; }
+.fnd-tm-head p { margin: 0; }
+.fnd-tm-section { display: grid; gap: 6px; grid-template-columns: minmax(0, 1fr); }
+.fnd-tm-section h3 { margin: 4px 0 0; font-size: var(--fs-body); }
+.fnd-tm-list { margin: 0; padding-inline-start: 18px; display: grid; gap: 4px; }
+.fnd-tm-list li { overflow-wrap: anywhere; }
+.fnd-tm-list code, .fnd-path code { font-family: var(--font-mono); font-size: var(--fs-small); }
+.fnd-tm-path { overflow-wrap: anywhere; font-family: var(--font-mono); }
+.fnd-chip { display: inline-flex; margin-inline-start: 6px; padding: 0 8px; border-radius: var(--r-pill); font-size: var(--fs-small); border: 1px solid var(--hairline-strong); color: var(--text-2); }
+.fnd-chip.chip-ok { color: var(--success); border-color: color-mix(in srgb, var(--success) 40%, transparent); }
+.fnd-chip.chip-warn { color: var(--warn); background: var(--warn-soft); border-color: color-mix(in srgb, var(--warn) 40%, transparent); }
+.fnd-threat { display: grid; gap: 4px; grid-template-columns: minmax(0, 1fr); }
+.fnd-threat-cat { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
+.fnd-threat-cat .fnd-chip { margin-inline-start: 0; }
+.fnd-path { margin: 0; padding-inline-start: 22px; display: grid; gap: 2px; }
+.fnd-path li { overflow-wrap: anywhere; }
+.fnd-path .fnd-step { margin-inline-end: 6px; }
+.fnd-batch-list { margin: 0; padding-inline-start: 18px; }
+.fnd-chat-actions { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
+@media (max-width: 520px) { .fnd-threat-chat { flex-wrap: wrap; } .fnd-chat-actions { width: 100%; justify-content: flex-start; } }
 .approval-advisory { border-color: color-mix(in srgb, var(--danger) 45%, var(--hairline-strong)); }
 .fnd-adv { display: grid; gap: 6px; grid-template-columns: minmax(0, 1fr); padding: 10px 12px; border-radius: var(--r-control); background: color-mix(in srgb, var(--danger-soft) 45%, var(--surface-2)); border: 1px solid color-mix(in srgb, var(--danger) 35%, var(--hairline)); }
 .fnd-adv p { margin: 0; }

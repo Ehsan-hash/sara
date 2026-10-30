@@ -131,6 +131,12 @@ export interface Settings {
    * default), the pass's token budget and the fix loop's test run.
    */
   securityPass?: Partial<import('./security/pass.ts').SecuritySettings>;
+  /**
+   * Phase 82: the threat model after coding turns (Settings → Abilities → Coding projects): Off /
+   * Report only / Report and offer the fix pass (default). Uses the security pass's reviewer switch
+   * and budget.
+   */
+  threatModel?: Partial<import('./security/threats.ts').ThreatSettings>;
   /** Discord bridge (Phase 6). Bot token lives in the vault (bridge:discord). */
   discord?: Partial<DiscordSettings>;
   /** Automatic backups (Phase 6). */

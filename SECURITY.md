@@ -86,5 +86,15 @@ your own projects: no scanning of other systems, no exploit or payload generatio
   branch is never touched, and Sara's git calls for them have no push, fetch or remote command at
   all (hooks, credential helpers and prompts are switched off). Publishing still goes through the
   normal approvals.
-- Everything is owner-only (`/api/findings`, `/api/security-pass`); household members and the demo
-  get 403. Details: [docs/design/HARNESS_TRACK.md § M6](docs/design/HARNESS_TRACK.md).
+- **Threat model (Phase 82):** after the same turns she maps the entry points of the project (HTTP
+  routes, uploads, message handlers, the command line) and follows them through the project's own
+  functions to dangerous lines (shell, SQL, file paths, outgoing requests, unsafe loaders, HTML,
+  redirects, eval, secrets in responses), plus routes that change things without a sign-in check
+  and sign-in routes without a rate limit. Every threat quotes its entry line and its sink line
+  (both checked against the files) and names the path; the Reviewing model may only add threats
+  from an entry point the code listed. *Fix these* (the owner's click, never automatic) runs a
+  fix-only pass on one local branch: edits outside the threats' functions are refused, the threat
+  rule re-checks, the project's tests run in a sandbox copy, one diff to Apply / Keep / Discard,
+  nothing pushed. It reads and fixes your own code only; it never probes a running app.
+- Everything is owner-only (`/api/findings`, `/api/security-pass`, `/api/threat-model`); household
+  members and the demo get 403. Details: [docs/design/HARNESS_TRACK.md § M6, M7](docs/design/HARNESS_TRACK.md).

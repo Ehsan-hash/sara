@@ -73,6 +73,12 @@ export interface FixState {
   /** Apply: files written / left alone because they changed meanwhile. */
   applied?: { written: string[]; conflicts: string[] };
   runId?: number;
+  /**
+   * Phase 82: the threat pass's second pass fixes several threats on ONE branch. Every finding of
+   * the batch carries the same state; the lead holds the branch, and Apply / Keep / Discard on any
+   * of them act on the whole batch. `results`: each threat's re-check (by finding id).
+   */
+  batch?: { lead: number; ids: number[]; results?: Record<string, { before: number; after: number; fixed: boolean }> };
 }
 
 export interface Finding {
@@ -211,6 +217,8 @@ export class FindingStore {
       'INSERT INTO findings (run_id, step, conversation_id, workspace, source, origin, severity, rule, title, file, line, quote, advice, status, reason, meta, fingerprint, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
     );
     const touch = this.#db.prepare('UPDATE findings SET run_id = COALESCE(?, run_id), step = COALESCE(?, step), line = COALESCE(?, line), updated_at = ? WHERE id = ?');
+    // Phase 82: a threat found again keeps its newest entry point and path (the code around it moved).
+    const touchMeta = this.#db.prepare('UPDATE findings SET meta = ? WHERE id = ?');
     this.#db.exec('BEGIN');
     try {
       for (const f of list) {
@@ -219,7 +227,10 @@ export class FindingStore {
         // Plan-check, sandbox and install-time findings are per event (each is its own decision): always new.
         const perEvent = f.source === 'contradiction' || f.source === 'sandbox' || f.meta?.install === true;
         if (old && !perEvent && (old.status !== 'fixed' || !f.file)) {
-          if (old.status === 'open') touch.run(scope.runId ?? null, scope.step ?? null, f.line ?? null, now, Number(old.id));
+          if (old.status === 'open') {
+            touch.run(scope.runId ?? null, scope.step ?? null, f.line ?? null, now, Number(old.id));
+            if (f.source === 'threat' && f.meta && !out.some((o) => o.id === Number(old.id))) touchMeta.run(JSON.stringify(f.meta).slice(0, 20_000), Number(old.id));
+          }
           out.push(this.#view((this.#db.prepare('SELECT * FROM findings WHERE id = ?').get(Number(old.id)) as Row) ?? old));
           continue;
         }

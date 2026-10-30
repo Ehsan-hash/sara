@@ -1245,6 +1245,10 @@
       "After a fix, the project's tests (npm test, pytest, cargo test, go test) run in a throwaway sandbox copy and the result is shown before you choose. Off: only the check that found it runs again.",
       "security"
     ],
+    "thr-mode": [
+      "After a coding turn that changed files, she lists the entry points (routes, uploads, messages) that reach dangerous lines, each quoted. Report and offer the fix pass adds Fix these: only those threats, on a local branch. Never in chats.",
+      "threat-model"
+    ],
     "fnd-ws": [
       "Which project's findings to show. Pick one to use Check now and Fix all serious for it. All projects lists everything.",
       "security"

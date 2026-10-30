@@ -60,6 +60,7 @@ import { FindingStore } from './security/findings.ts';
 import { OsvClient } from './security/advisories.ts';
 import { SecurityPass } from './security/pass.ts';
 import { FixBranches, sweepFixDirs } from './security/fix.ts';
+import { ThreatPass } from './security/threats.ts';
 import { detectIsolation, SandboxGate, sandboxGateSettings, sweepSandboxRuns, type Isolation, type SandboxGateSettings } from './sandbox-run.ts';
 import { accessInfo, adminHint, localVoiceMissing, localVoiceSupported } from './platform.ts';
 import { statusReport } from './status.ts';
@@ -569,6 +570,8 @@ function buildCompanion(space: Space, id: string, dir: string): Companion {
   if (!isMember) {
     app.security = new SecurityPass(app, app.findings, new OsvClient(store.db));
     app.fixes = new FixBranches(app, join(dir, 'cache', 'fix-branches'));
+    // Phase 82 (harness M7): the threat model after coding turns and its fix-only second pass.
+    app.threats = new ThreatPass(app, app.findings);
     sweepFixDirs(join(dir, 'cache', 'fix-branches'));
     try {
       app.fixes.recover();

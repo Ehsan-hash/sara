@@ -188,7 +188,10 @@ export class SecurityPass {
   turnHooks(conv: Conversation, wsDir: string, opts: { group?: boolean; external?: boolean; rec?: RunRecorder } = {}): TurnHooks | undefined {
     if (conv.mode !== 'coding' || conv.partner || opts.group || opts.external) return undefined;
     const s = this.settings();
-    if (s.mode === 'off') return undefined;
+    // Phase 82: the threat model after coding turns rides on the same seam and the same file list.
+    const threats = this.#app.threats;
+    const threatsOn = () => Boolean(threats && threats.settings().mode !== 'off');
+    if (s.mode === 'off' && !threatsOn()) return undefined;
     const named = new Set<string>();
     let shellRan = false;
     let started = false;
@@ -216,14 +219,17 @@ export class SecurityPass {
       afterReply: (c) => {
         if (!c.final || started) return;
         started = true;
-        if (this.settings().mode !== 'after') return;
+        const secAfter = this.settings().mode === 'after';
+        if (!secAfter && !threatsOn()) return;
         const files = new Set([...named].filter((f) => f && !f.startsWith('..')));
         if (repo.repo && (shellRan || named.size)) {
           for (const f of dirtyFiles(wsDir).slice(0, 1000)) if (!before || before.get(f) !== fileSig(wsDir, f)) files.add(f);
         }
         const list = [...files].filter((f) => (checkable(f) || isManifest(f)) && readWorkspaceText(wsDir, f) !== undefined).slice(0, MAX_FILES);
         if (!list.length) return;
-        this.start({ conversationId: conv.id, workspace: conv.workspace, wsDir, files: list, reason: 'turn', private: conv.private, replyMessageId: c.messageId, ...(repo.commit ? { changed: changedLines(wsDir, list) } : {}) });
+        const pass = secAfter ? this.start({ conversationId: conv.id, workspace: conv.workspace, wsDir, files: list, reason: 'turn', private: conv.private, replyMessageId: c.messageId, ...(repo.commit ? { changed: changedLines(wsDir, list) } : {}) }) : undefined;
+        // The threat pass waits for the security pass (one model call at a time, findings in order).
+        if (threats && threatsOn()) threats.start({ conversationId: conv.id, workspace: conv.workspace, wsDir, changed: list.filter(checkable), reason: 'turn', private: conv.private, replyMessageId: c.messageId }, pass);
       },
     };
   }
