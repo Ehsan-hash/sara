@@ -976,12 +976,13 @@
       <div class="tabs fnd-tabs" role="tablist" aria-label="Show" data-nodirty>
         <button id="fnd-tab-list" type="button" class="tab active" role="tab" aria-selected="true">Findings</button>
         <button id="fnd-tab-threats" type="button" class="tab" role="tab" aria-selected="false">Threat model</button>
+        <button id="fnd-tab-redteam" type="button" class="tab" role="tab" aria-selected="false">Red team</button>
       </div>
       <div class="fnd-filters" data-nodirty>
         <label>Project <select id="fnd-ws"></select></label>
         <label>Status <select id="fnd-status"><option value="open">Open</option><option value="fixed">Fixed</option><option value="dismissed">Dismissed</option><option value="accepted">Accepted</option><option value="all">All</option></select></label>
         <label>How serious <select id="fnd-severity"><option value="">Any</option><option value="high">Serious</option><option value="medium">Worth a look</option><option value="low">Minor</option></select></label>
-        <label>From <select id="fnd-source"><option value="">Every check</option><option value="security">Code checks</option><option value="advisory">Known vulnerabilities</option><option value="sandbox">Sandbox tries</option><option value="contradiction">Your decisions</option><option value="threat">Threat checks</option></select></label>
+        <label>From <select id="fnd-source"><option value="">Every check</option><option value="security">Code checks</option><option value="advisory">Known vulnerabilities</option><option value="sandbox">Sandbox tries</option><option value="contradiction">Your decisions</option><option value="threat">Threat checks</option><option value="redteam">Red team</option></select></label>
       </div>
       <p id="fnd-run-chip" class="fnd-run-chip small" hidden><span id="fnd-run-label"></span> <button id="fnd-run-clear" type="button" class="ghost small">Show all</button></p>
       <div class="add-row fnd-tools" data-nodirty>
@@ -991,6 +992,7 @@
       <p id="fnd-status-line" class="muted small" role="status"></p>
       <div id="fnd-list" class="fnd-list"></div>
       <div id="fnd-threats" class="fnd-threats" role="tabpanel" aria-label="Threat model" hidden></div>
+      <div id="fnd-redteam" class="fnd-redteam" role="tabpanel" aria-label="Red team" hidden></div>
     </form>
   </dialog>
 
@@ -1937,6 +1939,7 @@
         <section class="settings-page" data-page="ab-google" data-group="Abilities" data-title="Gmail and Calendar" data-owner-only hidden>
       <p id="g-status" class="muted small" role="status"></p>
       <div id="g-connected" class="add-row" hidden><button id="g-disconnect" type="button" class="ghost">Sign out of Google</button></div>
+      <div id="g-organize" class="add-row" hidden><button id="g-reconnect" type="button">Reconnect to allow organizing</button><button type="button" class="tip" data-tip="She can now organize your mail: archive, mark read, labels, stars, trash and spam. She shows the count first, and Undo works for 30 days. That needs one more Google permission (gmail.modify; it can't delete for good). Reconnect and leave the boxes ticked.">?</button></div>
       <details id="g-setup" data-noauto>
         <summary>Set it up (about 10 minutes, once)</summary>
         <p class="muted small">She reads your email and calendar through Google's own APIs, using a small Google app that <strong>you</strong> own, so nothing goes through anyone else. Reading is automatic; drafting, sending and adding events always ask you first.</p>
@@ -1949,6 +1952,7 @@
           <li>Copy the <strong>Client ID</strong> and <strong>Client secret</strong> it shows into the boxes below and press Save.</li>
           <li>Press <strong>Sign in with Google</strong>. On the "Google hasn't verified this app" page choose <em>Advanced</em> → <em>Go to Sara</em>, and leave all the boxes ticked.</li>
         </ol>
+        <p class="muted small">Organizing your mail (archive, labels, trash, spam) uses Google's gmail.modify permission. If your Google app lists its permissions under Data access, add gmail.modify there too.</p>
         <div class="add-row"><label>Client ID <input id="g-client-id" autocomplete="off" placeholder="…apps.googleusercontent.com"></label><label>Client secret <input id="g-client-secret" type="password" autocomplete="off" placeholder="GOCSPX-…"></label><button id="g-save" type="button">Save</button></div>
         <div class="add-row"><button id="g-connect" type="button" disabled>Sign in with Google</button><button id="g-forget" type="button" class="ghost small" hidden>Remove the Google app</button></div>
       </details>
@@ -1969,7 +1973,7 @@
         </section>
         <section class="settings-page" data-page="ab-projects" data-group="Abilities" data-title="Coding projects" data-owner-only hidden>
       <p class="muted small">What she knows about the code in each workspace: how to build and test it, its layout and rules, and the notes she keeps (decisions, conventions, commands). She looks again by herself every hour; coding conversations and her team use it.</p>
-      <div class="add-row"><label>Workspace <select id="pj-ws"></select></label><button id="pj-refresh" type="button" class="ghost">Look again</button></div>
+      <div class="add-row"><label>Workspace <select id="pj-ws"></select></label><button id="pj-refresh" type="button" class="ghost">Look again</button><button id="pj-redteam" type="button" class="ghost">Before you ship</button></div>
       <div id="pj-list" class="pj-list"></div>
       <div id="sbx-form">
       <h3>Try commands in a sandbox first</h3>
@@ -2006,6 +2010,15 @@
       <h3>Threat model</h3>
       <p class="muted small">After a coding turn that changed files, she maps the entry points her change can be reached from (routes, uploads, messages, the command line) and follows them to dangerous lines (commands, SQL, file paths, outgoing requests and more). Each threat quotes its entry point and the line. The fix pass only fixes those threats, on a local branch.</p>
       <label>Threat model after coding turns <select id="thr-mode"><option value="offer">Report and offer the fix pass</option><option value="report">Report only</option><option value="off">Off</option></select></label>
+      </div>
+      <div id="rt-form">
+      <h3>Red team</h3>
+      <p class="muted small">Before you ship, she tries to break her own work in a throwaway copy with the network off: the project's tests, unusual input at every entry point, insecure defaults and, if you allow it, a few probe scripts by the Coding model. The Reviewing model must prove each break again before it counts.</p>
+      <label>Red-team before shipping <select id="rt-ship"><option value="ask">Ask me</option><option value="always">Always</option><option value="off">Off</option></select></label>
+      <label>Probe scripts by the Coding model <select id="rt-scripts"></select></label>
+      <label>Red-team budget <select id="rt-budget"></select></label>
+      <label>Time limit for a run <select id="rt-minutes"></select></label>
+      <p id="rt-status" class="muted small" role="status"></p>
       </div>
         </section>
         <section class="settings-page" data-page="ab-budgets" data-group="Abilities" data-title="Budgets" data-owner-only hidden>

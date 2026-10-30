@@ -707,6 +707,28 @@ shows as *Remembered on her own*.
   Turn 3 was faster than turn 1, but the prompts differed and the machine was shared, so this is
   not evidence that recall helps.
 
+## Red team (Phase 86)
+
+Red-team mode's code path (`src/redteam.ts`, `src/redteam-probes.ts`; no model), scored by
+`scripts/eval-redteam.ts`: small seeded-broken projects really run in an M5 sandbox copy (copy-only,
+*not isolated*, on the Windows PC), the app started on a free port in 7890–7899, the fixed catalogue
+sent to every entry point, the insecure-default checks, and every break re-run in a fresh copy
+before it counts. Each seeded break (a missing value, a huge value, a number out of range, a stack
+trace or a secret in a response) has a guarded near-miss twin next to it. A probe break counts with
+the right kind on the right entry; an insecure default with the right rule.
+
+| Set | Projects | Expected | Found | Correct | Precision | Recall |
+|---|---|---|---|---|---|---|
+| Tuning (Express-style shop, Python `http.server` age) | 2 | 8 | 8 | 8 | **100 %** | **100 %** |
+| Held out (plain `node:http` notes, Python calculator, Express-style users; written after the tuning) | 3 | 13 | 12 | 12 | **100 %** | **92.3 %** |
+
+- No guarded twin was reported in either set (precision 100 %).
+- First held-out run: recall 76.9 %. The Python calculator's start file (`calc.py`) was not one of
+  the usual names, so the app never started. Changed generally: after the usual names, any top-level
+  or `src/` file that starts a server is a start file. The remaining miss: a parameter read as
+  `q.get('n', ['1'])[0]` is not recognised as a parameter, so `/stars` got only the baseline input.
+- A run takes 6–50 s per project on this PC (17–121 inputs, the app restarted after each crash).
+
 ## Code map
 
 `scripts/eval-codemap.ts` copies Sara's own code into a workspace and asks 8 "where is…?"

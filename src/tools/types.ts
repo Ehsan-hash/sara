@@ -44,12 +44,48 @@ export interface Tool {
    * "ask first" list: e.g. ssh_run with rm -rf, shutdown, a changed firewall).
    */
   asksFirst?: (args: Record<string, unknown>) => boolean;
+  /**
+   * Count-first tools (gmail_organize): work out what the call would touch before the approval
+   * point, e.g. count the matching emails. `summary` replaces the card's line, `detail` adds a
+   * structured section to the card, `ask` makes this call ask even when the tool is allowed, and
+   * `refuse` ends the call with that text (nothing asked, nothing changed).
+   */
+  prepare?: (args: Record<string, unknown>, ctx: { signal: AbortSignal; conversationId?: string }) => Promise<Prepared>;
   /** Source label for the settings UI, e.g. "built-in" or "MCP: github". */
   source?: string;
   /** Short human-readable description of a call, for the activity log and approval cards. */
   summarize(args: Record<string, unknown>): string;
   run(args: Record<string, unknown>, ctx: ToolContext): Promise<string>;
 }
+
+/** What a count-first tool found before asking (see Tool.prepare). */
+export interface Prepared {
+  summary?: string;
+  detail?: ApprovalDetail;
+  ask?: boolean;
+  refuse?: string;
+}
+
+/** Extra structured content for an approval card (drawn by the web app; every value is plain text). */
+export type ApprovalDetail = {
+  kind: 'gmail';
+  action: string;
+  count: number;
+  /** The count stopped at the cap: there are at least this many. */
+  capped: boolean;
+  cap: number;
+  query: string;
+  /** What the date words were read as (e.g. "up to the end of Oct 1, 2026"). */
+  dates?: string;
+  label?: string;
+  samples: { from: string; subject: string; date?: string }[];
+  /** It will run as a background task (progress above the chat, can be stopped). */
+  background: boolean;
+  /** Trash and spam ask every time. */
+  alwaysAsks: boolean;
+  /** For an undo: what it reverses. */
+  undoOf?: string;
+};
 
 /** An error whose message is shown to the model as the tool result. */
 export class ToolError extends Error {

@@ -14,7 +14,7 @@ per il web, Windows, Mac e telefono.
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="License: MIT"></a>
   <img src="https://img.shields.io/badge/node-%E2%89%A5%2024-339933" alt="Node 24 or newer">
   <img src="https://img.shields.io/badge/runtime%20dependencies-0-brightgreen" alt="Zero runtime dependencies">
-  <img src="https://img.shields.io/badge/tests-1105%20passing-brightgreen" alt="1105 tests passing">
+  <img src="https://img.shields.io/badge/tests-1129%20passing-brightgreen" alt="1129 tests passing">
   <a href="docs/RESULTS.md"><img src="https://img.shields.io/badge/HumanEval%20pass%401-96.3%25-informational" alt="HumanEval pass@1 96.3%"></a>
   <a href="https://github.com/farena-ai/sara/releases/latest"><img src="https://img.shields.io/github/v/release/farena-ai/sara?label=release" alt="Latest release"></a>
   <a href="https://github.com/farena-ai/sara/pkgs/container/sara"><img src="https://img.shields.io/badge/docker-amd64%20%7C%20arm64-2496ED" alt="Docker image for amd64 and arm64"></a>
@@ -28,7 +28,7 @@ per il web, Windows, Mac e telefono.
   <sub>Una sessione reale con un modello locale (qwen3.8 27B su Ollama, una RTX 5090) su un server di prova usa e getta, nel tema Notte: tira su il morale di chi le scrive, scrive una piccola app e il suo test mentre il modello li trasmette, chiede prima di eseguire un comando, scopre un vero bug con un test che fallisce e lo corregge finché tutti e 7 i test passano. Fotogrammi scelti dalla registrazione; nulla al loro interno è stato modificato.</sub>
 </p>
 
-> **Stato:** 2.18, licenza MIT, con ventinove versioni ricche di novità dalla 1.0 (tutte qui sotto).
+> **Stato:** 2.19, licenza MIT, con trenta versioni ricche di novità dalla 1.0 (tutte qui sotto).
 > Dalla 2.5 alla 2.8 tutta l'app ha cambiato aspetto. L'[app Android](https://play.google.com/store/apps/details?id=com.backstagecoding.sara)
 > è su Google Play; l'app per iPhone e la versione del Mac App Store arriveranno appena Apple le
 > approverà. Leggi [docs/DISCLOSURES.md](docs/DISCLOSURES.md) prima di usare o condividere Sara.
@@ -69,6 +69,7 @@ citano la pagina · la [modalità locale privata](docs/PRIVATE_LOCAL.md) · le [
 
 | Versione | Cosa ottieni |
 |---|---|
+| **2.19** · Modalità red team | **Prima del rilascio prova a rompere il suo stesso lavoro:** in una copia isolata esegue i tuoi test, avvia la tua app e invia input malformati e limite a ogni punto di ingresso, controlla le impostazioni predefinite insicure e lascia che il modello di codice scriva piccoli script di attacco che possono raggiungere solo quell'app isolata. Un modello revisore più forte tiene solo i guasti riproducibili, citando input, output e riga di codice. Poi **Correggi ciò che si è rotto** su un branch locale. Anche nella 2.19: **riordinare Gmail** (archiviare, segnare come letto, etichette, cestino… per ricerca o data, prima il conteggio, Annulla). [Come funziona](docs/design/HARNESS_TRACK.md) |
 | **2.18** · Ricorda da sola | **Ricorda senza che glielo chieda quando la situazione combacia:** lo stesso errore torna in questo progetto («l'ultima volta la soluzione era…»), un comando che qui è già fallito, un file su cui hai preso una decisione, un'attività simile a una da cui ha imparato qualcosa. Le lezioni nascono solo da ciò che è successo davvero (la riga d'errore e la modifica che l'ha risolto, citate). Ogni nota dice da dove viene e quanto è sicura, al massimo 2 per passo, e *Non utile* le insegna. [Come funziona](docs/design/HARNESS_TRACK.md) |
 | **2.17** · Valutazioni sul tuo lavoro | **Quale impostazione è davvero migliore per te?** Scegli fino a 3 varianti (modello, sbiadimento della memoria, modalità sandbox, budget) e lei ripete le tue ultime attività reali con ciascuna, in copie isolate. Si valutano i test superati, la tua reazione, i risultati dei controlli, token, tempo e costo, più un giudice facoltativo che deve citare. Un vincitore viene indicato solo se un test dei segni lo conferma («+18% su 20 delle tue attività di codice, p=0,01»), con il confronto di ogni coppia come prova. Altrimenti: *nessun vincitore chiaro*. [Come funziona](docs/design/HARNESS_TRACK.md) |
 | **2.16** · Viaggio nel tempo | **Crea un ramo di qualsiasi attività passata da qualsiasi passo:** cambia in quel passo il suo messaggio, il risultato di uno strumento, le note ricordate o il modello, e rilancia. I passi precedenti arrivano dalla registrazione (niente viene rieseguito). I rami di codice lavorano in una copia al commit registrato, mai nei tuoi file. Un confronto affiancato mostra passi, token, costo, modifiche ai file e risposta. *Ripeti senza modifiche* è il controllo. Tieni la risposta o applichi i file solo se vuoi. [Come funziona](docs/design/HARNESS_TRACK.md) |
@@ -286,8 +287,8 @@ uno SPEC che nessun test controllava. Quello che aggiunge oggi è il modo di lav
 chiede prima dei passi rischiosi, mostra cosa è stato eseguito), non un punteggio più alto su questi
 insiemi. Dettagli, risultati per compito e come rieseguirlo: [docs/RESULTS.md](docs/RESULTS.md).
 
-In più, `npm run check`: un controllo dei tipi e 1117 test automatici con un finto modello guidato
-da script (senza rete, senza GPU): 1105 passano su Windows e gli altri 8 sono test dell'isolamento
+In più, `npm run check`: un controllo dei tipi e 1141 test automatici con un finto modello guidato
+da script (senza rete, senza GPU): 1129 passano su Windows e gli altri 8 sono test dell'isolamento
 solo per Linux, eseguiti su un server Linux.
 
 ## Il confronto

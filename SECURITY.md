@@ -96,5 +96,16 @@ your own projects: no scanning of other systems, no exploit or payload generatio
   fix-only pass on one local branch: edits outside the threats' functions are refused, the threat
   rule re-checks, the project's tests run in a sandbox copy, one diff to Apply / Keep / Discard,
   nothing pushed. It reads and fixes your own code only; it never probes a running app.
-- Everything is owner-only (`/api/findings`, `/api/security-pass`, `/api/threat-model`); household
-  members and the demo get 403. Details: [docs/design/HARNESS_TRACK.md § M6, M7](docs/design/HARNESS_TRACK.md).
+- **Red team (Phase 86):** *Red-team this* (or *Red-team first* on a push / PR / publish card)
+  tries to break the project in a throwaway sandbox copy with the network off: the project's tests,
+  a fixed catalogue of generic unusual inputs (empty, very long, unusual Unicode, path-like text,
+  quotes, numbers out of range, wrong types, missing or duplicated fields, malformed JSON) sent only
+  to `127.0.0.1` and the port of the app the harness itself started, and insecure-default checks.
+  No exploit payloads and nothing aimed at any other system. The Coding model may write a few probe
+  scripts; code refuses any that name another host or port, start programs, install, stop
+  processes, write files or reach outside the copy, and on a computer without OS isolation the owner
+  reads and approves each one before it runs. A break counts only if it happens again in a fresh
+  copy and the Reviewing model cites the input, the output and the code line (checked by code).
+  *Fix what broke* uses the same local fix branches; nothing is pushed.
+- Everything is owner-only (`/api/findings`, `/api/security-pass`, `/api/threat-model`, `/api/redteam`); household
+  members and the demo get 403. Details: [docs/design/HARNESS_TRACK.md § M6, M7, M11](docs/design/HARNESS_TRACK.md).

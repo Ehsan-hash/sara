@@ -1249,6 +1249,22 @@
       "After a coding turn that changed files, she lists the entry points (routes, uploads, messages) that reach dangerous lines, each quoted. Report and offer the fix pass adds Fix these: only those threats, on a local branch. Never in chats.",
       "threat-model"
     ],
+    "rt-ship": [
+      "When you ask her to push, open a PR or publish. Ask me: the card offers Red-team first. Always: a red-team run goes first and its result is on the card. Off: no offer. Red-team this works any time.",
+      "redteam"
+    ],
+    "rt-scripts": [
+      "The Coding model may write small probe scripts against the app in the sandbox. Code checks each one (only the app's address, no programs, installs or file writes); without an OS sandbox you read and OK each first.",
+      "redteam"
+    ],
+    "rt-budget": [
+      "The most the probe scripts and the Reviewing model's check may spend per run, shown before it starts. When it runs out, she stops asking the models; the fixed probes still run.",
+      "redteam"
+    ],
+    "rt-minutes": [
+      "A red-team run stops at this limit: the tests, starting the app, the probes and the second check all count. Example: 5 minutes.",
+      "redteam"
+    ],
     "fnd-ws": [
       "Which project's findings to show. Pick one to use Check now and Fix all serious for it. All projects lists everything.",
       "security"

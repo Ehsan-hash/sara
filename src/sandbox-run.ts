@@ -24,6 +24,7 @@ import { dirname, join, relative, resolve, sep, win32 } from 'node:path';
 import { SNAPSHOT_SKIP } from './snapshots.ts';
 import { workspaceRef, type WorkspaceRef } from './runs.ts';
 import { PRIVATE_LOCAL_ENV, runCommand, windowsShell, type Bind, type RunResult, type SandboxInfo } from './tools/sandbox.ts';
+import { resolveInside } from './tools/workspace.ts';
 
 // ------------------------------------------------------------------------------------------------
 // 1. Which commands are risky (code only; no model call)
@@ -810,6 +811,12 @@ export interface SandboxRunOptions {
   watch?: string[];
   /** Prefer a git worktree when the workspace is a repository (default true). */
   preferWorktree?: boolean;
+  /**
+   * Phase 86 (M11): files written into the COPY before the command runs (relative paths, inside the
+   * copy only; never into the real workspace). Red-team mode puts its probe driver and plan here.
+   * They are part of the "before" state, so they never show up as changes.
+   */
+  inject?: Record<string, string>;
 }
 
 const LEFT_MARK = '[sara-sandbox-left:';
@@ -847,6 +854,12 @@ export async function runInSandbox(workspaceDir: string, command: string, opts: 
     const msg = err instanceof SandboxTooBig ? err.message : `The copy could not be made: ${(err as Error).message}`;
     const f: SandboxFinding = { source: 'sandbox', severity: 'medium', rule: 'too-big', title: 'Too big for a sandbox try', advice: `${msg} Run it for real only if you trust it, or raise the size limit in Settings.`, status: 'open' };
     return { ...base, copy: null, notRun: msg, run: null, changes: empty, findings: [f], verdict: 'flagged', ms: Date.now() - t0 };
+  }
+  // Phase 86: injected files (the red-team driver) go into the copy only, through the same path guard.
+  for (const [rel, text] of Object.entries(opts.inject ?? {})) {
+    const dest = resolveInside(copyDir, rel);
+    mkdirSync(dirname(dest), { recursive: true });
+    writeFileSync(dest, text);
   }
   // The deps: bound read-only where the OS can (bubblewrap, Docker, WSL), linked read-only for the
   // macOS sandbox (it refuses writes through the link), missing in the copy-only mode.

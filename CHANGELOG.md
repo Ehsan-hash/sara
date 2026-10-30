@@ -5,6 +5,31 @@ Format: newest first. Semantic versions since 1.0.0 (before that `0.<phase>.<pat
 
 ## Unreleased
 
+## 2.19.0 (2026-10-30): red-team mode, and Gmail organizing (harness track complete, Phase 86)
+
+- **Red-team mode:** *Red-team this* (after a coding turn, in Findings → *Red team*, or *Before you ship*
+  on a project). In a sandbox copy with no network: your project's tests; your app started on a local
+  port with a time limit; a fixed set of malformed and boundary inputs at every entry point the threat
+  model found (empty, missing, huge, odd Unicode, `../`, quotes, out-of-range and wrong-type values,
+  duplicated parameters, broken JSON, deep nesting); insecure defaults (debug on, default credentials,
+  CORS `*`, missing security headers, listening on all interfaces, world-writable files, committed env
+  files); then the Coding model writes up to a few probe scripts that can only reach that sandboxed app
+  (refused if they try anything else; on a computer without OS isolation you approve each script first).
+- **No theater:** the Reviewing model keeps a break only when it reproduces in a fresh copy and the
+  input, the output and the code line are quoted. **Fix what broke** runs on a local branch: the breaking
+  input must now pass, the tests too, and the other checks mustn't find more. Never pushes.
+- *Red-team before shipping* (Settings → Coding): Off / Ask me (default) / Always: when you ask her to
+  push or release, she offers to red-team first.
+- Measured on seeded projects: held-out precision 100 %, recall 92 % ([RESULTS](docs/RESULTS.md)).
+- **Gmail organizing:** archive, mark read or unread, star, important, labels (and new labels), trash
+  and spam, by a Gmail search or plain dates ("Oct 1st, 2026 or older" is read correctly in your time
+  zone). **Count first:** the approval card shows how many emails and a few samples; trash and spam always
+  ask; over 2,000 runs in the background with Stop; **Undo** within 30 days. Also: your top senders (to
+  suggest a clean-up) and unsubscribe links (shown, never clicked). Never permanent delete. Needs one
+  **Reconnect** (Settings → Abilities → Gmail and Calendar) for the new permission (see
+  [docs/GMAIL.md](docs/GMAIL.md)).
+- The harness track (Phases 76–86) is complete: see [the summary](docs/design/HARNESS_TRACK.md).
+
 ## 2.18.0 (2026-10-30): recall on her own (harness track, Phase 85)
 
 - **She recalls without being asked when the run matches something she has seen:** the same error

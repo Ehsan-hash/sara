@@ -91,7 +91,16 @@ version's details are in the [changelog](../CHANGELOG.md).
 | 83 | Time-travel: rewind a run to any step, change one thing, branch | ✅ 2.16 |
 | 84 | Eval loop: define "done", rerun her, see which prompt, tools or memory setting won, with evidence | ✅ 2.17 |
 | 85 | Active recall: she brings up what worked last time when a task looks like an earlier one | ✅ 2.18 |
-| 86 | Red-team mode: before shipping, she tries to break her own app inside the sandbox and fixes what broke | 2.19 |
+| 86 | Red-team mode: before shipping, she tries to break her own app inside the sandbox and fixes what broke | ✅ 2.19 |
+| 87 | Computer use 1: her own browser on your computer (through the desktop app): look, read, console logs, live view | 2.20 |
+| 88 | Computer use 2: she clicks and types in it, with approvals (or *Always allowed*), a Stop button and takeover | 2.21 |
+| 89 | Computer use 3: debug your web project in it (your dev server, hot reload) | 2.22 |
+| 90 | Computer use 4: saved logins, only when you say so, encrypted on your computer | 2.23 |
+| 91 | Computer use 5: use your password manager (Bitwarden, 1Password, KeePassXC…) to fill logins | 2.24 |
+| 92 | Computer use 6: she sees your desktop (screenshots and the accessibility tree) | 2.25 |
+| 93 | Computer use 7: she uses your mouse and keyboard | 2.26 |
+| 94 | Computer use 8: guided "tune up my computer" tasks | 2.27 |
+| 95 | Computer use 9: the same on Linux desktops | 2.28 |
 
 Ideas and requests are welcome in [Discussions](https://github.com/farena-ai/sara/discussions)
 and [issues](https://github.com/farena-ai/sara/issues). See [CONTRIBUTING.md](../CONTRIBUTING.md).

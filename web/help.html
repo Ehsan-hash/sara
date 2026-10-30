@@ -293,7 +293,8 @@
 
 <h2 id="accounts">Gmail, Calendar and GitHub</h2>
 <ul>
-  <li><strong>Google</strong> (<em>Settings → Abilities → Gmail and Calendar</em>): she can find and read mail, list what needs an answer, draft replies, and see or add calendar events. Sending and adding events ask you first.</li>
+  <li><strong>Google</strong> (<em>Settings → Abilities → Gmail and Calendar</em>): she can find and read mail, list what needs an answer, draft replies, organize your mail, and see or add calendar events. Sending, organizing and adding events ask you first.</li>
+  <li><strong>Organizing Gmail</strong>: archive, mark read or unread, star, mark important, add or remove labels, move to trash or out of it, and mark spam or not spam, for a Gmail search or plain dates ("everything from Oct 1st or older", "last week"). The card first shows how many emails, the search and a few of them; big jobs run in the background and can be stopped; the result card has <em>Undo</em> (30 days) and <em>Open in Gmail</em>. She never deletes for good and never opens unsubscribe links herself. Connected before this was added? Press <em>Reconnect to allow organizing</em>.</li>
   <li><strong>GitHub</strong> (<em>Settings → Abilities → GitHub</em>): add a token; she can then list and read issues and pull requests, open issues, comment and open pull requests (writing asks you first).</li>
   <li>Text in mail and on GitHub can come from anyone. She treats it as information, never as instructions.</li>
 </ul>
@@ -564,6 +565,16 @@
   <li>After a coding turn that changed files, she maps where your app can be reached from (<strong>entry points</strong>: web routes, file uploads, messages, the command line) and follows each one through your own functions to <strong>dangerous lines</strong>: shell commands, SQL, file paths, outgoing requests, unsafe loading of data, HTML, redirects, code that runs input. A route that changes things without a sign-in check, or a sign-in route without a rate limit, counts too.</li>
   <li>Each <strong>threat</strong> quotes its entry point and the dangerous line and names the path between them; a check on the way (placeholders, keeping only the file name, an allowlist, escaping) counts as safe. The Reviewing model may add threats only from an entry point the code found, with real quotes. <em>Findings → Threat model</em> shows the surfaces, the trust boundaries, the open threats and what changed this turn.</li>
   <li><strong>Fix these</strong> starts the second pass: the Coding model may only fix those threats (no new features, no refactors), on one local branch; its edits must stay in the code the threats run through, the same check runs again, the tests run in a sandbox copy, and you get one diff to <strong>Apply</strong>, <strong>Keep</strong> or <strong>Discard</strong>. Nothing is pushed. Choose <em>Report and offer the fix pass</em>, <em>Report only</em> or <em>Off</em> in <em>Settings → Abilities → Coding projects</em>.</li>
+</ul>
+
+<h2 id="redteam">Red team: try to break it before you ship</h2>
+<ul>
+  <li><strong>Red-team this</strong> (in <em>Findings → Red team</em>, on the card under a coding reply, or <em>Before you ship</em> on the project page) first shows the plan: the entry points, how many unusual inputs, the tests, how the app is started, the budget and the time limit. Nothing runs until you press <em>Start</em>.</li>
+  <li>Everything runs in a <strong>throwaway copy</strong> of the project with the network off: the project's tests; the app started on a free local port; generic unusual input at every entry point (empty, very long, unusual Unicode, path-like text, quotes, numbers out of range, wrong types, missing or duplicated fields, malformed JSON); and insecure defaults (debug mode, default passwords, CORS for any site, missing security headers, listening on every interface, files anyone can change, committed secrets). Crashes, hangs, stack traces and secrets in responses count as breaks.</li>
+  <li>The Coding model may write a few <strong>probe scripts</strong> against the app in the copy. Code checks each one first (only the app's address, no other hosts, no programs, installs or file writes). On a computer without an OS sandbox (Windows without Docker or WSL) you read each script and tick the ones to run; nothing it wrote runs by itself.</li>
+  <li><strong>No theater:</strong> every break is sent again in a fresh copy and must break the same way, and the Reviewing model must cite the input, what happened and the code line, all checked by code. Anything else is dropped and listed under <em>Dropped</em>.</li>
+  <li><strong>Fix what broke</strong> makes one local fix branch: the Coding model may only fix those breaks, the same inputs are sent again and must now get an answer, the tests must pass and the other checks must not find more. You choose <em>Apply</em>, <em>Keep</em> or <em>Discard</em>; nothing is pushed. A fixed break becomes a lesson she remembers in that project.</li>
+  <li><em>Settings → Abilities → Coding projects → Red-team before shipping</em>: <em>Ask me</em> (default) offers <em>Red-team first</em> when you ask her to push, open a PR or publish; <em>Always</em> runs it first; <em>Off</em>.</li>
 </ul>
 
 <h2 id="together">Things to do together</h2>

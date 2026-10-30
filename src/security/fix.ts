@@ -23,7 +23,7 @@ import type { Conversation } from '../store.ts';
 import { resolveInside, workspaceDir } from '../tools/workspace.ts';
 import { readWorkspaceText, type Finding, type FixState } from './findings.ts';
 import { dirtyFiles, git, repoState } from './git.ts';
-import { askModel, jsonIn, securitySettings, walkFiles } from './pass.ts';
+import { askModel, jsonIn, jsonObjectsIn, securitySettings, walkFiles } from './pass.ts';
 import { checkFile, RULES, type RuleId } from './rules.ts';
 import { regionsFor } from './threat-graph.ts';
 import { analyzeDir, recheckThreat } from './threats.ts';
@@ -75,6 +75,11 @@ Each "find" must be copied exactly from the file and appear in it only once.`;
 
 const THREAT_FIX_SYSTEM = `You fix ONLY the listed security threats. This is a fix-only pass: no new features, no refactoring, no renaming, no formatting, no other changes. Keep the code working and keep its behaviour for normal input.
 Change only lines inside the regions given for each file (you may also add an import line). Prefer the smallest change at the dangerous line or the entry point: a parameter instead of string-built SQL, a basename or a root check for paths, an allowlist, escaping, the project's own sign-in check or rate limiter.
+Answer with JSON only: {"edits":[{"file":"path as given","find":"exact text from the file (a few whole lines)","replace":"the new text"}],"note":"one sentence on what you changed"}
+Each "find" must be copied exactly from the file as shown and appear in it only once.`;
+
+const REDTEAM_FIX_SYSTEM = `You fix ONLY the listed red-team breaks: unusual input (empty, very long, wrong type, malformed) made the app crash, hang, show a stack trace or send back a secret. This is a fix-only pass: no new features, no refactoring, no renaming, no formatting, no other changes. Keep the code working and keep its behaviour for normal input.
+Change only lines inside the regions given for each file (you may also add an import line). Prefer the smallest change: check the value (present, the right type, a sensible length or range) and answer 400 with a short message, catch the error in the handler, or stop sending the stack trace / secret.
 Answer with JSON only: {"edits":[{"file":"path as given","find":"exact text from the file (a few whole lines)","replace":"the new text"}],"note":"one sentence on what you changed"}
 Each "find" must be copied exactly from the file as shown and appear in it only once.`;
 
@@ -178,8 +183,9 @@ export class FixBranches {
     if (!f) throw new Error('Finding not found.');
     const no = this.why(f);
     if (no) throw new Error(no);
-    // Phase 82: a threat is fixed by the threat pass's loop (its rule is the re-check).
-    if (f.source === 'threat') return this.startBatch([id], opts);
+    // Phase 82: a threat is fixed by the threat pass's loop (its rule is the re-check). Phase 86: a
+    // red-team break too (re-running its reproducing probe is the re-check).
+    if (f.source === 'threat' || f.source === 'redteam') return this.startBatch([id], opts);
     const ws = this.#wsDir(f);
     // An old branch of the same name (a fix kept earlier): this one gets its own name.
     let branch = branchName(id);
@@ -281,7 +287,7 @@ export class FixBranches {
         rec.startStep({ label: `Fix try ${attempts}` });
         const { text } = await askModel(chain, [{ role: 'system', content: FIX_SYSTEM }, { role: 'user', content: user }], Math.min(2500, room), signal);
         const j = jsonIn(text) as { edits?: { find: string; replace: string }[]; note?: string } | undefined;
-        const edits = Array.isArray(j?.edits) ? j!.edits.filter((e) => e && typeof e === 'object').slice(0, 10) : [];
+        const edits = (Array.isArray(j?.edits) ? j!.edits : editsFromObjects(text)).filter((e) => e && typeof e === 'object').slice(0, 10);
         if (!edits.length) {
           feedback = 'the answer had no edits';
           continue;
@@ -308,7 +314,7 @@ export class FixBranches {
     const tokens = rec.on ? rec.totals().tokens : 0;
     if (fixedText === undefined) {
       this.#cleanup(ws, dir, branch, true);
-      return store.setFix(f.id, { ...(store.get(f.id)!.fix as FixState), state: 'failed', stage: undefined, attempts, tokens, error: status === 'budget' ? 'Stopped: the fix budget ran out.' : `No working fix: ${feedback}.`, recheck: { fixed: false, before, after, remaining: [] }, endedAt: new Date().toISOString(), ...(rec.on ? { runId: rec.id } : {}) });
+      return store.setFix(f.id, { ...(store.get(f.id)!.fix as FixState), state: 'failed', stage: undefined, attempts, tokens, error: status === 'budget' ? 'Stopped: the fix budget ran out.' : `No working fix: ${feedback}.`, recheck: { fixed: false, before, after, remaining: [] }, endedAt: new Date().toISOString(), ...(rec.id ? { runId: rec.id } : {}) });
     }
     writeFileSync(join(dir, ...f.file!.split('/')), fixedText);
     // 3. The re-check (only this finding's rule) and the project's tests in a sandbox copy.
@@ -335,7 +341,7 @@ export class FixBranches {
     const fixSha = git(dir, ['rev-parse', 'HEAD']).out.trim();
     const diff = git(dir, ['diff', '--no-color', '--no-ext-diff', baseSha, fixSha]).out;
     const files = git(dir, ['diff', '--name-only', baseSha, fixSha]).out.split('\n').map((x) => x.trim()).filter(Boolean);
-    return store.setFix(f.id, { ...(store.get(f.id)!.fix as FixState), state: 'ready', stage: undefined, baseSha, fixSha, recheck, tests, diff: diff.length > 60_000 ? `${diff.slice(0, 60_000)}\n[… cut]` : diff, files, attempts, tokens, note, endedAt: new Date().toISOString(), ...(rec.on ? { runId: rec.id } : {}) });
+    return store.setFix(f.id, { ...(store.get(f.id)!.fix as FixState), state: 'ready', stage: undefined, baseSha, fixSha, recheck, tests, diff: diff.length > 60_000 ? `${diff.slice(0, 60_000)}\n[… cut]` : diff, files, attempts, tokens, note, endedAt: new Date().toISOString(), ...(rec.id ? { runId: rec.id } : {}) });
   }
 
   /** The fix branch's worktree from HEAD, with the owner's uncommitted work committed as its base. */
@@ -398,7 +404,10 @@ export class FixBranches {
     const list = [...new Set(ids)].slice(0, 20).map((i) => store.get(i));
     if (!list.length || list.some((f) => !f)) throw new Error('Finding not found.');
     const found = list as Finding[];
-    if (found.some((f) => f.source !== 'threat')) throw new Error('The fix pass is for threats only.');
+    // Phase 86: red-team breaks use the same pass with their own re-check (src/redteam.ts recheck).
+    const source = found[0].source;
+    if (found.some((f) => f.source !== source) || (source !== 'threat' && source !== 'redteam')) throw new Error('The fix pass is for threats only (or red-team breaks, one kind at a time).');
+    if (source === 'redteam' && !this.#app.redteam) throw new Error('Red-team mode is not available here.');
     if (new Set(found.map((f) => f.workspace)).size !== 1) throw new Error('These threats are in different projects.');
     for (const f of found) {
       const no = this.why(f);
@@ -407,8 +416,9 @@ export class FixBranches {
     found.sort((a, b) => a.id - b.id);
     const lead = found[0];
     const ws = this.#wsDir(lead);
-    let branch = `sara/threat-fix-${lead.id}`;
-    for (let n = 2; git(ws, ['rev-parse', '--verify', '-q', `refs/heads/${branch}`]).status === 0; n++) branch = `sara/threat-fix-${lead.id}-${n}`;
+    const prefix = source === 'redteam' ? 'sara/redteam-fix' : 'sara/threat-fix';
+    let branch = `${prefix}-${lead.id}`;
+    for (let n = 2; git(ws, ['rev-parse', '--verify', '-q', `refs/heads/${branch}`]).status === 0; n++) branch = `${prefix}-${lead.id}-${n}`;
     const dir = join(this.#root, `t${lead.id}-${randomUUID().slice(0, 8)}`, 'ws');
     const state: FixState = { state: 'working', branch, startedAt: new Date().toISOString(), stage: 'making the branch', batch: { lead: lead.id, ids: found.map((f) => f.id) } };
     const marked = this.#setAll(lead, state, branch)!;
@@ -433,7 +443,9 @@ export class FixBranches {
     const cur = () => store.get(lead.id)!.fix as FixState;
     const stage = (st: string, extra: Partial<FixState> = {}) => this.#setAll(lead, { ...cur(), stage: st, ...extra });
     const name = app.persona.name && app.persona.name !== 'Sara' ? app.persona.name : 'Sara';
-    const baseSha = this.#worktree(ws, dir, branch, name, `threats ${list.map((f) => `#${f.id}`).join(', ')}`);
+    const redteam = lead.source === 'redteam';
+    const what = redteam ? 'red-team breaks' : 'threats';
+    const baseSha = this.#worktree(ws, dir, branch, name, `${what} ${list.map((f) => `#${f.id}`).join(', ')}`);
     stage('asking the Coding model', { baseSha });
     // The files the threats name (sink and every step of the path), at most 8, and their regions.
     const files: string[] = [];
@@ -453,18 +465,21 @@ export class FixBranches {
       regions.set(p, regionsFor(p, text, [...new Set(lines)]));
     }
     const baseAnalysis = analyzeDir(dir);
-    const before = new Map(list.map((f) => [f.id, recheckThreat(f, dir, baseAnalysis).length]));
+    // A red-team break was reproduced twice already (count 1); a threat is counted by its rule.
+    const before = new Map(list.map((f) => [f.id, redteam ? 1 : recheckThreat(f, dir, baseAnalysis).length]));
     const codeBefore = new Map([...original].map(([p, t]) => [p, checkFile(p, t).length]));
+    const hitsBefore = baseAnalysis.hits.length;
     const conv: Conversation = (lead.conversationId ? app.store.getConversation(lead.conversationId) : undefined) ?? { id: '', title: 'Fix', providerId: null, model: null, workspace: lead.workspace ?? '', mode: 'coding', private: false, channel: 'web', channelKey: null, partner: null, projectId: null, archivedAt: null, tags: [], createdAt: '', updatedAt: '' };
-    const rec = app.runs && conv.id ? new RunRecorder(app.runs, { kind: 'security', conversationId: conv.id, title: `Fix threats ${list.map((f) => `#${f.id}`).join(', ')}` }) : RunRecorder.none();
+    const rec = app.runs && conv.id ? new RunRecorder(app.runs, { kind: redteam ? 'redteam' : 'security', conversationId: conv.id, title: `Fix ${what} ${list.map((f) => `#${f.id}`).join(', ')}` }) : RunRecorder.none();
     let chain = resolveChain(app, conv, 'coding');
-    if (rec.on) chain = chain.map((c) => ({ ...c, provider: rec.wrap(c.provider, 'threat fix') }));
+    if (rec.on) chain = chain.map((c) => ({ ...c, provider: rec.wrap(c.provider, redteam ? 'red-team fix' : 'threat fix') }));
     let attempts = 0;
     let feedback = '';
     let note = '';
     let status: 'ok' | 'budget' = 'ok';
     let results: Record<string, { before: number; after: number; fixed: boolean }> | undefined;
     let written: Map<string, string> | undefined;
+    let tests: FixState['tests'] | undefined;
     const restore = () => {
       for (const [p, t] of original) writeFileSync(join(dir, ...p.split('/')), t);
     };
@@ -474,8 +489,9 @@ export class FixBranches {
         const spent = rec.on ? rec.totals().tokens : 0;
         const threats = list
           .map((f) => {
-            const m = f.meta as { entry?: { label: string; file: string; line: number; quote: string }; path?: { file: string; line: number; label: string }[]; category?: string };
+            const m = f.meta as { entry?: { label: string; file: string; line: number; quote: string }; path?: { file: string; line: number; label: string }[]; category?: string; input?: string; observed?: string };
             const path = (m.path ?? []).map((x) => `${x.label} (${x.file}:${x.line})`).join(' -> ');
+            if (redteam) return `Break #${f.id} (${f.rule}): ${f.title}\nEntry point: ${m.entry ? `${m.entry.label} at ${m.entry.file}:${m.entry.line}: ${m.entry.quote}` : '-'}\nThe input that breaks it: ${m.input ?? '-'}\nWhat happened: ${String(m.observed ?? '').slice(0, 600)}\nThe line (${f.file}:${f.line}): ${f.quote}\nHow to fix: ${f.advice}\nAfter your change the same input is sent again: it must get an answer (a 400 with a short message is fine), not a crash, a hang, a stack trace or a secret.`;
             return `Threat #${f.id} (${f.rule}, ${m.category ?? ''}): ${f.title}\nEntry point: ${m.entry ? `${m.entry.label} at ${m.entry.file}:${m.entry.line}: ${m.entry.quote}` : '?'}\nPath: ${path}\nThe dangerous line (${f.file}:${f.line}): ${f.quote}\nHow to fix: ${f.advice}`;
           })
           .join('\n\n');
@@ -497,11 +513,13 @@ export class FixBranches {
           break;
         }
         rec.startStep({ label: `Fix pass try ${attempts}` });
-        const { text } = await askModel(chain, [{ role: 'system', content: THREAT_FIX_SYSTEM }, { role: 'user', content: user }], Math.min(3000, room), signal);
+        const { text } = await askModel(chain, [{ role: 'system', content: redteam ? REDTEAM_FIX_SYSTEM : THREAT_FIX_SYSTEM }, { role: 'user', content: user }], Math.min(3000, room), signal);
         const j = jsonIn(text) as { edits?: { file?: string; find: string; replace: string }[]; note?: string } | undefined;
-        const edits = Array.isArray(j?.edits) ? j!.edits.filter((e) => e && typeof e === 'object').slice(0, 20) : [];
+        const edits = (Array.isArray(j?.edits) ? j!.edits : editsFromObjects(text)).filter((e) => e && typeof e === 'object').slice(0, 20);
         if (!edits.length) {
           feedback = 'the answer had no edits';
+          // On the run, so the owner (and the next look) can see what the model answered instead.
+          rec.tool({ id: `fix-${attempts}`, name: 'fix_answer', summary: 'The answer had no usable edits', args: {}, status: 'error', output: text.slice(0, 2000), ms: 0 });
           continue;
         }
         // Each edit: a file the threats name, inside its regions (or only adding imports).
@@ -539,12 +557,14 @@ export class FixBranches {
           continue;
         }
         for (const [p, t] of next) writeFileSync(join(dir, ...p.split('/')), t);
-        // The proof: the threat rule on the whole worktree, and nothing new for the code checks.
+        // The proof: the threat rule on the whole worktree (red-team: the reproducing probe sent
+        // again in a sandbox copy of the worktree), and nothing new for the code checks.
         const after = analyzeDir(dir);
         const res: Record<string, { before: number; after: number; fixed: boolean }> = {};
         for (const f of list) {
           const b = before.get(f.id) ?? 0;
-          const a = recheckThreat(f, dir, after).length;
+          if (redteam) stage('sending the breaking input again');
+          const a = redteam ? await app.redteam!.recheck(f, dir, signal) : recheckThreat(f, dir, after).length;
           res[String(f.id)] = { before: b, after: a, fixed: a === 0 || a < b };
         }
         const worse = [...next].find(([p, t]) => checkFile(p, t).length > (codeBefore.get(p) ?? 0));
@@ -553,10 +573,25 @@ export class FixBranches {
           feedback = `the change added a new problem in ${worse[0]} (the code checks find more than before)`;
           continue;
         }
+        if (redteam && after.hits.length > hitsBefore) {
+          restore();
+          feedback = 'the change added a new threat (the threat checks find more than before)';
+          continue;
+        }
         if (!Object.values(res).some((r) => r.fixed)) {
           restore();
-          feedback = `the threat rule still finds ${list.map((f) => `#${f.id}`).join(', ')}`;
+          feedback = redteam ? `the same input still breaks it (${list.map((f) => `#${f.id}`).join(', ')})` : `the threat rule still finds ${list.map((f) => `#${f.id}`).join(', ')}`;
           continue;
+        }
+        if (redteam) {
+          // Red-team: the project's tests must pass with the fix (in a sandbox copy).
+          stage('running the tests', { attempts });
+          tests = await this.#tests(dir, true, signal);
+          if (tests && tests.ran && tests.exitCode !== 0) {
+            restore();
+            feedback = `the project's tests fail with this change: ${tests.output.split(/\r?\n/).filter((l) => /fail|error|not ok|✖/i.test(l)).slice(0, 3).join(' | ').slice(0, 300)}`;
+            continue;
+          }
         }
         results = res;
         written = next;
@@ -570,18 +605,18 @@ export class FixBranches {
     const total = (key: 'before' | 'after', r = results) => Object.values(r ?? {}).reduce((n, x) => n + x[key], 0);
     if (!results || !written) {
       this.#cleanup(ws, dir, branch, true);
-      return this.#setAll(lead, { ...cur(), state: 'failed', stage: undefined, attempts, tokens, error: status === 'budget' ? 'Stopped: the fix budget ran out.' : `No working fix: ${feedback}.`, recheck: { fixed: false, before: [...before.values()].reduce((a, b) => a + b, 0), after: [...before.values()].reduce((a, b) => a + b, 0), remaining: [] }, endedAt: new Date().toISOString(), ...(rec.on ? { runId: rec.id } : {}) });
+      return this.#setAll(lead, { ...cur(), state: 'failed', stage: undefined, attempts, tokens, error: status === 'budget' ? 'Stopped: the fix budget ran out.' : `No working fix: ${feedback}.`, recheck: { fixed: false, before: [...before.values()].reduce((a, b) => a + b, 0), after: [...before.values()].reduce((a, b) => a + b, 0), remaining: [] }, endedAt: new Date().toISOString(), ...(rec.id ? { runId: rec.id } : {}) });
     }
     const remaining = list.filter((f) => !results![String(f.id)].fixed).map((f) => ({ line: f.line ?? 0, quote: f.quote ?? '' }));
     const recheck = { fixed: remaining.length === 0, before: total('before'), after: total('after'), remaining };
     stage('running the tests', { recheck, attempts, tokens, note });
-    const tests = await this.#tests(dir, s.runTests, signal);
+    if (tests === undefined) tests = await this.#tests(dir, s.runTests, signal);
     git(dir, ['add', '--', ...written.keys()], { name });
-    git(dir, ['commit', '-q', '--no-verify', '-m', `${name}: fix threats ${list.map((f) => `#${f.id}`).join(', ')}`.slice(0, 200)], { name });
+    git(dir, ['commit', '-q', '--no-verify', '-m', `${name}: fix ${what} ${list.map((f) => `#${f.id}`).join(', ')}`.slice(0, 200)], { name });
     const fixSha = git(dir, ['rev-parse', 'HEAD']).out.trim();
     const diff = git(dir, ['diff', '--no-color', '--no-ext-diff', baseSha, fixSha]).out;
     const changed = git(dir, ['diff', '--name-only', baseSha, fixSha]).out.split('\n').map((x) => x.trim()).filter(Boolean);
-    return this.#setAll(lead, { ...cur(), state: 'ready', stage: undefined, baseSha, fixSha, recheck, tests, diff: diff.length > 60_000 ? `${diff.slice(0, 60_000)}\n[… cut]` : diff, files: changed, attempts, tokens, note, endedAt: new Date().toISOString(), batch: { ...cur().batch!, results }, ...(rec.on ? { runId: rec.id } : {}) });
+    return this.#setAll(lead, { ...cur(), state: 'ready', stage: undefined, baseSha, fixSha, recheck, tests, diff: diff.length > 60_000 ? `${diff.slice(0, 60_000)}\n[… cut]` : diff, files: changed, attempts, tokens, note, endedAt: new Date().toISOString(), batch: { ...cur().batch!, results }, ...(rec.id ? { runId: rec.id } : {}) });
   }
 
   /** Apply to my branch: only the fix's files, never over a file that changed since the fix started. */
@@ -627,12 +662,24 @@ export class FixBranches {
     if (f.fix.batch) {
       // The second pass: every threat of the batch the re-check proved fixed is fixed; the others stay open.
       const endedAt = new Date().toISOString();
+      const fixedNow: Finding[] = [];
       for (const mid of f.fix.batch.ids) {
         const m = store.get(mid);
         if (!m) continue;
         const r = f.fix.batch.results?.[String(mid)];
         store.setFix(mid, { ...f.fix, state: 'applied', applied: { written, conflicts }, endedAt });
-        if (r?.fixed && m.status === 'open') store.setStatus(mid, 'fixed', 'Fixed by the threat fix pass and applied to your files');
+        if (r?.fixed && m.status === 'open') {
+          store.setStatus(mid, 'fixed', m.source === 'redteam' ? 'Fixed by "Fix what broke": the same input no longer breaks it; applied to your files' : 'Fixed by the threat fix pass and applied to your files');
+          fixedNow.push(store.get(mid)!);
+        }
+      }
+      // Phase 86 (M10): a break that was fixed becomes a lesson (the input, the error, the change).
+      if (fixedNow.some((x) => x.source === 'redteam')) {
+        try {
+          this.#app.redteam?.lesson(fixedNow, f.fix.diff ?? '');
+        } catch (err) {
+          console.warn(`red-team lesson: ${(err as Error).message}`);
+        }
       }
       return store.get(f.id)!;
     }
@@ -705,4 +752,17 @@ export function sweepFixDirs(root: string): void {
   } catch {
     /* in use */
   }
+}
+
+/**
+ * Edits from an answer that came as several JSON objects instead of one (a small model once wrote two
+ * `{"edits": [...]}` objects back to back, or bare `{"find", "replace"}` objects): all of them, in order.
+ */
+function editsFromObjects(text: string): { file?: string; find: string; replace: string }[] {
+  const out: { file?: string; find: string; replace: string }[] = [];
+  for (const o of jsonObjectsIn(text)) {
+    if (Array.isArray(o.edits)) out.push(...(o.edits as { file?: string; find: string; replace: string }[]));
+    else if (typeof o.find === 'string' && typeof o.replace === 'string') out.push(o as unknown as { file?: string; find: string; replace: string });
+  }
+  return out;
 }

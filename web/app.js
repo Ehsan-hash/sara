@@ -31,11 +31,12 @@ import { emptyState, initTidy, overflowMenu } from './tidy.js';
 import { addStep, finishStep, hasSteps, memoryStep, recallStep, runLink, runStep, setBudget, stepLine, waitStep } from './steps.js';
 import { budgetCard, budgetMeter, fillBudgetSelect, overrideNote } from './budget-view.js';
 import { sandboxButtons, sandboxFirstNote, sandboxFlag, sandboxSection, teamSandboxRow } from './sandbox-view.js';
-import { advisoryFlag, advisorySection, initFindings, openFindings, refreshFindings, securityCard, threatCard } from './findings-view.js';
+import { advisoryFlag, advisorySection, initFindings, openFindings, openRedTeam, redteamFlag, redteamGateSection, refreshFindings, securityCard, threatCard } from './findings-view.js';
 import { openRunView } from './run-view.js';
 import { recallChip, recallKindWords } from './recall-view.js';
 import { initEvals, onEvalEvent, openEvals } from './evals-view.js';
 import { renderCard, renderCards } from './result-cards.js';
+import { gmailApproval, gmailQuestion } from './gmail-view.js';
 import { initLook, setContextRing, setLookBusy, showHeadChips } from './look.js';
 import { closePanel, initHerPanel, openPanel, panelConv, panelFace, panelJobs, panelMessages, panelMood, panelNow, panelOpen, togglePanel } from './her-panel.js';
 import { initCommandBar, openCommandBar, score as cmdScore } from './command-bar.js';
@@ -1340,6 +1341,11 @@ function renderMessages(messages, opts = {}) {
       }
     } else if (m.role === 'notice' && m.kind === 'job') {
       els.push(jobCard(m.content, m.meta?.status, m.meta));
+      // A background Gmail change: its result card (done, Undo) rides on the job's notice.
+      if (m.meta?.card) {
+        const rc = renderCard(m.meta.card);
+        if (rc) els.push(rc);
+      }
     } else if (m.role === 'notice' && m.kind === 'call') {
       els.push(bubble('notice', `📞 ${t('Sara called you')}: ${m.content}`, 'call', m.id));
     } else if (m.role === 'assistant' && !m.content.trim() && !m.meta?.proof?.length) {
@@ -1388,9 +1394,11 @@ function renderMessages(messages, opts = {}) {
       // The reply that ends a turn (no tool calls after it) carries the turn's step line.
       if (m.role === 'assistant' && !m.meta?.toolCalls?.length) flush();
       // Phase 81: her security pass over the files this turn changed (when it has finished).
-      if (m.role === 'assistant' && m.meta?.security && !document.body.classList.contains('demo')) els.push(securityCard(m.meta.security, { onOpen: (sum) => void openFindings(sum.runId ? { runId: sum.runId } : { conversationId: state.currentId }) }));
+      // Phase 86: "Red-team this" on the after-turn card (the threat card when there is one, else this one).
+      const rtWs = (state.conversations ?? []).find((c) => c.id === state.currentId)?.workspace;
+      if (m.role === 'assistant' && m.meta?.security && !document.body.classList.contains('demo')) els.push(securityCard(m.meta.security, { onOpen: (sum) => void openFindings(sum.runId ? { runId: sum.runId } : { conversationId: state.currentId }), redteam: !m.meta?.threats, workspace: rtWs, conversationId: state.currentId }));
       // Phase 82: the threat model of the same turn (entry point → dangerous line), with "Fix these".
-      if (m.role === 'assistant' && m.meta?.threats && !document.body.classList.contains('demo')) els.push(threatCard(m.meta.threats, { onOpen: (sum) => void openFindings({ workspace: sum.workspace, tab: 'threats' }), onFixStarted: (sum) => void openFindings({ workspace: sum.workspace, source: 'threat' }) }));
+      if (m.role === 'assistant' && m.meta?.threats && !document.body.classList.contains('demo')) els.push(threatCard(m.meta.threats, { onOpen: (sum) => void openFindings({ workspace: sum.workspace, tab: 'threats' }), onFixStarted: (sum) => void openFindings({ workspace: sum.workspace, source: 'threat' }), redteam: true, conversationId: state.currentId }));
     }
   }
   flush();
@@ -1812,6 +1820,9 @@ async function runStream(path, body, userBubble) {
         } else if (ev.type === 'advisory') {
           // Phase 81: the install check's outcome (installed anyway, not installed, not checked: offline).
           place(advisoryFlag(ev));
+        } else if (ev.type === 'redteam') {
+          // Phase 86: "Red-team first" on the ship card: the run started, shipping waits for its report.
+          place(redteamFlag(ev));
         } else if (ev.type === 'tool_running') {
           document.querySelector(`.approval[data-call="${CSS.escape(ev.id)}"]`)?.remove();
           if (steps) runStep(steps, ev.id);
@@ -2202,9 +2213,16 @@ function approvalCard(ev, block) {
     title.dataset.raw = '';
     card.classList.add('approval-advisory');
   }
+  // Phase 86: "Red-team before shipping": Red-team first / Ship / Don't.
+  const rtg = ev.redteam;
+  if (rtg && !c && !adv) {
+    title.textContent = rtg.mode === 'ask' ? t('Red-team before shipping?') : t('Ship after the red-team run?');
+    title.dataset.raw = '';
+    card.classList.add('approval-advisory');
+  }
   const yes = document.createElement('button');
   yes.type = 'button';
-  yes.textContent = c ? t('Do it anyway') : adv ? t('Install anyway') : ev.budget ? t('Keep going') : ev.sandboxFirst ? t('Try it in a copy') : t('Allow');
+  yes.textContent = c ? t('Do it anyway') : adv ? t('Install anyway') : rtg ? t('Ship without it') : ev.budget ? t('Keep going') : ev.sandboxFirst ? t('Try it in a copy') : t('Allow');
   yes.addEventListener('click', () => decide(true, c || adv ? 'override' : undefined));
   const no = document.createElement('button');
   no.type = 'button';
@@ -2212,6 +2230,14 @@ function approvalCard(ev, block) {
   no.textContent = c ? t("Don't") : adv ? t("Don't install") : ev.budget ? t('Wrap up') : t('Deny');
   no.addEventListener('click', () => decide(false, c || adv ? 'deny' : undefined));
   row.append(yes, no);
+  if (rtg && !c && !adv && rtg.mode === 'ask') {
+    const first = document.createElement('button');
+    first.type = 'button';
+    first.textContent = t('Red-team first');
+    first.addEventListener('click', () => decide(false, 'redteam'));
+    row.prepend(first);
+    yes.className = 'ghost';
+  }
   if (c) {
     const upd = document.createElement('button');
     upd.type = 'button';
@@ -2221,7 +2247,16 @@ function approvalCard(ev, block) {
     row.append(upd);
     card.classList.add('approval-contradict');
   }
-  card.append(title, ...(c ? [contradictionSection(c)] : []), ...(adv ? [advisorySection(adv)] : []), ...(ev.budget ? [budgetMeter(ev.budget)] : []), what, ...(ev.sandboxFirst ? [sandboxFirstNote(ev.sandboxFirst)] : []), row);
+  // Gmail organizing: the count-first card ("Archive 4,213 emails?", the search, a few of them).
+  const gm = ev.detail?.kind === 'gmail' ? gmailApproval(ev.detail) : null;
+  if (gm) {
+    const q = title.querySelector('.approval-what');
+    if (q) q.textContent = gmailQuestion(ev.detail);
+    else title.textContent = gmailQuestion(ev.detail);
+    what.hidden = true;
+    card.classList.add('approval-gmail');
+  }
+  card.append(title, ...(c ? [contradictionSection(c)] : []), ...(adv ? [advisorySection(adv)] : []), ...(rtg && !c && !adv ? [redteamGateSection(rtg)] : []), ...(ev.budget ? [budgetMeter(ev.budget)] : []), ...(gm ? [gm] : []), what, ...(ev.sandboxFirst ? [sandboxFirstNote(ev.sandboxFirst)] : []), row);
   if (card.classList.contains('approval-tidy')) {
     if (TOOL_WORDS[ev.name]) title.after(el('p', 'approval-about muted small', t(TOOL_WORDS[ev.name])));
     row.append(el('span', 'tool-raw approval-raw', ev.name));
@@ -2353,6 +2388,11 @@ const TOOL_WORDS = {
   gmail_needs_answer: 'Find emails waiting for your answer.',
   gmail_draft: 'Write an email draft for you to check and send.',
   gmail_send: 'Send an email when you clearly ask her to.',
+  gmail_organize: 'Archive, mark read, label, star, trash or mark spam on many emails at once. Shows the count first; Undo for 30 days.',
+  gmail_undo: 'Undo a change she made to your Gmail.',
+  gmail_labels: 'See your Gmail labels.',
+  gmail_senders: 'See who sends you the most email, to tidy up.',
+  gmail_unsubscribe_info: 'Find the unsubscribe link of a sender (you open it yourself).',
   calendar_events: 'See your Google Calendar.',
   calendar_add: 'Add an event to your Google Calendar.',
   calendar_remove: 'Delete an event from your Google Calendar.',
@@ -2384,6 +2424,7 @@ const TOOL_NAME = {
   recall: 'Look back at past chats', library: 'Read your documents', recipe_save: 'Save a recipe', recipe_find: 'Find a recipe', recipe_use: 'Follow a recipe',
   scrapbook: 'Scrapbook', moments: 'Our moments', share_photo: 'Send her pictures', take_photo: 'Make a new picture', change_outfit: 'Change her outfit',
   gmail_search: 'Search Gmail', gmail_read: 'Read an email', gmail_thread: 'Read an email conversation', gmail_needs_answer: 'Find emails to answer', gmail_draft: 'Draft an email', gmail_send: 'Send an email',
+  gmail_organize: 'Organize your Gmail', gmail_undo: 'Undo a Gmail change', gmail_labels: 'See Gmail labels', gmail_senders: 'Gmail clean-up summary', gmail_unsubscribe_info: 'Find unsubscribe links',
   calendar_events: 'See your calendar', calendar_add: 'Add a calendar event', calendar_remove: 'Delete a calendar event',
   home_status: 'See your smart home', home_control: 'Switch things at home',
   ssh_servers: 'List your servers', ssh_connect: 'Add a server', ssh_run: 'Run commands on a server', ssh_forget_password: 'Forget a server password', ssh_revoke_key: 'Remove her key from a server', ssh_remove_server: 'Remove a server',
@@ -2395,6 +2436,7 @@ const TOOL_GROUP_OF = {
   scrapbook: 'pictures', moments: 'pictures', share_photo: 'pictures', take_photo: 'pictures', change_outfit: 'pictures',
   web_search: 'web', web_fetch: 'web',
   gmail_search: 'mail', gmail_read: 'mail', gmail_thread: 'mail', gmail_needs_answer: 'mail', gmail_draft: 'mail', gmail_send: 'mail', calendar_events: 'mail', calendar_add: 'mail', calendar_remove: 'mail',
+  gmail_organize: 'mail', gmail_undo: 'mail', gmail_labels: 'mail', gmail_senders: 'mail', gmail_unsubscribe_info: 'mail',
   home_status: 'home', home_control: 'home',
   list_dir: 'files', read_file: 'files', write_file: 'files', edit_file: 'files', search: 'files', code_map: 'files', code_find: 'files', code_refs: 'files', code_deps: 'files', starter_create: 'files', project_note: 'files', review_code: 'files',
   shell: 'run', start_job: 'run', job_status: 'run', stop_job: 'run', delegate_task: 'run',
@@ -2413,7 +2455,7 @@ const TOOL_GROUP_TEXT = {
 };
 const TOOL_GROUP_ABOUT = {
   plan: 'Your to-dos, notes, reminders and shared lists.', memory: 'Looking back at your chats, your documents and how she did tricky jobs.', pictures: 'Her pictures, outfits, the scrapbook and your album.',
-  web: 'Searching the web and reading public pages.', mail: 'Your Gmail and Google Calendar. Sending and adding events ask first.', home: 'Lights, sensors and switches through Home Assistant.',
+  web: 'Searching the web and reading public pages.', mail: 'Your Gmail and Google Calendar. Sending, organizing mail and adding events ask first.', home: 'Lights, sensors and switches through Home Assistant.',
   her: 'Changing her personality dials and looking up how the app works.', files: 'Reading and changing files in her workspace.', run: 'Commands and long tasks on this server.',
   git: 'Project history and GitHub: commits, branches, issues and pull requests.', team: 'Helpers she leads on bigger jobs.', browser: 'A browser without a window she tests her web apps in.',
   ssh: 'Your other servers over SSH. Commands ask first.', mcp: 'Tools from other programs you added.', other: 'Tools that fit no other group.',
@@ -2422,6 +2464,7 @@ const TOOL_GROUP_ABOUT = {
 const TOOL_NEEDS = {
   web_search: 'search', github_list: 'github', github_read: 'github', github_create_issue: 'github', github_comment: 'github', github_open_pr: 'github', github_post_review: 'github', work_on_issue: 'github',
   gmail_search: 'google', gmail_read: 'google', gmail_thread: 'google', gmail_needs_answer: 'google', gmail_draft: 'google', gmail_send: 'google', calendar_events: 'google', calendar_add: 'google', calendar_remove: 'google',
+  gmail_organize: 'google', gmail_undo: 'google', gmail_labels: 'google', gmail_senders: 'google', gmail_unsubscribe_info: 'google',
   home_status: 'home', home_control: 'home', take_photo: 'pictures', change_outfit: 'looks', delegate_task: 'agents', moments: 'moments',
 };
 const TOOL_NEED_TEXT = {
@@ -4314,6 +4357,32 @@ async function saveThreatModel() {
   if (!$('#thr-mode').dataset.loaded) return;
   await api('/threat-model', { method: 'PUT', body: { mode: $('#thr-mode').value } });
 }
+// ---------- Phase 86: red-team mode (Settings → Abilities → Coding projects) ----------
+async function loadRedTeam() {
+  let r;
+  try {
+    r = await api('/redteam');
+  } catch {
+    $('#rt-form').hidden = true;
+    return;
+  }
+  $('#rt-form').hidden = false;
+  $('#rt-ship').value = r.ship;
+  $('#rt-scripts').replaceChildren(...r.choices.scripts.map((v) => new Option(v ? t('Up to {n}', { n: v }) : t('None'), String(v))));
+  $('#rt-scripts').value = String(r.scripts);
+  $('#rt-budget').replaceChildren(...r.choices.budgetTokens.map((v) => new Option(t('{n} tokens', { n: v.toLocaleString(locale()) }), String(v))));
+  $('#rt-budget').value = String(r.budgetTokens);
+  $('#rt-minutes').replaceChildren(...r.choices.minutes.map((v) => new Option(t('{n} minutes', { n: v }), String(v))));
+  $('#rt-minutes').value = String(r.minutes);
+  const notes = [r.isolation?.isolated ? t('Runs isolated here ({how}).', { how: r.isolation.label }) : t('No OS sandbox here: runs in a copy, and probe scripts wait for your OK.')];
+  notes.push(r.reviewModel ? t('Reviewing model: set in Which model does what.') : t('Reviewing model: not set, so the Coding model does the second look.'));
+  $('#rt-status').textContent = notes.join(' ');
+  $('#rt-form').dataset.loaded = '1';
+}
+async function saveRedTeam() {
+  if (!$('#rt-form').dataset.loaded) return;
+  await api('/redteam', { method: 'PUT', body: { ship: $('#rt-ship').value, scripts: Number($('#rt-scripts').value), budgetTokens: Number($('#rt-budget').value), minutes: Number($('#rt-minutes').value) } });
+}
 /** The packages live advisories would send (shown before they are switched on). */
 async function loadSecPassPreview() {
   const r = await api('/security-pass?preview=1');
@@ -4654,6 +4723,8 @@ async function loadGoogle() {
   if (!g) return;
   $('#g-redirect').textContent = gRedirect();
   $('#g-connected').hidden = !g.connected;
+  // Signed in before organizing existed: one more permission (gmail.modify) is needed.
+  $('#g-organize').hidden = !(g.connected && g.gmail && !g.canOrganize);
   $('#g-connect').disabled = !g.configured;
   $('#g-connect').textContent = g.connected ? t('Sign in again') : t('Sign in with Google');
   $('#g-forget').hidden = !g.configured;
@@ -4689,6 +4760,7 @@ $('#g-connect').addEventListener('click', async () => {
     $('#g-status').textContent = err.message;
   }
 });
+$('#g-reconnect').addEventListener('click', () => $('#g-connect').click());
 $('#g-disconnect').addEventListener('click', async () => {
   await api('/google', { method: 'DELETE' });
   loadGoogle();
@@ -4963,7 +5035,11 @@ function startEvents() {
         b.className = `msg notice ${ev.message.meta?.kind ?? ''}`;
       }
       if (ev.message.meta?.call) b.classList.add('missed-call');
-      if (ev.message.role === 'notice' && ev.message.content.startsWith('job:')) append(jobCard(ev.message.content.slice(4), ev.message.meta?.status, ev.message.meta));
+      if (ev.message.role === 'notice' && ev.message.content.startsWith('job:')) {
+        append(jobCard(ev.message.content.slice(4), ev.message.meta?.status, ev.message.meta));
+        const rc = ev.message.meta?.card ? renderCard(ev.message.meta.card) : null;
+        if (rc) append(rc);
+      }
       else append(b);
     }
     await loadConversations();
@@ -6435,7 +6511,7 @@ function showSettingsTab(page, opts = {}) {
   if (pick === 'dh-updates') void loadUpdates();
   if (pick === 'ab-recipes') void loadRecipes();
   if (pick === 'ab-budgets') void loadBudgets();
-  if (pick === 'ab-projects') void Promise.all([loadSandboxGate(), loadSecPass(), loadThreatModel()]);
+  if (pick === 'ab-projects') void Promise.all([loadSandboxGate(), loadSecPass(), loadThreatModel(), loadRedTeam()]);
   if (pick === 'ab-ssh') void loadSsh();
   if (pick === 'ab-library') void loadLibrarySettings();
   if (pick === 'co-apps') void Promise.all([loadOtherApps(), loadAlexa()]);
@@ -6610,7 +6686,7 @@ const SETTINGS_SAVERS = {
   'dh-usage': [saveUsage],
   'dh-health': [saveRuns],
   'ab-budgets': [saveBudgets],
-  'ab-projects': [saveSandboxGate, saveSecPass, saveThreatModel],
+  'ab-projects': [saveSandboxGate, saveSecPass, saveThreatModel, saveRedTeam],
 };
 const settingsChanged = new Set();
 /** Notes which Settings page an edit was made on (programmatic fills call this themselves). */
@@ -10757,6 +10833,8 @@ async function loadCodeProjects(fresh = false) {
 }
 $('#pj-ws').addEventListener('change', () => loadCodeProjects());
 $('#pj-refresh').addEventListener('click', () => loadCodeProjects(true));
+// Phase 86: "Before you ship": red-team the chosen project (the plan with its budget comes first).
+$('#pj-redteam').addEventListener('click', () => void openRedTeam({ workspace: $('#pj-ws').value || 'main' }));
 document.addEventListener('click', (e) => {
   if (e.target.closest?.('#settings-nav-list [data-page="ab-projects"]')) void loadCodeProjects();
 });

@@ -72,7 +72,7 @@ import type { PushService } from './push.ts';
 import type { Subscriptions } from './subscriptions/index.ts';
 import type { DiscordBridge } from './bridges/discord.ts';
 import type { SandboxInfo } from './tools/sandbox.ts';
-import { clip, ToolError } from './tools/types.ts';
+import { clip, ToolError, type ApprovalDetail, type Prepared, type Tool } from './tools/types.ts';
 import { workspaceDir } from './tools/workspace.ts';
 import type { Vault } from './vault.ts';
 import { personalize } from './identity.ts';
@@ -116,6 +116,8 @@ export interface AppContext {
   fixes?: import('./security/fix.ts').FixBranches;
   /** Phase 82 (harness M7): the threat-model pass after coding turns (src/security/threats.ts). */
   threats?: import('./security/threats.ts').ThreatPass;
+  /** Phase 86 (harness M11): red-team mode (src/redteam.ts): "Red-team this" and the ship gate. */
+  redteam?: import('./redteam.ts').RedTeam;
   /** MCP server connections (optional in tests). */
   mcp?: McpManager;
   /** Secret scrubbing for tool output and arguments. */
@@ -234,6 +236,8 @@ export interface AppContext {
   reports?: import('./reports.ts').ReportStore;
   /** Gmail and Google Calendar on the owner's own Google sign-in (Phase 14). */
   google?: import('./google.ts').GoogleAccount;
+  /** Gmail organizing (archive, labels, trash…): the undo log and bulk runs. Owner only, never the demo. */
+  gmail?: import('./gmail-organize.ts').GmailOrganizer;
   /** Phase 73: the owner's servers over SSH (owner space only; never members or the demo). */
   ssh?: import('./ssh.ts').SshManager;
   /** Phase 49: preview links to the web apps her jobs run (shared by every companion). */
@@ -257,9 +261,10 @@ export type ChatEvent =
   /** Phase 63: a tool call the model is still writing (throttled; see src/tool-stream.ts). Shown only, never run. */
   | ToolBuilding
   /** Phase 77: `contradiction` = the card's \"This goes against something you decided\" section (a stop). */
-  | { type: 'approval'; approvalId: string; id: string; name: string; summary: string; args: Record<string, unknown>; contradiction?: ContradictionCard; budget?: BudgetState; sandbox?: SandboxCard; sandboxFirst?: { label: string; isolated: boolean }; advisory?: AdvisoryCard }
+  | { type: 'approval'; approvalId: string; id: string; name: string; summary: string; args: Record<string, unknown>; detail?: ApprovalDetail; contradiction?: ContradictionCard; budget?: BudgetState; sandbox?: SandboxCard; sandboxFirst?: { label: string; isolated: boolean }; advisory?: AdvisoryCard; redteam?: import('./redteam.ts').RedTeamGateCard }
   /** Phase 81: the install check's outcome for a call (not checked offline, installed anyway, not installed). */
   | { type: 'advisory'; id: string; state: 'offline' | 'override' | 'declined'; packages: string[] }
+  | { type: 'redteam'; id: string; runId: number; workspace: string }
   /** Phase 80: the command is being tried in a throwaway copy (the sandbox gate). */
   | { type: 'sandbox_running'; id: string; label: string; isolated: boolean }
   /** Phase 80: what the sandbox try showed and what the owner chose (Apply / Discard / Run for real). */
@@ -625,6 +630,15 @@ export async function judgeFuzzy(app: AppContext, found: Contradiction[], priv: 
 }
 
 /** Tools that send data off the server; hidden in private conversations. */
+/** Runs a count-first tool's preparation; a failure ends the call with its message (nothing changes). */
+async function prepareCall(tool: Tool, args: Record<string, unknown>, signal: AbortSignal, conversationId: string): Promise<Prepared> {
+  try {
+    return await tool.prepare!(args, { signal, conversationId });
+  } catch (err) {
+    return { refuse: `Error: ${(err as Error).message}` };
+  }
+}
+
 export const OFFSERVER_TOOL = (name: string) =>
   name === 'web_fetch' || name === 'web_search' || name === 'delegate_task' || name === 'git_push' || name.startsWith('home_') || name.startsWith('mcp_') || name.startsWith('gmail_') || name.startsWith('calendar_') || name.startsWith('github_');
 
@@ -907,6 +921,8 @@ export interface BeforeToolResult {
   sandbox?: SandboxPlan;
   /** Phase 81: an install of a known-vulnerable version: the "Known vulnerability" card (an explicit override goes on). */
   advisory?: AdvisoryCard;
+  /** Phase 86: a push / PR / release: "Red-team before shipping" (Ask me: the card offers Red-team first; Always: the run's result). */
+  redteam?: import('./redteam.ts').RedTeamGateCard;
 }
 export interface AfterTool {
   step: number;
@@ -976,6 +992,7 @@ function joinHooks(list: (TurnHooks | undefined)[]): Required<Omit<TurnHooks, 'b
         out.stopFor ??= r.stopFor;
         out.sandbox ??= r.sandbox;
         out.advisory ??= r.advisory;
+        out.redteam ??= r.redteam;
       }
       return out;
     },
@@ -1491,7 +1508,10 @@ async function* runTurnInner(app: AppContext, conversationId: string, userText: 
         ...(opts.replay ? {} : { markUsed: (ids: number[]) => app.memory?.markUsed(ids, localDate(app.now().toISOString(), s.timeZone)) }),
       })
     : undefined;
-  const hooks = joinHooks([budgetHook, planHook, sandboxHook, securityHook, recallHook, recorderHooks(app, rec), findingsHook, opts.hooks]);
+  // Phase 86 (harness M11): red-team before shipping (a push / PR / release in a coding conversation;
+  // never in replays, groups, partner or other-app turns).
+  const shipHook: TurnHooks | undefined = app.redteam && conv.mode === 'coding' && !opts.group && !conv.partner && !opts.externalApp && !external && !opts.replay ? app.redteam.shipHooks(conv, wsDir) : undefined;
+  const hooks = joinHooks([budgetHook, planHook, sandboxHook, securityHook, shipHook, recallHook, recorderHooks(app, rec), findingsHook, opts.hooks]);
   // Phase 78: what the run is made of (M9 compares runs by these).
   const memPolicy = decayPolicy(memCfg).id;
   rec.setPolicy({ memoryPolicy: memPolicy, model: `${provider.config.id}/${model}`, tools: toolSetHash(tools.map((t) => t.spec.name)), mode: conv.mode, ...(conv.private ? { private: true } : {}) });
@@ -1801,7 +1821,7 @@ async function* runTurnInner(app: AppContext, conversationId: string, userText: 
     if (rec.workspaceDir) await rec.settled();
     for (const call of calls) {
       const tool = app.tools.get(call.name);
-      const summary = app.redactor.redact(tool?.summarize(call.arguments) ?? call.name);
+      let summary = app.redactor.redact(tool?.summarize(call.arguments) ?? call.name);
       const shownArgs = app.redactor.redactValue(call.arguments);
       yield { type: 'tool_call', id: call.id, name: call.name, summary, args: shownArgs };
       const started = Date.now();
@@ -1820,10 +1840,18 @@ async function* runTurnInner(app: AppContext, conversationId: string, userText: 
       // Phase 81: the install check's stop (if any) and the owner's answer.
       let advisoryStop: AdvisoryCard | undefined;
       let advisoryAnswer: 'override' | 'deny' | undefined;
+      // Phase 86: "Red-team first" on the ship card (the tool result says a run started instead).
+      let redteamNote = '';
 
       const set = tool ? app.tools.permission(call.name, s.toolPermissions) : 'never';
+      // Count-first tools (gmail_organize): what the call would touch is worked out before any card,
+      // only when the call may run at all (offered this turn, not off, not blocked by privacy).
+      const mayPrepare = Boolean(tool?.prepare) && set !== 'never' && !conv.partner && tools.some((t) => t.spec.name === call.name) && !(tool?.isAvailable && !tool.isAvailable()) && !((conv.private || privateLocalOn()) && OFFSERVER_TOOL(call.name));
+      const prep = mayPrepare && tool ? await prepareCall(tool, call.arguments, signal, conv.id) : undefined;
+      if (prep?.summary) summary = app.redactor.redact(prep.summary);
+      const prepDetail = prep?.detail ? (app.redactor.redactValue(prep.detail) as ApprovalDetail) : undefined;
       // Phase 73: a few commands always ask first, even when the owner lets the tool run on its own.
-      const permission = set === 'auto' && tool?.asksFirst?.(call.arguments) ? 'ask' : set;
+      const permission = set === 'auto' && (tool?.asksFirst?.(call.arguments) || prep?.ask) ? 'ask' : set;
       let allowed = permission === 'auto';
       /** Phase 78: how the call got (or didn't get) to run, for the run record. */
       let approval: AfterTool['approval'] = 'refused';
@@ -1843,6 +1871,10 @@ async function* runTurnInner(app: AppContext, conversationId: string, userText: 
       } else if (permission === 'never') {
         status = 'denied';
         output = `The owner has disabled the ${call.name} tool.`;
+      } else if (prep?.refuse !== undefined) {
+        // The count-first step found nothing to do (or can't do it): nothing was asked or changed.
+        status = 'error';
+        output = prep.refuse;
       } else {
         // Phase 78 seam 2: before the tool runs (the Phase 77 plan check is the first hook).
         approval = 'auto';
@@ -1852,16 +1884,29 @@ async function* runTurnInner(app: AppContext, conversationId: string, userText: 
         const gate = pre.sandbox;
         // Phase 81: a known-vulnerable install stops first (an explicit override goes on).
         advisoryStop = pre.advisory;
+        // Phase 86: the ship gate's card (Red-team first / Ship / Don't).
+        const redteamCard = pre.redteam?.ask ? pre.redteam : undefined;
         // Phase 80: with an isolated sandbox try, the try's card is the approval; without isolation
         // (Windows copy mode) a tool that asks first still asks before the try.
-        const firstCard = Boolean(stopFor) || Boolean(advisoryStop) || (permission === 'ask' && (!gate || gate.askFirst));
+        const firstCard = Boolean(stopFor) || Boolean(advisoryStop) || Boolean(redteamCard) || (permission === 'ask' && (!gate || gate.askFirst));
         if (firstCard) {
           const { id, decision } = app.approvals.request(conv.id, signal);
           const stops = (turnContradictions.get(call.id) ?? []).filter((c) => c.act === 'stop');
-          yield { type: 'approval', approvalId: id, id: call.id, name: call.name, summary, args: shownArgs, ...(stopFor ? { contradiction: cardOf(stopFor, stops.filter((c) => c !== stopFor)) } : {}), ...(gate ? { sandboxFirst: { label: gate.isolation.label, isolated: gate.isolation.isolated } } : {}), ...(advisoryStop ? { advisory: advisoryStop } : {}) };
+          yield { type: 'approval', approvalId: id, id: call.id, name: call.name, summary, args: shownArgs, ...(prepDetail ? { detail: prepDetail } : {}), ...(stopFor ? { contradiction: cardOf(stopFor, stops.filter((c) => c !== stopFor)) } : {}), ...(gate ? { sandboxFirst: { label: gate.isolation.label, isolated: gate.isolation.isolated } } : {}), ...(advisoryStop ? { advisory: advisoryStop } : {}), ...(redteamCard ? { redteam: redteamCard } : {}) };
           allowed = await decision;
           approval = allowed ? 'allowed' : 'denied';
           const how = app.approvals.takeHow(id);
+          if (redteamCard && how === 'redteam' && !signal.aborted) {
+            // "Red-team first": the action does not run; a red-team run of this project starts.
+            allowed = false;
+            try {
+              const r = app.redteam!.start({ workspace: conv.workspace, wsDir, conversationId: conv.id, reason: 'ship', private: Boolean(conv.private) });
+              redteamNote = `The owner chose to red-team this first (red-team run #${r.id} started). Do not push, open a PR or publish now; wait for its report, then ask again.`;
+              yield { type: 'redteam', id: call.id, runId: r.id, workspace: conv.workspace };
+            } catch (err) {
+              redteamNote = `The owner chose to red-team this first, but it could not start: ${(err as Error).message}. Do not push now.`;
+            }
+          }
           if (advisoryStop && !signal.aborted) {
             // Phase 81: the owner's answer on the "Known vulnerability" card, kept as findings.
             advisoryAnswer = allowed ? 'override' : 'deny';
@@ -1934,7 +1979,7 @@ async function* runTurnInner(app: AppContext, conversationId: string, userText: 
           } else if (permission === 'ask' && !firstCard) {
             // No try was possible: fall back to the plain approval.
             const { id, decision } = app.approvals.request(conv.id, signal);
-            yield { type: 'approval', approvalId: id, id: call.id, name: call.name, summary, args: shownArgs };
+            yield { type: 'approval', approvalId: id, id: call.id, name: call.name, summary, args: shownArgs, ...(prepDetail ? { detail: prepDetail } : {}) };
             allowed = await decision;
             approval = allowed ? 'allowed' : 'denied';
             app.approvals.takeHow(id);
@@ -1949,7 +1994,7 @@ async function* runTurnInner(app: AppContext, conversationId: string, userText: 
           output = sandboxOutput(tried, sbDecision, applied);
         } else if (!allowed) {
           status = 'denied';
-          output = signal.aborted ? 'Cancelled.' : stopFor ? declinedOutput(stopFor, ownerWord) : advisoryStop ? declinedInstallOutput(advisoryStop) : 'The owner declined this action.';
+          output = signal.aborted ? 'Cancelled.' : redteamNote ? redteamNote : stopFor ? declinedOutput(stopFor, ownerWord) : advisoryStop ? declinedInstallOutput(advisoryStop) : 'The owner declined this action.';
         } else {
           if (SNAPSHOT_TOOLS.has(call.name) && conv.mode !== 'coding' && !opts.replay) {
             try {

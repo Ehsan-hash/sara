@@ -67,8 +67,9 @@ interface Pending {
  * Phase 80: a "Ran in a sandbox" card: Apply to my workspace ('apply'), Discard ('discard') or Run
  * for real ('real'). A plain Allow on that card (bridges, older apps) applies the diff.
  */
-export type ApprovalHow = 'override' | 'deny' | 'update' | 'apply' | 'discard' | 'real';
-export const APPROVAL_HOWS: readonly ApprovalHow[] = ['override', 'deny', 'update', 'apply', 'discard', 'real'];
+/** Phase 86: 'redteam' = "Red-team first" on the ship card (the action does not run; a red-team run starts). */
+export type ApprovalHow = 'override' | 'deny' | 'update' | 'apply' | 'discard' | 'real' | 'redteam';
+export const APPROVAL_HOWS: readonly ApprovalHow[] = ['override', 'deny', 'update', 'apply', 'discard', 'real', 'redteam'];
 
 /** Holds tool calls waiting for the owner's approve/deny click. */
 export class ApprovalBroker {
@@ -104,7 +105,8 @@ export class ApprovalBroker {
     // \"Update the note\", \"Don't\" and \"Discard\" never run the call, whatever `approved` says;
     // \"Apply\" and \"Run for real\" are the owner's explicit yes.
     if (how) this.#how.set(id, how);
-    p.resolve(how === 'update' || how === 'deny' || how === 'discard' ? false : how === 'apply' || how === 'real' ? true : approved);
+    // Phase 86: "Red-team first" never runs the call either (a red-team run starts instead).
+    p.resolve(how === 'update' || how === 'deny' || how === 'discard' || how === 'redteam' ? false : how === 'apply' || how === 'real' ? true : approved);
     return true;
   }
 

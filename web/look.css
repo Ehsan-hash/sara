@@ -356,6 +356,26 @@ li.step { animation: step-in var(--dur-slow) var(--ease-out) both; }
 .rc-source-link { min-width: 0; color: var(--text-1); text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rc-source-link:hover { color: var(--accent-text); text-decoration: underline; }
 .rc-host { flex: none; font-size: 12px; color: var(--text-3); }
+/* Gmail organizing: the result card (done, Undo, Open in Gmail) and the count-first approval section. */
+.gm-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
+.gm-undo { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; }
+.rcard-link.gm-open { min-height: 44px; }
+.gm-undo svg.ic { width: 16px; height: 16px; }
+.gm-status:empty { display: none; }
+.gm-approval { display: grid; gap: 6px; min-width: 0; }
+.gm-query { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; margin: 0; }
+.gm-k { margin: 0; font-size: var(--fs-meta); color: var(--text-3); }
+.gm-q { font: 12.5px var(--font-mono); color: var(--text-1); overflow-wrap: anywhere; }
+.gm-line { margin: 0; font-size: var(--fs-meta); color: var(--text-2); }
+.gm-samples { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; }
+.gm-sample { display: grid; grid-template-columns: minmax(0, 12em) minmax(0, 1fr); gap: 10px; padding: 4px 8px; border-radius: var(--r-control); background: color-mix(in srgb, var(--surface-3) 45%, transparent); font-size: 12.5px; }
+.gm-from { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-2); }
+.gm-subj { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-1); }
+.gm-notes { margin: 0; padding-left: 18px; font-size: var(--fs-meta); color: var(--text-2); }
+@media (max-width: 640px) {
+  .gm-sample { grid-template-columns: minmax(0, 1fr); gap: 0; }
+  .approval-gmail .row button { min-height: 44px; }
+}
 
 /* ---------- Approvals and the activity line ---------- */
 #messages > .approval {

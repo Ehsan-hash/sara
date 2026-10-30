@@ -8,7 +8,28 @@ import type { Vault } from './vault.ts';
 
 export const GOOGLE_CLIENT_VAULT = 'google:client';
 export const GOOGLE_TOKEN_VAULT = 'google:token';
-export const GOOGLE_SCOPES = ['https://www.googleapis.com/auth/gmail.readonly', 'https://www.googleapis.com/auth/gmail.compose', 'https://www.googleapis.com/auth/calendar.events'];
+// gmail.modify (organizing: archive, read/unread, labels, trash, spam; never permanent delete) is
+// a restricted scope: fine for the owner's own OAuth client with the owner as a test user (or
+// published unverified for personal use). Sign-ins from before it was added lack it (`canOrganize`).
+export const GOOGLE_SCOPES = ['https://www.googleapis.com/auth/gmail.readonly', 'https://www.googleapis.com/auth/gmail.compose', 'https://www.googleapis.com/auth/gmail.modify', 'https://www.googleapis.com/auth/calendar.events'];
+/**
+ * Test-only: send Gmail/Calendar API calls to a local fake Google instead (SARA_GOOGLE_API_BASE,
+ * e.g. http://127.0.0.1:7899). Only loopback addresses are accepted, so it can never point Sara's
+ * Google sign-in at someone else's server.
+ */
+export function googleApiBase(env: Record<string, string | undefined> = process.env): string | undefined {
+  const v = env.SARA_GOOGLE_API_BASE?.trim().replace(/\/+$/, '');
+  return v && /^http:\/\/(127\.0\.0\.1|localhost|\[::1\]):\d{2,5}$/.test(v) ? v : undefined;
+}
+/** A Google API answer that wasn't OK (the HTTP status lets callers back off on 429 / 5xx). */
+export class GoogleApiError extends Error {
+  readonly status: number;
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = 'GoogleApiError';
+    this.status = status;
+  }
+}
 const AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
 const TOKEN_URL = 'https://oauth2.googleapis.com/token';
 const REVOKE_URL = 'https://oauth2.googleapis.com/revoke';
@@ -34,6 +55,8 @@ export interface GoogleStatus {
   /** Which parts the sign-in allowed (the owner can untick boxes on Google's page). */
   gmail: boolean;
   calendar: boolean;
+  /** Organizing mail (archive, labels, read, trash, spam) needs gmail.modify: older sign-ins lack it. */
+  canOrganize: boolean;
 }
 
 type Fetch = typeof fetch;
@@ -45,10 +68,13 @@ export class GoogleAccount {
   /** Sign-ins in progress: state → PKCE verifier + redirect address (10 minutes). */
   readonly #pending = new Map<string, { verifier: string; redirect: string; at: number }>();
 
-  constructor(vault: Vault, opts: { fetch?: Fetch; now?: () => number } = {}) {
+  readonly #base: string | undefined;
+
+  constructor(vault: Vault, opts: { fetch?: Fetch; now?: () => number; apiBase?: string } = {}) {
     this.#vault = vault;
     this.#fetch = opts.fetch ?? netFetch;
     this.#now = opts.now ?? Date.now;
+    this.#base = opts.apiBase;
   }
 
   #client(): Client | undefined {
@@ -69,8 +95,9 @@ export class GoogleAccount {
       ...(c ? { clientId: c.clientId } : {}),
       connected: Boolean(t),
       ...(t?.email ? { email: t.email } : {}),
-      gmail: Boolean(t) && scopes.includes('gmail.readonly'),
+      gmail: Boolean(t) && (scopes.includes('gmail.readonly') || scopes.includes('gmail.modify')),
       calendar: Boolean(t) && scopes.includes('calendar.events'),
+      canOrganize: Boolean(t) && scopes.includes('gmail.modify'),
     };
   }
 
@@ -155,6 +182,7 @@ export class GoogleAccount {
   /** One call to a Google API (JSON in, JSON out). */
   async api(url: string, init: { method?: string; body?: unknown; signal?: AbortSignal } = {}): Promise<unknown> {
     const access = await this.#access();
+    if (this.#base) url = url.replace(/^https:\/\/(gmail|www)\.googleapis\.com/, this.#base);
     const r = await this.#fetch(url, {
       method: init.method ?? 'GET',
       headers: { authorization: `Bearer ${access}`, ...(init.body !== undefined ? { 'content-type': 'application/json' } : {}) },
@@ -164,8 +192,8 @@ export class GoogleAccount {
     if (r.status === 204) return {};
     const j = (await r.json().catch(() => ({}))) as { error?: { message?: string; status?: string } };
     if (!r.ok) {
-      if (r.status === 403 && /insufficient|scope/i.test(j.error?.message ?? '')) throw new Error("The Google sign-in didn't allow this. Sign in again and leave all the boxes ticked.");
-      throw new Error(`Google: ${j.error?.message ?? r.status}`);
+      if (r.status === 403 && /insufficient|scope/i.test(j.error?.message ?? '')) throw new GoogleApiError("The Google sign-in didn't allow this. Sign in again and leave all the boxes ticked.", 403);
+      throw new GoogleApiError(`Google: ${j.error?.message ?? r.status}`, r.status);
     }
     return j;
   }

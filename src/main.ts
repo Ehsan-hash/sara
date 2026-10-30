@@ -9,7 +9,9 @@ import { createCodingTools } from './tools/coding.ts';
 import { createBrowserTools } from './tools/browser.ts';
 import { PreviewManager } from './preview.ts';
 import { BrowserManager } from './browser.ts';
-import { GoogleAccount } from './google.ts';
+import { GoogleAccount, googleApiBase } from './google.ts';
+import { GmailOrganizer } from './gmail-organize.ts';
+import { createGmailOrganizeTools } from './tools/gmail-organize.ts';
 import { createGitHubTools } from './tools/github.ts';
 import { createHomeTools } from './tools/home.ts';
 import { createGoogleTools } from './tools/google.ts';
@@ -61,6 +63,7 @@ import { OsvClient } from './security/advisories.ts';
 import { SecurityPass } from './security/pass.ts';
 import { FixBranches, sweepFixDirs } from './security/fix.ts';
 import { ThreatPass } from './security/threats.ts';
+import { RedTeam } from './redteam.ts';
 import { detectIsolation, SandboxGate, sandboxGateSettings, sweepSandboxRuns, type Isolation, type SandboxGateSettings } from './sandbox-run.ts';
 import { accessInfo, adminHint, localVoiceMissing, localVoiceSupported } from './platform.ts';
 import { statusReport } from './status.ts';
@@ -310,7 +313,9 @@ const sshManager = isDemo ? undefined : new SshManager({ dir: dataDir, vault });
 if (sshManager) for (const t of createSshTools(() => sshManager)) mainTools.add(t);
 const events = new EventHub();
 const subscriptions = new Subscriptions(vault, dataDir);
-const google = new GoogleAccount(vault);
+// SARA_GOOGLE_API_BASE (loopback only) points the Google APIs at a local fake for tests.
+const googleBase = googleApiBase();
+const google = new GoogleAccount(vault, googleBase ? { apiBase: googleBase } : {});
 // Local voice tools are Linux only for now (deploy/install-voice.sh).
 const voice = new LocalVoiceEngine(resolve(process.env.SARA_VOICE_DIR ?? (localVoiceSupported() ? '/opt/sara-voice' : join(dataDir, 'voice'))), dataDir);
 const companions = new CompanionManager(dataDir);
@@ -598,6 +603,13 @@ function buildCompanion(space: Space, id: string, dir: string): Companion {
     app.fixes = new FixBranches(app, join(dir, 'cache', 'fix-branches'));
     // Phase 82 (harness M7): the threat model after coding turns and its fix-only second pass.
     app.threats = new ThreatPass(app, app.findings);
+    // Phase 86 (harness M11): red-team mode ("Red-team this", the ship gate, "Fix what broke").
+    app.redteam = new RedTeam(app, app.findings, store.db);
+    try {
+      app.redteam.store.recover();
+    } catch (err) {
+      console.warn(`red team: ${(err as Error).message}`);
+    }
     sweepFixDirs(join(dir, 'cache', 'fix-branches'));
     try {
       app.fixes.recover();
@@ -630,6 +642,11 @@ function buildCompanion(space: Space, id: string, dir: string): Companion {
     for (const t of createHomeTools(app)) tools.add(t);
     // Phase 14: Gmail and Google Calendar (the owner's own Google app; off until they sign in).
     for (const t of createGoogleTools(google, () => settingsC.get().timeZone)) tools.add(t);
+    // Gmail organizing (archive, labels, trash…, with Undo): the owner's own Gmail only; never the demo.
+    if (!isDemo) {
+      app.gmail = new GmailOrganizer(google, store.db, { timeZone: () => settingsC.get().timeZone, now: () => app.now(), jobs: () => app.jobs, workspaceOf: (id) => store.getConversation(id)?.workspace });
+      for (const t of createGmailOrganizeTools({ google, organizer: app.gmail })) tools.add(t);
+    }
   }
 
   // Phase 38: meaning search (vectors made a few at a time while the embeddings job is set).

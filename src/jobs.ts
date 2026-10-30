@@ -60,6 +60,18 @@ export interface JobSpec {
   meter?: { config: ProviderConfig; model: string; parse: (line: string) => UsageNumbers | undefined };
 }
 
+/**
+ * An in-process background task (a bulk Gmail change): the same jobs strip, Stop button, notice
+ * and her report as a command job, but the work is a function, not a command.
+ */
+export interface TaskSpec {
+  conversationId: string;
+  workspace: string;
+  label: string;
+  /** Does the work; `progress` sets the line shown on the strip. Stops early when `signal` aborts. */
+  run: (signal: AbortSignal, progress: (line: string) => void) => Promise<{ ok: boolean; output: string; result?: Record<string, unknown> }>;
+}
+
 const TAIL = 4000;
 export const MAX_JOB_MS = 60 * 60_000;
 const MAX_RUNNING = 3;
@@ -243,6 +255,54 @@ export class JobManager {
     return { job: { ...job }, done };
   }
 
+  /** Starts an in-process task (see TaskSpec); returns at once. */
+  startTask(spec: TaskSpec): { job: Job; done: Promise<Job> } {
+    if (this.#running.size >= MAX_RUNNING) throw new Error(`Already ${MAX_RUNNING} background jobs running; wait for one or stop it.`);
+    const app = this.#app;
+    const startedAt = app.now().toISOString();
+    const label = spec.label.slice(0, 500);
+    const id = Number(this.#db.prepare("INSERT INTO jobs (conversation_id, workspace, label, kind, status, started_at) VALUES (?, ?, ?, 'command', 'running', ?)").run(spec.conversationId, spec.workspace, label, startedAt).lastInsertRowid);
+    const job: Job = { id, conversationId: spec.conversationId, workspace: spec.workspace, label, kind: 'command', status: 'running', exitCode: null, startedAt, endedAt: null, tail: '' };
+    this.#live.set(id, job);
+    const ac = new AbortController();
+    this.#running.set(id, ac);
+    app.events?.publish({ type: 'job', job: { ...job } });
+    let lastEvent = 0;
+    const ranAt = Date.now();
+    const done = (async () => {
+      let out: { ok: boolean; output: string; result?: Record<string, unknown> };
+      try {
+        out = await spec.run(ac.signal, (line) => {
+          job.tail = app.redactor.redact(line).slice(-TAIL);
+          const t = Date.now();
+          if (t - lastEvent > 500) {
+            lastEvent = t;
+            app.events?.publish({ type: 'job', job: { ...job } });
+          }
+        });
+      } catch (err) {
+        out = { ok: false, output: `Failed: ${(err as Error).message}` };
+      }
+      job.status = ac.signal.aborted ? 'stopped' : out.ok ? 'ok' : 'failed';
+      job.exitCode = out.ok ? 0 : 1;
+      job.endedAt = app.now().toISOString();
+      job.tail = app.redactor.redact(out.output).slice(-TAIL);
+      if (out.result) job.result = out.result;
+      this.#db.prepare('UPDATE jobs SET status = ?, exit_code = ?, ended_at = ?, tail = ?, result = ? WHERE id = ?').run(job.status, job.exitCode, job.endedAt, job.tail, job.result ? JSON.stringify(job.result) : null, id);
+      this.#running.delete(id);
+      this.#live.delete(id);
+      try {
+        this.onEnd?.({ ...job });
+      } catch {
+        /* a listener's problem never breaks the job */
+      }
+      app.events?.publish({ type: 'job', job: { ...job } });
+      await this.#report(job, { exitCode: job.exitCode, output: out.output, timedOut: false, ms: Date.now() - ranAt }).catch((err: Error) => console.warn(`jobs: report failed: ${err.message}`));
+      return { ...job };
+    })();
+    return { job: { ...job }, done };
+  }
+
   /** Phase 52: a job stopped at its budget can carry on (as a new job) with a bigger one. */
   canContinue(id: number): boolean {
     return this.#paused.has(id);
@@ -303,7 +363,9 @@ export class JobManager {
     // Not in the middle of her answering in that conversation: wait for her to finish (up to 10 min).
     for (let i = 0; i < 600 && app.isBusy?.(conv.id); i++) await new Promise((r) => setTimeout(r, 1000));
     // Saved as an app note (shown to the owner as a job card; she sees it in her history).
-    const notice = app.store.addMessage(conv.id, 'notice', `job:${receiptText}`, { job: job.id, status: job.status, ...(job.status === 'budget' ? {} : { key: headKey, params: headParams }) });
+    // A task's result card (a bulk Gmail change: done, failed, Undo) rides on the notice.
+    const card = job.result?.card && typeof job.result.card === 'object' ? { card: job.result.card } : {};
+    const notice = app.store.addMessage(conv.id, 'notice', `job:${receiptText}`, { job: job.id, status: job.status, ...card, ...(job.status === 'budget' ? {} : { key: headKey, params: headParams }) });
     app.events?.publish({ type: 'message', conversationId: conv.id, message: notice, reason: 'job' });
     if (job.status === 'stopped') return; // the owner stopped it; nothing to announce
     if (job.status === 'budget') {

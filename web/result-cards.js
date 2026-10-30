@@ -5,6 +5,7 @@
 import { t } from './naming.js';
 import { icon } from './icons.js';
 import { kindFromSky, sparkline, weatherArt } from './viz.js';
+import { gmailResult } from './gmail-view.js';
 
 const el = (tag, cls, text) => {
   const e = document.createElement(tag);
@@ -190,7 +191,7 @@ function search(c) {
   return card;
 }
 
-const DRAW = { weather, task, reminder, note, calendar, test, job, home, photo, search };
+const DRAW = { weather, task, reminder, note, calendar, test, job, home, photo, search, gmail: gmailResult };
 
 /** One element per card; the file cards of a reply become one "Files changed" card. */
 export function renderCards(cards) {

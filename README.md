@@ -11,7 +11,7 @@ Windows, Mac and phones.
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="License: MIT"></a>
   <img src="https://img.shields.io/badge/node-%E2%89%A5%2024-339933" alt="Node 24 or newer">
   <img src="https://img.shields.io/badge/runtime%20dependencies-0-brightgreen" alt="Zero runtime dependencies">
-  <img src="https://img.shields.io/badge/tests-1105%20passing-brightgreen" alt="1105 tests passing">
+  <img src="https://img.shields.io/badge/tests-1129%20passing-brightgreen" alt="1129 tests passing">
   <a href="docs/RESULTS.md"><img src="https://img.shields.io/badge/HumanEval%20pass%401-96.3%25-informational" alt="HumanEval pass@1 96.3%"></a>
   <a href="https://github.com/farena-ai/sara/releases/latest"><img src="https://img.shields.io/github/v/release/farena-ai/sara?label=release" alt="Latest release"></a>
   <a href="https://github.com/farena-ai/sara/pkgs/container/sara"><img src="https://img.shields.io/badge/docker-amd64%20%7C%20arm64-2496ED" alt="Docker image for amd64 and arm64"></a>
@@ -25,7 +25,7 @@ Windows, Mac and phones.
   <sub>A real session on a local model (qwen3.8 27B on Ollama, one RTX 5090) on a throwaway test server, in the Night look: she cheers the user up, writes a small app and its test as the model streams them, asks before running a command, catches a real bug with a failing test and fixes it until all 7 tests pass. Frames picked from the recording; nothing in them was edited.</sub>
 </p>
 
-> **Status:** 2.18, MIT licensed, with twenty-nine feature releases since 1.0 (all below). 2.5 to 2.8
+> **Status:** 2.19, MIT licensed, with thirty feature releases since 1.0 (all below). 2.5 to 2.8
 > gave the whole app a new look. The [Android app](https://play.google.com/store/apps/details?id=com.backstagecoding.sara)
 > is on Google Play; the iPhone app and the Mac App Store version are coming as soon as Apple approves them.
 > Read [docs/DISCLOSURES.md](docs/DISCLOSURES.md) before using or sharing Sara.
@@ -63,6 +63,7 @@ people you live with · [video calls](docs/VIDEO_CALLS.md) with her moving portr
 
 | Release | What you get |
 |---|---|
+| **2.19** · Red-team mode | **Before you ship, she tries to break her own work:** in a sandbox copy she runs your tests, starts your app and throws malformed and boundary inputs at every entry point, checks insecure defaults, and lets the coding model write small attack scripts that can only reach that sandboxed app. A stronger reviewing model keeps only breaks that reproduce, with the input, the output and the code line quoted. Then **Fix what broke** on a local branch. Also in 2.19: **Gmail organizing** (archive, mark read, labels, trash… by search or date, count first, Undo). [How it works](docs/design/HARNESS_TRACK.md) |
 | **2.18** · Recall on her own | **She remembers without being asked when the situation matches:** the same error came back in this project ("last time the fix was…"), a command that failed here before, a file you have a decision about, a task like one she has a lesson for. Lessons are written only from what really happened (the error line and the fixing change, quoted). Each note says where it came from and how sure, at most 2 a step, and *Not useful* teaches her. [How it works](docs/design/HARNESS_TRACK.md) |
 | **2.17** · Evals on your own work | **Which setting is actually better for you?** Pick up to 3 variants (model, memory fading, sandbox mode, budget) and she replays your last real tasks with each one in sandbox copies. Each run is scored on whether your tests pass, how you reacted, findings, tokens, time and cost, plus an optional judge that must quote. A winner is named only when a sign test says it's real ("+18% on 20 of your coding tasks, p=0.01"), with every pair's diff as evidence. Otherwise: *no clear winner*. [How it works](docs/design/HARNESS_TRACK.md) |
 | **2.16** · Time-travel | **Branch any past task from any step:** change her message, a tool result, the notes she remembered or the model at that step, and run it again. Earlier steps come from the record (nothing is re-run). Coding branches work in a copy at the recorded commit, never in your files. A side-by-side diff shows steps, tokens, cost, file edits and the answer. *Replay unchanged* is the control. Keep the answer or apply the files only if you want. [How it works](docs/design/HARNESS_TRACK.md) |
@@ -272,8 +273,8 @@ README or SPEC that no test checked. What she adds today is the way of working (
 asks before risky steps, shows what ran), not a higher score on these sets. Details, per-task
 results and how to re-run: [docs/RESULTS.md](docs/RESULTS.md).
 
-Plus `npm run check`: a typecheck and 1117 automated tests with a scripted fake model (no network,
-no GPU): 1105 pass on Windows and the other 8 are Linux-only sandbox tests, run on a Linux server.
+Plus `npm run check`: a typecheck and 1141 automated tests with a scripted fake model (no network,
+no GPU): 1129 pass on Windows and the other 8 are Linux-only sandbox tests, run on a Linux server.
 
 ## How Sara compares
 

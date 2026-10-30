@@ -139,6 +139,11 @@ export interface Settings {
    * and budget.
    */
   threatModel?: Partial<import('./security/threats.ts').ThreatSettings>;
+  /**
+   * Phase 86: red-team mode (Settings → Abilities → Coding projects): before a push / PR / release
+   * (Off / Ask me (default) / Always), attacker scripts per run, its own token budget and time limit.
+   */
+  redteam?: Partial<import('./redteam.ts').RedTeamSettings>;
   /** Discord bridge (Phase 6). Bot token lives in the vault (bridge:discord). */
   discord?: Partial<DiscordSettings>;
   /** Automatic backups (Phase 6). */

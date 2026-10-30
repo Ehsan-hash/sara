@@ -16,7 +16,8 @@ export type Card =
   | { kind: 'job'; id: number; label: string; status: string; exitCode?: number }
   | { kind: 'home'; entity: string; service: string; name?: string; state?: string }
   | { kind: 'photo'; caption: string }
-  | { kind: 'search'; query: string; results: { title: string; url: string; host: string }[] };
+  | { kind: 'search'; query: string; results: { title: string; url: string; host: string }[] }
+  | { kind: 'gmail'; id: string; action: string; done: number; failed: number; total: number; query: string; link?: string; label?: string; stopped?: boolean; undoOf?: string };
 
 export type CardInput = { name: string; args: Record<string, unknown>; status: 'ok' | 'error' | 'denied'; output: string };
 
@@ -80,6 +81,9 @@ function build({ name, args, output }: CardInput): Card | undefined {
     }
     case 'share_photo':
       return /^Photo sent/.test(output) ? { kind: 'photo', caption: '' } : undefined;
+    case 'gmail_organize':
+    case 'gmail_undo':
+      return gmailCard(output);
     case 'web_search':
       return searchCard(arg(args, 'query'), output);
     default:
@@ -90,6 +94,30 @@ function build({ name, args, output }: CardInput): Card | undefined {
 // ---------- shell: weather and test runs ----------
 
 const TEST_CMD = /(^|[;&|(\s])(npm (run )?test\b|npm t\b|yarn test|pnpm (run )?test|bun test|node (--\S+ )*--test\b|npx (jest|vitest|mocha)\b|jest\b|vitest\b|mocha\b|pytest\b|python3? -m (pytest|unittest)\b|cargo test\b|go test\b|deno test\b|make (check|test)\b|dotnet test\b|mvn (-\S+ )*test\b|gradle(w)? test\b|\.\/gradlew test\b|npm run check\b)/;
+
+/** A Gmail change: done / failed, the search, Undo (by id) and an "Open in Gmail" link. A big one started as a background task is a task card. */
+function gmailCard(output: string): Card | undefined {
+  const started = /^Started background job #(\d+): (.+?)\. Progress/m.exec(output);
+  if (started) return { kind: 'job', id: Number(started[1]), label: cut(started[2]), status: 'running' };
+  const m = /^\[gmail-result (\{.*\})\]$/m.exec(output);
+  if (!m) return undefined;
+  const j = JSON.parse(m[1]) as { id?: string; action?: string; done?: number; failed?: number; total?: number; query?: string; label?: string; stopped?: boolean; undoOf?: string };
+  const count = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? Math.max(0, Math.round(v)) : 0);
+  const query = cut(j.query ?? '', 300);
+  return {
+    kind: 'gmail',
+    id: /^g_[\w]{4,20}$/.test(j.id ?? '') ? j.id! : '',
+    action: cut(j.action ?? '', 20),
+    done: count(j.done),
+    failed: count(j.failed),
+    total: count(j.total),
+    query,
+    ...(query ? { link: `https://mail.google.com/mail/u/0/#search/${encodeURIComponent(query)}` } : {}),
+    ...(j.label ? { label: cut(j.label, 80) } : {}),
+    ...(j.stopped ? { stopped: true } : {}),
+    ...(j.undoOf ? { undoOf: cut(j.undoOf, 20) } : {}),
+  };
+}
 
 function shellCard(command: string, output: string): Card | undefined {
   const head = /^\[(?:exit code (-?\d+|none)|timed out after [\d.]+s), ([\d.]+)s/.exec(output);

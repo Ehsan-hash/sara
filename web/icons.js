@@ -84,6 +84,8 @@ export const ICONS = {
   photo: '<path d="M4 8.5a2 2 0 0 1 2-2h2l1.5-2h5l1.5 2h2a2 2 0 0 1 2 2V18a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><circle cx="12" cy="13" r="3.5"/>',
   job: '<path d="M7 3.5h10M7 20.5h10M8 3.5c0 4 8 4.5 8 8.5s-8 4.5-8 8.5M16 3.5c0 2-1.4 3.2-3 4.3M8 20.5c0-1.6 1.6-2.6 4-3.1 2.4.5 4 1.5 4 3.1"/>',
   mail: '<rect x="3" y="5.5" width="18" height="13" rx="2.5"/><path d="M3.5 7l8.5 6 8.5-6"/>',
+  archive: '<rect x="3" y="4" width="18" height="5" rx="1.5"/><path d="M5 9v9a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V9"/><path d="M10 13h4"/>',
+  undo: '<path d="M9 14L4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/>',
   branch: '<circle cx="6.5" cy="5.5" r="2"/><circle cx="6.5" cy="18.5" r="2"/><circle cx="17.5" cy="8" r="2"/><path d="M6.5 7.5v9M17.5 10c0 4-5 3.5-9.5 7"/>',
   book: '<path d="M4.5 5.5c2.5-1.3 5-1.3 7.5 0v14c-2.5-1.3-5-1.3-7.5 0zM12 5.5c2.5-1.3 5-1.3 7.5 0v14c-2.5-1.3-5-1.3-7.5 0z"/>',
   monitor: '<rect x="3" y="4.5" width="18" height="12" rx="2"/><path d="M8.5 20.5h7M12 16.5v4"/>',
@@ -94,6 +96,7 @@ export const ICONS = {
   wrench: '<path d="M14.7 6.3a4 4 0 0 0 5 5L20 11a4.5 4.5 0 0 1-5.6 5.6L7.5 21.5a2.1 2.1 0 0 1-3-3l4.9-6.9A4.5 4.5 0 0 1 15 6z"/>',
   sliders: '<path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/>',
   // Phase 81: the security pass and findings (a shield with a check).
+  target: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.2"/>',
   shield: '<path d="M12 3l7.5 3v5.5c0 4.6-3.2 8.3-7.5 9.5-4.3-1.2-7.5-4.9-7.5-9.5V6z"/><path d="M8.8 12.2l2.3 2.3 4.3-4.6"/>',
   // Phase 79: budgets (a half-dial with its needle).
   sandbox: '<rect x="3" y="3" width="18" height="18" rx="3" stroke-dasharray="3 2.5"/><path d="M12 7.5l4.5 2.5v5L12 17.5 7.5 15v-5z"/><path d="M7.5 10l4.5 2.5 4.5-2.5M12 12.5v5"/>',
@@ -152,7 +155,7 @@ export function paintIcons(root = document) {
 export const TOOL_ICONS = {
   remind: 'reminder', todo: 'todo', note: 'note', recall: 'recall', web_search: 'search', web_fetch: 'globe',
   calendar: 'calendar', calendar_add: 'calendar', calendar_events: 'calendar', email: 'mail', gmail_search: 'mail',
-  gmail_thread: 'mail', gmail_needs_answer: 'mail', home_control: 'home', home_status: 'home', ssh_servers: 'server',
+  gmail_thread: 'mail', gmail_needs_answer: 'mail', gmail_organize: 'archive', gmail_undo: 'undo', gmail_labels: 'mail', gmail_senders: 'mail', gmail_unsubscribe_info: 'mail', home_control: 'home', home_status: 'home', ssh_servers: 'server',
   ssh_connect: 'server', ssh_run: 'server', ssh_forget_password: 'server', ssh_revoke_key: 'server', ssh_remove_server: 'server',
   take_photo: 'photo', share_photo: 'photo', change_outfit: 'shirt', scrapbook: 'scrapbook', shared_list: 'dice',
   settings_guide: 'help', tune_personality: 'sliders', team_task: 'team', work_on_issue: 'team', start_job: 'job',

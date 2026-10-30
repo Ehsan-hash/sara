@@ -18,6 +18,7 @@ import { DEFAULT_REPORT_INBOX, REASON_LABELS, validReason } from '../reports.ts'
 import { disclosureText } from '../safety.ts';
 import { adultModeOn } from '../settings.ts';
 import { clearTodayCache } from '../today.ts';
+import { ACTION_WORDS, RECONNECT_TEXT } from '../gmail-organize.ts';
 import { ENTITY_ID, haCall, switchPlan } from '../home-switch.ts';
 import { cleanHomeUrl, HOME_VAULT, type HaState } from '../tools/home.ts';
 import { NEXT, type RouteCtx, type RouteHandler } from './context.ts';
@@ -203,6 +204,23 @@ export function createConnectionsRoutes(ctx: RouteCtx): RouteHandler {
         await g.disconnect();
         g.forgetClient();
         return send(res, 200, g.status());
+      }
+      // Gmail organizing: the result card's Undo button (exactly the emails that change touched).
+      if (b === 'undo' && c && method === 'POST') {
+        const gm = app.gmail;
+        if (!gm) throw new HttpError(404, 'Not available');
+        if (!gm.canOrganize()) throw new HttpError(409, RECONNECT_TEXT);
+        const problem = gm.undoProblem(c);
+        if (problem) throw new HttpError(409, problem);
+        const r = gm.get(c)!;
+        const verb = ACTION_WORDS[r.action]?.verb.toLowerCase() ?? r.action;
+        try {
+          const out = await gm.execute(`Gmail: undo "${verb}" on ${r.count.toLocaleString('en-US')} emails`, r.count, r.conversationId ?? undefined, undefined, (signal, progress) => gm.undo(c, { ...(signal ? { signal } : {}), progress }), { action: r.action });
+          const done = /^\[gmail-result (\{.*\})\]$/m.exec(out.text);
+          return send(res, 200, { ...(out.job ? { job: out.job } : {}), ...(done ? (JSON.parse(done[1]) as Record<string, unknown>) : {}) });
+        } catch (err) {
+          throw as400(err);
+        }
       }
       if (b === 'connect' && method === 'POST') {
         try {

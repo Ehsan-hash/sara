@@ -27,6 +27,7 @@ import { cleanBudget, usageLine } from '../usage.ts';
 import { FINDING_SEVERITIES, FINDING_SOURCES, FINDING_STATUSES, type FindingSeverity, type FindingSource, type FindingStatus } from '../security/findings.ts';
 import { DEFAULT_SECURITY, mergeSecurity, REVIEW_BUDGET_CHOICES, SECURITY_MODES, securitySettings } from '../security/pass.ts';
 import { DEFAULT_THREATS, mergeThreats, THREAT_MODES, threatSettings } from '../security/threats.ts';
+import { DEFAULT_REDTEAM, mergeRedteam, redteamSettings, RT_BUDGET_CHOICES, RT_MINUTE_CHOICES, SCRIPT_CHOICES, SHIP_MODES } from '../redteam.ts';
 import { NEXT, type RouteCtx, type RouteHandler } from './context.ts';
 
 export function createCodingRoutes(ctx: RouteCtx): RouteHandler {
@@ -116,6 +117,85 @@ export function createCodingRoutes(ctx: RouteCtx): RouteHandler {
         // Only open threats, all of one project (the one named, when named).
         const list = ids.map((i: number) => store.get(i)).filter((f): f is NonNullable<typeof f> => Boolean(f && f.source === 'threat' && f.status === 'open' && (!workspace || f.workspace === workspace) && !(f.fix && (f.fix.state === 'working' || f.fix.state === 'ready'))));
         if (!list.length) throw new HttpError(409, 'None of these threats is open (or each is already on a fix branch).');
+        try {
+          return send(res, 202, { finding: fixes.startBatch(list.map((f) => f.id)), ids: list.map((f) => f.id) });
+        } catch (err) {
+          throw new HttpError(409, (err as Error).message);
+        }
+      }
+      if (method !== 'GET') await readJson(req).catch(() => ({}));
+      throw new HttpError(404, 'Not found');
+    }
+    // Phase 86 (harness M11): red-team mode. GET: its settings (Red-team before shipping, scripts per
+    // run, budget, time limit), the sandbox's isolation and, with ?workspace=, that project's reports;
+    // PUT: the settings. POST plan: what a run would do (shown before it starts: entry points, probes,
+    // tests, start command, budget, isolation). POST (with confirm): start a run. GET :id: a report.
+    // POST :id/scripts {approve}: run the attacker scripts the owner read and approved (copy-only mode).
+    // POST :id/fix: "Fix what broke" (the fix pass over this run's open breaks). POST :id/stop.
+    // Owner-only like the security pass (members have no coding; OWNER_SETTINGS); the demo refuses.
+    if (a === 'redteam') {
+      const rt = app.redteam;
+      if (!rt) throw new HttpError(404, 'Red-team mode is not available here.');
+      const target = (body: Record<string, unknown>) => {
+        const conv = body.conversationId ? app.store.getConversation(String(body.conversationId)) : undefined;
+        if (body.conversationId && !conv) throw new HttpError(404, 'Conversation not found');
+        if (conv && conv.mode !== 'coding') throw new HttpError(400, 'Red-team mode is for coding projects.');
+        const workspace = conv ? conv.workspace : validWorkspace(body.workspace);
+        return { conv, workspace, wsDir: workspaceDir(rootDir, workspace) };
+      };
+      if (!b) {
+        if (method === 'PUT') {
+          const body = await readJson(req);
+          app.settings.update({ redteam: mergeRedteam(redteamSettings(app.settings.get()), body) });
+        } else if (method === 'POST') {
+          const body = await readJson(req);
+          if (body.confirm !== true) throw new HttpError(400, 'Look at the plan first, then start it (confirm).');
+          const { conv, workspace, wsDir } = target(body);
+          if (!existsSync(wsDir)) throw new HttpError(404, 'Workspace not found');
+          try {
+            return send(res, 202, { report: rt.start({ workspace, wsDir, conversationId: conv?.id ?? null, reason: 'ask', private: Boolean(conv?.private) }) });
+          } catch (err) {
+            throw new HttpError(409, (err as Error).message);
+          }
+        } else if (method !== 'GET') throw new HttpError(405, 'Method not allowed');
+        const q = new URL(req.url ?? '/', 'http://x').searchParams;
+        const ws = q.get('workspace') ? validWorkspace(q.get('workspace')) : '';
+        const iso = app.sandboxGate?.isolation();
+        return send(res, 200, { ...redteamSettings(app.settings.get()), choices: { ship: SHIP_MODES, scripts: SCRIPT_CHOICES, budgetTokens: RT_BUDGET_CHOICES, minutes: RT_MINUTE_CHOICES }, defaults: DEFAULT_REDTEAM, isolation: iso ? { driver: iso.driver, isolated: iso.isolated, label: iso.label } : null, reviewModel: Boolean(app.settings.get().routes?.review), ...(ws ? { workspace: ws, reports: rt.list(ws).map((r) => ({ id: r.id, status: r.status, startedAt: r.startedAt, endedAt: r.endedAt ?? null, breaks: r.breaks.length, serious: r.breaks.filter((x) => x.severity === 'high' || x.severity === 'block').length, reason: r.reason })) } : {}) });
+      }
+      if (b === 'plan' && !c && method === 'POST') {
+        const body = await readJson(req);
+        const { workspace, wsDir } = target(body);
+        if (!existsSync(wsDir)) throw new HttpError(404, 'Workspace not found');
+        return send(res, 200, { plan: rt.plan(workspace, wsDir) });
+      }
+      const id = b && /^\d+$/.test(b) ? Number(b) : 0;
+      const report = id ? rt.get(id) : undefined;
+      if (!report) {
+        if (method !== 'GET') await readJson(req).catch(() => ({}));
+        throw new HttpError(404, 'Red-team run not found.');
+      }
+      if (!c && method === 'GET') return send(res, 200, { report, running: rt.running.has(id) });
+      if (c === 'scripts' && method === 'POST') {
+        const body = await readJson(req);
+        const approve = Array.isArray(body.approve) ? body.approve.map(String).filter((x: string) => /^S\d{1,2}$/.test(x)).slice(0, 10) : [];
+        try {
+          return send(res, 202, { report: await rt.approveScripts(id, approve) });
+        } catch (err) {
+          throw new HttpError(409, (err as Error).message);
+        }
+      }
+      if (c === 'stop' && method === 'POST') {
+        await readJson(req).catch(() => ({}));
+        return send(res, 200, { report: rt.stop(id) });
+      }
+      if (c === 'fix' && method === 'POST') {
+        await readJson(req).catch(() => ({}));
+        const fixes = app.fixes;
+        const store = app.findings;
+        if (!fixes || !store) throw new HttpError(404, 'The fix loop is not available here.');
+        const list = report.breaks.map((x) => store.get(x.findingId)).filter((f): f is NonNullable<typeof f> => Boolean(f && f.source === 'redteam' && f.status === 'open' && !fixes.why(f)));
+        if (!list.length) throw new HttpError(409, 'Nothing from this run can go to a fix branch (fixed, dismissed, already on a branch, or no code line).');
         try {
           return send(res, 202, { finding: fixes.startBatch(list.map((f) => f.id)), ids: list.map((f) => f.id) });
         } catch (err) {

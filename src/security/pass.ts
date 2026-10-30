@@ -147,11 +147,79 @@ export function jsonIn(text: string): unknown {
       try {
         return JSON.parse(t);
       } catch {
-        /* next */
+        // Small models often put real line breaks / tabs inside JSON strings (code in "find" and
+        // "replace"): escape them and try once more.
+        try {
+          return JSON.parse(escapeRawControls(t));
+        } catch {
+          /* next */
+        }
       }
     }
   }
   return undefined;
+}
+
+/**
+ * Every top-level JSON object in a text, in order (string-aware brace matching; each object parsed on
+ * its own, with raw line breaks escaped). For answers that list several objects where one was asked.
+ */
+export function jsonObjectsIn(text: string): Record<string, unknown>[] {
+  const out: Record<string, unknown>[] = [];
+  let depth = 0;
+  let start = -1;
+  let inStr = false;
+  for (let i = 0; i < text.length && out.length < 50; i++) {
+    const ch = text[i];
+    if (inStr) {
+      if (ch === '\\') i++;
+      else if (ch === '"') inStr = false;
+      continue;
+    }
+    if (ch === '"' && depth > 0) inStr = true;
+    else if (ch === '{') {
+      if (depth === 0) start = i;
+      depth++;
+    } else if (ch === '}' && depth > 0) {
+      depth--;
+      if (depth === 0 && start >= 0) {
+        const t = text.slice(start, i + 1);
+        for (const cand of [t, escapeRawControls(t)]) {
+          try {
+            const v = JSON.parse(cand) as unknown;
+            if (v && typeof v === 'object' && !Array.isArray(v)) out.push(v as Record<string, unknown>);
+            break;
+          } catch {
+            /* next */
+          }
+        }
+        start = -1;
+      }
+    }
+  }
+  return out;
+}
+
+/** Escapes raw newlines, carriage returns and tabs that appear inside JSON string literals. */
+export function escapeRawControls(s: string): string {
+  let out = '';
+  let inStr = false;
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i];
+    if (inStr) {
+      if (ch === '\\') {
+        out += ch + (s[i + 1] ?? '');
+        i++;
+        continue;
+      }
+      if (ch === '"') inStr = false;
+      out += ch === '\n' ? '\\n' : ch === '\r' ? '\\r' : ch === '\t' ? '\\t' : ch;
+    } else {
+      if (ch === '"') inStr = true;
+      out += ch;
+    }
+  }
+  return out;
 }
 
 const REVIEW_SYSTEM = `You review a code change for SECURITY problems only (not style). You never write exploits, attack payloads or test inputs; you only point at lines and say how to fix them.

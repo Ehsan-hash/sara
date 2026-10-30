@@ -43,6 +43,7 @@ import { detectTests } from './security/fix.ts';
 import { askModel, jsonIn, walkFiles } from './security/pass.ts';
 import { checkFile } from './security/rules.ts';
 import { analyze } from './security/threat-graph.ts';
+import { insecureDefaults } from './redteam-probes.ts';
 import type { Conversation } from './store.ts';
 import { ApprovalBroker } from './tools/registry.ts';
 import { workspaceDir } from './tools/workspace.ts';
@@ -1389,5 +1390,8 @@ export function countFindings(dir: string, files: { path: string; change: string
   } catch {
     /* the map is best effort */
   }
+  // Phase 86 (M11): red-team mode's insecure-default probes on the changed files (code only: the
+  // eval doesn't start apps; full red-team runs are their own runs, kind 'redteam').
+  for (const x of insecureDefaults([...changed], read)) list.push({ file: x.file ?? '', line: x.line ?? 0, rule: x.rule, quote: clip(String(x.quote ?? ''), 160) });
   return { n: list.length, list: list.slice(0, 30) };
 }

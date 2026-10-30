@@ -959,6 +959,99 @@ tasks are **the owner's own recorded turns**, not `.sara/evals/*.json` specs.
   network stays off; findings flow into the fix path; a run in private local mode uses only local
   models.
 
+**As built (Phase 86, 2.19.0):**
+
+- **The loop** (`src/redteam.ts`, `RedTeam`): everything runs in an M5 sandbox copy of the
+  workspace at its current state (`runInSandbox`, network off; bwrap / Seatbelt / Docker / WSL when
+  present, otherwise copy-only and labelled *not isolated*). A small Node driver
+  (`DRIVER_SOURCE` in `src/redteam-probes.ts`) is written into the copy only (new `inject` option of
+  `runInSandbox`, so it is never part of the diff). Stages: (a) the project's tests
+  (`detectTestCommand`: npm/pnpm/yarn by lockfile, pytest, go test, cargo test), failures recorded;
+  (b) the app started from a detected Node or Python start file (`detectStart`: package.json
+  `start`/`main`, the usual names, then any top-level or `src/` file that starts a server) on a
+  port the harness picked and checked free (`SARA_REDTEAM_PORTS`, default any free port), with a
+  bounded start time; the driver refuses a port that was already in use, connects only to
+  `127.0.0.1:<that port>`, and only ever stops its own child; (c) the fixed probe catalogue at each
+  M7 entry point; (d) insecure-default checks on code and config plus the headers the app really
+  sent; (e) the attacker scripts; (f) reproduction and review. Its own budget (tokens for the two
+  model roles, minutes for the whole run) is shown on the plan before *Start*, and the run stops at
+  the time limit.
+- **Probe catalogue** (`probesFor`, `VALUE_SETS`; at most 40 per entry, 200 per run): a baseline,
+  then per parameter: missing, empty, very long (8,000 chars; 1 MB body), unusual Unicode (RTL
+  override, zero-width, emoji), path-like `../`, quote characters, numbers out of range (`-1`,
+  `1e309`, 20 digits), the wrong type (`a[]=` / `a[x]=` / an object or array in JSON), a duplicated
+  parameter; per body: malformed JSON, the wrong content type, deep nesting; path parameters get the
+  same values; command-line entries get no / empty / long / unicode / path / number arguments.
+  Message handlers are listed but not probed. The parameters come from the handler's own code
+  (`paramsOf`: `req.query.x`, destructured `req.body`, `searchParams.get`, Flask/Django/`parse_qs`
+  shapes), and plain `http.createServer` / `http.server` handlers are split into their sub-routes
+  (`subRoutes`). Nothing else can be sent: the model never adds a probe to the catalogue.
+- **Detection** (`breaksIn`): the process ended (*exit*), a 5xx (*crash*), an uncaught error in the
+  app's log (*uncaught*; also when Python's server drops the connection), no answer in time
+  (*timeout*), a stack trace in the response (*stack-trace*), a secret from the project's env/config
+  files or a key-shaped value in the response (*secret-echo*). 4xx answers are good behaviour; a
+  request the client could not even form is not a break. The cited line is the first stack frame in
+  a project file (`citeFromTrace`), else the entry's handler line.
+- **Insecure defaults** (`insecureDefaults`, `headerFindings`): debug on, default credentials
+  (admin/password/changeme… in code or config, placeholders and `${VAR}` excepted), CORS `*`,
+  missing `X-Content-Type-Options` and `Content-Security-Policy`/`X-Frame-Options` on the app's real
+  responses, listening on all interfaces, world-writable files, a committed env file with real
+  values (the quote is the key name and `=`, never the value). Example/test/fixture files are skipped.
+- **Attacker / reviewer pairing:** the **Coding** model is the attacker: it may write up to N
+  (Settings: 0/1/3/5, default 3) small Node or Python probe scripts against `APP_URL` only.
+  `validateScript` refuses any other host, IP or port, `node:net`/`socket`/`child_process`/
+  `subprocess`, installs, process stopping, file writes, paths outside the copy, `eval`/dynamic
+  imports, environment values other than `APP_URL`, and scripts over 4,000 chars / 120 lines.
+  `APP_URL` points at the driver's recording proxy in front of the app, so every request and answer
+  is observed by code, never taken from the script's word. **Without OS isolation the scripts are
+  shown in the report and run only after the owner ticks them** (*Run the ones I ticked* /
+  *Skip them*), never by themselves. The **Reviewing** model (falls back to Coding) is the second
+  pass: for each reproduced candidate it must cite the reproducing input, the observed output and a
+  code line; `validateQuotes` and substring checks against the recorded exchange decide. Every
+  candidate is first re-run in a fresh copy with the app started afresh (probe re-sent, script
+  re-run, tests re-run) and must break the same way. Unreproducible, unquoted, misquoted or
+  "not real" candidates are dropped and listed under *Dropped* with the reason ("no theater").
+  Without a reviewer (none set, budget spent), code-found breaks keep their code-cited line and
+  model-written ones are dropped.
+- **Report and findings:** a report per run (`redteam_runs` table: plan, tests, app, what was
+  tried by kind and entry, candidates, dropped, breaks with severity, input, observed output, line
+  and quote), and one finding per break (source `redteam`, origin code, or model when the reviewer
+  wrote the title) in the one table, with the reproduction in `meta`. Secrets are masked everywhere
+  they are stored or shown (`maskSecrets`).
+- **Fix what broke:** `FixBranches.startBatch` (one kind per batch) on a local
+  `sara/redteam-fix-<id>` branch in its own worktree; the re-check (`RedTeam.recheck`) re-sends each
+  reproducing input in a sandbox copy of the fixed tree (it must no longer break), runs the tests,
+  and the M6 rules and M7 hits must not increase. A failed re-check is fed back for one more try.
+  Apply / Keep / Discard as for threats; no push, fetch or remote command exists in the path.
+  Applying writes a `lesson` memory (M10) quoting the input, the error and the change, linked in
+  `recall_lessons`.
+- **Records and evals:** every probe (`redteam_probe`), default check, script run, reproduction and
+  test run is a tool step on the run (M3, kind `redteam`; the fix has its own run).
+  `countFindings` (M9) also counts the insecure-default checks on changed files.
+- **Ship gate:** *Settings → Abilities → Coding projects → Red-team before shipping*: Off / Ask me
+  (default) / Always. On a push, PR or publish (`isShipAction`: `git_push`, `github_open_pr`, and
+  shell `git push` / `npm|pnpm|yarn publish` / `cargo publish` / `twine upload` / `gh pr create` /
+  `gh release create`), *Ask me* adds **Red-team first** to the approval card (a new approval answer
+  `redteam`: the action does not run, a run starts and she is told to wait for the report); *Always*
+  starts the run first and shows its result on the card.
+- **UI:** *Findings → Red team* (plan card with entries, inputs, tests, start, budget and the
+  isolation note; live stage and budget; report; the scripts to approve; *Fix what broke*), the
+  *Red-team this* button on the coding chat's after-turn card, *Before you ship* on the project
+  page, a `redteam` source filter and the `target` icon. Routes (owner only): `GET/PUT
+  /api/redteam`, `POST /api/redteam/plan`, `POST /api/redteam` (needs `confirm`), `GET
+  /api/redteam/:id`, `POST /api/redteam/:id/scripts`, `POST /api/redteam/:id/fix`.
+- **Measured:** see [RESULTS.md](../RESULTS.md#red-team-phase-86).
+- **Deviations:**
+  1. The model **writes** probe scripts (the Phase 86 brief) instead of only picking catalogue
+     checks (this design). The catalogue is still the only thing the code sends by itself; scripts
+     are validated by code, can reach only the sandboxed app through the recording proxy, and need
+     the owner's OK without OS isolation.
+  2. The THREAT_MODEL section lives in `SECURITY.md` (security-pass section).
+  3. "Behaviour checks from M5" are the sandbox's own findings on the driver run (listed under
+     *What was tried*); no browser preview check (`browser_check`) is run against the app.
+  4. Go and Rust apps are not started yet (their tests still run); the Python/Node start detector
+     needs a file that starts a server.
+
 ### 3.12 Model calls, small local models, private local mode
 
 | Feature | Model call? | Small local model | Private local mode ("Nothing leaves this computer") |
@@ -1174,3 +1267,24 @@ The original questions:
    Or should a security fix push and open a PR on its own after the re-check passes? And OK to add the
    new model job **"Reviewing"** (`review`, falls back to Coding) for the stronger second-pass model,
    and to swap the order to M8 time-travel → M9 eval?
+
+## 8. The harness track is complete (Phases 76–86, 2.9.0–2.19.0)
+
+All eleven milestones are built. What the track adds up to:
+
+- **Memory she can explain** (M1, M2, M10): ranked notes with why and how sure, contradictions
+  stopped before a tool acts, and lessons from her own fixed failures that come back by themselves.
+- **Runs she can account for** (M3, M4, M8, M9): every step, model call, tool and memory pick is
+  recorded; budgets stop work cleanly; any step can be replayed or branched; variants are compared
+  on real tasks with a hard cost ceiling.
+- **Code she checks before you trust it** (M5, M6, M7, M11): commands run in a sandbox copy first;
+  the security pass and the threat map quote real lines; red-team mode tries to break the app in
+  the sandbox and only reports what it could break twice. All three fix through one local
+  fix-branch path whose re-check is the proof, and nothing is ever pushed without the owner.
+- **The rules held across the track:** no runtime npm packages, additive migrations only, every
+  model claim checked by code (quotes, reproduction) or dropped, owner-only security surfaces,
+  private conversations and private local mode use only local models, generic checks only (no
+  exploit payloads, nothing that leaves the sandbox).
+- **What is still open:** OS isolation on Windows needs Docker or WSL (copy-only otherwise); Go and
+  Rust apps are not started by red-team mode; the threat walk does not follow callbacks; live
+  numbers come from one PC with local Ollama models (see RESULTS.md).

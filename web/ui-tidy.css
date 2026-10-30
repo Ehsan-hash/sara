@@ -564,6 +564,20 @@ dialog:not(.settings-dialog) .settings-body > :is(.error, p[role="status"]):empt
 .fnd-adv-pkg p { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .fnd-adv-pkg code { font-family: var(--font-mono); }
 .fnd-flag { align-self: flex-start; display: flex; gap: 8px; align-items: center; max-width: min(720px, 85%); padding: 6px 10px; border-radius: 10px; background: var(--surface-1); border: 1px dashed var(--hairline-strong); font-size: 13px; }
+/* Phase 86: red-team mode (Findings → Red team: the plan, the report, scripts to approve; the ship card). */
+.fnd-redteam { display: grid; gap: 12px; grid-template-columns: minmax(0, 1fr); }
+.fnd-repro { display: grid; gap: 4px; grid-template-columns: minmax(0, 1fr); }
+.fnd-repro p { margin: 0; }
+.fnd-repro code { font-family: var(--font-mono); font-size: var(--fs-small); overflow-wrap: anywhere; }
+.fnd-rt-plan ul { margin: 0; }
+.fnd-rt-plan .fnd-chip { margin-inline-start: 0; margin-inline-end: 6px; }
+.fnd-rt-row button { justify-self: start; }
+.fnd-rt-scripts { display: grid; gap: 8px; grid-template-columns: minmax(0, 1fr); }
+.fnd-rt-scripts p { margin: 0; }
+.fnd-rt-scripts .fnd-diff { max-height: 16em; }
+.fnd-rt-gate button { justify-self: start; }
+.fnd-flag .fnd-icon { color: var(--text-2); }
+@media (max-width: 520px) { .fnd-flag { flex-wrap: wrap; } .fnd-rt-plan .row, .fnd-redteam .row { flex-wrap: wrap; } }
 #messages > .fnd-flag { margin-left: 60px; max-width: min(640px, calc(100% - 60px)); }
 .fnd-flag.fnd-flag-override { border-color: color-mix(in srgb, var(--danger) 50%, transparent); }
 .fnd-flag.fnd-flag-offline { color: var(--text-2); }
