@@ -153,10 +153,15 @@ test('extract: Markdown headings (not inside code fences); languages by file nam
   assert.match(identWords('readPdfFile snake_case_name'), /read pdf file.*snake case name/);
 });
 
-test('ignore rules: names, globs, folders, anchored paths, **; negation lines skipped', () => {
+test('ignore rules: names, globs, folders, anchored paths, ** and ordered negations', () => {
   const r = new IgnoreRules('# comment\n*.log\nbuild/\n/out\ndocs/tmp\n**/gen/*.ts\nsecret?.txt\n!keep.log\n');
   assert.equal(r.ignores('a/b/x.log', false), true);
-  assert.equal(r.ignores('keep.log', false), true, 'negations are not supported (stays out)');
+  assert.equal(r.ignores('keep.log', false), false, 'a later negation re-includes the file');
+  assert.equal(r.decision('src/main.ts', false), undefined, 'no matching rule has no decision');
+  const excludedAgain = new IgnoreRules('*.log\n!keep.log\nkeep.log\n');
+  assert.equal(excludedAgain.ignores('keep.log', false), true, 'the last matching rule wins');
+  const escaped = new IgnoreRules('\\!literal.ts\n');
+  assert.equal(escaped.ignores('!literal.ts', false), true, 'an escaped leading ! is literal');
   assert.equal(r.ignores('build', true), true);
   assert.equal(r.ignores('build', false), false, 'folder-only rule');
   assert.equal(r.ignores('out', true), true);
@@ -165,6 +170,29 @@ test('ignore rules: names, globs, folders, anchored paths, **; negation lines sk
   assert.equal(r.ignores('a/gen/x.ts', false), true);
   assert.equal(r.ignores('secret1.txt', false), true);
   assert.equal(r.ignores('src/main.ts', false), false);
+});
+
+test('store: nested rules can re-include a file but cannot revive an ignored parent', (t) => {
+  const { dir, close } = scratch(t);
+  const ws = join(dir, 'ws');
+  const put = (rel: string, body: string) => {
+    mkdirSync(join(ws, rel, '..'), { recursive: true });
+    writeFileSync(join(ws, rel), body);
+  };
+  put('.gitignore', '*.ts\n!skip.ts\nsecret/\n!secret/keep.ts\nignored/\n!ignored/\n!ignored/keep.ts\n!node_modules/\n!.hidden/\n');
+  put('src/.gitignore', '!keep.ts\nskip.ts\n');
+  put('src/keep.ts', 'export const kept = true;\n');
+  put('src/skip.ts', 'export const skipped = true;\n');
+  put('src/other.ts', 'export const inherited = true;\n');
+  put('secret/keep.ts', 'export const hidden = true;\n');
+  put('ignored/keep.ts', 'export const folder = true;\n');
+  put('node_modules/keep.ts', 'export const dependency = true;\n');
+  put('.hidden/keep.ts', 'export const dot = true;\n');
+  const store = new CodeMapStore(ws, join(dir, 'map.db'));
+  close(() => store.close());
+  const r = store.refreshAll();
+  assert.deepEqual(store.files().map((f) => f.path), ['ignored/keep.ts', 'src/keep.ts']);
+  assert.equal(r.ignored, 3, 'nested exclusions and the ignored parent are counted');
 });
 
 test('store: skips .git, node_modules, dist, .gitignored, binary and >1 MB files; links are not followed', (t) => {

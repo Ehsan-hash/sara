@@ -5,6 +5,9 @@ Format: newest first. Semantic versions since 1.0.0 (before that `0.<phase>.<pat
 
 ## Unreleased
 
+- **Code map ignore rules:** `.gitignore` negation lines now re-include matching source files in
+  rule order, while excluded parent folders and the map's fixed dependency skips stay excluded.
+
 ## 2.9.0 (2026-10-30): ranked memory (harness track, Phase 76)
 
 The first step of the harness track ([docs/design/HARNESS_TRACK.md](docs/design/HARNESS_TRACK.md)).

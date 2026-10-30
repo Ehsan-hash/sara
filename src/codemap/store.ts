@@ -227,7 +227,8 @@ export class CodeMapStore {
     for (let i = parts.length - 1; i >= 0; i--) {
       const base = parts.slice(0, i).join('/');
       const rules = st.rules.get(base);
-      if (rules && rules.ignores(parts.slice(i).join('/'), isDir)) return true;
+      const decision = rules?.decision(parts.slice(i).join('/'), isDir);
+      if (decision !== undefined) return decision;
     }
     return false;
   }
