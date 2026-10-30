@@ -518,3 +518,69 @@ html.shell-test.shell-mac .shell-drag::before { content: ""; position: absolute;
 @media (pointer: coarse) {
   #input { font-size: max(16px, var(--chat-size, 15px)); }
 }
+
+/* ---------- Phase 78: "Show the run" and the Run view (web/run-view.js) ---------- */
+.step-run { list-style: none; padding: 2px 8px 4px; }
+.run-open { display: inline-flex; align-items: center; gap: 6px; background: none; border: 0; padding: 4px 0; font: inherit; cursor: pointer; min-height: 32px; }
+.run-open .step-icon svg { width: 15px; height: 15px; }
+dialog.run-view { width: min(920px, 94vw); max-height: 88vh; }
+/* Room for the window's ✕ beside the step headers. */
+@media (min-width: 761px) { .run-body { padding-right: 40px; } }
+.run-body { display: grid; gap: var(--s-3); grid-template-columns: minmax(0, 1fr); }
+.run-head { display: grid; gap: 4px; }
+.run-title { display: flex; align-items: center; gap: 10px; margin: 0; font-family: var(--font-display); letter-spacing: var(--tracking-display); }
+.run-icon { display: inline-flex; flex: none; width: 18px; height: 18px; color: var(--text-2); }
+.run-icon svg { width: 100%; height: 100%; }
+.run-icon.big { width: 24px; height: 24px; color: var(--accent-text); }
+.run-ask { margin: 0; padding: 8px 12px; border-left: 3px solid var(--accent-solid); background: var(--surface-1); border-radius: 0 var(--r-control) var(--r-control) 0; color: var(--text-1); overflow-wrap: anywhere; }
+.run-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: var(--s-2); }
+.run-stat { display: grid; gap: 2px; padding: 10px 12px; background: var(--glass-fill); border: 1px solid var(--hairline); border-radius: var(--r-card); box-shadow: var(--elev-1); }
+.run-stat-v { font-size: 1.05rem; font-weight: 600; color: var(--text-1); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.run-steps { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--s-2); grid-template-columns: minmax(0, 1fr); }
+.run-step { border: 1px solid var(--hairline); border-radius: var(--r-card); background: var(--surface-1); min-width: 0; }
+.run-step.stopped { border-color: var(--warn); }
+.run-step[open] { background: var(--surface-2); }
+.run-step-head { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "n title chips" "n meta meta"; align-items: center; gap: 2px 10px; padding: 10px 12px; cursor: pointer; list-style: none; min-height: var(--tap); }
+.run-step-head::-webkit-details-marker { display: none; }
+.run-step-head:focus-visible { outline: 2px solid var(--accent-solid); outline-offset: 2px; }
+.run-step-n { grid-area: n; display: inline-grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; background: var(--accent-soft); color: var(--accent-text); font-weight: 600; font-variant-numeric: tabular-nums; }
+.run-step-title { grid-area: title; font-weight: 600; color: var(--text-1); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.run-step-chips { grid-area: chips; display: flex; flex-wrap: wrap; gap: 4px; justify-content: flex-end; }
+.run-step-meta { grid-area: meta; font-variant-numeric: tabular-nums; }
+.run-chip { display: inline-flex; align-items: center; padding: 1px 8px; border-radius: var(--r-pill); background: var(--surface-3); color: var(--text-2); font-size: var(--fs-small); white-space: nowrap; }
+.run-chip.ok { background: var(--success-soft); color: var(--success); }
+.run-chip.bad { background: var(--danger-soft); color: var(--danger); }
+.run-chip.warn { background: var(--warn-soft); color: var(--warn); }
+.run-step-body { display: grid; gap: var(--s-3); padding: 0 12px 12px; grid-template-columns: minmax(0, 1fr); }
+.run-sec { display: grid; gap: 6px; min-width: 0; justify-items: start; }
+.run-sec > * { max-width: 100%; }
+.run-sec > ul, .run-sec > .run-sent { justify-self: stretch; }
+.run-sec p, .run-tool-body p { margin: 0; }
+.run-sec-h { margin: 0; font-size: var(--fs-small); text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-3); }
+.run-calls, .run-picks, .run-tools, .run-contras, .run-dirty { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; min-width: 0; }
+.run-call, .run-pick { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; padding: 6px 8px; border-radius: var(--r-control); background: var(--surface-1); overflow-wrap: anywhere; }
+.run-call.bad { border-left: 3px solid var(--danger); }
+.run-pick-id { font-weight: 600; color: var(--text-1); }
+.run-tool { border-radius: var(--r-control); background: var(--surface-1); min-width: 0; }
+.run-tool.error, .run-tool.denied { border-left: 3px solid var(--danger); }
+.run-tool-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; padding: 8px; cursor: pointer; list-style: none; min-height: var(--tap); }
+.run-tool-head::-webkit-details-marker { display: none; }
+.run-tool-verb { color: var(--text-1); }
+.run-tool-body { display: grid; gap: 6px; padding: 0 8px 8px; grid-template-columns: minmax(0, 1fr); }
+.run-what { font-family: var(--font-mono); font-size: var(--fs-small); color: var(--text-2); overflow-wrap: anywhere; white-space: pre-wrap; }
+.run-out { margin: 0; max-height: 320px; overflow: auto; padding: 8px 10px; border-radius: var(--r-control); background: var(--surface-0); border: 1px solid var(--hairline); font-family: var(--font-mono); font-size: var(--fs-small); white-space: pre-wrap; overflow-wrap: anywhere; color: var(--text-2); }
+.run-contra { margin: 0; color: var(--warn); }
+.run-err { color: var(--danger); }
+.run-sent { display: grid; gap: 6px; grid-template-columns: minmax(0, 1fr); }
+.run-prompt > summary { cursor: pointer; padding: 6px 0; color: var(--accent-text); min-height: 32px; }
+.run-msg { display: grid; gap: 2px; margin: 6px 0; }
+.run-msg-role { color: var(--text-3); }
+.run-foot { margin: 0; }
+@media (max-width: 760px) {
+  /* Phone: a full-screen sheet (not the half sheet other windows use). */
+  dialog.run-view[open] { width: 100vw; height: 100dvh; max-height: 100dvh; margin: 0; border-radius: 0; padding-top: var(--safe-t); }
+  .run-body { padding-bottom: calc(var(--s-6) + var(--safe-b)); }
+  .run-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .run-step-head { grid-template-columns: auto minmax(0, 1fr); grid-template-areas: "n title" "n chips" "n meta"; }
+  .run-step-chips { justify-content: flex-start; }
+}

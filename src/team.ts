@@ -16,6 +16,7 @@ import type { RoutePurpose } from './settings.ts';
 import { ToolError, type Tool } from './tools/types.ts';
 import { workspaceDir } from './tools/workspace.ts';
 import { cleanBudget, usageLine, usageScope, type UsageTotals } from './usage.ts';
+import { filesNamed, RunRecorder } from './runs.ts';
 
 export type HelperRole = 'researcher' | 'coder' | 'reviewer' | 'tester' | 'writer' | 'designer' | 'agent';
 
@@ -232,7 +233,7 @@ type Row = Record<string, string | number | null>;
 export class TeamManager {
   readonly #app: AppContext;
   readonly #db: DatabaseSync;
-  readonly #runs = new Map<number, { ctl: AbortController; step?: { id: number; ctl: AbortController }; inbox: Map<number, string[]>; approvals: Map<string, PendingApproval>; done: Promise<TeamTask>; answer?: (d: 'go' | 'skip' | 'stop') => void }>();
+  readonly #runs = new Map<number, { ctl: AbortController; step?: { id: number; ctl: AbortController }; inbox: Map<number, string[]>; approvals: Map<string, PendingApproval>; done: Promise<TeamTask>; answer?: (d: 'go' | 'skip' | 'stop') => void; rec: RunRecorder }>();
   /** Tasks that were running when the server stopped (picked up again by resumeInterrupted). */
   readonly #resumable: number[] = [];
 
@@ -402,11 +403,27 @@ CREATE INDEX IF NOT EXISTS team_log_task ON team_log(task_id, id);
   }
 
   #launch(id: number, plan?: { helper: string; title: string; instructions: string }[]): void {
-    const run = { ctl: new AbortController(), inbox: new Map<number, string[]>(), approvals: new Map<string, PendingApproval>(), done: Promise.resolve(undefined as unknown as TeamTask) };
+    const task = this.get(id);
+    const conv = task?.conversationId;
+    // Phase 78: each launch of a team task is a run (each helper's move a step). The usage scope
+    // (AsyncLocalStorage, as before) carries the recorder to every model call in it.
+    const rec = this.#app.runs && conv && this.#app.store.getConversation(conv) ? new RunRecorder(this.#app.runs, { kind: 'team', conversationId: conv, teamTaskId: id, title: clip(task?.goal ?? '', 120), budget: task?.limits }) : RunRecorder.none();
+    const run = { ctl: new AbortController(), inbox: new Map<number, string[]>(), approvals: new Map<string, PendingApproval>(), done: Promise.resolve(undefined as unknown as TeamTask), rec };
     this.#runs.set(id, run);
     // Phase 52: every model call in the run counts toward it (the usage meter and its budget).
-    const conv = this.get(id)?.conversationId;
-    run.done = usageScope.run({ purpose: 'team', teamTaskId: id, ...(conv ? { conversationId: conv } : {}) }, () => this.#run(id, plan)).finally(() => this.#runs.delete(id));
+    run.done = usageScope
+      .run({ purpose: 'team', teamTaskId: id, ...(conv ? { conversationId: conv } : {}), ...(rec.on ? { runId: rec.id, onCall: (c) => rec.modelCall(c) } : {}) }, () => this.#run(id, plan))
+      .then(
+        (t) => {
+          rec.close(t.status === 'done' ? 'ok' : t.status === 'limit' ? 'limit' : t.status === 'stopped' ? 'stopped' : 'error');
+          return t;
+        },
+        (err) => {
+          rec.close('error');
+          throw err;
+        },
+      )
+      .finally(() => this.#runs.delete(id));
   }
 
   /** Phase 52: what the run has used so far (real token counts where the models report them). */
@@ -660,12 +677,15 @@ CREATE INDEX IF NOT EXISTS team_log_task ON team_log(task_id, id);
       if (!tool || (tool.isAvailable && !tool.isAvailable())) throw new Error(`The ${name} tool isn't available${name.startsWith('github') ? ' (connect GitHub in Settings → Abilities → GitHub)' : ''}.`);
       if (app.tools.permission(name, app.settings.get().toolPermissions) === 'never') throw new Error(`The ${name} tool is switched off in Settings.`);
       this.#note(task.id, step.id, `${app.persona.name}: ${app.redactor.redact(tool.summarize(args))}`);
+      const t0 = Date.now();
       try {
         const out = app.redactor.redact(await tool.run(args, ctx));
         receipts.push({ name, status: 'ok', args, output: out });
+        run.rec.tool({ id: `pr-${name}`, name, summary: app.redactor.redact(tool.summarize(args)), args: app.redactor.redactValue(args), status: 'ok', output: out, ms: Date.now() - t0, approval: 'allowed' });
         return out;
       } catch (err) {
         receipts.push({ name, status: 'error', args, output: `Error: ${(err as Error).message}` });
+        run.rec.tool({ id: `pr-${name}`, name, summary: app.redactor.redact(tool.summarize(args)), args: app.redactor.redactValue(args), status: 'error', output: app.redactor.redact(`Error: ${(err as Error).message}`), ms: Date.now() - t0, approval: 'allowed' });
         throw err;
       } finally {
         step.receipts = receipts;
@@ -803,6 +823,8 @@ CREATE INDEX IF NOT EXISTS team_log_task ON team_log(task_id, id);
         let reply = '';
         const calls: ToolCall[] = [];
         const { provider, model } = chain[ci];
+        // Phase 78: one step per helper move (its model call and the tools it asked for).
+        run.rec.startStep({ label: `${helper.name}: ${clip(step.title, 120)}`, model, provider: provider.config.label, system: app.redactor.redact(system), memoryPicks: [] });
         const scope = usageScope.getStore();
         const was = { tokens: scope?.tokens ?? 0, reported: scope?.reported ?? 0 };
         try {
@@ -886,6 +908,9 @@ CREATE INDEX IF NOT EXISTS team_log_task ON team_log(task_id, id);
     const permission = tool ? app.tools.permission(call.name, app.settings.get().toolPermissions) : 'never';
     let status: Receipt['status'] = 'ok';
     let output: string;
+    const t0 = Date.now();
+    let asked = false;
+    let stopSeen: Contradiction | undefined;
     if (!tool || !tools.some((t) => t.spec.name === call.name)) {
       status = 'denied';
       output = `${helper.name} doesn't have the ${call.name} tool.`;
@@ -910,7 +935,9 @@ CREATE INDEX IF NOT EXISTS team_log_task ON team_log(task_id, id);
         }
       }
       let allowed = permission === 'auto' && !stopFor;
+      stopSeen = stopFor;
       if (permission === 'ask' || stopFor) {
+        asked = true;
         const { id, decision } = app.approvals.request(task.conversationId, signal);
         const shown = stopFor ? `${summary} (goes against what you decided: "${stopFor.note}")` : summary;
         run.approvals.set(id, { id, stepId: step.id, helper: helper.name, tool: call.name, summary: shown, ...(stopFor ? { contradiction: cardOf(stopFor) } : {}) });
@@ -941,6 +968,7 @@ CREATE INDEX IF NOT EXISTS team_log_task ON team_log(task_id, id);
       }
     }
     output = app.redactor.redact(output);
+    run.rec.tool({ id: call.id, name: call.name, summary, args: app.redactor.redactValue(call.arguments), status, output, ms: Date.now() - t0, approval: asked ? (status === 'denied' ? 'denied' : 'allowed') : status === 'denied' ? 'refused' : 'auto', files: filesNamed(call.name, call.arguments), ...(stopSeen ? { contradictions: [stopSeen] } : {}) });
     return { receipt: { name: call.name, status, args: call.arguments, output } };
   }
 

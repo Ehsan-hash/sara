@@ -418,7 +418,8 @@ export function createSaraServer(opts: ServerOptions): Server {
         },
       })
     : offStore;
-  const offOverrides: Partial<AppContext> = { store: ctxStore, memory: undefined, inner: undefined, tools: noTools, uploads: undefined, moments: undefined, momentsWorker: undefined, together: app.together ? new TogetherStore(offStore.db, app.now) : undefined };
+  // Phase 78: off the record means no run snapshots either (`runs` unset: nothing is recorded).
+  const offOverrides: Partial<AppContext> = { runs: undefined, store: ctxStore, memory: undefined, inner: undefined, tools: noTools, uploads: undefined, moments: undefined, momentsWorker: undefined, together: app.together ? new TogetherStore(offStore.db, app.now) : undefined };
   const offApp = new Proxy(app, { get: (t, k: string) => (k in offOverrides ? offOverrides[k as keyof AppContext] : t[k as keyof AppContext]) }) as AppContext;
   /** The context a conversation lives in (off-the-record ones are only in memory). */
   const ctxOf = (id: string): AppContext => (offStore.getConversation(id) ? offApp : app);

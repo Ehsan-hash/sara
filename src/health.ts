@@ -75,6 +75,11 @@ export function healthReport(app: AppContext, info: AppInfo) {
     if (stuck.length) add(en('Model lists'), false, stuck.map((x) => x.text).join(' '), stuck);
     if (moved.length) add(en('Model changes'), true, moved.map((n) => n.text).join(' '), moved);
   }
+  // Phase 78: how much room the run snapshots take (risk 11).
+  if (app.runs) {
+    const st = app.runs.stats();
+    add(en('Run history'), true, [en('Runs: {n}, {mb} MB'), { n: st.runs, mb: (st.bytes / 1048576).toFixed(st.bytes < 104_858 ? 2 : 1) }]);
+  }
   const tg = app.bridges?.telegram?.status();
   if (s.telegram?.enabled) add('Telegram', Boolean(tg?.running), tg?.running ? (tg.linked ? `@${tg.bot}` : [en('{bot} (not linked yet)'), { bot: `@${tg.bot}` }]) : (tg?.error ?? en('not running')));
   const dc = app.bridges?.discord?.status();

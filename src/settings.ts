@@ -111,6 +111,8 @@ export interface Settings {
    * 'stop' = clear conflicts stop with an approval card in coding/work conversations; 'mention'.
    */
   contradict?: Partial<import('./contradict.ts').ContradictSettings>;
+  /** Phase 78: how long run snapshots are kept (days; 0 = until deleted) and their size cap (MB). */
+  runs?: Partial<import('./runs.ts').RunSettings>;
   /** Discord bridge (Phase 6). Bot token lives in the vault (bridge:discord). */
   discord?: Partial<DiscordSettings>;
   /** Automatic backups (Phase 6). */

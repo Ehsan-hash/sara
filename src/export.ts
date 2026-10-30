@@ -23,6 +23,8 @@ export interface ExportFile {
   conversations: { [k: string]: unknown; messages: Row[] }[];
   memories: Row[];
   memoryState: Row[];
+  /** Phase 78: run snapshots, only when asked for (import leaves them out). */
+  runs?: { runs: Row[]; steps: Row[]; prompts: { sha: string; text: string }[] };
   projects: Row[];
   tasks: Row[];
   notes: Row[];
@@ -46,7 +48,12 @@ export interface ExportFile {
 const has = (app: AppContext, table: string) => Boolean(app.store.db.prepare("SELECT 1 FROM sqlite_master WHERE type IN ('table') AND name = ?").get(table));
 const all = (app: AppContext, sql: string, ...args: (string | number)[]) => (has(app, sql.match(/FROM (\w+)/)![1]) ? (app.store.db.prepare(sql).all(...args) as Row[]) : []);
 
-export function exportAll(app: AppContext): ExportFile {
+/**
+ * Phase 78: run snapshots go in only with `runs: true` (Settings → Data → Export, "Include run
+ * history"): they are records of how she worked, big, and not merged back by import. Backups
+ * always carry them (a backup is the whole database).
+ */
+export function exportAll(app: AppContext, opts: { runs?: boolean } = {}): ExportFile {
   const s = app.settings.get();
   const conversations = all(app, 'SELECT * FROM conversations ORDER BY created_at').map((c) => ({ ...c, messages: all(app, 'SELECT * FROM messages WHERE conversation_id = ? ORDER BY id', String(c.id)) }));
   const file: ExportFile = {
@@ -69,6 +76,7 @@ export function exportAll(app: AppContext): ExportFile {
     ...(s.prices?.length ? { prices: s.prices } : {}),
     ...(s.jobBudget && (s.jobBudget.tokens || s.jobBudget.usd) ? { jobBudget: s.jobBudget } : {}),
     ...(s.teamLimits && Object.keys(s.teamLimits).length ? { teamLimits: s.teamLimits } : {}),
+    ...(opts.runs && app.runs ? { runs: app.runs.exportRows() as unknown as ExportFile['runs'] } : {}),
   };
   return app.redactor.redactValue(file) as ExportFile;
 }

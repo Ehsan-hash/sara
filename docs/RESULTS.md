@@ -336,6 +336,38 @@ two flags and her usual approval card. One finding from that run is fixed in thi
 background note writer read a one-time *Do it anyway* as the rule changing and retired the
 decision; overridden decisions are now never retired by that path.
 
+### Run snapshots: cost of recording (Phase 78)
+
+Every step of a turn, job and team task is recorded (`src/runs.ts`). The budget from the design:
+under 5 ms a step and under 2% of a turn. Measured on the dev PC (Windows 11, Node 24, SQLite in
+WAL mode with its default full sync, so each write waits for the disk):
+
+| Measure | Result | How |
+|---|---|---|
+| Recorder time per step (prompt scrub, hash, one INSERT per step, JSON) | **1.4 ms** (12-step turn, 40 notes, 3 kB tool outputs) | `test/phase78.test.ts` "performance" (the test fails above 5 ms) |
+| Before batching to one write per step | 2.9 ms | same test, first version (two commits a step) |
+| Share of a real turn on `qwen3.5:9b` (Ollama, local) | **about 0.1%** (9 steps × 1.4 ms in a 13.3 s turn) | live run below |
+| Share of a turn against a fake model that answers instantly | 10% (14 ms of 170 ms) | same test; only meaningful as an upper bound |
+
+Most of the 1.4 ms is the one SQLite commit per step (about 1 ms on this disk); a prompt that
+doesn't change between steps is not hashed or scrubbed again, and the coding-mode `git status`
+runs in the background after the step is written.
+
+**Database growth**, live (throwaway server, `qwen3.5:9b` and `gemma4:12b` on Ollama, a coding
+conversation in a git workspace):
+
+| Turn | Steps | Recorded | Of which: the system prompt (deflated, once per distinct text) |
+|---|---|---|---|
+| Read 2 files, 2 failed edits, wrote 2 files (typical small coding turn) | 9 | **12.4 kB** | 5.2 kB (11,406 characters) |
+| One approved shell command | 2 | 6.4 kB | 5.2 kB (a new prompt: a minute later) |
+| Read a file, answered | 2 | **1.5 kB** | 0 (same prompt as the turn before) |
+
+So about **0.6–0.8 kB per step plus about 5 kB per new prompt** (prompts repeat within a turn and
+often between turns); a busy day of 200 coding turns adds roughly 2–3 MB. History is never
+copied (a message-id range); tool outputs are kept shortened to 4,000 characters. Retention (90
+days by default) and the 200 MB cap keep it bounded; Settings → Data & health → Health shows
+*Runs: N, X MB*.
+
 ## Library (documents)
 
 `scripts/eval-library.ts` gives her a lease (a real PDF printed by Edge), house notes (Markdown)

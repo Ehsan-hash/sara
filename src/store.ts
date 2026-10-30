@@ -386,6 +386,12 @@ export class Store {
     return [...n].map(([tag, count]) => ({ tag, count })).sort((a, b) => b.count - a.count || a.tag.localeCompare(b.tag));
   }
 
+  /** Phase 78: the newest message id of a conversation (0 when empty). */
+  lastMessageId(conversationId: string): number {
+    const r = this.db.prepare('SELECT MAX(id) AS id FROM messages WHERE conversation_id = ?').get(conversationId) as Row | undefined;
+    return Number(r?.id ?? 0);
+  }
+
   messages(conversationId: string): StoredMessage[] {
     return (this.db.prepare('SELECT * FROM messages WHERE conversation_id = ? ORDER BY id').all(conversationId) as Row[]).map(toMessage);
   }

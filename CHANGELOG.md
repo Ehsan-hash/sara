@@ -5,6 +5,24 @@ Format: newest first. Semantic versions since 1.0.0 (before that `0.<phase>.<pat
 
 ## Unreleased
 
+## 2.11.0 (2026-10-30): run snapshots (harness track, Phase 78)
+
+- **Every step recorded** for chat turns, background jobs and team tasks: model and provider, tokens,
+  cost estimate ("unknown" when the price isn't known; local and subscriptions $0), time, the system
+  prompt (stored once by its hash), which messages she saw, the notes she used and their policy, every
+  tool call with its result (secrets removed, long output clipped), approvals and conflicts, files
+  touched (git HEAD and hashes of changed files in coding projects). Off-the-record chats are never
+  recorded.
+- **Show the run** under a reply opens the Run view: each step with its time, model, tokens and cost,
+  tool, result, files, notes and conflicts; tap a step for the full detail, including the prompt.
+- Settings → Data & health → *Run history*: keep 30 days / 90 days (default) / a year / until deleted,
+  with a 200 MB cap; *Delete run history*. Backups include runs; data export only if you ask.
+- Under 2 ms per step; about 1 kB per step plus 5 kB per new prompt ([measured](docs/RESULTS.md)).
+- For developers: one `TurnHooks` seam (before each model call, before and after each tool, after the
+  reply) that the next harness steps plug into; API `GET /api/runs`, `/api/runs/:id`,
+  `/api/runs/:id/steps/:n`.
+- Tests: the household test waits up to 3 minutes for its server on a busy machine.
+
 ## 2.10.0 (2026-10-30): she checks her plans against what you decided (harness track, Phase 77)
 
 - **Contradiction check before acting:** before a tool runs, the planned step is checked against your

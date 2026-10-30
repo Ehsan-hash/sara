@@ -517,6 +517,14 @@
       "Answer other people in servers when they call her (mention, reply, or the switches below). With them she's openly an AI, has no tools and shares nothing private.",
       "safety"
     ],
+    "runs-keep": [
+      "How long the step records of her replies, jobs and team tasks are kept. Older ones are removed by themselves; a run history over 200 MB loses its oldest runs first. Backups include it. Example: 90 days.",
+      "runs"
+    ],
+    "export-runs": [
+      "Adds the step records (models, tools, tokens, costs) to the export file. Off by default: they are large and Import doesn't bring them back. Backups always include them.",
+      "runs"
+    ],
     "hh-range": [
       "How far back the health charts go.",
       "trouble"

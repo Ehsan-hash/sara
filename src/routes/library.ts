@@ -20,7 +20,9 @@ export function createLibraryRoutes(ctx: RouteCtx): RouteHandler {
   return async (req, res, method, parts) => {
     const [a, b, c] = parts;
     if (a === 'export' && !b && method === 'GET') {
-      const body = JSON.stringify(exportAll(app), null, 1);
+      // Phase 78: `?runs=1` adds the run history (left out by default; backups always have it).
+      const withRuns = new URL(req.url ?? '/', 'http://x').searchParams.get('runs') === '1';
+      const body = JSON.stringify(exportAll(app, { runs: withRuns }), null, 1);
       const name = `sara-export-${app.now().toISOString().slice(0, 10)}.json`;
       res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'content-disposition': `attachment; filename="${name}"`, 'cache-control': 'no-store', ...SECURITY_HEADERS });
       return void res.end(body);

@@ -275,5 +275,25 @@ export function memoryStep(box, count) {
   render(box);
 }
 
+/**
+ * Phase 78: "Show the run" at the end of the step list: opens the Run view (web/run-view.js) for
+ * this reply's run (every step's model, tokens, cost, tools, files and memory picks).
+ */
+export function runLink(box, runId, open) {
+  if (!runId || box._runId === runId) return;
+  box._runId = runId;
+  box.querySelector('.step-run')?.remove();
+  const li = el('li', 'step step-run');
+  const btn = el('button', 'step-link small run-open');
+  btn.type = 'button';
+  btn.append(stepIcon('compass'), el('span', '', t('Show the run')));
+  btn.addEventListener('click', (e) => {
+    e.preventDefault();
+    open(runId);
+  });
+  li.append(btn);
+  box.querySelector('.steps-list').append(li);
+}
+
 /** True when a line has anything to show. */
 export const hasSteps = (box) => Boolean(box?._steps?.length);

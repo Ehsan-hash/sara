@@ -2,7 +2,8 @@
 // Moved from src/server.ts unchanged (wave 3); shared state comes from the RouteCtx (src/routes/context.ts).
 import { closeSync, existsSync, openSync, readdirSync, readSync, statSync } from 'node:fs';
 import { join } from 'node:path';
-import { resolveChain } from '../chat.ts';
+import { buildHistory, resolveChain } from '../chat.ts';
+import { historyRange, KEEP_DAY_CHOICES, runSettings } from '../runs.ts';
 import { as400, HttpError, readJson, send, validWorkspace } from '../http.ts';
 import { trOwner } from '../i18n.ts';
 import { checkIssues, cleanWatch, type OpenIssue, openIssues, startFromIssue, watchSettings } from '../issues.ts';
@@ -25,6 +26,79 @@ export function createCodingRoutes(ctx: RouteCtx): RouteHandler {
   const { active, app, me, opts, projectOrThrow, rootDir } = ctx;
   return async (req, res, method, parts) => {
     const [a, b, c] = parts;
+    // Phase 78: run snapshots (read only; time-travel is M8). The owner's own space; a household
+    // member's space answers from that member's own database; the demo refuses (not in DEMO_READS).
+    if (a === 'runs') {
+      const runs = app.runs;
+      if (!runs) throw new HttpError(404, 'Run history is not available here.');
+      const q = new URL(req.url ?? '/', 'http://x').searchParams;
+      const statsView = () => {
+        const st = runs.stats();
+        return { ...st, mb: Math.round((st.bytes / 1048576) * 100) / 100 };
+      };
+      if (b === 'settings' && !c) {
+        if (method === 'PUT') {
+          const body = await readJson(req);
+          const keep = Number(body.keepDays);
+          if (!KEEP_DAY_CHOICES.includes(keep as (typeof KEEP_DAY_CHOICES)[number])) throw new HttpError(400, 'keepDays must be 30, 90, 365 or 0 (until deleted).');
+          app.settings.update({ runs: { ...runSettings(app.settings.get()), keepDays: keep } });
+          runs.prune(true);
+        } else if (method !== 'GET') throw new HttpError(405, 'Method not allowed');
+        return send(res, 200, { ...runSettings(app.settings.get()), choices: KEEP_DAY_CHOICES, stats: statsView() });
+      }
+      if (!b && method === 'GET') {
+        const conversationId = q.get('conversationId') ?? undefined;
+        const before = q.get('before') ? Number(q.get('before')) : undefined;
+        return send(res, 200, { runs: runs.list({ ...(conversationId ? { conversationId } : {}), ...(before ? { before } : {}), limit: Number(q.get('limit') ?? 50) || 50 }), stats: statsView() });
+      }
+      if (!b && method === 'DELETE') {
+        const conversationId = q.get('conversationId') ?? undefined;
+        const removed = runs.deleteAll(conversationId);
+        return send(res, 200, { removed, stats: statsView() });
+      }
+      const id = Number(b);
+      if (!b || !/^\d{1,12}$/.test(b) || method !== 'GET') throw new HttpError(404, 'No such run.');
+      const run = runs.get(id);
+      if (!run) throw new HttpError(404, 'No such run.');
+      if (!c) {
+        // The run and its steps (tool outputs clipped further for the list; the step detail has more).
+        const steps = runs.steps(id).map((s) => ({ ...s, tools: s.tools.map((t) => ({ ...t, output: t.output.length > 600 ? `${t.output.slice(0, 600)}…` : t.output })) }));
+        const conv = run.conversationId ? app.store.getConversation(run.conversationId) : undefined;
+        return send(res, 200, { run, steps, conversation: conv ? { id: conv.id, title: conv.title, mode: conv.mode, private: conv.private, workspace: conv.workspace } : null });
+      }
+      if (c === 'steps' && parts[3] !== undefined && !parts[4]) {
+        const n = Number(parts[3]);
+        const step = Number.isInteger(n) && n >= 0 ? runs.step(id, n) : undefined;
+        if (!step) throw new HttpError(404, 'No such step.');
+        // The prompt as sent: the system prompt from its blob, the history from the stored messages
+        // in the step's id range (rebuilt the same way the turn built it), then the app's own notes.
+        const system = step.systemSha ? (runs.blob(step.systemSha) ?? null) : null;
+        let history: { id?: number; role: string; content: string; toolCalls?: unknown }[] = [];
+        if (run.conversationId && step.historyToId) {
+          const msgs = historyRange(app.store.messages(run.conversationId), step.historyFromId, step.historyToId);
+          history = buildHistory(msgs).messages.map((m) => ({ role: m.role, content: m.content.length > 8000 ? `${m.content.slice(0, 8000)}\n[… ${m.content.length - 8000} more characters]` : m.content, ...(m.role === 'assistant' && m.toolCalls?.length ? { toolCalls: m.toolCalls } : {}) }));
+        }
+        // Chat mode: the files a step's shell changed, from its undo snapshot and the next one.
+        const conv = run.conversationId ? app.store.getConversation(run.conversationId) : undefined;
+        const changes: Record<string, { added: string[]; changed: string[]; removed: string[] }> = {};
+        if (conv && conv.mode !== 'coding') {
+          const snaps = app.snapshots.list(conv.workspace).map((x) => x.id).reverse();
+          for (const t of step.tools) {
+            if (!t.snapshotId) continue;
+            const next = snaps[snaps.indexOf(t.snapshotId) + 1];
+            if (snaps.includes(t.snapshotId) && next) {
+              try {
+                changes[t.id] = app.snapshots.compare(conv.workspace, t.snapshotId, next);
+              } catch {
+                /* a snapshot pruned meanwhile */
+              }
+            }
+          }
+        }
+        return send(res, 200, { run, step, prompt: { system, history, extra: step.extra }, changes });
+      }
+      throw new HttpError(404, 'No such run.');
+    }
     // Phase 49: preview links (owner only). Listing, opening one for a job's port, closing.
     if (a === 'previews') {
       if (!app.previews) throw new HttpError(404, 'Previews are not available on this server.');

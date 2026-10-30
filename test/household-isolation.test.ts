@@ -130,7 +130,8 @@ before(async () => {
   child = spawn(process.execPath, [join(ROOT, 'src', 'main.ts')], { env, stdio: ['ignore', 'pipe', 'pipe'] });
   child.stdout!.on('data', (d: Buffer) => (log += d.toString()));
   child.stderr!.on('data', (d: Buffer) => (log += d.toString()));
-  const until = Date.now() + 60_000;
+  // Generous: on a busy shared server (load 10+) a cold start has taken over 60 s.
+  const until = Date.now() + 180_000;
   for (;;) {
     const ok = await fetch(`${base}/api/health`).then((r) => r.ok, () => false);
     if (ok) break;

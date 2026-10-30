@@ -458,6 +458,9 @@
   </dialog>
 
   <!-- Phase 38: find the best model for a job (side by side, blind) -->
+  <dialog id="run-view" class="run-view" aria-label="The run">
+    <div class="settings-body run-body"></div>
+  </dialog>
   <dialog id="compare-dialog" aria-label="Find the best model">
     <div class="settings-body compare">
       <h2>Find the best model: <span id="cmpx-job"></span></h2>
@@ -2174,6 +2177,9 @@
       <p id="health-info" class="muted small"></p>
       <p class="small"><button id="doctor-run" type="button" class="ghost">Run full check</button> <span class="muted small">Also checks the database, asks every model provider for its models and checks the off-server copy (same as <code data-admin="doctor">sudo sara doctor</code>).</span></p>
       <ul id="doctor-checks" class="health" hidden></ul>
+      <h3>Run history <button type="button" class="tip" data-tip="Each reply, background job and team task keeps a record of its steps: the model, what went into the prompt, the tools and their results, files touched, tokens and cost. Open it with Show the run under a reply. Secrets are hidden in it.">?</button></h3>
+      <p class="small"><label>Keep runs <select id="runs-keep"><option value="30">for 30 days</option><option value="90" selected>for 90 days</option><option value="365">for a year</option><option value="0">until deleted</option></select></label> <span id="runs-stats" class="muted small"></span></p>
+      <p class="small"><button id="runs-delete" type="button" class="small danger">Delete run history</button> <span class="muted small">Chats, memories and files stay; only the step records go.</span></p>
       <h3>History</h3>
       <div class="hh-head"><select id="hh-range" aria-label="Period"><option value="24h">Last 24 hours</option><option value="7d">Last 7 days</option><option value="30d">Last 30 days</option></select> <span id="hh-up" class="muted small"></span></div>
       <div id="hh-charts" class="hh-charts"></div>
@@ -2287,6 +2293,7 @@
       <p class="muted small">Download everything (chats, memories, to-dos, reminders, notes) as one file, or bring in a file from another Sara. Keys and passwords are blanked out in the export; add your provider keys again after moving.</p>
       <div class="row">
         <a id="export-link" class="button ghost" href="/api/export" download>Export all data</a>
+        <label class="row small"><input id="export-runs" type="checkbox" data-nodirty> Include run history</label>
         <button type="button" class="ghost file-button" data-pick="import-file">Import a file</button><input id="import-file" type="file" accept="application/json,.json" hidden>
       </div>
       <p id="import-status" class="muted small"></p>

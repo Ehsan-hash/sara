@@ -13,8 +13,9 @@ import { checkClaims, type Receipt } from './receipts.ts';
 import { detectMinorSexualContent } from './safety.ts';
 import { en, trOwner } from './i18n.ts';
 import { identityOf } from './persona.ts';
-import { cleanBudget, overBudget, usageScope, type Budget, type UsageNumbers, type UsageScope } from './usage.ts';
+import { billingOf, cleanBudget, overBudget, usageScope, type Budget, type UsageNumbers, type UsageScope } from './usage.ts';
 import type { ProviderConfig } from './providers/types.ts';
+import { RunRecorder, filesNamed } from './runs.ts';
 
 /** 'budget': stopped cleanly at its token / $ budget (Phase 52; can be continued with more). */
 export type JobStatus = 'running' | 'ok' | 'failed' | 'stopped' | 'interrupted' | 'budget';
@@ -145,8 +146,13 @@ export class JobManager {
     this.#running.set(id, ac);
     app.events?.publish({ type: 'job', job: { ...job } });
     let lastEvent = 0;
+    // Phase 78: the job is a run too (the command as its step, her report's model call after it).
+    // Its usage scope keeps the AsyncLocalStorage attribution and carries the recorder.
+    const rec = app.runs && app.store.getConversation(spec.conversationId) ? new RunRecorder(app.runs, { kind: 'job', conversationId: spec.conversationId, jobId: id, title: spec.label.slice(0, 120), ...(spec.budget ? { budget: spec.budget } : {}) }) : RunRecorder.none();
+    if (rec.on) rec.startStep({ label: `${spec.kind === 'agent' ? 'Agent job' : 'Background job'} #${id}`, ...(spec.meter ? { model: spec.meter.model, provider: spec.meter.config.label } : {}) });
+    const ranAt = Date.now();
     // Phase 52: model calls in the job (her report about it too) count toward the job.
-    const scope: UsageScope = { purpose: 'job', jobId: id, conversationId: spec.conversationId };
+    const scope: UsageScope = { purpose: 'job', jobId: id, conversationId: spec.conversationId, ...(rec.on ? { runId: rec.id, onCall: (c) => rec.modelCall(c) } : {}) };
     const used = { tokens: 0, usd: 0, unpriced: 0 };
     let budgetHit: string | undefined;
     let partial = '';
@@ -155,6 +161,8 @@ export class JobManager {
       const u = m?.parse(line);
       if (!m || !u) return;
       const row = app.usage?.record(m.config, m.model, u, { ...scope, purpose: 'job' });
+      // Phase 78: an agent job's own model calls (read from its output) are on the run's step.
+      rec.modelCall({ model: m.model, provider: m.config.label, providerId: m.config.id, billing: billingOf(m.config), purpose: 'agent', in: u.input, out: u.output, cached: u.cached ?? 0, usd: row ? row.usd : null, reported: true, ms: 0, ok: true });
       used.tokens += u.input + u.output;
       used.usd += row?.usd ?? 0;
       if (row && row.usd === null) used.unpriced++;
@@ -223,7 +231,13 @@ export class JobManager {
         /* a listener's problem never breaks the job */
       }
       app.events?.publish({ type: 'job', job: { ...job } });
+      const files = job.result?.files as { added?: string[]; changed?: string[]; removed?: string[] } | undefined;
+      rec.tool({ id: `job-${id}`, name: spec.kind === 'agent' ? 'delegate_task' : 'start_job', summary: app.redactor.redact(job.label), args: app.redactor.redactValue({ command: spec.command.slice(0, 2000) }), status: job.status === 'ok' ? 'ok' : 'error', output: job.tail, ms: Date.now() - ranAt, approval: 'auto', files: files ? [...(files.added ?? []), ...(files.changed ?? []), ...(files.removed ?? [])].slice(0, 200) : filesNamed('', {}) });
+      if (job.status === 'budget') rec.stopped('budget');
+      // Her report about it is the run's next step.
+      if (rec.on) rec.startStep({ label: 'Report' });
       await this.#report(job, run).catch((err: Error) => console.warn(`jobs: report failed: ${err.message}`));
+      rec.close(job.status === 'ok' ? 'ok' : job.status === 'budget' ? 'budget' : job.status === 'stopped' ? 'stopped' : 'error');
       return { ...job };
     });
     return { job: { ...job }, done };

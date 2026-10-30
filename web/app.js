@@ -27,7 +27,8 @@ import { startsOnToday } from './start-view.js';
 import { initHousehold, joinFromLink, loadAccount, loadHousehold, showPaused } from './household.js';
 import { initNav, relabelNav, revealNav, setMore } from './nav.js';
 import { emptyState, initTidy, overflowMenu } from './tidy.js';
-import { addStep, finishStep, hasSteps, memoryStep, runStep, stepLine, waitStep } from './steps.js';
+import { addStep, finishStep, hasSteps, memoryStep, runLink, runStep, stepLine, waitStep } from './steps.js';
+import { openRunView } from './run-view.js';
 import { renderCard, renderCards } from './result-cards.js';
 import { initLook, setContextRing, setLookBusy, showHeadChips } from './look.js';
 import { closePanel, initHerPanel, openPanel, panelConv, panelFace, panelJobs, panelMessages, panelMood, panelNow, panelOpen, togglePanel } from './her-panel.js';
@@ -1226,6 +1227,8 @@ const msgTime = (iso) => {
 // ---------- Phase 75: her messages, step lines and result cards ----------
 const toolNamed = (name) => (TOOL_NAME[name] ? t(TOOL_NAME[name]) : '');
 const newSteps = () => stepLine({ named: toolNamed, undo: addUndo });
+/** Phase 78: the Run view of one reply's run. */
+const showRun = (runId) => void openRunView(runId, { api, named: toolNamed });
 /** Her small face at the start of a run of her messages (one companion; groups show the speaker). */
 function herFace(div, start) {
   div.classList.add('her');
@@ -1264,10 +1267,12 @@ function renderMessages(messages, opts = {}) {
   // Phase 75: what she did in a turn (tools, memories) becomes one step line under the reply that
   // ends it; result cards sit where the result came; the files she changed form one card.
   let turn = null;
-  const newTurn = () => ({ steps: null, files: [], filesSlot: null, mem: new Set() });
+  const newTurn = () => ({ steps: null, files: [], filesSlot: null, mem: new Set(), runId: 0 });
   const flush = () => {
     if (!turn) return;
     if (turn.mem.size) memoryStep((turn.steps ??= newSteps()), turn.mem.size);
+    // Phase 78: "Show the run" (not on the demo, which keeps no run history for visitors).
+    if (turn.runId && turn.steps && !document.body.classList.contains('demo')) runLink(turn.steps, turn.runId, showRun);
     if (turn.filesSlot) {
       const card = renderCards(turn.files)[0];
       const at = els.indexOf(turn.filesSlot);
@@ -1282,6 +1287,7 @@ function renderMessages(messages, opts = {}) {
     if (m.role === 'user') flush();
     turn ??= newTurn();
     if (m.role === 'assistant' && Array.isArray(m.meta?.memoryIds)) for (const id of m.meta.memoryIds) turn.mem.add(id);
+    if (m.role === 'assistant' && m.meta?.runId) turn.runId = m.meta.runId;
     // Phase 77: flags and finished stops of her plan check (`meta.contradictions`), under that step.
     if (m.role === 'assistant' && Array.isArray(m.meta?.contradictions)) for (const c of m.meta.contradictions) if (c?.note && c.status !== 'open') els.push(contradictionFlag(c));
     if (m.role === 'tool') {
@@ -4067,6 +4073,7 @@ async function loadHealth() {
   const up = h.uptimeSeconds > 86400 ? `${Math.floor(h.uptimeSeconds / 86400)} d` : h.uptimeSeconds > 3600 ? `${Math.floor(h.uptimeSeconds / 3600)} h` : `${Math.floor(h.uptimeSeconds / 60)} min`;
   void loadHealthHistory();
   void loadProblems();
+  void loadRuns();
   $('#health-info').textContent = `Sara ${h.version}${h.revision ? ` (${h.revision})` : ''} · Node ${h.node} · ${t('up {time}', { time: up })} · ${t('database {size}', { size: fmtBytes(h.data.databaseBytes) })} · ${h.pushDevices === 1 ? t('1 notification device') : t('{n} notification devices', { n: h.pushDevices })}`;
 }
 // ---------- Phase 30: health history and recent problems ----------
@@ -4120,6 +4127,35 @@ async function loadHealthHistory() {
   );
 }
 $('#hh-range').addEventListener('change', loadHealthHistory);
+// ---------- Phase 78: run history (retention, size, delete) ----------
+async function loadRuns() {
+  let r;
+  try {
+    r = await api('/runs/settings');
+  } catch {
+    return;
+  }
+  $('#runs-keep').value = String(r.keepDays);
+  $('#runs-keep').dataset.loaded = '1';
+  $('#runs-stats').textContent = t('Runs: {n}, {mb} MB', { n: r.stats.runs.toLocaleString(locale()), mb: r.stats.mb.toLocaleString(locale(), { minimumFractionDigits: 1, maximumFractionDigits: r.stats.mb < 0.1 ? 2 : 1 }) });
+}
+async function saveRuns() {
+  // Only a value read from the server is sent back (never the list's first choice by accident).
+  if (!$('#runs-keep').dataset.loaded) return;
+  await api('/runs/settings', { method: 'PUT', body: { keepDays: Number($('#runs-keep').value) } });
+  void loadRuns();
+}
+$('#runs-delete').addEventListener('click', async () => {
+  if (!confirm(t('Delete the whole run history? Chats, memories and files stay.'))) return;
+  try {
+    await api('/runs', { method: 'DELETE' });
+  } catch (err) {
+    $('#runs-stats').textContent = err.message;
+    return;
+  }
+  void loadRuns();
+});
+$('#export-runs').addEventListener('change', () => ($('#export-link').href = $('#export-runs').checked ? '/api/export?runs=1' : '/api/export'));
 /** "Error: X\n    at f (file:///…)" → "X". */
 function oneLineProblem(msg) {
   const first = String(msg ?? '').split('\n')[0].replace(/\s+at\s+(?:async\s+)?[\w.$<>]+\s+\((?:file|node):.*$/, '').replace(/^(?:Uncaught\s+)?(?:\w*Error):\s*/, '');
@@ -6316,6 +6352,7 @@ const SETTINGS_SAVERS = {
   'co-discord': [saveDiscord],
   'co-phone': [savePush],
   'dh-usage': [saveUsage],
+  'dh-health': [saveRuns],
 };
 const settingsChanged = new Set();
 /** Notes which Settings page an edit was made on (programmatic fills call this themselves). */

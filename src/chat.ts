@@ -80,6 +80,7 @@ import { metered } from './usage.ts';
 import { cutOtherSpeakers, GROUP_TOOLS, isGroupChannel, otherLine, ownerLine, stripLeadTag } from './group.ts';
 import { cardFor, type Card } from './cards.ts';
 import { cardOf, checkPlan, contradictionNote, contradictSettings, declinedOutput, gateAct, judgePrompt, judgeSaysNo, type Contradiction, type ContradictionCard } from './contradict.ts';
+import { filesNamed, RunRecorder, toolSetHash } from './runs.ts';
 
 export interface AppContext {
   store: Store;
@@ -185,6 +186,8 @@ export interface AppContext {
   noToolModels?: Set<string>;
   /** Phase 52: the cost and token meter (per companion). */
   usage?: import('./usage.ts').UsageStore;
+  /** Phase 78: run snapshots (per companion; unset off the record and in bare test apps). */
+  runs?: import('./runs.ts').RunStore;
   /** Phase 56: every provider's model list, kept current (shared by every companion). */
   modelCatalog?: import('./model-catalog.ts').ModelCatalog;
   /** Phase 67: "Nothing leaves this computer" (server-wide state; the guard is src/net-guard.ts). */
@@ -459,11 +462,14 @@ export function bondContext(app: AppContext, closeness?: number): { adultOn: boo
  * Asks the owner's safety classifier model (if configured) about one message. Failures and
  * timeouts return OK: the heuristics still apply, so a broken classifier never weakens safety.
  */
-export async function classify(app: AppContext, text: string): Promise<ClassifierLabel> {
+export async function classify(app: AppContext, text: string, rec?: RunRecorder): Promise<ClassifierLabel> {
   const cfg = app.settings.get().safetyClassifier;
   if (!cfg) return 'OK';
   try {
-    const { provider, model } = resolveProvider(app, cfg.providerId, cfg.model);
+    const r = resolveProvider(app, cfg.providerId, cfg.model);
+    const model = r.model;
+    // Phase 78: inside a recorded turn the check's call is on the run too.
+    const provider = rec?.on ? rec.wrap(r.provider, 'safety check') : r.provider;
     // Phase 67: in private local mode the optional check runs only on a model on this computer
     // (else it's skipped: the built-in checks still apply, it only ever adds protection).
     if (privateLocalOn() && !onThisComputer(provider.config, model)) return 'OK';
@@ -483,12 +489,14 @@ export async function classify(app: AppContext, text: string): Promise<Classifie
  * Phase 28: the optional local judge backs up the claim patterns (any language). It can only add
  * a flag: failures, timeouts and answers that don't quote the reply return nothing.
  */
-export async function judgeClaims(app: AppContext, reply: string, receipts: Receipt[], prior: Receipt[] = []): Promise<Claim[]> {
+export async function judgeClaims(app: AppContext, reply: string, receipts: Receipt[], prior: Receipt[] = [], rec?: RunRecorder): Promise<Claim[]> {
   const cfg = app.settings.get().safetyClassifier;
   const lines = numberedSentences(reply);
   if (!cfg || reply.trim().length < 20 || !lines.length) return [];
   try {
-    const { provider, model } = resolveProvider(app, cfg.providerId, cfg.model);
+    const r = resolveProvider(app, cfg.providerId, cfg.model);
+    const model = r.model;
+    const provider = rec?.on ? rec.wrap(r.provider, 'claim check') : r.provider;
     if (privateLocalOn() && !onThisComputer(provider.config, model)) return [];
     let out = '';
     const messages: ChatMessage[] = [
@@ -514,13 +522,15 @@ export async function judgeClaims(app: AppContext, reply: string, receipts: Rece
  * timeout, an error or an unclear answer leaves the pattern result as it was. It uses only the
  * model the owner picked there (a cloud model only if the owner picks one).
  */
-export async function judgeUnsure(app: AppContext, reply: string, receipts: Receipt[], prior: Receipt[] = [], opts: { private?: boolean } = {}): Promise<Claim[]> {
+export async function judgeUnsure(app: AppContext, reply: string, receipts: Receipt[], prior: Receipt[] = [], opts: { private?: boolean } = {}, rec?: RunRecorder): Promise<Claim[]> {
   const cfg = app.settings.get().claimJudge;
   if (!cfg) return [];
   const unsure = unsureClaims(reply, receipts, prior);
   if (!unsure.length) return [];
   try {
-    const { provider, model } = resolveProvider(app, cfg.providerId, cfg.model, { purpose: 'background' });
+    const r = resolveProvider(app, cfg.providerId, cfg.model, { purpose: 'background' });
+    const model = r.model;
+    const provider = rec?.on ? rec.wrap(r.provider, 'claim judge') : r.provider;
     // A private conversation never leaves the owner's hardware, not even for this check.
     if (opts.private && (!provider.config.local || isCloudModelName(model))) return [];
     if (privateLocalOn() && !onThisComputer(provider.config, model)) return [];
@@ -544,7 +554,7 @@ export async function judgeUnsure(app: AppContext, reply: string, receipts: Rece
  * and never turn anything into a stop; no judge, a timeout or an error keeps the flag (fails open
  * to \"flag\"). A private conversation's judge must be a model on this computer.
  */
-export async function judgeFuzzy(app: AppContext, found: Contradiction[], priv: boolean): Promise<Contradiction[]> {
+export async function judgeFuzzy(app: AppContext, found: Contradiction[], priv: boolean, rec?: RunRecorder): Promise<Contradiction[]> {
   const cfg = app.settings.get().claimJudge;
   const fuzzy = found.filter((c) => !c.clear).slice(0, 2);
   if (!cfg || !fuzzy.length) return found;
@@ -555,6 +565,7 @@ export async function judgeFuzzy(app: AppContext, found: Contradiction[], priv: 
   } catch {
     return found;
   }
+  if (rec?.on) provider = rec.wrap(provider, 'plan judge');
   if (priv && (!provider.config.local || isCloudModelName(model))) return found;
   if (privateLocalOn() && !onThisComputer(provider.config, model)) return found;
   const drop = new Set<Contradiction>();
@@ -752,6 +763,143 @@ export interface TurnOptions {
    * copy; this turn answers it (or, for banter, the others' last lines) without saving it again.
    */
   group?: GroupTurn;
+  /**
+   * Phase 78: the run recorder for this turn, passed explicitly (risk 1: an AsyncLocalStorage scope
+   * doesn't reliably carry into code the caller's next() resumes). runTurn opens one when unset.
+   */
+  recorder?: RunRecorder;
+  /** Phase 78: extra hooks at the four fixed places of the turn (after the built-in ones). */
+  hooks?: TurnHooks;
+}
+
+/**
+ * Phase 78 (harness risk 2): the one seam into the agent loop. Called at four fixed places of
+ * runTurnInner, in order: the built-in plan check (M2), the run recorder (M3), then `opts.hooks`.
+ * Later milestones add hooks here instead of code inline (M4 budgets: beforeModelCall; M5 sandbox
+ * gate: beforeTool; M6 security pass: afterReply with `final`; M8/M9 replay: all four).
+ */
+export interface TurnHooks {
+  /** Right before each model call of the loop (one per step), with exactly what is sent. */
+  beforeModelCall?(c: BeforeModelCall): void | Promise<void>;
+  /** A planned tool call that may run (after the 'never' / not-available checks, before the approval point). */
+  beforeTool?(c: BeforeTool): BeforeToolResult | void | Promise<BeforeToolResult | void>;
+  /** A tool call finished (its scrubbed result is stored). */
+  afterTool?(c: AfterTool): void | Promise<void>;
+  /** The model's message of a step was saved (`final`: no tool calls follow). */
+  afterReply?(c: AfterReply): void | Promise<void>;
+}
+export interface BeforeModelCall {
+  step: number;
+  provider: Provider;
+  model: string;
+  messages: ChatMessage[];
+  /** Oldest and newest stored message ids in the history sent (0 = from the start). */
+  historyFromId: number;
+  historyToId: number;
+  /** Short notes the app added after the history (corrections, plan-check flags, "continue"). */
+  extra: string[];
+  tools: string[];
+  memoryPicks?: unknown[];
+  policyId?: string;
+}
+export interface BeforeTool {
+  step: number;
+  call: ToolCall;
+  summary: string;
+  /** Scrubbed arguments (as shown and stored). */
+  args: Record<string, unknown>;
+  permission: 'auto' | 'ask';
+  /** The step's saved message (the tool calls' request). */
+  messageId: number;
+}
+export interface BeforeToolResult {
+  /** Events to show before the call goes on (Phase 77 flags). */
+  events?: ChatEvent[];
+  /** Stop for the owner's OK because of this finding (the approval card's section). */
+  stopFor?: Contradiction;
+}
+export interface AfterTool {
+  step: number;
+  call: ToolCall;
+  summary: string;
+  args: Record<string, unknown>;
+  status: 'ok' | 'error' | 'denied';
+  /** Scrubbed output (before clipping for storage). */
+  output: string;
+  ms: number;
+  approval: 'auto' | 'allowed' | 'denied' | 'refused';
+  snapshotId?: string;
+  messageId: number;
+  contradictions?: Contradiction[];
+}
+export interface AfterReply {
+  step: number;
+  messageId: number;
+  reply: string;
+  calls: ToolCall[];
+  final: boolean;
+}
+
+/** Hooks called in order; beforeTool events are joined, the first stop wins. */
+function joinHooks(list: (TurnHooks | undefined)[]): Required<Omit<TurnHooks, 'beforeTool'>> & { beforeTool(c: BeforeTool): Promise<BeforeToolResult> } {
+  const hs = list.filter((h): h is TurnHooks => Boolean(h));
+  return {
+    async beforeModelCall(c) {
+      for (const h of hs) await h.beforeModelCall?.(c);
+    },
+    async beforeTool(c: BeforeTool) {
+      const out: BeforeToolResult = {};
+      for (const h of hs) {
+        const r = await h.beforeTool?.(c);
+        if (!r) continue;
+        if (r.events?.length) out.events = [...(out.events ?? []), ...r.events];
+        out.stopFor ??= r.stopFor;
+      }
+      return out;
+    },
+    async afterTool(c) {
+      for (const h of hs) await h.afterTool?.(c);
+    },
+    async afterReply(c) {
+      for (const h of hs) await h.afterReply?.(c);
+    },
+  };
+}
+
+/** Phase 78: the recorder's side of the hooks (steps, replies, tool steps). */
+export function recorderHooks(app: AppContext, rec: RunRecorder): TurnHooks {
+  // The system prompt rarely changes between steps: scrub it once per distinct text.
+  let lastRaw = '';
+  let lastClean = '';
+  return {
+    beforeModelCall(c) {
+      if (!rec.on) return;
+      const t0 = performance.now();
+      const raw = typeof c.messages[0]?.content === 'string' ? c.messages[0].content : '';
+      if (raw !== lastRaw) {
+        lastRaw = raw;
+        lastClean = app.redactor.redact(raw);
+      }
+      const extra = c.extra.map((x) => app.redactor.redact(x).slice(0, 4000));
+      rec.overheadMs += performance.now() - t0;
+      rec.startStep({ model: c.model, provider: c.provider.config.label, system: lastClean, historyFromId: c.historyFromId, historyToId: c.historyToId, extra, ...(c.memoryPicks?.length ? { memoryPicks: c.memoryPicks } : {}), ...(c.policyId ? { policyId: c.policyId } : {}) });
+    },
+    afterReply(c) {
+      rec.reply(c.messageId);
+    },
+    afterTool(c) {
+      rec.tool({ id: c.call.id, name: c.call.name, summary: c.summary, args: c.args, status: c.status, output: c.output, ms: c.ms, approval: c.approval, messageId: c.messageId, ...(c.snapshotId ? { snapshotId: c.snapshotId } : {}), ...(c.contradictions?.length ? { contradictions: c.contradictions } : {}), files: filesNamed(c.call.name, c.args) });
+      // §2.3: a stop the owner said no to is why this step stopped short.
+      if (c.contradictions?.some((x) => x.act === 'stop' && x.answer && x.answer !== 'override')) rec.stopped('contradiction');
+    },
+  };
+}
+
+/** Phase 78: a turn's recorder (none off the record, without a run store, or for a missing conversation). */
+export function openTurnRecorder(app: AppContext, conversationId: string, text: string): RunRecorder {
+  if (!app.runs || !app.store.getConversation(conversationId)) return RunRecorder.none();
+  const one = text.replace(/\s+/g, ' ').trim();
+  return new RunRecorder(app.runs, { kind: 'turn', conversationId, title: one.length > 120 ? `${one.slice(0, 119)}…` : one });
 }
 
 /** Phase 66: what one group-chat reply needs to know. */
@@ -795,14 +943,35 @@ export const chatTurns = { running: 0, onStart: new Set<() => void>() };
 export async function* runTurn(app: AppContext, conversationId: string, userText: string, signal: AbortSignal = new AbortController().signal, opts: TurnOptions = {}): AsyncGenerator<ChatEvent> {
   chatTurns.running++;
   for (const f of chatTurns.onStart) f();
+  // Phase 78: the run recorder is made here and handed down explicitly (risk 1), never through
+  // AsyncLocalStorage, so it sees every model call of the turn however the caller drives next().
+  const rec = opts.recorder ?? openTurnRecorder(app, conversationId, userText);
+  let status: 'ok' | 'error' | 'stopped' = 'stopped';
+  let replyId = 0;
   try {
-    yield* runTurnInner(app, conversationId, userText, signal, opts);
+    for await (const ev of runTurnInner(app, conversationId, userText, signal, opts, rec)) {
+      if (ev.type === 'done') {
+        status = 'ok';
+        replyId = ev.messageId;
+        // The reply knows its run ("Show the run" on its step line).
+        if (rec.on && replyId) app.store.updateMessageMeta(replyId, { runId: rec.id });
+      } else if (ev.type === 'error') status = signal.aborted ? 'stopped' : 'error';
+      yield ev;
+    }
   } finally {
     chatTurns.running--;
+    if (rec.on && !replyId && rec.lastReplyId) {
+      try {
+        app.store.updateMessageMeta(rec.lastReplyId, { runId: rec.id });
+      } catch {
+        /* the conversation may be gone */
+      }
+    }
+    if (!opts.recorder) rec.close(status, replyId || rec.lastReplyId || undefined);
   }
 }
 
-async function* runTurnInner(app: AppContext, conversationId: string, userText: string, signal: AbortSignal, opts: TurnOptions): AsyncGenerator<ChatEvent> {
+async function* runTurnInner(app: AppContext, conversationId: string, userText: string, signal: AbortSignal, opts: TurnOptions, rec: RunRecorder): AsyncGenerator<ChatEvent> {
   const { store } = app;
   const conv = store.getConversation(conversationId);
   if (!conv) {
@@ -832,6 +1001,7 @@ async function* runTurnInner(app: AppContext, conversationId: string, userText: 
     yield { type: 'error', message: 'Nothing to continue.' };
     return;
   }
+  rec.setUserMessage(userMsg.id);
   // Phase 4: her inner state reacts to the message; time since the last one.
   const prevOwnerAt = store.lastOwnerMessageAt(userMsg.id);
   const gapHours = prevOwnerAt ? (now.getTime() - prevOwnerAt.getTime()) / 3_600_000 : null;
@@ -841,7 +1011,7 @@ async function* runTurnInner(app: AppContext, conversationId: string, userText: 
   }
 
   // Optional local classifier: can only add protection on top of the heuristics.
-  const label = await classify(app, text);
+  const label = await classify(app, text, rec);
   // H1: the rule-statement cut ("I'm not talking about minors") is only for the real owner in the
   // web/phone/desktop app. API keys (/v1, MCP ask_sara), Home Assistant, the lines and notes an app
   // sends, and other people get none; other people's weak words also count next to a sexual sentence.
@@ -906,6 +1076,8 @@ async function* runTurnInner(app: AppContext, conversationId: string, userText: 
     const adult = adultOn && (conv.channel.endsWith('-nsfw') || (!conv.partner && !isWorkChannel(conv.channel))) && recentUser.some((m) => detectExplicit(m.content));
     job = adult && jobRoutes.adult ? 'turn' : photosNow && visionSet ? 'vision' : conv.mode !== 'coding' && jobRoutes.research && RESEARCH_RE.test(text) ? 'research' : opts.quickModel ? 'quick' : 'turn';
     chain = resolveChain(app, conv, job, adult);
+    // Phase 78: every provider of the chain is recorded (model, tokens, cost, latency per call).
+    if (rec.on) chain = chain.map((c) => ({ ...c, provider: rec.wrap(c.provider) }));
     ({ provider, model } = chain[0]);
   } catch (err) {
     yield { type: 'error', message: (err as Error).message };
@@ -946,6 +1118,8 @@ async function* runTurnInner(app: AppContext, conversationId: string, userText: 
     yield { type: 'error', message: (err as Error).message };
     return;
   }
+  // Phase 78 (risk 3): coding runs record git HEAD + the dirty files' hashes per step.
+  if (conv.mode === 'coding') rec.workspaceDir = wsDir;
 
   // 3.4: memories for this turn (selected once, small fixed budget).
   let injection: Injection | undefined;
@@ -1015,6 +1189,50 @@ async function* runTurnInner(app: AppContext, conversationId: string, userText: 
   /** Her short system notes about flags, for the next model call. */
   const contradictNotes: string[] = [];
   const ownerWord = s.ownerName?.trim() || 'the owner';
+  // Phase 78: the plan check runs behind the turn's beforeTool seam (same rules, same order of
+  // events); `plan.byCall` is this step's findings (kept on the step's message as `contradictions`).
+  const plan = { byCall: new Map<string, Contradiction[]>() };
+  const planHook: TurnHooks = {
+    beforeModelCall() {
+      plan.byCall = new Map();
+    },
+    async beforeTool(c) {
+      if (!checkPlans) return;
+      // Phase 77: check the plan against the owner's decisions (code rules; fuzzy ones only flag).
+      let found: Contradiction[] = [];
+      try {
+        found = checkPlan(app.memory!, {
+          tool: c.call.name,
+          args: c.call.arguments,
+          callId: c.call.id,
+          summary: c.summary,
+          conversationId: conv.id,
+          workspaceDir: wsDir,
+          prior: [...priorReceipts, ...receipts],
+          ...(appSafe ? { allow: appSafe } : {}),
+          now,
+        });
+        found = await judgeFuzzy(app, found, Boolean(conv.private), rec);
+      } catch (err) {
+        console.warn(`plan check: ${(err as Error).message}`);
+      }
+      const act = gateAct(found, { settings: cset, work: workConv, group: Boolean(opts.group) });
+      for (const x of found) x.act = act === 'stop' && x.clear ? 'stop' : 'flag';
+      const events: ChatEvent[] = [];
+      for (const x of found.filter((f) => f.act === 'flag')) {
+        x.status = 'flagged';
+        contradictNotes.push(contradictionNote(x, ownerWord));
+        events.push({ type: 'contradiction', id: c.call.id, item: x });
+      }
+      if (found.length) plan.byCall.set(c.call.id, found);
+      if (found.length) store.updateMessageMeta(c.messageId, { contradictions: [...plan.byCall.values()].flat() });
+      return { events, stopFor: found.find((x) => x.act === 'stop') };
+    },
+  };
+  const hooks = joinHooks([planHook, recorderHooks(app, rec), opts.hooks]);
+  // Phase 78: what the run is made of (M9 compares runs by these).
+  const memPolicy = decayPolicy(memCfg).id;
+  rec.setPolicy({ memoryPolicy: memPolicy, model: `${provider.config.id}/${model}`, tools: toolSetHash(tools.map((t) => t.spec.name)), mode: conv.mode, ...(conv.private ? { private: true } : {}) });
   // Phase 12: a date that's today is in her prompt now, so she won't text about it separately later.
   if (!conv.partner && app.memory && memCfg.enabled) {
     const today = localDate(now.toISOString(), s.timeZone);
@@ -1115,6 +1333,21 @@ async function* runTurnInner(app: AppContext, conversationId: string, userText: 
     if (opts.resume && step === 0 && hist.messages.at(-1)?.role === 'assistant') {
       messages.push({ role: 'user', content: '[Note from the app: your last reply was cut off (stopped, an error, or a restart). Continue from exactly where it stopped. Do not repeat what you already wrote and do not apologize; just carry on.]' });
     }
+    // Phase 78 seam 1: right before the model call (the recorder opens its step here).
+    {
+      const sent = new Set<ChatMessage>(hist.messages);
+      await hooks.beforeModelCall({
+        step,
+        provider,
+        model,
+        messages,
+        historyFromId: hist.firstKeptId,
+        historyToId: store.lastMessageId(conv.id),
+        extra: messages.slice(1).filter((m) => !sent.has(m)).map((m) => (typeof m.content === 'string' ? m.content : '')),
+        tools: tools.map((t) => t.spec.name),
+        ...(injection?.picks.length ? { memoryPicks: injection.picks, policyId: injection.picks[0]?.policy ?? memPolicy } : { policyId: memPolicy }),
+      });
+    }
 
     let reply = '';
     const calls: ToolCall[] = [];
@@ -1203,6 +1436,8 @@ async function* runTurnInner(app: AppContext, conversationId: string, userText: 
     const untagged = opts.group ? cutOtherSpeakers(stripLeadTag(tagless, [conv.title, app.persona.name, ...opts.group.others]), [...opts.group.others, s.ownerName?.trim() || '']) : tagless;
     const saved = store.addMessage(conv.id, 'assistant', untagged, meta);
     lastAssistantId = saved.id;
+    // Phase 78 seam 4: the step's message is saved.
+    await hooks.afterReply({ step, messageId: saved.id, reply: untagged, calls, final: !calls.length });
     // Phase 76: notes that went in because they MATCHED count as used today (+1 a day at most);
     // standing picks (and loose stem-only hits) don't, so injected notes can't keep themselves alive.
     if (injection && !usedMarked && app.memory) {
@@ -1218,18 +1453,19 @@ async function* runTurnInner(app: AppContext, conversationId: string, userText: 
     // Phase 28: her own words get the same minors check as the owner's (patterns, then the
     // optional judge). A failing reply is replaced everywhere and the turn ends (no tools run).
     const herMatch = reply && reply.trim() !== MINOR_BLOCK_REPLY ? minorSexualMatch(reply, ownerApp ? { fromHer: true } : {}) : null;
-    if (reply && reply.trim() !== MINOR_BLOCK_REPLY && (herMatch || (await classify(app, reply)) === 'MINOR_SEXUAL')) {
+    if (reply && reply.trim() !== MINOR_BLOCK_REPLY && (herMatch || (await classify(app, reply, rec)) === 'MINOR_SEXUAL')) {
       store.recordSafetyEvent('minor_sexual_block', conv.id);
       store.updateMessageContent(saved.id, MINOR_BLOCK_REPLY);
       // Only which words matched is kept (not the reply), so a wrong block can be looked into.
       store.updateMessageMeta(saved.id, { toolCalls: undefined, blocked: 'minor_sexual', blockedBy: herMatch ? `words: ${herMatch.minor} + ${herMatch.sexual}` : 'classifier' });
       yield { type: 'replace', messageId: saved.id, text: MINOR_BLOCK_REPLY };
+      rec.stopped('minors');
       break;
     }
     if (!calls.length) {
       let claims = checkClaims(reply, receipts, priorReceipts);
-      if (!claims.length) claims = await judgeUnsure(app, reply, receipts, priorReceipts, { private: Boolean(conv.private) });
-      if (!claims.length) claims = await judgeClaims(app, reply, receipts, priorReceipts);
+      if (!claims.length) claims = await judgeUnsure(app, reply, receipts, priorReceipts, { private: Boolean(conv.private) }, rec);
+      if (!claims.length) claims = await judgeClaims(app, reply, receipts, priorReceipts, rec);
       if (!claims.length) break;
       store.recordSafetyEvent('unverified_claim', conv.id);
       store.updateMessageMeta(saved.id, { unverified: claims });
@@ -1242,7 +1478,7 @@ async function* runTurnInner(app: AppContext, conversationId: string, userText: 
     }
 
     // Phase 77: what the plan check found for this step's calls (kept on this step's reply as `contradictions`).
-    const turnContradictions = new Map<string, Contradiction[]>();
+    const turnContradictions = plan.byCall;
     for (const call of calls) {
       const tool = app.tools.get(call.name);
       const summary = app.redactor.redact(tool?.summarize(call.arguments) ?? call.name);
@@ -1260,6 +1496,8 @@ async function* runTurnInner(app: AppContext, conversationId: string, userText: 
       // Phase 73: a few commands always ask first, even when the owner lets the tool run on its own.
       const permission = set === 'auto' && tool?.asksFirst?.(call.arguments) ? 'ask' : set;
       let allowed = permission === 'auto';
+      /** Phase 78: how the call got (or didn't get) to run, for the run record. */
+      let approval: AfterTool['approval'] = 'refused';
       if (!tool) {
         status = 'error';
         output = `Unknown tool "${call.name}".`;
@@ -1277,42 +1515,17 @@ async function* runTurnInner(app: AppContext, conversationId: string, userText: 
         status = 'denied';
         output = `The owner has disabled the ${call.name} tool.`;
       } else {
-        // Phase 77: check the plan against the owner's decisions (code rules; fuzzy ones only flag).
-        let stopFor: Contradiction | undefined;
-        if (checkPlans) {
-          let found: Contradiction[] = [];
-          try {
-            found = checkPlan(app.memory!, {
-              tool: call.name,
-              args: call.arguments,
-              callId: call.id,
-              summary,
-              conversationId: conv.id,
-              workspaceDir: wsDir,
-              prior: [...priorReceipts, ...receipts],
-              ...(appSafe ? { allow: appSafe } : {}),
-              now,
-            });
-            found = await judgeFuzzy(app, found, Boolean(conv.private));
-          } catch (err) {
-            console.warn(`plan check: ${(err as Error).message}`);
-          }
-          const act = gateAct(found, { settings: cset, work: workConv, group: Boolean(opts.group) });
-          for (const c of found) c.act = act === 'stop' && c.clear ? 'stop' : 'flag';
-          stopFor = found.find((c) => c.act === 'stop');
-          for (const c of found.filter((x) => x.act === 'flag')) {
-            c.status = 'flagged';
-            contradictNotes.push(contradictionNote(c, ownerWord));
-            yield { type: 'contradiction', id: call.id, item: c };
-          }
-          if (found.length) turnContradictions.set(call.id, found);
-          if (found.length) store.updateMessageMeta(saved.id, { contradictions: [...turnContradictions.values()].flat() });
-        }
+        // Phase 78 seam 2: before the tool runs (the Phase 77 plan check is the first hook).
+        approval = 'auto';
+        const pre = await hooks.beforeTool({ step, call, summary, args: shownArgs, permission: permission === 'ask' ? 'ask' : 'auto', messageId: saved.id });
+        for (const ev of pre.events ?? []) yield ev;
+        const stopFor = pre.stopFor;
         if (permission === 'ask' || stopFor) {
           const { id, decision } = app.approvals.request(conv.id, signal);
           const stops = (turnContradictions.get(call.id) ?? []).filter((c) => c.act === 'stop');
           yield { type: 'approval', approvalId: id, id: call.id, name: call.name, summary, args: shownArgs, ...(stopFor ? { contradiction: cardOf(stopFor, stops.filter((c) => c !== stopFor)) } : {}) };
           allowed = await decision;
+          approval = allowed ? 'allowed' : 'denied';
           const how = app.approvals.takeHow(id);
           if (stopFor) {
             // The owner's answer is kept on the finding (every note on the card): an explicit
@@ -1371,8 +1584,10 @@ async function* runTurnInner(app: AppContext, conversationId: string, userText: 
       // Phase 75: a result card from the (scrubbed) result and arguments, kept with the message.
       const card = cardFor({ name: call.name, args: shownArgs, status, output });
       const flagged = turnContradictions.get(call.id);
-      store.addMessage(conv.id, 'tool', stored, { toolCallId: call.id, name: call.name, args: shownArgs, summary, status, ms, ...(snapshotId ? { snapshotId } : {}), ...(shown.length ? { images: shown } : {}), ...(card ? { card } : {}), ...(flagged?.length ? { contradiction: flagged[0] } : {}) });
+      const toolMsg = store.addMessage(conv.id, 'tool', stored, { toolCallId: call.id, name: call.name, args: shownArgs, summary, status, ms, ...(snapshotId ? { snapshotId } : {}), ...(shown.length ? { images: shown } : {}), ...(card ? { card } : {}), ...(flagged?.length ? { contradiction: flagged[0] } : {}) });
       receipts.push({ name: call.name, status, args: call.arguments, output });
+      // Phase 78 seam 3: the call is done (the recorder keeps the scrubbed result).
+      await hooks.afterTool({ step, call, summary, args: shownArgs, status, output, ms, approval, messageId: toolMsg.id, ...(snapshotId ? { snapshotId } : {}), ...(flagged?.length ? { contradictions: flagged } : {}) });
       yield { type: 'tool_result', id: call.id, name: call.name, status, output: clip(output, UI_OUTPUT_LIMIT), ms, ...(snapshotId ? { snapshotId } : {}), ...(card ? { card } : {}) };
       for (const img of pendingImages) yield { type: 'image', id: img };
       for (const img of newProof) yield { type: 'proof', id: img };
@@ -1382,6 +1597,7 @@ async function* runTurnInner(app: AppContext, conversationId: string, userText: 
       }
     }
     if (step === maxSteps - 1) {
+      rec.stopped('steps');
       yield { type: 'error', message: personalize(`Stopped after ${maxSteps} steps. Say "continue" to let her keep going.`, identityOf(app.persona)) };
     }
   }

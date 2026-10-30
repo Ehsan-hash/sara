@@ -42,6 +42,7 @@
   <a href="#starters">Starter projects</a>
   <a href="#clients">In your terminal and editor</a>
   <a href="#usage">Usage and costs</a>
+  <a href="#runs">Show the run</a>
   <a href="#library">Her library</a>
   <a href="#chatapps">Telegram and Discord</a>
   <a href="#together">Things to do together</a>
@@ -492,6 +493,16 @@
   <li>Every model call that reports its tokens is counted: by model and by what it was for (chat, coding, team, jobs, memory, her life). See it in <em>Settings → Data &amp; health → Usage and costs</em> (today, 7 days, 30 days), under each conversation, and on each team task and job.</li>
   <li>Costs are <strong>estimates</strong> from a price table: a few public list prices come built in, and you can add or change prices per model. Models without a price show tokens only. Local models show as <em>local</em> and subscriptions as <em>$0 (subscription)</em>.</li>
   <li><strong>Budgets:</strong> a team task (tokens or dollars) and a job that uses a model (Claude Code, Grok Build) stop cleanly at their budget, keep what they did and offer <strong>Continue with more budget</strong>. Set defaults on the same page, or a budget when you start a team task.</li>
+</ul>
+
+<h2 id="runs">Show the run</h2>
+<ul>
+  <li>Every reply, background job and team task keeps a record of how it was done: each step's model, tokens in and out, cost estimate and time, the tools she ran (with what they returned, shortened), whether you allowed them, the files they touched, the memory notes that went in and why, and anything her plan check flagged. Open it with <strong>Show the run</strong> at the end of a reply's step line.</li>
+  <li><strong>Show what was sent to the model</strong> on a step loads exactly what she was given: her instructions (kept once, by fingerprint) and the conversation as it stood. Secrets are hidden before anything is kept.</li>
+  <li>In coding conversations each step notes the git commit and a fingerprint of every changed file (no copies). Elsewhere a step points at the undo point taken before it.</li>
+  <li>Off-the-record conversations are never recorded. Private conversations are recorded on your server only, like the rest. Each person in a household sees only their own runs; the demo keeps none for visitors.</li>
+  <li>Choose how long runs are kept in <em>Settings → Data &amp; health → Health</em> (30 days, 90 days, a year, or until deleted; 90 by default; the oldest go first above 200 MB), see how much room they take, or <strong>Delete run history</strong>. Backups include runs; the data export only with <em>Include run history</em> ticked.</li>
+  <li>The Run view is read only for now: branching from a step comes later.</li>
 </ul>
 
 <h2 id="together">Things to do together</h2>

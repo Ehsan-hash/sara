@@ -251,6 +251,61 @@ after the permission lookup (before the approval point) and in `TeamManager.#too
   `run_blobs`; retention keeps branch parents; a turn on a model that reports no usage is marked
   "cost unknown", not 0; backup restore keeps runs.
 
+**As built (Phase 78, 2026-10-30):** `src/runs.ts` (`RunStore`, `RunRecorder`), the `TurnHooks`
+seam in `src/chat.ts`, routes in `src/routes/coding.ts`, `web/run-view.js` + "Show the run" on the
+step line (`web/steps.js`), retention on Settings → Data & health → Health.
+
+- **Tables** (additive, in each space's `sara.db`): `runs` (as §2.1 plus `reply_message_id`,
+  `title`, `steps`, `tokens_in`/`tokens_out`, `unpriced`/`unreported`, `ms`, `bytes`; split
+  tokens instead of one `tokens`), `run_steps` (as §2.1, with `calls` (every provider call of the
+  step: model, provider, billing, tokens, cost or null, latency, time to first event, ok/error,
+  purpose for side calls), `label`, `extra` (the app's notes after the history), `contradictions`,
+  `reply_message_id`, `unpriced`/`unreported`, `bytes`), `run_blobs`, `usage.run_id`.
+  `conversation_id` cascades: deleting a conversation deletes its runs.
+- **Risk 1:** the turn's recorder is made in `runTurn` and passed explicitly to `runTurnInner`; it
+  wraps the chain's providers (`metered(...).meter.rewrap({ runId, onCall })`, the meter's own
+  price and usage row, now with latency). Side calls of a turn (safety classifier, claim judges,
+  the plan judge) take the recorder as a parameter. Proved by a test that drives the generator
+  with every `next()` inside a different AsyncLocalStorage scope: all three calls land on the
+  turn's run and none in the caller's scope. Jobs and team runs keep their ALS usage scope; the
+  scope now carries `runId` and `onCall`.
+- **Risk 2:** `TurnHooks { beforeModelCall, beforeTool, afterTool, afterReply }` at four fixed places;
+  order: the Phase 77 plan check, the recorder, `TurnOptions.hooks`. The plan check moved behind
+  `beforeTool` with the same rules and events (phase77 tests pass unchanged). The approval point
+  itself stays inline (it is the §2.3 gate: a hook's `stopFor` becomes the approval card).
+- **Risk 3:** coding steps record HEAD and branch (read from `.git`, no process) and the dirty files
+  with a 16-hex sha256 each (one `git status --porcelain -z` in the background after the step is
+  written; files over 2 MB: size only; up to 200 files). Only for the first step and steps that
+  ran a file-changing tool. Chat-mode steps keep the undo snapshot id per tool; the step detail
+  route compares it with the next snapshot for the files a shell call changed.
+- **Risk 6:** a delegated job is one step with the job's command as a tool step and the agent's own
+  token lines as model calls (`purpose: agent`); its inner steps are not visible.
+- **Risk 11:** one INSERT per step at its end; prompts once per distinct text (sha256, deflated);
+  history as an id range; tool output clipped to 4,000 characters. Retention: 30 / 90 (default) /
+  365 days / until deleted, newest 500 runs per conversation, 200 MB cap (oldest first), branch
+  parents always kept, orphan prompts dropped. Measured: 1.4 ms per step; ~0.6–0.8 kB per step plus
+  ~5 kB per new prompt (`docs/RESULTS.md`).
+- **Privacy:** secrets scrubbed by the same `Redactor` as tool output (prompt, notes, args, output);
+  off the record never recorded (`runs` unset in the off-the-record context); private
+  conversations recorded locally like the rest; a household member's runs live in their own space
+  (`runs` is a member route answered from their database); the demo refuses the routes. Backups
+  include runs (they are in the database); the data export only with `?runs=1` ("Include run
+  history"), and import does not bring them back.
+- **Deviations:** (1) runs are not kept "per conversation N" only: days + size cap + per-conversation
+  500 together. (2) Forgetting messages does not yet hide them in a step's rebuilt history view
+  (the run view rebuilds from the messages still stored; forgotten ones are filtered like in her
+  history). (3) The "system prompt round-trips byte for byte" holds for the scrubbed prompt (the
+  same unless the prompt carried a secret). (4) `findings` is still not a table: contradictions
+  are copied from the reply meta into `run_steps.contradictions`. (5) `budget` holds a job's budget
+  or a team task's limits; turns have none until M4. (6) Steps with no tools and no memory show no
+  step line, so their run is reachable through the API and the run list, not from the chat.
+- **Hooks left:** M4 `beforeModelCall` (meter: `RunRecorder` already sums tokens/cost per step) and
+  `stopped='budget'`; M5 `beforeTool` → `stopFor` (a gate verdict) and `afterTool`; M6 `afterReply`
+  with `final` + `workspace_ref` dirty files; M8 `parent_run_id`/`branched_from_step`, the step's
+  system blob + history range + memory picks/policy id = the inputs to replay, `workspace_ref` to
+  restore; M9 `runs.policy` (memory policy, model, tool-set hash) to compare variants; M10 the
+  steps' tools, files and error outputs for the run signatures.
+
 ### M4 · Phase 79 · 2.12.0: enforced cost budgets
 
 - **Ships:** a per-task ceiling (tokens, $, steps, minutes) for chat turns, set per conversation or

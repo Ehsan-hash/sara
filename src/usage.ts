@@ -27,6 +27,29 @@ export interface UsageScope {
   /** Calls inside the scope that reported their usage / that didn't. */
   reported?: number;
   unreported?: number;
+  /** Phase 78: the run being recorded (jobs, team runs): its id goes on the usage rows. */
+  runId?: number;
+  /** Phase 78: told about every call in the scope (the run recorder's step list). */
+  onCall?: (c: CallInfo) => void;
+}
+
+/** Phase 78: one provider call as the meter saw it (for the run recorder, src/runs.ts). */
+export interface CallInfo {
+  model: string;
+  provider: string;
+  providerId: string;
+  in: number;
+  out: number;
+  cached: number;
+  /** null = cost unknown (no price, or no usage reported). */
+  usd: number | null;
+  /** How the call is paid for (local and subscription calls are $0, not "unknown"). */
+  billing: Billing;
+  reported: boolean;
+  ms: number;
+  firstMs?: number;
+  ok: boolean;
+  error?: string;
 }
 export const usageScope = new AsyncLocalStorage<UsageScope>();
 
@@ -192,6 +215,9 @@ export class UsageStore {
     CREATE INDEX IF NOT EXISTS usage_conv ON usage(conversation_id);
     CREATE INDEX IF NOT EXISTS usage_job ON usage(job_id);
     CREATE INDEX IF NOT EXISTS usage_team ON usage(team_task_id);`);
+    // Phase 78: which recorded run a call belongs to (additive).
+    if (!(db.prepare('PRAGMA table_info(usage)').all() as Row[]).some((r) => r.name === 'run_id')) db.exec('ALTER TABLE usage ADD COLUMN run_id INTEGER');
+    db.exec('CREATE INDEX IF NOT EXISTS usage_run ON usage(run_id)');
   }
 
   /** Records one call (and adds it to the running totals of the scope it happened in). */
@@ -204,8 +230,8 @@ export class UsageStore {
     const output = clean(u.output);
     const cached = clean(u.cached);
     const r = this.#db
-      .prepare('INSERT INTO usage (at, provider_id, provider_label, model, billing, purpose, conversation_id, job_id, team_task_id, input, output, cached, usd) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
-      .run(at, config.id, config.label.slice(0, 80), model.slice(0, 200), billing, where.purpose.slice(0, 40), where.conversationId ?? null, where.jobId ?? null, where.teamTaskId ?? null, input, output, cached, usd);
+      .prepare('INSERT INTO usage (at, provider_id, provider_label, model, billing, purpose, conversation_id, job_id, team_task_id, input, output, cached, usd, run_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+      .run(at, config.id, config.label.slice(0, 80), model.slice(0, 200), billing, where.purpose.slice(0, 40), where.conversationId ?? null, where.jobId ?? null, where.teamTaskId ?? null, input, output, cached, usd, where.runId || null);
     return { id: Number(r.lastInsertRowid), at, providerId: config.id, providerLabel: config.label, model, billing, purpose: where.purpose, conversationId: where.conversationId ?? null, jobId: where.jobId ?? null, teamTaskId: where.teamTaskId ?? null, input, output, cached, usd };
   }
 
@@ -318,18 +344,38 @@ export function mergeSummaries(parts: { id: string; name: string; summary: Usage
   };
 }
 
-export function metered(provider: Provider, store: UsageStore, tag: { purpose?: string; conversationId?: string } = {}): Provider {
+/** Phase 78: who else hears about each call (the run recorder), and the run id for its usage rows. */
+export interface MeterHook {
+  runId?: number;
+  onCall?: (c: CallInfo) => void;
+}
+
+/**
+ * The provider with its calls metered. Phase 78: `meter.rewrap(hook)` makes the same provider with
+ * a run's id and recorder (src/runs.ts, passed explicitly into a turn: risk 1); without a hook the
+ * usage scope's (jobs, team runs) is used. Each call's latency is measured here too.
+ */
+export function metered(provider: Provider, store: UsageStore, tag: { purpose?: string; conversationId?: string } = {}, hook?: MeterHook): Provider & { meter: { rewrap: (h: MeterHook) => Provider } } {
   return {
     config: provider.config,
     listModels: (signal?: AbortSignal) => provider.listModels(signal),
+    meter: { rewrap: (h: MeterHook) => metered(provider, store, tag, h) },
     async *stream(req: ChatRequest): AsyncIterable<StreamEvent> {
       const scope = usageScope.getStore();
+      const runId = hook?.runId ?? scope?.runId;
+      const onCall = hook?.onCall ?? scope?.onCall;
+      const t0 = Date.now();
+      let first: number | undefined;
       let seen = false;
+      let row: UsageRow | undefined;
+      let ok = true;
+      let error: string | undefined;
       try {
         for await (const ev of provider.stream(req)) {
+          first ??= Date.now() - t0;
           if (ev.type === 'usage') {
             seen = true;
-            const row = store.record(provider.config, req.model, ev, { ...scope, purpose: scope?.purpose ?? tag.purpose ?? 'other', conversationId: scope?.conversationId ?? tag.conversationId });
+            row = store.record(provider.config, req.model, ev, { ...scope, purpose: scope?.purpose ?? tag.purpose ?? 'other', conversationId: scope?.conversationId ?? tag.conversationId, ...(runId ? { runId } : {}) });
             if (scope) {
               scope.tokens = (scope.tokens ?? 0) + row.input + row.output;
               scope.usd = (scope.usd ?? 0) + (row.usd ?? 0);
@@ -339,8 +385,19 @@ export function metered(provider: Provider, store: UsageStore, tag: { purpose?: 
           }
           yield ev;
         }
+      } catch (err) {
+        ok = false;
+        error = (err as Error).message.slice(0, 200);
+        throw err;
       } finally {
         if (!seen && scope) scope.unreported = (scope.unreported ?? 0) + 1;
+        if (onCall) {
+          try {
+            onCall({ model: req.model, provider: provider.config.label, providerId: provider.config.id, billing: billingOf(provider.config), in: row?.input ?? 0, out: row?.output ?? 0, cached: row?.cached ?? 0, usd: row ? row.usd : null, reported: seen, ms: Date.now() - t0, ...(first !== undefined ? { firstMs: first } : {}), ok, ...(error ? { error } : {}) });
+          } catch {
+            /* recording never breaks a call */
+          }
+        }
       }
     },
   };

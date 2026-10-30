@@ -34,6 +34,7 @@ import { HistoryImporter } from './history-import/index.ts';
 import { embedTarget, MemoryVectors } from './embeddings.ts';
 import { createTeamTools, TeamManager } from './team.ts';
 import { priceTable, UsageStore } from './usage.ts';
+import { RunStore, runSettings } from './runs.ts';
 import { createStarterTool } from './starters.ts';
 import { createProjectNoteTool, ProjectKnowledgeStore } from './projectknow.ts';
 import { createSettingsGuideTool } from './settingsguide.ts';
@@ -524,6 +525,11 @@ function buildCompanion(space: Space, id: string, dir: string): Companion {
   if (modelCatalog) app.modelCatalog = modelCatalog;
   app.usage = new UsageStore(store.db);
   app.usage.prices = () => priceTable(settingsC.get().prices);
+  // Phase 78: run snapshots (every step of turns, jobs and team runs), with retention and a size cap.
+  app.runs = new RunStore(store.db, app.now);
+  app.runs.usage = app.usage;
+  app.runs.settings = () => runSettings(app.settings.get());
+  app.runs.prune(true);
   // Phase 13: background jobs, git and delegating to Claude Code / Grok Build.
   app.jobs = new JobManager(app, store.db);
   app.reports = new ReportStore(store.db, app.now);

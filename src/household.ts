@@ -498,6 +498,8 @@ export const MEMBER_ROUTES: ReadonlySet<string> = new Set([
   'security', 'passkey', 'two-step', 'owner-token', 'devices', 'device', 'pair',
   // talking
   'conversations', 'live', 'events', 'approvals', 'uploads', 'video', 'calls', 'voice', 'tags', 'find', 'reports',
+  // Phase 78: the run view of their own turns (their space's own database)
+  'runs',
   // her
   'persona', 'look', 'sara', 'character', 'gallery', 'companions', 'groups', 'adult', 'photos',
   // memory and life
