@@ -335,5 +335,6 @@ test('15 (UI): the panel reads why/sure from meta.memoryPicks with no extra requ
   assert.ok(app.includes("A note's weight halves every {days} days since it happened or was last used."));
   assert.match(explainPolicy({ halfLifeDays: 30, reuseWeight: 0.1, minStanding: 0.5 }), /^A note's weight halves every 30 days since it happened or was last used\./);
   for (const css of ['her-panel.css', 'ui-tidy.css']) assert.doesNotMatch(web(css).split('Phase 76')[1]?.split('\n\n')[0] ?? '', /#[0-9a-f]{3,8}\b/i, 'tokens only');
-  assert.match(web('sw.js'), /sara-shell-v9/);
+  // v9 here; later phases bump it again (Phase 77: v10).
+  assert.ok(Number(/sara-shell-v(\d+)/.exec(web('sw.js'))?.[1]) >= 9);
 });

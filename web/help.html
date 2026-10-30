@@ -276,6 +276,13 @@
   <li>She can also <strong>test it herself</strong> in a real browser with no window: open the preview, click, type, read the page, run simple checks and take screenshots at desktop and phone width. She sees the screenshots (when her model can see pictures), and they're attached to her message as proof. If she says she tested something in the browser but didn't, her reply is marked unverified.</li>
   <li>The browser: Microsoft Edge on Windows, Chrome/Edge/Chromium on a Mac, and on Linux an optional download (see the install guide, <code>deploy/install-browser.sh</code>). <em>Settings → Abilities → Tools and approvals</em> shows whether one was found; <em>Run full check</em> and <code>sara doctor</code> also explain how to install it when it is missing. Switch <code>preview_start</code> and the <code>browser_</code> tools there. It only reaches her previews unless web tools are on, and never in private conversations.</li>
 </ul>
+<h3 id="plan-check">She checks her plans against what you decided</h3>
+<ul>
+  <li>Before she runs a tool, she compares what it would do with your <strong>decisions</strong> (Memory → Decided together) and rules in your notes, such as <em>never push to main</em>, <em>no force pushes</em>, <em>tests before every push</em>, <em>don't touch infra/</em> or <em>use pnpm, not npm</em>. Fixed rules in the code decide this, not her model, so it works the same on every model.</li>
+  <li>In a coding or work conversation, a clear conflict <strong>stops</strong> with the approval card: it quotes your note and the day you decided it, with why it came up and how sure that is. Choose <em>Do it anyway</em> (kept on the reply as your explicit choice), <em>Don't</em>, or <em>Update the note</em> (opens the note so you can change it).</li>
+  <li>When it is only a maybe, or in everyday chat, nothing stops: she tells you in her reply, quoting the note. Tools that only read or look are never checked, and notes that were replaced by newer ones don't count.</li>
+  <li>It can only add a stop: tools set to <em>Off</em> stay off and <em>Ask me first</em> still asks. Switch it in <em>Settings → Abilities → Tools and approvals → Your decisions</em>, and pick <em>Stop on clear conflicts</em> or <em>Only mention them</em>.</li>
+</ul>
 
 <h2 id="accounts">Gmail, Calendar and GitHub</h2>
 <ul>

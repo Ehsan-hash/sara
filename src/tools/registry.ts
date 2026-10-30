@@ -61,9 +61,17 @@ interface Pending {
   timer: NodeJS.Timeout;
 }
 
+/**
+ * Phase 77: how the owner answered a card that said "This goes against something you decided":
+ * Do it anyway ('override'), Don't ('deny') or Update the note ('update'). Plain cards have none.
+ */
+export type ApprovalHow = 'override' | 'deny' | 'update';
+export const APPROVAL_HOWS: readonly ApprovalHow[] = ['override', 'deny', 'update'];
+
 /** Holds tool calls waiting for the owner's approve/deny click. */
 export class ApprovalBroker {
   readonly #pending = new Map<string, Pending>();
+  readonly #how = new Map<string, ApprovalHow>();
   readonly #timeoutMs: number;
 
   constructor(timeoutMs = 10 * 60 * 1000) {
@@ -88,11 +96,20 @@ export class ApprovalBroker {
     return { id, decision };
   }
 
-  decide(id: string, approved: boolean): boolean {
+  decide(id: string, approved: boolean, how?: ApprovalHow): boolean {
     const p = this.#pending.get(id);
     if (!p) return false;
-    p.resolve(approved);
+    // \"Update the note\" and \"Don't\" never run the call, whatever `approved` says.
+    if (how) this.#how.set(id, how);
+    p.resolve(how === 'update' || how === 'deny' ? false : approved);
     return true;
+  }
+
+  /** Phase 77: the owner's answer on a contradiction card (read once, after the decision). */
+  takeHow(id: string): ApprovalHow | undefined {
+    const h = this.#how.get(id);
+    this.#how.delete(id);
+    return h;
   }
 
   pendingFor(conversationId: string): string[] {

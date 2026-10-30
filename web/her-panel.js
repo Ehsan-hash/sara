@@ -309,7 +309,15 @@ function renderApprovals() {
         card.scrollIntoView({ block: 'center', behavior: 'smooth' });
         card.querySelector('button')?.focus({ preventScroll: true });
       });
-      btns.append(mirror(yes, 'small', t('Allow')), mirror(no, 'ghost small', t('Deny')), show);
+      // Phase 77: a card that goes against a decision says so here too, with its own button words
+      // (Do it anyway / Don't); "Update the note" stays on the chat card (Show in the chat).
+      const against = card.querySelector('.contradict-note')?.textContent?.trim();
+      if (against) {
+        const warn = el('p', 'hp-appr-against', `${t('This goes against something you decided')}: ${against}`);
+        warn.dataset.raw = '';
+        row.insertBefore(warn, row.children[1] ?? null);
+      }
+      btns.append(mirror(yes, 'small', against ? yes?.textContent ?? t('Allow') : t('Allow')), mirror(no, 'ghost small', against ? no?.textContent ?? t('Deny') : t('Deny')), show);
       row.append(btns);
       return row;
     }),

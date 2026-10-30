@@ -15,6 +15,7 @@ import { createFromStarter, listStarters } from '../starters.ts';
 import type { Conversation } from '../store.ts';
 import { cleanHelpers, cleanLimits, ROLES, teamHelpers, type TeamLimits, type TeamTask } from '../team.ts';
 import { GIT_SAFE, GITHUB_VAULT, shq } from '../tools/coding.ts';
+import { APPROVAL_HOWS, type ApprovalHow } from '../tools/registry.ts';
 import { runCommand } from '../tools/sandbox.ts';
 import { resolveInside, workspaceDir } from '../tools/workspace.ts';
 import { cleanBudget, usageLine } from '../usage.ts';
@@ -120,7 +121,9 @@ export function createCodingRoutes(ctx: RouteCtx): RouteHandler {
 
     if (a === 'approvals' && b && method === 'POST') {
       const body = await readJson(req);
-      if (!app.approvals.decide(b, body.approved === true)) throw new HttpError(404, 'That request is no longer waiting.');
+      // Phase 77: a contradiction card says how (Do it anyway / Don't / Update the note).
+      const how = APPROVAL_HOWS.includes(body.how as ApprovalHow) ? (body.how as ApprovalHow) : undefined;
+      if (!app.approvals.decide(b, body.approved === true, how)) throw new HttpError(404, 'That request is no longer waiting.');
       return send(res, 200, { ok: true });
     }
     // Phase 13: background jobs (list, stop) and the GitHub token used for pushing.

@@ -109,7 +109,7 @@ decisions: at most ${MAX_DECISIONS} things ${O} and Sara decided or agreed on to
 promises: at most ${MAX_PROMISES} commitments someone made: who is "owner" (${O} will do something, e.g. quit coffee for a month) or "sara" (Sara said she will do something, e.g. check in after the interview). what is one short sentence starting with ${O} or Sara. due is "YYYY-MM-DD" only if a day was given or clearly meant, else null. message_id and quote as above (the promiser's own message and words). Use [] when there are none.
 milestones: at most ${MAX_MILESTONES} moments that matter in their story together: firsts, big news, a hard day, making up after a disagreement, an inside joke being born. One short sentence each, past tense. message_id and quote as above. Use [] for ordinary chats (most conversations have none).
 kept: open promises (listed below with their numbers) that this part of the conversation shows were kept or are no longer wanted; promise is the number, with the message_id and exact quote that shows it. Use [] when none.
-outdated: earlier notes (listed below as "Earlier notes" with their numbers) that this part of the conversation shows are no longer true or were changed (moved house, changed jobs, broke up, a decision reversed); note is the number, with the message_id and exact quote that shows the change. The new version goes in facts or decisions as usual. Use [] when none.\u0003`, id).replaceAll(O, owner).replace('\u0003', `${open.length ? `\n\nOpen promises:\n${open.map((p) => `${p.id}. ${p.content}`).join('\n')}` : '\n\nOpen promises: none.'}${related.length ? `\n\nEarlier notes:\n${related.map((p) => `${p.id}. ${p.content}`).join('\n')}` : ''}`).split('\u0002');
+outdated: earlier notes (listed below as "Earlier notes" with their numbers) that this part of the conversation shows are no longer true or were changed (moved house, changed jobs, broke up, a decision reversed); note is the number, with the message_id and exact quote that shows the change. The new version goes in facts or decisions as usual. A one-time exception is not a change: when ${O} lets Sara do something "anyway" or "just this once" against a decision (or presses Do it anyway on a card), the decision still stands: don't mark it outdated and don't write the exception down as a new decision. Use [] when none.\u0003`, id).replaceAll(O, owner).replace('\u0003', `${open.length ? `\n\nOpen promises:\n${open.map((p) => `${p.id}. ${p.content}`).join('\n')}` : '\n\nOpen promises: none.'}${related.length ? `\n\nEarlier notes:\n${related.map((p) => `${p.id}. ${p.content}`).join('\n')}` : ''}`).split('\u0002');
   return `${head}${transcript}${tail}`;
 }
 
@@ -349,8 +349,15 @@ export async function summarizeConversation(app: AppContext, mem: MemoryStore, c
   // Earlier notes this conversation shows are no longer true: replaced (kept on the Memory page).
   const relatedIds = new Set(related.map((r) => r.id));
   const newest = [...factIds, ...ledgerIds].at(-1) ?? null;
+  // Phase 77: a decision the owner overrode once on a plan-check card (\"Do it anyway\") still
+  // stands: a one-time exception never retires it, whatever the summary model reads into it.
+  const overridden = new Set<number>();
+  for (const m of app.store.messages(conversationId)) {
+    if (m.role !== 'assistant' || !Array.isArray(m.meta?.contradictions)) continue;
+    for (const c of m.meta.contradictions as { memoryId?: unknown; answer?: unknown }[]) if (c?.answer === 'override' && typeof c.memoryId === 'number') overridden.add(c.memoryId);
+  }
   for (const it of parsed.outdated) {
-    if (it.promise !== undefined && relatedIds.has(it.promise) && quoted(it, ['user', 'assistant'])) mem.supersede(it.promise, newest);
+    if (it.promise !== undefined && relatedIds.has(it.promise) && !overridden.has(it.promise) && quoted(it, ['user', 'assistant'])) mem.supersede(it.promise, newest);
   }
   mem.setState(conversationId, { summarizedThrough: last.id, lastAttemptAt: attempt, lastError: null });
   app.events?.publish({ type: 'memory', conversationId });

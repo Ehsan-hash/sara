@@ -6,7 +6,9 @@
 import { randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import { type AppContext, fallbackAfterMs, promptChars, OFFSERVER_TOOL, resolveChain, SlowModelError, streamWithin } from './chat.ts';
+import { cardOf, checkPlan, contradictSettings, gateAct, type Contradiction } from './contradict.ts';
 import { complete } from './life.ts';
+import { memorySettings } from './memory-worker.ts';
 import { buildSystemPrompt, SAFETY_BOUNDARIES } from './persona.ts';
 import type { ChatMessage, ToolCall } from './providers/types.ts';
 import { checkClaims, correctionNote, type Receipt } from './receipts.ts';
@@ -174,6 +176,8 @@ export interface PendingApproval {
   helper: string;
   tool: string;
   summary: string;
+  /** Phase 77: the call goes against a decision (the card's extra section). */
+  contradiction?: import('./contradict.ts').ContradictionCard;
 }
 
 const MAX_HELPER_ROUNDS = 25;
@@ -889,18 +893,41 @@ CREATE INDEX IF NOT EXISTS team_log_task ON team_log(task_id, id);
       status = 'denied';
       output = `The owner has disabled the ${call.name} tool.`;
     } else {
-      let allowed = permission === 'auto';
-      if (permission === 'ask') {
+      // Phase 77: helpers' calls are checked against the owner's decisions like hers (team work is
+      // coding work: a clear conflict stops with the approval; fuzzy ones are noted in the log).
+      // The tests-first rule is left to her own turns: a helper's run doesn't carry the turn's receipts.
+      let stopFor: Contradiction | undefined;
+      const cset = contradictSettings(app.settings.get());
+      if (cset.on && app.memory && memorySettings(app).enabled) {
+        try {
+          const found = checkPlan(app.memory, { tool: call.name, args: call.arguments, callId: call.id, summary, conversationId: task.conversationId, workspaceDir: wsDir, skipShapes: ['tests-first'], now: app.now() });
+          const act = gateAct(found, { settings: cset, work: true, group: false });
+          stopFor = act === 'stop' ? found.find((c) => c.clear) : undefined;
+          if (stopFor) stopFor.act = 'stop';
+          else if (found.length) this.#note(task.id, step.id, `This may go against what you decided: "${found[0].note}"`);
+        } catch (err) {
+          console.warn(`plan check (team): ${(err as Error).message}`);
+        }
+      }
+      let allowed = permission === 'auto' && !stopFor;
+      if (permission === 'ask' || stopFor) {
         const { id, decision } = app.approvals.request(task.conversationId, signal);
-        run.approvals.set(id, { id, stepId: step.id, helper: helper.name, tool: call.name, summary });
-        this.#note(task.id, step.id, `Waiting for your OK: ${summary}`);
+        const shown = stopFor ? `${summary} (goes against what you decided: "${stopFor.note}")` : summary;
+        run.approvals.set(id, { id, stepId: step.id, helper: helper.name, tool: call.name, summary: shown, ...(stopFor ? { contradiction: cardOf(stopFor) } : {}) });
+        this.#note(task.id, step.id, `Waiting for your OK: ${shown}`);
         allowed = await decision;
+        const how = app.approvals.takeHow(id);
         run.approvals.delete(id);
-        this.#note(task.id, step.id, allowed ? 'You said yes.' : 'Not allowed.');
+        if (stopFor) {
+          stopFor.answer = allowed ? 'override' : how === 'update' ? 'update' : 'deny';
+          stopFor.status = allowed ? 'overridden' : how === 'update' ? 'update' : 'declined';
+          if (allowed) app.memory?.markUsed([stopFor.memoryId], app.now().toISOString().slice(0, 10));
+        }
+        this.#note(task.id, step.id, allowed ? (stopFor ? 'You said do it anyway.' : 'You said yes.') : 'Not allowed.');
       }
       if (!allowed) {
         status = 'denied';
-        output = signal.aborted ? 'Cancelled.' : 'The owner declined this action.';
+        output = signal.aborted ? 'Cancelled.' : stopFor ? `The owner declined this action: it goes against what they decided: "${stopFor.note}".` : 'The owner declined this action.';
       } else {
         this.#note(task.id, step.id, `${helper.name}: ${summary}`);
         try {

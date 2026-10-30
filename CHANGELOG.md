@@ -5,6 +5,23 @@ Format: newest first. Semantic versions since 1.0.0 (before that `0.<phase>.<pat
 
 ## Unreleased
 
+## 2.10.0 (2026-10-30): she checks her plans against what you decided (harness track, Phase 77)
+
+- **Contradiction check before acting:** before a tool runs, the planned step is checked against your
+  stored decisions. Clear shapes are matched in code: pushing to a branch you ruled out, any push, force
+  pushes, "tests before every push / commit", a folder or file that's hands-off, a package manager or a
+  command or flag you ruled out. Read-only tools are never checked.
+- **In coding chats and work channels it stops** on the approval card with *This goes against something
+  you decided*: your note, its date, why it matched and how sure, other conflicts under *Also*, and
+  **Do it anyway** (recorded), **Don't** or **Update the note**. Everyday chat, group chats and other apps
+  only flag it (she mentions it). It can only add a stop; tools set to *never* stay never.
+- Fuzzy matches only ever flag; the optional judge model can only drop a fuzzy flag, never add a stop.
+- A one-time *Do it anyway* never retires your decision.
+- Settings → Memory → *Check her plans against what you decided* (on) and *Stop on clear conflicts* /
+  *Only mention them*.
+- Measured: stop precision and recall 1.00 on the development and held-out sets; 11 of 12 exact on the
+  held-out set; under 20 ms per tool call with 10,000 notes.
+
 ## 2.9.0 (2026-10-30): ranked memory (harness track, Phase 76)
 
 The first step of the harness track ([docs/design/HARNESS_TRACK.md](docs/design/HARNESS_TRACK.md)).

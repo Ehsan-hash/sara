@@ -14,7 +14,7 @@ em um só app para a web, Windows, Mac e celular.
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="License: MIT"></a>
   <img src="https://img.shields.io/badge/node-%E2%89%A5%2024-339933" alt="Node 24 or newer">
   <img src="https://img.shields.io/badge/runtime%20dependencies-0-brightgreen" alt="Zero runtime dependencies">
-  <img src="https://img.shields.io/badge/tests-943%20passing-brightgreen" alt="943 tests passing">
+  <img src="https://img.shields.io/badge/tests-961%20passing-brightgreen" alt="961 tests passing">
   <a href="docs/RESULTS.md"><img src="https://img.shields.io/badge/HumanEval%20pass%401-96.3%25-informational" alt="HumanEval pass@1 96.3%"></a>
   <a href="https://github.com/farena-ai/sara/releases/latest"><img src="https://img.shields.io/github/v/release/farena-ai/sara?label=release" alt="Latest release"></a>
   <a href="https://github.com/farena-ai/sara/pkgs/container/sara"><img src="https://img.shields.io/badge/docker-amd64%20%7C%20arm64-2496ED" alt="Docker image for amd64 and arm64"></a>
@@ -28,7 +28,7 @@ em um só app para a web, Windows, Mac e celular.
   <sub>Uma sessão real com um modelo local (qwen3.8 27B no Ollama, uma RTX 5090) em um servidor de teste descartável, no visual Noite: ela anima quem está conversando, escreve um app pequeno e o teste dele enquanto o modelo transmite, pede permissão antes de rodar um comando, pega um bug de verdade com um teste que falha e corrige até os 7 testes passarem. Quadros escolhidos da gravação; nada neles foi editado.</sub>
 </p>
 
-> **Status:** 2.9, licença MIT, com vinte versões com novos recursos desde a 1.0 (todas abaixo). Da
+> **Status:** 2.10, licença MIT, com vinte e uma versões com novos recursos desde a 1.0 (todas abaixo). Da
 > 2.5 à 2.8 o app inteiro ganhou um visual novo. O
 > [app Android](https://play.google.com/store/apps/details?id=com.backstagecoding.sara) está no Google
 > Play; o app de iPhone e a versão da Mac App Store chegam assim que a Apple aprovar. Leia
@@ -69,6 +69,7 @@ para quem mora com você · [chamadas de vídeo](docs/VIDEO_CALLS.md) com o retr
 
 | Versão | O que você ganha |
 |---|---|
+| **2.10** · Confere os planos dela com os seus | **Antes de agir, ela confere o passo com o que você decidiu.** Disse a ela "nunca dê push no main", "testes antes de cada push", "use pnpm" ou "não mexa na configuração de produção"? Um passo planejado que vai contra isso **para num cartão** que cita a sua decisão, com *Fazer mesmo assim*, *Não* ou *Atualizar a nota*. Na conversa do dia a dia ela só menciona. As regras são conferidas no código (sem adivinhar), e isso só pode acrescentar uma parada, nunca tirar. [Como funciona](docs/design/HARNESS_TRACK.md) |
 | **2.9** · Memória ranqueada | **Ela diz por que lembrou de algo:** cada nota que ela usa recebe uma pontuação para a sua mensagem e mostra *por que veio à mente* e *com que certeza* (também no painel dela). Notas antigas desbotam aos poucos em vez de sumir, as que ela usa sempre continuam fortes e você pode **fixar** as que nunca devem desbotar. O desbotamento é ajustado num controle deslizante. [Como funciona](docs/design/HARNESS_TRACK.md) |
 | **2.8** · Acabamento | **Um degrau mais refinado:** uma aurora lenta atrás do vidro fosco, uma serifada elegante para os títulos, um halo luminoso na cor do humor dela em volta do retrato, ícones desenhados, ilustrações do tempo e anéis de progresso, e uma barra de vidro flutuante no celular (todo movimento desliga com *reduzir movimento*). [O plano](docs/design/NEW_LOOK.md) |
 | **2.7** · O novo visual, parte 3 | **Hoje em blocos** (tempo, seu dia, agenda, do que ela se lembrou, momentos, trabalho em segundo plano, casa), uma barra embaixo no celular, todas as telas no novo visual, e nos apps de Windows e Mac **notificações com Permitir / Negar e Feito / Mais tarde**, *Enviar para → Sara* para arquivos e voz na pergunta rápida. [O plano](docs/design/NEW_LOOK.md) |
@@ -277,8 +278,8 @@ verificava. O que ela acrescenta hoje é o jeito de trabalhar (roda os testes, p
 de passos arriscados, mostra o que foi executado), não uma nota maior nesses conjuntos. Detalhes,
 resultados por tarefa e como rodar de novo: [docs/RESULTS.md](docs/RESULTS.md).
 
-E também `npm run check`: uma checagem de tipos e 951 testes automáticos com um modelo falso
-roteirizado (sem rede, sem GPU): 943 passam no Windows e os outros 8 são testes de isolamento só
+E também `npm run check`: uma checagem de tipos e 969 testes automáticos com um modelo falso
+roteirizado (sem rede, sem GPU): 961 passam no Windows e os outros 8 são testes de isolamento só
 para Linux, executados em um servidor Linux.
 
 ## Como a Sara se compara

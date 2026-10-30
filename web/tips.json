@@ -381,6 +381,14 @@
       "Lets the commands she runs reach the internet (installing packages, downloading). Off keeps them offline.",
       "coding"
     ],
+    "contradict-on": [
+      "Before she runs a tool, she checks it against what you decided (\"never push to main\", \"don't touch infra/\", \"use pnpm, not npm\"). On a clear conflict she stops and asks; otherwise she just mentions it. Your approvals stay as they are.",
+      "plan-check"
+    ],
+    "contradict-mode": [
+      "Stop: in coding and work chats a clear conflict waits for Do it anyway, Don't or Update the note. Mention: she never stops for it, she only tells you. Everyday chat always just mentions it.",
+      "plan-check"
+    ],
     "g-client-id": [
       "From your Google Cloud project's OAuth client (the steps above). Ends in .apps.googleusercontent.com.",
       "accounts"

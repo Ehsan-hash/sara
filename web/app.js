@@ -1282,6 +1282,8 @@ function renderMessages(messages, opts = {}) {
     if (m.role === 'user') flush();
     turn ??= newTurn();
     if (m.role === 'assistant' && Array.isArray(m.meta?.memoryIds)) for (const id of m.meta.memoryIds) turn.mem.add(id);
+    // Phase 77: flags and finished stops of her plan check (`meta.contradictions`), under that step.
+    if (m.role === 'assistant' && Array.isArray(m.meta?.contradictions)) for (const c of m.meta.contradictions) if (c?.note && c.status !== 'open') els.push(contradictionFlag(c));
     if (m.role === 'tool') {
       addStep((turn.steps ??= newSteps()), { id: m.meta?.toolCallId, name: m.meta?.name, summary: m.meta?.summary ?? m.meta?.name, args: m.meta?.args, status: m.meta?.status ?? 'ok', output: m.content, ms: m.meta?.ms, snapshotId: m.meta?.snapshotId });
       const card = (m.meta?.status ?? 'ok') === 'ok' ? m.meta?.card : null;
@@ -1732,6 +1734,12 @@ async function runStream(path, body, userBubble) {
           place(card);
           card.scrollIntoView({ block: 'nearest' });
           setActivity('waiting', ev.summary);
+        } else if (ev.type === 'contradiction') {
+          // Phase 77: a flag (she mentions it), or how a stop ended (Do it anyway / Don't / Update the note).
+          const old = document.querySelector(`.contradict-flag[data-call="${CSS.escape(ev.id)}"][data-mem="${ev.item.memoryId}"]`);
+          const node = contradictionFlag(ev.item);
+          if (old) old.replaceWith(node);
+          else place(node);
         } else if (ev.type === 'tool_running') {
           document.querySelector(`.approval[data-call="${CSS.escape(ev.id)}"]`)?.remove();
           if (steps) runStep(steps, ev.id);
@@ -2087,32 +2095,105 @@ function approvalCard(ev, block) {
   }
   const row = document.createElement('div');
   row.className = 'row';
-  const decide = async (approved) => {
+  const c = ev.contradiction;
+  const decide = async (approved, how) => {
     card.querySelectorAll('button').forEach((b) => (b.disabled = true));
     try {
-      await api(`/approvals/${ev.approvalId}`, { method: 'POST', body: { approved } });
+      await api(`/approvals/${ev.approvalId}`, { method: 'POST', body: { approved, ...(how ? { how } : {}) } });
       card.remove();
+      // Phase 77: "Update the note" opens that note so you can correct it.
+      if (how === 'update' && c) void openMemory({ focus: c.memoryId });
     } catch (err) {
       title.textContent = err.message;
     }
   };
   const yes = document.createElement('button');
   yes.type = 'button';
-  yes.textContent = t('Allow');
-  yes.addEventListener('click', () => decide(true));
+  yes.textContent = c ? t('Do it anyway') : t('Allow');
+  yes.addEventListener('click', () => decide(true, c ? 'override' : undefined));
   const no = document.createElement('button');
   no.type = 'button';
   no.className = 'ghost';
-  no.textContent = t('Deny');
-  no.addEventListener('click', () => decide(false));
+  no.textContent = c ? t("Don't") : t('Deny');
+  no.addEventListener('click', () => decide(false, c ? 'deny' : undefined));
   row.append(yes, no);
-  card.append(title, what, row);
+  if (c) {
+    const upd = document.createElement('button');
+    upd.type = 'button';
+    upd.className = 'ghost';
+    upd.textContent = t('Update the note');
+    upd.addEventListener('click', () => decide(false, 'update'));
+    row.append(upd);
+    card.classList.add('approval-contradict');
+  }
+  card.append(title, ...(c ? [contradictionSection(c)] : []), what, row);
   if (card.classList.contains('approval-tidy')) {
     if (TOOL_WORDS[ev.name]) title.after(el('p', 'approval-about muted small', t(TOOL_WORDS[ev.name])));
     row.append(el('span', 'tool-raw approval-raw', ev.name));
   }
   if (block) block.open = false;
   return card;
+}
+
+// ---------- Phase 77: her plans checked against what you decided ----------
+const contradictRule = {
+  'push-branch': (x) => t('rule: no push to {branch}', { branch: x.join(', ') }),
+  'no-push': () => t('rule: no pushing'),
+  'force-push': () => t('rule: no force push'),
+  'tests-first': (x) => (x[0] === 'commit' ? t('rule: tests before every commit') : t('rule: tests before every push')),
+  path: (x) => t('rule: hands off {path}', { path: x.join(' ') }),
+  'package-manager': (x) => t('rule: not {program}', { program: x.join(', ') }),
+  command: (x) => t('rule: never {command}', { command: x.join(' ') }),
+  fuzzy: (x) => t('shared words {words}', { words: x.map((w) => `“${w}”`).join(', ') }),
+};
+const sureWord = { high: () => t('high'), medium: () => t('medium'), low: () => t('low') };
+/** The note's [why …; sure …] line, in the app language (the same format as her memory notes). */
+function contradictBracket(c) {
+  const reasons = [];
+  if (c.words?.length && c.rule !== 'fuzzy') reasons.push(t('words {words}', { words: c.words.slice(0, 4).map((w) => `“${w}”`).join(', ') }));
+  const rule = contradictRule[c.rule];
+  if (rule) reasons.push(rule(Array.isArray(c.target) ? c.target : []));
+  return `[${t('why: {reasons}; sure: {sure}', { reasons: reasons.join(' + '), sure: (sureWord[c.sure] ?? sureWord.low)() })}]`;
+}
+/** The approval card's "This goes against something you decided" section. */
+function contradictionSection(c) {
+  const box = el('div', 'contradict');
+  const head = el('p', 'contradict-head');
+  head.append(iconSpan('contradict-icon', 'warn'), el('strong', '', t('This goes against something you decided')));
+  const note = el('blockquote', 'contradict-note', `“${c.note}”`);
+  note.dataset.raw = '';
+  const meta = el('p', 'contradict-meta muted small', [t('Decided on {date}', { date: memDay(c.decidedOn) }), c.quote ? t('Your words: “{quote}”', { quote: c.quote }) : ''].filter(Boolean).join(' · '));
+  meta.dataset.raw = '';
+  const why = el('p', 'contradict-why muted small', contradictBracket(c));
+  why.dataset.raw = '';
+  box.append(head, note, meta, why);
+  // Other notes the same step goes against (one answer covers them all).
+  for (const o of Array.isArray(c.also) ? c.also.slice(0, 3) : []) {
+    const more = el('p', 'contradict-also small', t('Also: “{note}” ({date})', { note: o.note, date: memDay(o.decidedOn) }));
+    more.dataset.raw = '';
+    box.append(more);
+  }
+  return box;
+}
+/** A flag under her step: she was told and mentions it (or how a stop ended). */
+function contradictionFlag(c) {
+  const box = el('div', `contradict-flag${c.act === 'stop' ? ' contradict-stopped' : ''}`);
+  box.dataset.call = c.callId ?? '';
+  box.dataset.mem = String(c.memoryId);
+  const head =
+    c.act !== 'stop' ? t('This may go against something you decided:') : c.answer === 'override' ? t('You chose to do it anyway, against what you decided:') : c.answer === 'update' ? t('Stopped so you can update the note:') : t('Stopped: it goes against what you decided:');
+  const body = el('div', 'contradict-flag-body');
+  const q = el('span', 'contradict-flag-note', `“${c.note}”`);
+  q.dataset.raw = '';
+  const why = el('span', 'contradict-why muted small', contradictBracket(c));
+  why.dataset.raw = '';
+  body.append(el('span', 'contradict-flag-head', head), q, why);
+  const open = el('button', 'linkish small', t('Open the note'));
+  open.type = 'button';
+  open.addEventListener('click', () => void openMemory({ focus: c.memoryId }));
+  body.append(open);
+  box.append(iconSpan('contradict-icon', 'warn'), body);
+  return box;
 }
 
 // ---------- tools settings ----------
@@ -2317,6 +2398,10 @@ async function loadTools() {
   $('#sandbox-note').hidden = !data.sandbox.note;
   $('#sandbox-note').textContent = data.sandbox.note ? t('{note} You can still set a tool to Allowed below; then her commands run on this computer without asking.', { note: t(data.sandbox.note) }) : '';
   $('#shell-network').checked = data.shellNetwork;
+  // Phase 77: check her plans against what you decided.
+  $('#contradict-on').checked = data.contradict?.on !== false;
+  $('#contradict-mode').value = data.contradict?.mode ?? 'stop';
+  $('#contradict-mode').disabled = !$('#contradict-on').checked;
   // Phase 49: the browser she tests web apps with.
   const br = data.browser ?? { found: false, how: '' };
   $('#browser-status').textContent = br.found ? `${t('Found')}: ${br.name}. ${t('She can open her previews in it, click through them and take desktop and phone screenshots.')}` : `${t('Not found.')} ${br.how}`;
@@ -2369,6 +2454,7 @@ async function loadTools() {
   );
 }
 
+$('#contradict-on').addEventListener('change', () => ($('#contradict-mode').disabled = !$('#contradict-on').checked));
 $('#browser-recheck').addEventListener('click', async () => {
   $('#browser-status').textContent = t('Looking…');
   await api('/tools?recheck=1').catch(() => {});
@@ -2378,7 +2464,7 @@ $('#browser-recheck').addEventListener('click', async () => {
 async function saveTools() {
   const permissions = {};
   for (const sel of document.querySelectorAll('#tool-list select[data-tool]')) permissions[sel.dataset.tool] = sel.value;
-  await api('/tools', { method: 'PUT', body: { permissions, shellNetwork: $('#shell-network').checked } });
+  await api('/tools', { method: 'PUT', body: { permissions, shellNetwork: $('#shell-network').checked, contradict: { on: $('#contradict-on').checked, mode: $('#contradict-mode').value } } });
 }
 
 // ---------- conversation settings ----------
@@ -5136,8 +5222,13 @@ $('#import-file').addEventListener('change', async (e) => {
 });
 
 // ---------- memory ----------
-async function openMemory() {
+async function openMemory(opts = {}) {
   $('#mem-error').textContent = '';
+  // Phase 77: "Update the note" / "Open the note" open the list on that note.
+  if (opts.focus) {
+    $('#mem-q').value = '';
+    $('#mem-kind').value = '';
+  }
   const s = await api('/memory/settings');
   $('#mem-enabled').checked = s.enabled;
   $('#mem-quiet').value = String([10, 30, 60, 120].reduce((b, v) => (Math.abs(v - s.quietMinutes) < Math.abs(b - s.quietMinutes) ? v : b), 30));
@@ -5151,8 +5242,16 @@ async function openMemory() {
   $('#mem-budget').value = String([1000, 2500, 4500].reduce((b, v) => (Math.abs(v - s.injectBudgetChars) < Math.abs(b - s.injectBudgetChars) ? v : b), 2500));
   await loadMemories();
   $('#memory').showModal();
+  if (opts.focus) {
+    const card = document.querySelector(`#mem-list .mem[data-mem="${opts.focus}"]`);
+    if (card) {
+      card.scrollIntoView({ block: 'center' });
+      card.classList.add('highlight');
+      setTimeout(() => card.classList.remove('highlight'), 2500);
+    } else $('#mem-error').textContent = t('That note is gone or was replaced.');
+  }
 }
-$('#open-memory').addEventListener('click', openMemory);
+$('#open-memory').addEventListener('click', () => openMemory());
 
 let memSearchTimer;
 $('#mem-q').addEventListener('input', () => {
@@ -5253,6 +5352,7 @@ $('#mem-timeline').addEventListener('click', () => {
 function memoryCard(m) {
   const card = document.createElement('div');
   card.className = 'mem';
+  card.dataset.mem = String(m.id);
   const head = document.createElement('div');
   head.className = 'mem-head';
   const kind = document.createElement('span');

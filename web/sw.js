@@ -5,14 +5,15 @@ const OFFLINE = '/offline.html';
 // v7 (2.7.1): new app files (viewport.js, start-view.js); a fresh cache after the iPhone fix.
 // v8 (2.8 polish): new tokens in theme.css (the aurora, glass, the display serif) and new app files.
 // v9 (Phase 76): a fresh cache with the memory panel's sureness and pin changes.
+// v10 (Phase 77): the approval card's "goes against something you decided" section and plan flags.
 const SHELL = [OFFLINE, '/offline.css', '/offline.js', '/theme.css', '/theme-boot.js', '/icon-192.png'];
 
 self.addEventListener('install', (event) => {
-  event.waitUntil(caches.open('sara-shell-v9').then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));
+  event.waitUntil(caches.open('sara-shell-v10').then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));
 });
 
 self.addEventListener('activate', (event) => {
-  event.waitUntil(caches.keys().then((keys) => Promise.all(keys.filter((k) => k !== 'sara-shell-v9').map((k) => caches.delete(k)))).then(() => self.clients.claim()));
+  event.waitUntil(caches.keys().then((keys) => Promise.all(keys.filter((k) => k !== 'sara-shell-v10').map((k) => caches.delete(k)))).then(() => self.clients.claim()));
 });
 
 self.addEventListener('fetch', (event) => {

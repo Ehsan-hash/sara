@@ -476,7 +476,8 @@ export class DiscordBridge {
       else if (ev.type === 'notice') sends.push(this.send(channelId, `ℹ️ ${isOwner && ev.key ? this.#tr(ev.key, ev.params) : ev.text}`));
       else if (ev.type === 'approval' && isOwner) {
         sends.push(
-          this.send(channelId, this.#tr('She wants to: {what}', { what: ev.summary }), {
+          this.send(channelId, `${this.#tr('She wants to: {what}', { what: ev.summary })}${ev.contradiction ? `
+⚠️ ${this.#tr('This goes against something you decided: “{note}”', { note: ev.contradiction.note })}` : ''}`, {
             components: [{ type: 1, components: [{ type: 2, style: 3, label: this.#tr('Allow'), custom_id: `ap:${ev.approvalId}:1` }, { type: 2, style: 4, label: this.#tr('Deny'), custom_id: `ap:${ev.approvalId}:0` }] }],
           }),
         );

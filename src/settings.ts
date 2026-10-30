@@ -106,6 +106,11 @@ export interface Settings {
    * receipt patterns are unsure about; it can only add a correction, never remove one.
    */
   claimJudge?: { providerId: string; model: string };
+  /**
+   * Phase 77: \"Check her plans against what you decided\" (on unless turned off) and how strict:
+   * 'stop' = clear conflicts stop with an approval card in coding/work conversations; 'mention'.
+   */
+  contradict?: Partial<import('./contradict.ts').ContradictSettings>;
   /** Discord bridge (Phase 6). Bot token lives in the vault (bridge:discord). */
   discord?: Partial<DiscordSettings>;
   /** Automatic backups (Phase 6). */

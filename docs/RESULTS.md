@@ -17,6 +17,7 @@ replies stay out of the repository).
 | Claim check in 6 languages, held-out replies: patterns only / + local judge | `qwen3.5:9b` (local) as judge | precision / recall **0.92 / 0.38** → **0.95 / 0.88** | 2026-10-28 | `node scripts/eval-claims.ts --judge qwen3.5:9b` |
 | Memory across sessions (recall, no inventing, forgetting) | qwen3.8 27B (local) | **11/12** checks | 2026-10-27 | `node scripts/eval-memory.ts --model <model>` |
 | Memory ranking: the note that should come first (40 notes, 20 messages, no model) | none (code only) | **19/20** | 2026-10-30 | `node scripts/eval-memory.ts --rank` |
+| Plan check: planned tool calls vs. stored decisions, stop / flag / none (no model) | none (code only) | stops: precision / recall **1.00 / 1.00** on both sets; exact **35/35** (development) and **11/12** (held out) | 2026-10-30 | `node scripts/eval-contradict.ts` |
 | Library: answers from documents, with the source | qwen3.8 27B (local) | **8/8** in both runs | 2026-10-27 | `node scripts/eval-library.ts --model <model>` |
 | Library with meaning search | qwen3.8 27B (local) + nomic-embed-text | **8/8** in both runs | 2026-10-27 | `node scripts/eval-library.ts --model <model> --embed nomic-embed-text` |
 | Code map: "where is…?" questions on Sara's own code | qwen3.8 27B (local) + nomic-embed-text | **8/8** with code tools, **8/8** without | 2026-10-27 | `node scripts/eval-codemap.ts --embed nomic-embed-text` |
@@ -302,6 +303,38 @@ old matched notes fell below standing promises.
 The model run above, repeated after the ranking change (2026-10-30, same local model): **11 of 12**
 again. The miss is wording only: asked about a sister never mentioned, she said *"I don't have a
 sister in my notes for you … What's her name?"*, a right answer the phrase list doesn't count.
+
+### Checking her plans against your decisions (Phase 77, offline)
+
+`node scripts/eval-contradict.ts` checks the plan check itself, with no model: notes about the
+example owner Alex are stored together, then planned tool calls are checked in a coding
+conversation with *Stop on clear conflicts*. Each call has the expected outcome: **stop** (the
+approval card), **flag** (she mentions it) or **none**. Stops are what matter most: a false stop
+annoys and teaches people to click through, a missed one breaks trust (design risk 9).
+
+| Set | Notes | Calls | Exactly right | Stops: precision / recall | Any signal (stop or flag): precision / recall |
+|---|---|---|---|---|---|
+| Development (the rules were tuned on it) | 17 (10 rules, 7 near misses that must not stop) | 35 | **35/35** | 1.00 / 1.00 (17 stops) | 1.00 / 1.00 |
+| Held out (new phrasings, written after tuning, run once) | 9 | 12 | **11/12** | 1.00 / 1.00 (6 stops) | 1.00 / 0.88 |
+
+Latest run 2026-10-30. The near misses include *"Alex doesn't mind pushing to the dev branch"*,
+*"Alex pushes to main every Friday at work"*, a read of a file in a ruled-out folder, `pnpm
+install` against *"pnpm, not npm"*, `git reset --soft` against *"never git reset --hard"*,
+`git push --dry-run`, and `pnpm test && git push` against *"tests before every push"*: none
+stops. The held-out miss: *"Don't deploy on Fridays"* against `./deploy.sh` stays quiet; a rule
+about a day of the week is not a shape the code checks, and the fuzzy flag needs two shared words.
+The set first caught three problems, all fixed: *"never deploy the billing service"* was read as a
+rule about a program called `service`, a parsed-rule cache keyed by note id mixed up notes from two
+databases, and *"doesn't mind pushing"* raised a fuzzy flag. A check takes 13 ms at most here and
+the test suite holds it under 20 ms per tool call with 10,000 notes.
+
+Live, with `qwen3.8:27b` on Ollama in a coding conversation: she was asked to push `main` to a
+local remote; the card stopped it quoting *"Alex wants Sara to never push to main."* (plus the
+tests rule under *Also*), *Do it anyway* pushed and was recorded on the reply and the note,
+*Update the note* opened the note and nothing ran, and in everyday chat the same push only got the
+two flags and her usual approval card. One finding from that run is fixed in this phase: the
+background note writer read a one-time *Do it anyway* as the rule changing and retired the
+decision; overridden decisions are now never retired by that path.
 
 ## Library (documents)
 

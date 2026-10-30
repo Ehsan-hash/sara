@@ -195,6 +195,44 @@ S ≈ one session, M ≈ two or three, L ≈ four or more (each including docs, 
   recorded on the finding; a chat (not tool) mismatch only flags; judge off → code path only; a
   private conversation's judge uses only local models.
 
+**As built (Phase 77, 2026-10-30):** `src/contradict.ts` + the check in `runTurnInner` right
+after the permission lookup (before the approval point) and in `TeamManager.#tool`.
+
+- Clear shapes matched in code: push to a named branch (refspecs, `HEAD:x`, `--all`, and the
+  current branch read from `.git/HEAD` for a plain `git push`/`git_push`), no push at all, force
+  push (`-f`, `--force*`, `+refspec`), tests before every push/commit (a passing test command
+  earlier in the turn/conversation since the last push, or `tests && git push` in one command),
+  hands off a path (`infra/`, `config/prod.yaml`, `.env`, "the legacy folder"; only for calls
+  that change files: writes, edits, `rm/mv/cp/sed -i/>`), a package manager ruled out (`pnpm, not
+  npm`), a command or flag ruled out (`git reset --hard`, `sudo`, `--no-verify`). Read-only tools
+  are never checked. Fuzzy (flag only): a path rule in words only ("the prod config") whose words
+  all appear in a changed path, or a rule-like note sharing two words with the call.
+- Gate (§2.3 + §7 #4): stop only for a clear conflict, only in coding conversations and work
+  channels, only with strictness *Stop on clear conflicts*; everything else is a flag plus a short
+  system note so she mentions it. It only turns `auto` into an approval and adds a section to an
+  `ask` card; `never` stays refused before the check runs. Group chats only flag (no approvals
+  mid-round). Other apps (`externalApp`) get the same notes filter as M1 (no private, imported or
+  adult-channel notes) and, being everyday chats, flags only. Household members meet only their
+  own notes (their own space).
+- The card: "This goes against something you decided" with the note, its date, the owner's words
+  when the note has them, the `[why …; sure …]` line, other clear conflicts of the same call under
+  *Also*, and *Do it anyway* / *Don't* / *Update the note* (`ApprovalBroker.decide(id, approved,
+  how)`). Telegram/Discord work chats get one extra line on their Allow/Deny message.
+- **Deviations:** (1) no `findings` table yet: each check is a Finding-shaped object
+  (`Contradiction`: source, severity, quote, rule, title, advice, status, answer) on the reply's
+  `meta.contradictions` and the tool message's `meta.contradiction`, for M3 to copy into
+  `run_steps`/`findings`. (2) The claim check of replies against stored facts ("a reply that states
+  something contradicting a stored fact gets a flag") is not built; only planned tool calls are
+  checked. (3) Every current decision is a candidate, not only the ranked ones (a few hundred at
+  most; parsing is cached), because "tests before every push" shares no word with `git push
+  origin x`. (4) The optional judge only drops fuzzy flags (a clear NO) and needs the claim-judge
+  model; it never stops. (5) Team helpers skip the tests-first rule (their runs don't carry the
+  turn's receipts). (6) Found live: the note writer retired a decision after a one-time *Do it
+  anyway*; overridden decisions are now never superseded by that path, and its prompt says so.
+- Measured: `scripts/eval-contradict.ts`, stops precision/recall 1.00/1.00 on a 35-call
+  development set and a 12-call held-out set (11/12 exact; the miss is a day-of-week rule), < 20 ms
+  per call with 10,000 notes (`test/phase77.test.ts`). See `docs/RESULTS.md`.
+
 ### M3 · Phase 78 · 2.11.0: run snapshots
 
 - **Ships:** every reply gets "Show the steps": each step's model, what memory went in and why, the

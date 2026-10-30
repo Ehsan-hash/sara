@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { backupName, BACKUPS_DIR, createBackup, DEFAULT_BACKUP, listBackups } from '../backup.ts';
 import { HISTORY_BUDGET_CHARS } from '../chat.ts';
 import { checklist } from '../checklist.ts';
+import { CONTRADICT_MODES, type ContradictMode, contradictSettings } from '../contradict.ts';
 import { runDoctor } from '../doctor.ts';
 import { healthReport } from '../health.ts';
 import { as400, HttpError, readJson, SECURITY_HEADERS, send } from '../http.ts';
@@ -218,6 +219,8 @@ export function createAdminRoutes(ctx: RouteCtx): RouteHandler {
           })),
           sandbox: { mode: app.sandbox.mode, detail: app.sandbox.detail, ...(app.sandbox.mode === 'none' ? { note: noSandboxNote() } : {}) },
           shellNetwork: s.shellNetwork ?? true,
+          // Phase 77: check her plans against what you decided (switch + strictness).
+          contradict: contradictSettings(s),
           // Phase 49: the browser she tests web apps with.
           browser: app.browsers ? (({ found, name, how }) => ({ found, name: name ?? null, how }))(new URL(req.url ?? '/', 'http://x').searchParams.get('recheck') ? app.browsers.refresh() : app.browsers.status()) : { found: false, name: null, how: 'Not available on this server.' },
         });
@@ -236,6 +239,12 @@ export function createAdminRoutes(ctx: RouteCtx): RouteHandler {
           patch.toolPermissions = perms;
         }
         if (body.shellNetwork !== undefined) patch.shellNetwork = Boolean(body.shellNetwork);
+        if (body.contradict !== undefined) {
+          if (!body.contradict || typeof body.contradict !== 'object') throw new HttpError(400, 'contradict must be an object');
+          const c = body.contradict as { on?: unknown; mode?: unknown };
+          const cur = contradictSettings(app.settings.get());
+          patch.contradict = { on: c.on === undefined ? cur.on : Boolean(c.on), mode: CONTRADICT_MODES.includes(c.mode as ContradictMode) ? (c.mode as ContradictMode) : cur.mode };
+        }
         app.settings.update(patch);
         return send(res, 200, { ok: true });
       }

@@ -372,7 +372,8 @@ export class TelegramBridge {
       } else if (ev.type === 'notice') sends.push(this.send(chatId, `ℹ️ ${isOwner && ev.key ? this.#tr(ev.key, ev.params) : ev.text}`));
       else if (ev.type === 'approval' && isOwner) {
         sends.push(
-          this.send(chatId, this.#tr('She wants to: {what}', { what: ev.summary }), {
+          this.send(chatId, `${this.#tr('She wants to: {what}', { what: ev.summary })}${ev.contradiction ? `
+⚠️ ${this.#tr('This goes against something you decided: “{note}”', { note: ev.contradiction.note })}` : ''}`, {
             reply_markup: { inline_keyboard: [[{ text: this.#tr('Allow'), callback_data: `ap:${ev.approvalId}:1` }, { text: this.#tr('Deny'), callback_data: `ap:${ev.approvalId}:0` }]] },
           }),
         );

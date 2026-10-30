@@ -404,3 +404,25 @@ dialog:not(.settings-dialog) .settings-body > :is(.error, p[role="status"]):empt
   .companion-menu .cm-item { min-height: 44px; }
   .dlg-more { min-height: 32px; }
 }
+
+/* Phase 77: her plans checked against what you decided (the approval card's section, flags). */
+.approval-contradict { border-color: color-mix(in srgb, var(--warn) 60%, var(--hairline-strong)); }
+.contradict { display: grid; gap: 4px; padding: 8px 10px; border-radius: 8px; background: var(--warn-soft); border: 1px solid color-mix(in srgb, var(--warn) 40%, transparent); }
+.contradict p { margin: 0; }
+.contradict-head { display: flex; align-items: center; gap: 8px; color: var(--warn); }
+.contradict-icon { display: inline-grid; place-items: center; flex: none; color: var(--warn); }
+.contradict-icon svg.ic { width: 18px; height: 18px; }
+.contradict-note { margin: 0; padding-left: 10px; border-left: 3px solid var(--warn); font-style: italic; overflow-wrap: anywhere; }
+.contradict-meta, .contradict-why, .contradict-also { overflow-wrap: anywhere; }
+.contradict-also { margin: 0; color: var(--warn); }
+.contradict-flag { align-self: flex-start; display: flex; gap: 8px; align-items: flex-start; max-width: min(720px, 85%); padding: 8px 10px; border-radius: 10px; background: var(--warn-soft); border: 1px dashed color-mix(in srgb, var(--warn) 55%, transparent); font-size: 13px; }
+.contradict-flag.contradict-stopped { border-style: solid; }
+#messages > .contradict-flag { margin-left: 60px; max-width: min(640px, calc(100% - 60px)); }
+.contradict-flag-body { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: baseline; min-width: 0; }
+.contradict-flag-head { font-weight: 600; }
+.contradict-flag-note { font-style: italic; overflow-wrap: anywhere; }
+.mem.highlight { outline: 2px solid var(--warn); outline-offset: 2px; }
+@media (max-width: 720px) {
+  #messages > .contradict-flag { margin-left: 48px; max-width: calc(100% - 48px); }
+  .approval-contradict .row button { flex: 1 1 auto; }
+}

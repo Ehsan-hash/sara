@@ -82,7 +82,7 @@ version's details are in the [changelog](../CHANGELOG.md).
 | 74 | Big documents: 500–1,000-page PDFs and books in her library, every scanned page read, answers with page numbers | ✅ 2.3 |
 | 75 | The new look: her work and results on screen, a presence panel, Today as tiles, dark by default; the same on phones; Windows and Mac apps with native glass, a quick-ask window and richer tray menus | ✅ 2.5–2.8 |
 | 76 | Ranked memory: each note she uses says why it came to mind and how sure that is; old notes fade unless used or pinned | ✅ 2.9 |
-| 77 | Contradiction check: before she acts, a planned step that goes against something you decided stops and asks | 2.10 |
+| 77 | Contradiction check: before she acts, a planned step that goes against something you decided stops and asks | ✅ 2.10 |
 | 78 | Run snapshots: every step of her work recorded (prompt, tools, files, memory, cost) | 2.11 |
 | 79 | Hard cost budgets per task, with a graceful slow-down instead of a surprise bill | 2.12 |
 | 80 | Sandbox gate: her code runs in a throwaway copy before it touches your workspace | 2.13 |

@@ -79,6 +79,7 @@ import { frameNote, noFrameNote } from './video.ts';
 import { metered } from './usage.ts';
 import { cutOtherSpeakers, GROUP_TOOLS, isGroupChannel, otherLine, ownerLine, stripLeadTag } from './group.ts';
 import { cardFor, type Card } from './cards.ts';
+import { cardOf, checkPlan, contradictionNote, contradictSettings, declinedOutput, gateAct, judgePrompt, judgeSaysNo, type Contradiction, type ContradictionCard } from './contradict.ts';
 
 export interface AppContext {
   store: Store;
@@ -226,7 +227,10 @@ export type ChatEvent =
   | { type: 'tool_progress'; name: string; chars: number; path?: string }
   /** Phase 63: a tool call the model is still writing (throttled; see src/tool-stream.ts). Shown only, never run. */
   | ToolBuilding
-  | { type: 'approval'; approvalId: string; id: string; name: string; summary: string; args: Record<string, unknown> }
+  /** Phase 77: `contradiction` = the card's \"This goes against something you decided\" section (a stop). */
+  | { type: 'approval'; approvalId: string; id: string; name: string; summary: string; args: Record<string, unknown>; contradiction?: ContradictionCard }
+  /** Phase 77: a planned call may go against a decision; not stopped, she mentions it (also every stop's outcome). */
+  | { type: 'contradiction'; id: string; item: Contradiction }
   /** An approved tool has started running. */
   | { type: 'tool_running'; id: string; name: string; summary: string }
   /** Phase 75: `card` is a small structured result (src/cards.ts) the app draws as a result card. */
@@ -532,6 +536,44 @@ export async function judgeUnsure(app: AppContext, reply: string, receipts: Rece
   } catch {
     return [];
   }
+}
+
+/**
+ * Phase 77: the optional judge for FUZZY plan flags (the owner's claim-judge model, Settings →
+ * Models → \"Double-check her claims\"). It can only drop a fuzzy flag (a clear NO), never add one
+ * and never turn anything into a stop; no judge, a timeout or an error keeps the flag (fails open
+ * to \"flag\"). A private conversation's judge must be a model on this computer.
+ */
+export async function judgeFuzzy(app: AppContext, found: Contradiction[], priv: boolean): Promise<Contradiction[]> {
+  const cfg = app.settings.get().claimJudge;
+  const fuzzy = found.filter((c) => !c.clear).slice(0, 2);
+  if (!cfg || !fuzzy.length) return found;
+  let provider: Provider;
+  let model: string;
+  try {
+    ({ provider, model } = resolveProvider(app, cfg.providerId, cfg.model, { purpose: 'background' }));
+  } catch {
+    return found;
+  }
+  if (priv && (!provider.config.local || isCloudModelName(model))) return found;
+  if (privateLocalOn() && !onThisComputer(provider.config, model)) return found;
+  const drop = new Set<Contradiction>();
+  for (const c of fuzzy) {
+    try {
+      const q = judgePrompt(c);
+      let out = '';
+      const messages: ChatMessage[] = [
+        { role: 'system', content: q.system },
+        { role: 'user', content: q.user },
+      ];
+      for await (const ev of provider.stream({ model, messages, temperature: 0, maxTokens: 6, reasoning: 'none', signal: AbortSignal.timeout(8_000) })) if (ev.type === 'text') out += ev.text;
+      c.judged = true;
+      if (judgeSaysNo(out)) drop.add(c);
+    } catch {
+      // fails open: the flag stays
+    }
+  }
+  return found.filter((c) => !drop.has(c));
 }
 
 /** Tools that send data off the server; hidden in private conversations. */
@@ -964,6 +1006,15 @@ async function* runTurnInner(app: AppContext, conversationId: string, userText: 
   let correction: string | undefined;
   let corrected = false;
   const maxSteps = conv.mode === 'coding' ? MAX_STEPS_CODING : MAX_STEPS;
+  // Phase 77 (harness M2): planned tool calls are checked against the owner's decisions. Clear
+  // conflicts stop with an approval card in coding and work conversations (strictness \"stop\");
+  // everything else is a flag she mentions. It can only ADD a stop ('auto' → ask); 'never' stays.
+  const cset = contradictSettings(s);
+  const checkPlans = cset.on && Boolean(app.memory) && memCfg.enabled && !conv.partner;
+  const workConv = conv.mode === 'coding' || isWorkChannel(conv.channel);
+  /** Her short system notes about flags, for the next model call. */
+  const contradictNotes: string[] = [];
+  const ownerWord = s.ownerName?.trim() || 'the owner';
   // Phase 12: a date that's today is in her prompt now, so she won't text about it separately later.
   if (!conv.partner && app.memory && memCfg.enabled) {
     const today = localDate(now.toISOString(), s.timeZone);
@@ -1059,6 +1110,8 @@ async function* runTurnInner(app: AppContext, conversationId: string, userText: 
       messages.push({ role: 'system', content: correction });
       correction = undefined;
     }
+    // Phase 77: what the plan check found (flags she should mention).
+    for (const n of contradictNotes.splice(0)) messages.push({ role: 'system', content: n });
     if (opts.resume && step === 0 && hist.messages.at(-1)?.role === 'assistant') {
       messages.push({ role: 'user', content: '[Note from the app: your last reply was cut off (stopped, an error, or a restart). Continue from exactly where it stopped. Do not repeat what you already wrote and do not apologize; just carry on.]' });
     }
@@ -1188,6 +1241,8 @@ async function* runTurnInner(app: AppContext, conversationId: string, userText: 
       continue;
     }
 
+    // Phase 77: what the plan check found for this step's calls (kept on this step's reply as `contradictions`).
+    const turnContradictions = new Map<string, Contradiction[]>();
     for (const call of calls) {
       const tool = app.tools.get(call.name);
       const summary = app.redactor.redact(tool?.summarize(call.arguments) ?? call.name);
@@ -1222,15 +1277,59 @@ async function* runTurnInner(app: AppContext, conversationId: string, userText: 
         status = 'denied';
         output = `The owner has disabled the ${call.name} tool.`;
       } else {
-        if (permission === 'ask') {
+        // Phase 77: check the plan against the owner's decisions (code rules; fuzzy ones only flag).
+        let stopFor: Contradiction | undefined;
+        if (checkPlans) {
+          let found: Contradiction[] = [];
+          try {
+            found = checkPlan(app.memory!, {
+              tool: call.name,
+              args: call.arguments,
+              callId: call.id,
+              summary,
+              conversationId: conv.id,
+              workspaceDir: wsDir,
+              prior: [...priorReceipts, ...receipts],
+              ...(appSafe ? { allow: appSafe } : {}),
+              now,
+            });
+            found = await judgeFuzzy(app, found, Boolean(conv.private));
+          } catch (err) {
+            console.warn(`plan check: ${(err as Error).message}`);
+          }
+          const act = gateAct(found, { settings: cset, work: workConv, group: Boolean(opts.group) });
+          for (const c of found) c.act = act === 'stop' && c.clear ? 'stop' : 'flag';
+          stopFor = found.find((c) => c.act === 'stop');
+          for (const c of found.filter((x) => x.act === 'flag')) {
+            c.status = 'flagged';
+            contradictNotes.push(contradictionNote(c, ownerWord));
+            yield { type: 'contradiction', id: call.id, item: c };
+          }
+          if (found.length) turnContradictions.set(call.id, found);
+          if (found.length) store.updateMessageMeta(saved.id, { contradictions: [...turnContradictions.values()].flat() });
+        }
+        if (permission === 'ask' || stopFor) {
           const { id, decision } = app.approvals.request(conv.id, signal);
-          yield { type: 'approval', approvalId: id, id: call.id, name: call.name, summary, args: shownArgs };
+          const stops = (turnContradictions.get(call.id) ?? []).filter((c) => c.act === 'stop');
+          yield { type: 'approval', approvalId: id, id: call.id, name: call.name, summary, args: shownArgs, ...(stopFor ? { contradiction: cardOf(stopFor, stops.filter((c) => c !== stopFor)) } : {}) };
           allowed = await decision;
+          const how = app.approvals.takeHow(id);
+          if (stopFor) {
+            // The owner's answer is kept on the finding (every note on the card): an explicit
+            // override, a no, or \"update the note\". An override counts as a use of the note.
+            for (const c of stops) {
+              c.answer = allowed ? 'override' : how === 'update' ? 'update' : 'deny';
+              c.status = allowed ? 'overridden' : how === 'update' ? 'update' : 'declined';
+            }
+            if (allowed && app.memory) app.memory.markUsed(stops.map((c) => c.memoryId), localDate(now.toISOString(), s.timeZone));
+            store.updateMessageMeta(saved.id, { contradictions: [...turnContradictions.values()].flat() });
+            for (const c of stops) yield { type: 'contradiction', id: call.id, item: c };
+          }
           if (allowed) yield { type: 'tool_running', id: call.id, name: call.name, summary };
         }
         if (!allowed) {
           status = 'denied';
-          output = signal.aborted ? 'Cancelled.' : 'The owner declined this action.';
+          output = signal.aborted ? 'Cancelled.' : stopFor ? declinedOutput(stopFor, ownerWord) : 'The owner declined this action.';
         } else {
           if (SNAPSHOT_TOOLS.has(call.name) && conv.mode !== 'coding') {
             try {
@@ -1271,7 +1370,8 @@ async function* runTurnInner(app: AppContext, conversationId: string, userText: 
       const stored = clip(output, TOOL_RESULT_LIMIT);
       // Phase 75: a result card from the (scrubbed) result and arguments, kept with the message.
       const card = cardFor({ name: call.name, args: shownArgs, status, output });
-      store.addMessage(conv.id, 'tool', stored, { toolCallId: call.id, name: call.name, args: shownArgs, summary, status, ms, ...(snapshotId ? { snapshotId } : {}), ...(shown.length ? { images: shown } : {}), ...(card ? { card } : {}) });
+      const flagged = turnContradictions.get(call.id);
+      store.addMessage(conv.id, 'tool', stored, { toolCallId: call.id, name: call.name, args: shownArgs, summary, status, ms, ...(snapshotId ? { snapshotId } : {}), ...(shown.length ? { images: shown } : {}), ...(card ? { card } : {}), ...(flagged?.length ? { contradiction: flagged[0] } : {}) });
       receipts.push({ name: call.name, status, args: call.arguments, output });
       yield { type: 'tool_result', id: call.id, name: call.name, status, output: clip(output, UI_OUTPUT_LIMIT), ms, ...(snapshotId ? { snapshotId } : {}), ...(card ? { card } : {}) };
       for (const img of pendingImages) yield { type: 'image', id: img };
