@@ -133,7 +133,14 @@ export class Updater {
   }
 
   /** Windows/macOS: asks GitHub for the newest release and compares it with this version. */
-  async check(now = new Date()): Promise<UpdateStatus> {
+  check(now = new Date()): Promise<UpdateStatus> {
+    // 2.18: every open page checks when it opens; several at once share one request to GitHub.
+    if (!this.#inflight) this.#inflight = this.#check(now).finally(() => (this.#inflight = undefined));
+    return this.#inflight;
+  }
+  #inflight: Promise<UpdateStatus> | undefined;
+
+  async #check(now: Date): Promise<UpdateStatus> {
     const version = this.#o.version ?? '0.0.0';
     const at = now.toISOString();
     const f = this.#o.fetch ?? netFetch;

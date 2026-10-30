@@ -182,6 +182,8 @@
           <button id="open-help" type="button" class="side-icon" title="Help: tours, the guide, and asking her" aria-label="Help"><i class="ic" data-icon="help"></i></button>
           <button id="open-settings" type="button" class="side-icon" title="Settings (Ctrl+,)" aria-label="Settings"><i class="ic" data-icon="settings"></i></button>
         </div>
+        <!-- 2.18: a new version is out (owner only; web/update-check.js). Opens Settings → Updates. -->
+        <button id="side-update" type="button" class="side-update" data-owner-only hidden title="A new version of Sara is ready: open Settings → Updates"><i class="ic" data-icon="update"></i><span id="side-update-text">Update available</span></button>
       </nav>
     </aside>
     <button id="sidebar-scrim" type="button" tabindex="-1" aria-label="Close the list"></button>
@@ -368,6 +370,7 @@
         <section id="hp-mem" class="hp-sec" aria-labelledby="hp-mem-h">
           <h3 class="hp-h"><button id="hp-mem-h" class="hp-fold" type="button" aria-expanded="false" aria-controls="hp-mem-list"><span>She remembered</span> <span id="hp-mem-count" class="hp-fold-count"></span><span class="hp-fold-chev" aria-hidden="true"></span></button></h3>
           <ul id="hp-mem-list" class="hp-list" hidden></ul>
+          <div id="hp-recall" class="hp-recall" hidden><h4 class="hp-sub">Remembered on her own</h4><div id="hp-recall-list" class="hp-recall-list"></div></div>
         </section>
         <section id="hp-conv" class="hp-sec" aria-labelledby="hp-conv-h">
           <h3 id="hp-conv-h" class="hp-h">This conversation <button id="hp-conv-edit" class="hp-link" type="button">Change</button></h3>
@@ -539,6 +542,24 @@
   </dialog>
 
   <!-- Phase 16: asked once on servers that had adult content before the switch existed -->
+  <!-- 2.18: "Sara X is available" when the app opens (and every 12 hours while open; owner only). -->
+  <dialog id="update-pop" class="update-pop" aria-labelledby="upp-title">
+    <div class="settings-body">
+      <h2 id="upp-title" class="update-pop-title"><i class="ic" data-icon="update"></i><span id="upp-title-text">A new version is available</span></h2>
+      <p class="muted small">What's new:</p>
+      <ul id="upp-changes" class="small update-pop-changes"></ul>
+      <label class="row"><input id="upp-dismiss" type="checkbox"> <span>Don't remind me about this version <button type="button" class="tip" data-tip="Saved on this device only. You won't see this window again for this version, but the Update available link stays in the sidebar, and a newer version shows here again.">?</button></span></label>
+      <p class="actions-left"><button id="upp-go" type="button">Update now</button><a id="upp-download" class="button" target="_blank" rel="noopener noreferrer" href="https://github.com/farena-ai/sara/releases/latest" hidden>Update now</a> <button id="upp-later" type="button" class="ghost">Later</button></p>
+    </div>
+  </dialog>
+  <!-- 2.18: "Sara was updated to X" after the reload, and "Sara was updated. Reload" on pages that
+       were busy when the server changed version (web/update-check.js). -->
+  <div id="update-note" class="update-note" role="status" aria-live="polite" hidden>
+    <i class="ic" data-icon="update"></i><span id="update-note-text"></span>
+    <button id="update-note-reload" type="button" hidden>Reload now</button>
+    <button id="update-note-close" type="button" class="ghost icon" aria-label="Close"><i class="ic" data-icon="close"></i></button>
+  </div>
+
   <dialog id="adult-ask" data-required="1">
     <div class="settings-body">
       <h2>Adult mode is now a setting</h2>
@@ -1128,6 +1149,7 @@
           <option value="promise">Promises</option>
           <option value="milestone">Your story</option>
           <option value="self">About Sara</option>
+          <option value="lesson">Lessons from her runs</option>
           <option value="pinned">Pinned (never fade)</option>
         </select>
         <input id="mem-q" placeholder="Search memories">
@@ -1148,6 +1170,7 @@
       <label>Old memories <button type="button" class="tip" data-tip="Like a person: with fading, things from long ago only come back when something brings them up (you mention it, or she looks it up). Promises and dates never fade. 'Never fade' keeps everything equally fresh.">?</button> <select id="mem-fade"><option value="never">Never fade</option><option value="slow">Fade slowly (after a year)</option><option value="normal">Fade like a person (after about 4 months)</option><option value="custom">Custom (you pick how fast)</option></select></label>
       <label id="mem-halflife-row" hidden><span>Half-life: <span id="mem-halflife-n"></span> <button type="button" class="tip" data-tip="How many days until an old note counts half as much. Short = she lives in the present; long = old things stay close. Notes that match what you say still come up, and pinned notes never fade.">?</button></span><input id="mem-halflife" type="range" min="7" max="1095" step="1" value="120"></label>
       <p id="mem-decay" class="muted small"><span>How fading works:</span> <button type="button" class="tip" data-tip="The rule she uses right now, in plain words. Pin a note (on the Memory list or in She remembered) to keep it from fading.">?</button> <span id="mem-decay-text"></span></p>
+      <label>Recall on her own <button type="button" class="tip" data-tip="When something matches her past runs (the same error, a command that failed, a file you have a note about), she gets a short note with where it came from, shown as Remembered on her own. Coding only: just coding chats.">?</button> <select id="mem-recall"><option value="off">Off</option><option value="coding">Coding conversations only</option><option value="everywhere">Everywhere</option></select></label>
       <label id="mem-sharing-row" hidden>Between companions <button type="button" class="tip" data-tip="Shared: what one companion learns about you (your job, your sister's name) the others know too. Their conversations, notes and what they say about themselves stay their own either way.">?</button> <select id="mem-sharing"><option value="own">Each knows only what you told her</option><option value="shared">Share what they know about you</option></select></label>
       <p id="mem-error" class="error" role="alert"></p>
     </form>

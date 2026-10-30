@@ -350,6 +350,11 @@ case "${1:-help}" in
     req=""
     # Only a plain file sara wrote: never follow a symlink she might have planted.
     if [[ -f "$rf" && ! -L "$rf" ]]; then req="$(head -c 16 -- "$rf" 2>/dev/null | tr -cd 'a-z' || true)"; fi
+    # Say it started before the request file goes, so Settings never sees a gap with the old status.
+    case "$req" in
+      check) write_status checking "Checking for updates…" ;;
+      update) write_status updating "Starting the update…" ;;
+    esac
     rm -f -- "$rf"
     case "$req" in
       check) check_updates ;;

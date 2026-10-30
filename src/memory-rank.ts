@@ -32,9 +32,9 @@ export const DEFAULT_DECAY: DecayPolicy = { halfLifeDays: 0, reuseWeight: 0.1, m
 export type PolicyWithId = DecayPolicy & { id: string; preset: FadePreset };
 
 /** Standing weight of a note that didn't match the message, by kind (one table; M2 reads it too). */
-export const KIND_PRIOR: Record<MemoryKind, number> = { promise: 0.5, decision: 0.35, fact: 0.25, self: 0.2, summary: 0.2, milestone: 0.2, reflection: 0.15, date: 0.2 };
+export const KIND_PRIOR: Record<MemoryKind, number> = { promise: 0.5, decision: 0.35, fact: 0.25, self: 0.2, summary: 0.2, milestone: 0.2, reflection: 0.15, date: 0.2, lesson: 0.1 };
 /** Plain words for a standing note's kind in the "why". */
-const KIND_WORD: Record<MemoryKind, string> = { promise: 'open promise', decision: 'decision', fact: 'fact', self: 'about yourself', summary: 'other conversation', milestone: 'your story', reflection: 'reflection', date: 'date' };
+const KIND_WORD: Record<MemoryKind, string> = { promise: 'open promise', decision: 'decision', fact: 'fact', self: 'about yourself', summary: 'other conversation', milestone: 'your story', reflection: 'reflection', date: 'date', lesson: 'lesson' };
 
 /** The meaning score floor (same as MIN_SCORE in embeddings.ts; repeated so this module stays import-free). */
 const MEANING_FLOOR = 0.5;
@@ -272,7 +272,8 @@ export function rankMemories(mem: RankSource, ctx: RankContext): RankedPick[] {
   const policy = ctx.policy ?? DEFAULT_DECAY;
   const exclude = new Set(ctx.override?.exclude ?? []);
   const inHistory = (m: Memory) => (m.conversationId === ctx.conversationId && (m.sourceMessageId ?? 0) >= ctx.oldestHistoryId) || m.supersededBy !== null || m.kind === 'date' || (m.kind === 'promise' && m.resolvedAt !== null);
-  const ok = (m: Memory) => !exclude.has(m.id) && !inHistory(m) && (!ctx.allow || ctx.allow(m)) && (!ctx.kinds || ctx.kinds.includes(m.kind));
+  // Phase 85: lessons come back through the recall triggers (src/triggers.ts), only when asked for by kind.
+  const ok = (m: Memory) => !exclude.has(m.id) && !inHistory(m) && (!ctx.allow || ctx.allow(m)) && (ctx.kinds ? ctx.kinds.includes(m.kind) : m.kind !== 'lesson');
   const byId = new Map<number, Candidate>();
   const add = (m: Memory, patch: Partial<Candidate>) => {
     if (!ok(m)) return;

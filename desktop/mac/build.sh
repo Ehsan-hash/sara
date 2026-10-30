@@ -104,9 +104,55 @@ if [ -n "$ID" ] && [ -n "${NOTARY_PROFILE:-}" ] && [ "${SARA_NOTARIZE:-1}" = 1 ]
   xcrun stapler staple build/Sara.app
   rm -f build/Sara-app.zip
 fi
-# Disk image with an Applications shortcut (drag Sara in).
-mkdir -p build/dmg && cp -R build/Sara.app build/dmg/ && ln -s /Applications build/dmg/Applications
-hdiutil create -quiet -volname Sara -srcfolder build/dmg -ov -format UDZO build/Sara.dmg
+# 2.18: the disk image opens as an install window: Sara on the left, an arrow, the Applications
+# shortcut on the right, "Drag Sara to Applications" in the background (dmg/background*.png, made by
+# dmg/make-background.py), 600 x 400, no toolbar or sidebar. Made read-write, laid out by Finder
+# (dmg/layout.applescript), then compressed. Finder needs the logged-in Mac session (over SSH too:
+# Finder's Automation permission) and no other volume called Sara mounted (an older Sara disk image
+# still open: eject it). There is no saved-layout fallback: a Finder .DS_Store holds aliases with the
+# building Mac's user folder, which must never ship. Without Finder the window is plain; a release build
+# stops instead (SARA_DMG_PLAIN=1 allows the plain window).
+# The read-write image lives outside the home folder: Finder's layout keeps an alias to the image
+# file, and its path must not name this Mac's user.
+RW=/tmp/sara-dmg-$$/Sara-rw.dmg
+rm -rf build/dmg && mkdir -p build/dmg/.background "$(dirname "$RW")"
+cp -R build/Sara.app build/dmg/ && ln -s /Applications build/dmg/Applications
+tiffutil -cathidpicheck dmg/background.png dmg/background@2x.png -out build/dmg/.background/background.tiff >/dev/null
+hdiutil create -quiet -volname Sara -srcfolder build/dmg -ov -fs HFS+ -format UDRW -size "$(( $(du -sm build/dmg | cut -f1) + 40 ))m" "$RW"
+OTHER_SARA=0
+for v in /Volumes/Sara*; do
+  if [ -d "$v" ] && [ "$(diskutil info "$v" 2>/dev/null | sed -n 's/^ *Volume Name: *//p')" = Sara ]; then OTHER_SARA=1; fi
+done
+MNT=$(hdiutil attach -readwrite -noverify -noautoopen "$RW" | grep -o '/Volumes/.*$' | head -1)
+[ -d "$MNT" ] || { echo "The disk image didn't mount." >&2; exit 1; }
+LAID_OUT=0
+if [ "${SARA_DMG_TEMPLATE:-0}" != 1 ] && [ $OTHER_SARA = 0 ]; then
+  if osascript dmg/layout.applescript Sara >/dev/null; then
+    for _ in 1 2 3 4 5 6 7 8 9 10; do
+      if grep -aq icvp "$MNT/.DS_Store" 2>/dev/null; then LAID_OUT=1; break; fi
+      sleep 1
+    done
+  fi
+fi
+if [ $LAID_OUT = 1 ]; then
+  echo "Disk image window laid out by Finder."
+  # The layout must not name this Mac's user folder (Finder can store an alias path there).
+  if LC_ALL=C grep -aq "$HOME" "$MNT/.DS_Store" || LC_ALL=C grep -aq ":Users:$(id -un):" "$MNT/.DS_Store"; then
+    echo "The disk image layout names this Mac's user folder: not shipping it (a plain window)." >&2
+    rm -f "$MNT/.DS_Store"; LAID_OUT=0
+  fi
+fi
+if [ $LAID_OUT = 0 ] && [ "${SARA_DMG_PLAIN:-0}" != 1 ]; then
+  if [ $OTHER_SARA = 1 ]; then echo "Another disk image called Sara is open: eject it and build again (or SARA_DMG_PLAIN=1)." >&2
+  else echo "Finder couldn't lay out the disk image window (or SARA_DMG_PLAIN=1 for a plain one)." >&2; fi
+  hdiutil detach -quiet "$MNT" || hdiutil detach -force -quiet "$MNT"
+  exit 1
+fi
+rm -rf "$MNT/.fseventsd" "$MNT/.Trashes"
+sync
+hdiutil detach -quiet "$MNT" || { sleep 3; hdiutil detach -force -quiet "$MNT"; }
+hdiutil convert -quiet "$RW" -ov -format UDZO -imagekey zlib-level=9 -o build/Sara.dmg
+rm -rf "$(dirname "$RW")"
 if [ -n "$ID" ]; then
   codesign --timestamp --sign "$ID" build/Sara.dmg
   if [ -n "${NOTARY_PROFILE:-}" ] && [ "${SARA_NOTARIZE:-1}" = 1 ]; then

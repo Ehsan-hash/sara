@@ -66,6 +66,9 @@ html.ios-short-view { --safe-b: 0px; }
   --danger-fill: #b3383d;
   --on-danger: #ffffff;
   --info: #8fb4ff;
+  /* 2.18: "Update available" in the sidebar footer and the update window: amber at Night. */
+  --update-accent: #f5b452;
+  --update-soft: rgb(245 180 82 / .14);
   --spk-0: #f08aa5;
   --spk-1: #7fa8ff;
   --spk-2: #4fd1a5;
@@ -127,6 +130,9 @@ html.ios-short-view { --safe-b: 0px; }
   --shadow-up: 0 -12px 40px rgb(60 30 70 / .16);
   --danger-fill: #b42a3a;
   --info: #2f5fc4;
+  /* 2.18: "Update available": blue by Day (5.9:1 on the light surfaces). */
+  --update-accent: #2456c0;
+  --update-soft: rgb(36 86 192 / .10);
   --spk-0: #b8436a;
   --spk-1: #2f5fc4;
   --spk-2: #17805d;

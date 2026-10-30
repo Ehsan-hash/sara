@@ -29,7 +29,7 @@ import { createSshTools } from './tools/ssh.ts';
 import { Redactor, vaultSecretValues } from './redact.ts';
 import { SnapshotStore } from './snapshots.ts';
 import { MemoryStore } from './memory.ts';
-import { MemoryWorker } from './memory-worker.ts';
+import { localDate, memorySettings, MemoryWorker } from './memory-worker.ts';
 import { HistoryImporter } from './history-import/index.ts';
 import { embedTarget, MemoryVectors } from './embeddings.ts';
 import { createTeamTools, TeamManager } from './team.ts';
@@ -88,7 +88,8 @@ import { ModelPuller } from './local-models.ts';
 import { ModelCatalog } from './model-catalog.ts';
 import { createProvider } from './providers/registry.ts';
 import { HealthHistory } from './health-history.ts';
-import { createRecallTool } from './recall.ts';
+import { createRecallTool, sharedWithApps } from './recall.ts';
+import { backfill, RecallIndex, recallMode } from './triggers.ts';
 import { LibraryStore } from './library/store.ts';
 import { LibraryWorker } from './library/worker.ts';
 import { createLibraryTool } from './library/use.ts';
@@ -568,6 +569,30 @@ function buildCompanion(space: Space, id: string, dir: string): Companion {
   // household members have no coding tools). Fix worktrees left by a restart were swept at start-up.
   app.findings = new FindingStore(store.db, app.now);
   app.findings.onChange = (x) => app.events?.publish({ type: 'findings', conversationId: x.conversationId, workspace: x.workspace });
+  // Phase 85 (harness M10): run signatures, lessons and trigger weights (every space), and the
+  // one-time bounded backfill over runs recorded before (a chunk every few seconds, off the turn).
+  app.recall = new RecallIndex(store.db, app.now);
+  {
+    const recallIdx = app.recall;
+    const step = () => {
+      try {
+        const mem = memorySettings(app);
+        const r = backfill(
+          recallIdx,
+          app.runs!,
+          (id) => {
+            const c = app.store.getConversation(id);
+            return c ? { workspace: c.workspace, private: Boolean(c.private), apps: sharedWithApps(c), partner: Boolean(c.partner) } : undefined;
+          },
+          { ...(app.memory && mem.enabled ? { memory: app.memory } : {}), today: () => localDate(app.now().toISOString(), app.settings.get().timeZone), lessons: mem.enabled && recallMode(mem) !== 'off' },
+        );
+        if (!r.done) setTimeout(step, 3000).unref?.();
+      } catch (err) {
+        console.warn(`recall backfill: ${(err as Error).message}`);
+      }
+    };
+    if (recallIdx.meta('backfill_done') !== '1') setTimeout(step, 20_000).unref?.();
+  }
   if (!isMember) {
     app.security = new SecurityPass(app, app.findings, new OsvClient(store.db));
     app.fixes = new FixBranches(app, join(dir, 'cache', 'fix-branches'));

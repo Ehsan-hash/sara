@@ -89,6 +89,7 @@ export const ICONS = {
   monitor: '<rect x="3" y="4.5" width="18" height="12" rx="2"/><path d="M8.5 20.5h7M12 16.5v4"/>',
   terminal: '<rect x="3" y="4.5" width="18" height="15" rx="2.5"/><path d="M7 9.5l3 2.5-3 2.5M12.5 15h4.5"/>',
   flask: '<path d="M9.5 3.5h5M10 3.5v6L4.8 18a1.7 1.7 0 0 0 1.5 2.5h11.4a1.7 1.7 0 0 0 1.5-2.5L14 9.5v-6"/><path d="M7.5 14.5h9"/>',
+  update: '<path d="M20 12a8 8 0 1 1-2.4-5.7"/><path d="M20 4.5v4h-4M12 16.5v-8M8.8 11.5L12 8.3l3.2 3.2"/>',
   package: '<path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/><path d="M4 7.5l8 4.5 8-4.5M12 12v9M8 5.2l8 4.6"/>',
   wrench: '<path d="M14.7 6.3a4 4 0 0 0 5 5L20 11a4.5 4.5 0 0 1-5.6 5.6L7.5 21.5a2.1 2.1 0 0 1-3-3l4.9-6.9A4.5 4.5 0 0 1 15 6z"/>',
   sliders: '<path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/>',

@@ -16,6 +16,7 @@ import { sandboxGateSettings } from '../sandbox-run.ts';
 import { BUDGET_PRESETS, CEILING_CHOICES, CONCURRENCY_CHOICES, DEFAULT_CONCURRENCY, DEFAULT_SCHEDULE, DEFAULT_TASKS, evalSchedule, EVAL_KINDS, HALF_LIFE_CHOICES, MAX_VARIANTS, MEMORY_PRESETS, SCHEDULE_BUDGETS, TASK_COUNTS, variantWords, WEIGHTS, type EvalView } from '../evals.ts';
 import { SANDBOX_GATE_MODES } from '../sandbox-run.ts';
 import { memorySettings } from '../memory-worker.ts';
+import { recallMode } from '../triggers.ts';
 import { turnBudgetSettings } from '../budget.ts';
 import { NEXT, type RouteCtx, type RouteHandler } from './context.ts';
 
@@ -57,7 +58,7 @@ export function createEvalRoutes(ctx: RouteCtx): RouteHandler {
         return send(res, 200, {
           evals: evals.store.list(30).map(brief),
           choices: { kinds: EVAL_KINDS, counts: TASK_COUNTS, count: DEFAULT_TASKS, maxVariants: MAX_VARIANTS, memory: MEMORY_PRESETS, halfLife: HALF_LIFE_CHOICES, sandbox: SANDBOX_GATE_MODES, budgets: BUDGET_PRESETS, concurrency: CONCURRENCY_CHOICES, defaultConcurrency: DEFAULT_CONCURRENCY, ceilings: CEILING_CHOICES, models: evals.models() },
-          now: { fade: mem.fade ?? 'never', halfLifeDays: mem.decay?.halfLifeDays ?? null, sandbox: sandboxGateSettings(s).mode, budget: turnBudgetSettings(s).coding },
+          now: { fade: mem.fade ?? 'never', halfLifeDays: mem.decay?.halfLifeDays ?? null, sandbox: sandboxGateSettings(s).mode, budget: turnBudgetSettings(s).coding, recall: recallMode(mem) },
           judgeModel: Boolean(s.routes?.review || s.routes?.coding),
           weights: WEIGHTS,
           schedule: evalSchedule(s),

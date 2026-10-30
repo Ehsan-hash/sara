@@ -217,6 +217,17 @@ profile in a keychain of their own, `~/Library/Keychains/sara-signing.keychain-d
 `build.sh` then unlocks it, signs with a timestamp, notarizes and staples, so the DMG opens on any
 Mac without warnings.
 
+The DMG opens as an install window (2.18): Sara on the left, an arrow, the Applications shortcut on
+the right and "Drag Sara to Applications" in the background, 600 × 400, no toolbar or sidebar. The
+background is `desktop/mac/dmg/background.png` and `background@2x.png` (made by
+`desktop/mac/dmg/make-background.py`); `build.sh` makes a read-write image, has Finder lay out the
+window with `desktop/mac/dmg/layout.applescript`, then compresses, signs and notarizes it. That needs
+the logged-in Mac session (over SSH, Finder's Automation permission) and **no other volume called
+Sara mounted** (eject an older Sara DMG first): Finder finds the volume by its name. Otherwise
+`build.sh` stops and says why (`SARA_DMG_PLAIN=1` builds a plain window instead). The read-write image
+is made under `/tmp` and the finished layout is checked so it never names the building Mac's user
+folder (Finder keeps an alias to the image file in `.DS_Store`); no saved layout is kept in the repo.
+
 ## Offering them for download
 
 Put the files in the server's data folder; Settings → Devices and sign-in then shows a

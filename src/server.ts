@@ -1001,6 +1001,8 @@ export function createSaraServer(opts: ServerOptions): Server {
         ...(authed ? { identity: identityOf(app.persona) } : {}),
         // Phase 67: the header badge while nothing may leave this computer.
         ...(authed && privateLocalOn() ? { privateLocal: true } : {}),
+        // 2.18: the version this server runs, so open pages notice an update and reload (web/update-check.js). Not in the demo.
+        ...(authed && !opts.demo ? { version: info.version } : {}),
         // Phase 53: the app language (the page loads its translations before showing anything).
         ...(authed ? { language: app.settings.get().language ?? 'auto', appLanguage: appLanguage(app.settings.get()) } : {}),
         // Phase 16: servers that had adult content before the switch existed ask once (web only).

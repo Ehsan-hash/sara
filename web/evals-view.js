@@ -54,6 +54,7 @@ const st = { data: null, variants: [], draft: null, open: 0, timer: 0 };
 const KIND = { coding: () => t('Coding conversations'), everyday: () => t('Everyday chats'), both: () => t('Coding and everyday') };
 const MEMORY = { never: () => t('Never fade'), slow: () => t('Fade slowly (after a year)'), normal: () => t('Fade like a person (after about 4 months)'), custom: () => t('Custom (you pick how fast)') };
 const SANDBOX = { risky: () => t('Only risky commands'), every: () => t('Every command'), off: () => t('Off') };
+const RECALL = { on: () => t('On'), off: () => t('Off') };
 const BUDGET = { tight: () => t('Tight (50k tokens, 10 steps)'), roomy: () => t('Roomy (500k tokens, 80 steps)') };
 const STATUS = { draft: () => t('Waiting for your OK'), running: () => t('Running'), judging: () => t('The judge is reading'), done: () => t('Finished'), stopped: () => t('Stopped'), ceiling: () => t('Stopped at the ceiling'), error: () => t('Something went wrong'), interrupted: () => t('Interrupted by a restart') };
 const FEEDBACK = { accepted: () => t('you said it worked'), corrected: () => t('you corrected it'), replaced: () => t('you used a re-run instead'), reported: () => t('you reported it'), none: () => '' };
@@ -70,6 +71,7 @@ function variantText(v, i) {
   if (v.model) bits.push(`${t('Model')}: ${models.find((m) => m.providerId === v.model.providerId && m.model === v.model.model)?.label ?? v.model.model}`);
   if (v.sandbox) bits.push(`${t('Sandbox tries')}: ${SANDBOX[v.sandbox]?.() ?? v.sandbox}`);
   if (v.budget) bits.push(`${t('Budget')}: ${BUDGET[v.budget]?.() ?? v.budget}`);
+  if (v.recall) bits.push(`${t('Recall on her own')}: ${RECALL[v.recall]?.() ?? v.recall}`);
   return `${t('Variant {n}', { n: i ?? Number(String(v.id).slice(1)) })}: ${bits.join(' · ')}`;
 }
 
@@ -126,8 +128,13 @@ function variantCard(v, i) {
   bud.s.addEventListener('change', () => {
     v.budget = bud.s.value || undefined;
   });
+  // Phase 85: recall on her own on or off for this variant (does it fix repeated errors faster?).
+  const rcl = select('', [['', t('Same as now')], ...Object.entries(RECALL).map(([k, f]) => [k, f()])], v.recall ?? '', t('Recall on her own'), t('Whether she gets notes from her past runs (an error fixed before, a command that failed here) during this variant. Compare On and Off to see if it saves steps.'));
+  rcl.s.addEventListener('change', () => {
+    v.recall = rcl.s.value || undefined;
+  });
   const grid = el('div', 'ev-variant-grid');
-  grid.append(mem.lab, hl.lab, mdl.lab, sbx.lab, bud.lab);
+  grid.append(mem.lab, hl.lab, mdl.lab, sbx.lab, bud.lab, rcl.lab);
   card.append(grid);
   return card;
 }
@@ -481,7 +488,7 @@ export function initEvals() {
     b.disabled = true;
     $('#ev-status').textContent = t('Picking your tasks…');
     try {
-      const variants = st.variants.map((v) => ({ ...(v.memory ? { memory: v.memory } : {}), ...(v.model ? { model: v.model } : {}), ...(v.sandbox ? { sandbox: v.sandbox } : {}), ...(v.budget ? { budget: v.budget } : {}) }));
+      const variants = st.variants.map((v) => ({ ...(v.memory ? { memory: v.memory } : {}), ...(v.model ? { model: v.model } : {}), ...(v.sandbox ? { sandbox: v.sandbox } : {}), ...(v.budget ? { budget: v.budget } : {}), ...(v.recall ? { recall: v.recall } : {}) }));
       const d = await api('/evals', { method: 'POST', body: { kind: $('#ev-kind').value, count: Number($('#ev-count').value), judge: $('#ev-judge').value === 'on', concurrency: Number($('#ev-conc').value), variants } });
       st.draft = d.eval;
       $('#ev-status').textContent = '';

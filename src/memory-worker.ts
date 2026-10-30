@@ -22,6 +22,8 @@ export interface MemorySettings {
   fade?: FadePreset;
   /** Phase 76: the decay policy's own numbers (half-life for 'custom', reuse lift, min standing). */
   decay?: Partial<DecayPolicy>;
+  /** Phase 85 (harness M10): "Recall on her own" (off / coding conversations only (default) / everywhere). */
+  recall?: import('./triggers.ts').RecallMode;
 }
 
 /** Days before a note stops coming to mind on its own, by fade setting (Phase 76: the half-life of each preset). */

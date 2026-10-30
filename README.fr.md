@@ -14,7 +14,7 @@ vous choisissez, dans une seule app pour le web, Windows, Mac et le téléphone.
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="License: MIT"></a>
   <img src="https://img.shields.io/badge/node-%E2%89%A5%2024-339933" alt="Node 24 or newer">
   <img src="https://img.shields.io/badge/runtime%20dependencies-0-brightgreen" alt="Zero runtime dependencies">
-  <img src="https://img.shields.io/badge/tests-1081%20passing-brightgreen" alt="1081 tests passing">
+  <img src="https://img.shields.io/badge/tests-1105%20passing-brightgreen" alt="1105 tests passing">
   <a href="docs/RESULTS.md"><img src="https://img.shields.io/badge/HumanEval%20pass%401-96.3%25-informational" alt="HumanEval pass@1 96.3%"></a>
   <a href="https://github.com/farena-ai/sara/releases/latest"><img src="https://img.shields.io/github/v/release/farena-ai/sara?label=release" alt="Latest release"></a>
   <a href="https://github.com/farena-ai/sara/pkgs/container/sara"><img src="https://img.shields.io/badge/docker-amd64%20%7C%20arm64-2496ED" alt="Docker image for amd64 and arm64"></a>
@@ -28,7 +28,7 @@ vous choisissez, dans une seule app pour le web, Windows, Mac et le téléphone.
   <sub>Une vraie session avec un modèle local (qwen3.8 27B sur Ollama, une RTX 5090) sur un serveur de test jetable, dans le thème Nuit : elle remonte le moral de son interlocuteur, écrit une petite app et son test pendant que le modèle les transmet, demande avant d'exécuter une commande, repère un vrai bug grâce à un test qui échoue et le corrige jusqu'à ce que les 7 tests passent. Images choisies dans l'enregistrement ; rien n'y a été retouché.</sub>
 </p>
 
-> **État :** 2.17, licence MIT, avec vingt-huit versions riches en nouveautés depuis la 1.0 (toutes
+> **État :** 2.18, licence MIT, avec vingt-neuf versions riches en nouveautés depuis la 1.0 (toutes
 > ci-dessous). De la 2.5 à la 2.8, toute l'app a changé de look. L'[app Android](https://play.google.com/store/apps/details?id=com.backstagecoding.sara)
 > est sur Google Play ; l'app iPhone et la version Mac App Store arrivent dès qu'Apple les aura
 > approuvées. Lisez [docs/DISCLOSURES.md](docs/DISCLOSURES.md) avant d'utiliser ou de partager Sara.
@@ -70,6 +70,7 @@ qui citent la page · le [mode local privé](docs/PRIVATE_LOCAL.md) · les [conv
 
 | Version | Ce que vous y gagnez |
 |---|---|
+| **2.18** · Elle se souvient d'elle-même | **Elle se souvient sans qu'on le lui demande quand la situation s'y prête :** la même erreur revient dans ce projet (« la dernière fois, la correction était… »), une commande qui a déjà échoué ici, un fichier sur lequel vous avez pris une décision, une tâche proche d'une autre dont elle a tiré une leçon. Les leçons ne viennent que de ce qui s'est vraiment passé (la ligne d'erreur et la modification qui l'a corrigée, citées). Chaque note dit d'où elle vient et avec quelle certitude, 2 au plus par étape, et *Pas utile* lui apprend. [Comment ça marche](docs/design/HARNESS_TRACK.md) |
 | **2.17** · Évaluations sur votre propre travail | **Quel réglage est vraiment meilleur pour vous ?** Choisissez jusqu'à 3 variantes (modèle, estompage de la mémoire, mode bac à sable, budget) et elle rejoue vos dernières vraies tâches avec chacune, dans des copies isolées. Chaque essai est noté sur vos tests, votre réaction, les constats, les tokens, le temps et le coût, plus un juge optionnel qui doit citer. Un gagnant n'est annoncé que si un test des signes le confirme (« +18 % sur 20 de vos tâches de code, p=0,01 »), avec la comparaison de chaque paire comme preuve. Sinon : *pas de gagnant net*. [Comment ça marche](docs/design/HARNESS_TRACK.md) |
 | **2.16** · Voyage dans le temps | **Créez une branche de n'importe quelle tâche passée, à n'importe quelle étape :** changez à cette étape son message, un résultat d'outil, les notes dont elle s'est souvenue ou le modèle, et relancez. Les étapes précédentes viennent de l'enregistrement (rien n'est réexécuté). Les branches de code travaillent dans une copie au commit enregistré, jamais dans vos fichiers. Une comparaison côte à côte montre étapes, tokens, coût, modifications de fichiers et réponse. *Rejouer sans changement* sert de témoin. Vous gardez la réponse ou appliquez les fichiers seulement si vous le voulez. [Comment ça marche](docs/design/HARNESS_TRACK.md) |
 | **2.15** · Modèle de menaces | **Elle trace comment l'extérieur atteint votre code :** après une étape de code, elle trouve les points d'entrée (routes, envois de fichiers, gestionnaires de messages, ligne de commande dans Express, Koa, Fastify, Flask, FastAPI, Django, Go) et suit les valeurs de la requête d'un fichier à l'autre jusqu'aux lignes risquées (shell, SQL, chemins, URL sortantes, redirections, HTML, eval). Une menace n'est signalée qu'avec les deux lignes citées et le chemin nommé. Un onglet **Modèle de menaces** par projet et **Corriger celles-ci** : une deuxième passe qui ne fait que les corriger, sur une branche locale, en relançant vos tests. [Comment ça marche](docs/design/HARNESS_TRACK.md) |
@@ -293,8 +294,8 @@ qu'aucun test ne vérifiait. Ce qu'elle apporte aujourd'hui, c'est la manière d
 lance les tests, demande avant les étapes risquées, montre ce qui a tourné), pas un meilleur score
 sur ces jeux. Détails, résultats par tâche et comment relancer : [docs/RESULTS.md](docs/RESULTS.md).
 
-En plus, `npm run check` : une vérification des types et 1093 tests automatiques avec un faux modèle
-scripté (sans réseau, sans GPU) : 1081 passent sous Windows, et les 8 autres sont des tests
+En plus, `npm run check` : une vérification des types et 1117 tests automatiques avec un faux modèle
+scripté (sans réseau, sans GPU) : 1105 passent sous Windows, et les 8 autres sont des tests
 d'isolation propres à Linux, exécutés sur un serveur Linux.
 
 ## Comparaison

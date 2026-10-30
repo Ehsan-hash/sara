@@ -266,6 +266,8 @@ export interface BudgetState {
 /** The answer a beforeModelCall hook may give (src/chat.ts applies it; first hook with one wins). */
 export interface ModelCallPlan {
   events?: { type: 'budget'; state: BudgetState }[];
+  /** Phase 85: the recall notes that go into this call ("Remembered on her own"), shown before it. */
+  recall?: { type: 'recall'; item: import('./triggers.ts').RecallItem }[];
   switchTo?: { provider: Provider; model: string };
   noTools?: boolean;
   maxTokens?: number;

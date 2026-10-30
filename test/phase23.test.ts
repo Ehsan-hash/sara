@@ -118,3 +118,15 @@ test('no page uses inline styles or scripts (the CSP would block them and the pa
   assert.equal(res.status, 200);
   assert.match(res.headers.get('content-type') ?? '', /text\/css/);
 });
+
+test('updates: the first click visibly works (no gap where the old status shows and the page stops looking)', () => {
+  // The root updater marks the work as started BEFORE it removes the request file…
+  const sh = readFileSync(join(ROOT, 'deploy', 'sara'), 'utf8');
+  const web = sh.slice(sh.indexOf('web-request)'), sh.indexOf('logs) need_root'));
+  assert.ok(web.indexOf('write_status checking') >= 0 && web.indexOf('write_status checking') < web.indexOf('rm -f -- "$rf"'), 'status first, then the request file goes');
+  assert.ok(web.indexOf('write_status updating') < web.indexOf('rm -f -- "$rf"'));
+  // …and the page keeps showing "Checking…" until the server's status actually changes.
+  const app = readFileSync(join(ROOT, 'web', 'app.js'), 'utf8');
+  assert.match(app, /let upWait = null;/);
+  assert.match(app, /st\.pending = upWait\.action/);
+});

@@ -276,6 +276,23 @@ export function memoryStep(box, count) {
 }
 
 /**
+ * Phase 85: a note she remembered on her own, as a step where it happened ("Remembered on her own:
+ * the same error before"). The chip under the step line has the note itself and "Not useful".
+ */
+export function recallStep(box, what) {
+  const done = t('Remembered on her own: {what}', { what });
+  const step = { kind: 'memory', name: 'recall', now: done, done, icon: 'recall', status: 'ok' };
+  const li = el('li', 'step ok memory recall');
+  const row = el('div', 'step-head');
+  row.append(stepIcon('recall'), el('span', 'step-verb', done));
+  li.append(row);
+  step.li = li;
+  box.querySelector('.steps-list').append(li);
+  box._steps.push(step);
+  render(box);
+}
+
+/**
  * Phase 78: "Show the run" at the end of the step list: opens the Run view (web/run-view.js) for
  * this reply's run (every step's model, tokens, cost, tools, files and memory picks).
  */

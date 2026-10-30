@@ -33,6 +33,7 @@ import { en, fill } from './i18n.ts';
 import { decayPolicy, type PickNote } from './memory-rank.ts';
 import { localDate, memorySettings } from './memory-worker.ts';
 import { selectMemories } from './memory.ts';
+import { type RecallMode, recallMode } from './triggers.ts';
 import { isCloudModelName } from './model-names.ts';
 import { branchesDir, discardCopy, rebuildStep, replayRun, ReplayError, type BranchEvent, type ReplayOutcome } from './replay.ts';
 import { finalAnswer } from './run-diff.ts';
@@ -100,6 +101,8 @@ export interface VariantSpec {
   model?: { providerId: string; model: string };
   sandbox?: SandboxGateMode;
   budget?: BudgetPreset;
+  /** Phase 85 (M10): recall on her own forced on or off for this variant (the triggers on/off measurement). */
+  recall?: 'on' | 'off';
 }
 
 export type FeedbackKind = 'accepted' | 'corrected' | 'replaced' | 'reported' | 'none';
@@ -599,10 +602,11 @@ export function cleanVariant(app: AppContext, raw: unknown, id: string): Variant
   }
   if (SANDBOX_GATE_MODES.includes(v.sandbox as SandboxGateMode)) out.sandbox = v.sandbox as SandboxGateMode;
   if (v.budget === 'tight' || v.budget === 'roomy') out.budget = v.budget;
+  if (v.recall === 'on' || v.recall === 'off') out.recall = v.recall;
   return out;
 }
 
-const changes = (v: VariantSpec) => Boolean(v.memory || v.model || v.sandbox || v.budget);
+const changes = (v: VariantSpec) => Boolean(v.memory || v.model || v.sandbox || v.budget || v.recall);
 
 /** The variant in words (English; the page words it itself from the fields). */
 export function variantWords(v: VariantSpec): string {
@@ -612,6 +616,7 @@ export function variantWords(v: VariantSpec): string {
   if (v.model) bits.push(`model: ${v.model.model}`);
   if (v.sandbox) bits.push(`sandbox tries: ${v.sandbox}`);
   if (v.budget) bits.push(`budget: ${v.budget}`);
+  if (v.recall) bits.push(`recall on her own: ${v.recall}`);
   return bits.join(' · ');
 }
 
@@ -1144,7 +1149,7 @@ export class Evals {
     const t0 = Date.now();
     for (let tries = 0; ; tries++) {
       try {
-        outcome = await replayRun(appV, task.runId, { fromStep: 0, model, budget, ...(edits.memory ? { edits } : {}), sandbox: { keep: true }, signal, hooks, onEvent });
+        outcome = await replayRun(appV, task.runId, { fromStep: 0, model, budget, ...(edits.memory ? { edits } : {}), ...(v.recall ? { recall: v.recall === 'on' } : {}), sandbox: { keep: true }, signal, hooks, onEvent });
         break;
       } catch (err) {
         // Two branches already (the owner's own, by hand): wait for a slot.
@@ -1309,6 +1314,14 @@ export class Evals {
       const side = ev.kind === 'everyday' ? 'chat' : 'coding';
       patch.turnBudgets = mergeTurnBudgets(cur, { [side]: { on: true, tokens: b.tokens, steps: b.steps } });
       list.push({ key: `turnBudgets.${side}`, before: { on: cur[side].on, tokens: cur[side].tokens, steps: cur[side].steps }, after: { on: true, tokens: b.tokens, steps: b.steps } });
+    }
+    if (v.recall) {
+      // Phase 85: "on" keeps it to coding unless the eval was on everyday chats too.
+      const mem = memorySettings(app);
+      const before = recallMode(mem);
+      const after: RecallMode = v.recall === 'off' ? 'off' : ev.kind === 'coding' ? (before === 'everywhere' ? 'everywhere' : 'coding') : 'everywhere';
+      patch.memory = { ...mem, ...((patch.memory as object | undefined) ?? {}), recall: after };
+      list.push({ key: 'memory.recall', before, after });
     }
     app.settings.update(patch as Parameters<AppContext['settings']['update']>[0]);
     const historyId = this.store.addHistory({ source: 'eval', ref: id, what: `Eval #${id}: used ${variantWords(v)}`, changes: list });

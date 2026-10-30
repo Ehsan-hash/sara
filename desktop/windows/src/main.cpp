@@ -1963,7 +1963,9 @@ static void showSetup(const std::wstring& error = L"", const std::wstring& typed
                       L"</div></div><script>const $=(i)=>document.getElementById(i);const k=$('k');if(k)k.onclick=()=>chrome.webview.postMessage({m:'retry'});"
                       L"const go=()=>chrome.webview.postMessage({m:'setServer',url:$('u').value});"
                       L"const l=$('l');if(l)l.onclick=()=>chrome.webview.postMessage({m:'useLocal'});"
-                      L"$('b').onclick=go;$('u').onkeydown=e=>e.key==='Enter'&&go();</script></body></html>";
+                      // 2.18: no return value from the key handler (returning false cancelled every
+                      // key but Enter, so nothing could be typed into the address).
+                      L"$('b').onclick=go;$('u').onkeydown=e=>{if(e.key==='Enter')go();};</script></body></html>";
   if (g_web) g_web->NavigateToString(html.c_str());
 }
 

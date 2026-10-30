@@ -661,3 +661,47 @@ dialog:not(.settings-dialog) .settings-body > :is(.error, p[role="status"]):empt
   .ev-actions button { flex: 1 1 auto; }
   .ev-pair > button { flex: 1 1 100%; }
 }
+
+/* Phase 85 (harness M10): "Remembered on her own" chips (web/recall-view.js), under her step and in her panel. */
+.recall-chip { align-self: flex-start; display: flex; gap: 8px; align-items: flex-start; max-width: min(720px, 85%); padding: 8px 10px; border-radius: 10px; background: var(--accent-soft); border: 1px solid color-mix(in srgb, var(--accent-solid) 35%, transparent); font-size: 13px; color: var(--text-1); }
+#messages > .recall-chip { margin-left: 60px; max-width: min(640px, calc(100% - 60px)); }
+/* Its row on the step line: the long words shorten with … instead of widening the list on a phone. */
+.steps-list > .step.recall { min-width: 0; }
+.recall-icon { flex: none; display: inline-flex; width: 18px; height: 18px; color: var(--accent-text); margin-top: 1px; }
+.recall-icon svg { width: 18px; height: 18px; }
+.recall-body { display: flex; flex-wrap: wrap; gap: 2px 8px; align-items: baseline; min-width: 0; }
+.recall-head { font-weight: 600; }
+.recall-text { flex-basis: 100%; overflow-wrap: anywhere; }
+.recall-why, .recall-src { overflow-wrap: anywhere; }
+.recall-actions { flex-basis: 100%; display: flex; gap: 8px; }
+.recall-chip.recall-dismissed { opacity: .65; border-style: dashed; }
+.recall-chip.recall-compact { max-width: 100%; font-size: 12.5px; }
+.hp-recall { margin-top: var(--s-2); display: grid; gap: var(--s-2); }
+.hp-sub { margin: 0; font-size: 11px; font-weight: 650; letter-spacing: .06em; text-transform: uppercase; color: var(--text-3); }
+.hp-recall-list { display: grid; gap: var(--s-2); }
+@media (max-width: 720px) {
+  #messages > .recall-chip { margin-left: 48px; max-width: calc(100% - 48px); }
+}
+
+/* 2.18: updates. The sidebar footer's "Update available" link (amber at Night, blue by Day), the
+   "Sara X is available" window and the "Sara was updated" note (web/update-check.js). */
+.side-update { display: flex; align-items: center; gap: var(--s-2); width: 100%; min-height: 44px; margin-top: 2px; padding: 0 10px; background: transparent; border: 0; border-radius: 10px; color: var(--update-accent); font-size: 13px; font-weight: 600; text-align: left; cursor: pointer; }
+.side-update[hidden] { display: none; }
+.side-update svg.ic { width: 18px; height: 18px; flex: none; }
+.side-update:hover, .side-update:focus-visible { background: var(--update-soft); color: var(--update-accent); text-decoration: underline; }
+.update-pop { max-width: min(480px, calc(100vw - 24px)); }
+.update-pop-title { display: flex; align-items: center; gap: var(--s-2); }
+.update-pop-title svg.ic { width: 22px; height: 22px; color: var(--update-accent); flex: none; }
+.update-pop-changes { max-height: 40vh; overflow: auto; margin: 0 0 var(--s-3); padding-left: 1.2em; }
+.update-pop-changes:empty { display: none; }
+.update-pop .actions-left { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2); }
+.update-pop .actions-left .button, .update-pop .actions-left button { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; margin: 0; }
+.update-note { position: fixed; z-index: 60; left: 50%; bottom: calc(16px + var(--safe-b)); transform: translateX(-50%); display: flex; align-items: center; gap: var(--s-2); max-width: min(560px, calc(100vw - 24px)); padding: 6px 6px 6px 14px; background: var(--surface-2, var(--panel)); color: var(--text-1, var(--text)); border: 1px solid var(--update-accent); border-radius: 14px; box-shadow: var(--shadow-2); font-size: 14px; }
+.update-note[hidden] { display: none; }
+.update-note > svg.ic { width: 18px; height: 18px; flex: none; color: var(--update-accent); }
+.update-note button { min-height: 44px; }
+.update-note .icon { min-width: 44px; }
+@media (max-width: 720px) {
+  /* Above the phone's bottom bar. */
+  .update-note { bottom: calc(76px + var(--safe-b)); }
+}

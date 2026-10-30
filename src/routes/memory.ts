@@ -11,6 +11,7 @@ import { captionModel, deletePhotoEverywhere, handEligible, type Moment, MOMENTS
 import { DEFAULT_IMAGE_MODEL, PHOTO_KEY_VAULT, photoSettings } from '../photos.ts';
 import { adultModeOn } from '../settings.ts';
 import { importedName } from '../store.ts';
+import { RECALL_MODES, type RecallMode, recallMode, TRIGGER_KINDS, type TriggerKind } from '../triggers.ts';
 import { NEXT, type RouteCtx, type RouteHandler } from './context.ts';
 
 export function createMemoryRoutes(ctx: RouteCtx): RouteHandler {
@@ -24,7 +25,7 @@ export function createMemoryRoutes(ctx: RouteCtx): RouteHandler {
         // Phase 76: the decay policy in numbers (`decay`) and in words (`decayText`).
         const withDecay = (m: MemorySettings) => {
           const p = decayPolicy(m);
-          return { ...m, fade: p.preset, decay: { halfLifeDays: p.halfLifeDays, reuseWeight: p.reuseWeight, minStanding: p.minStanding }, policyId: p.id, decayText: explainPolicy(p) };
+          return { ...m, recall: recallMode(m), fade: p.preset, decay: { halfLifeDays: p.halfLifeDays, reuseWeight: p.reuseWeight, minStanding: p.minStanding }, policyId: p.id, decayText: explainPolicy(p) };
         };
         if (method === 'GET') return send(res, 200, { ...withDecay(memorySettings(app)), sharing: app.settings.get().memorySharing ?? 'own' });
         if (method === 'PUT') {
@@ -37,10 +38,31 @@ export function createMemoryRoutes(ctx: RouteCtx): RouteHandler {
             fade: FADE_PRESETS.includes(body.fade as FadePreset) ? (body.fade as FadePreset) : (cur.fade ?? 'never'),
             // Phase 76: clamped (half-life 0 or 7–3650 days, reuse 0–0.3, min standing 0–1).
             decay: body.decay && typeof body.decay === 'object' ? clampDecay(body.decay, clampDecay(cur.decay)) : cur.decay,
+            // Phase 85: Recall on her own.
+            recall: RECALL_MODES.includes(body.recall as RecallMode) ? (body.recall as RecallMode) : recallMode(cur),
           };
           if (!next.decay) delete next.decay;
           app.settings.update({ memory: { ...next, budgetMoved: true } as MemorySettings, ...(body.sharing === 'shared' || body.sharing === 'own' ? { memorySharing: body.sharing } : {}) });
           return send(res, 200, { ...withDecay(next), sharing: app.settings.get().memorySharing ?? 'own' });
+        }
+      }
+      // Phase 85 (harness M10): "Not useful" on a "Remembered on her own" chip halves that trigger's
+      // weight (recorded); GET shows how much the index holds and the latest feedback.
+      if (a === 'memory' && b === 'recall') {
+        const idx = app.recall;
+        if (!idx) throw new HttpError(404, 'Memory is not available');
+        if (method === 'GET' && !c) return send(res, 200, { mode: recallMode(memorySettings(app)), signatures: idx.count(), lessons: idx.lessons(500).length, feedback: idx.feedbackRows(20) });
+        if (method === 'POST' && c === 'feedback') {
+          const body = await readJson(req);
+          const kind = String(body.kind ?? '') as TriggerKind;
+          const ref = String(body.ref ?? '');
+          if (!TRIGGER_KINDS.includes(kind) || !/^(lesson|note|sig):[\w-]{1,40}$/.test(ref)) throw new HttpError(400, 'Bad request');
+          const messageId = Number(body.messageId);
+          const msg = Number.isInteger(messageId) && messageId > 0 ? app.store.messageById(messageId) : undefined;
+          const r = idx.feedback(kind, ref, 'not-useful', { conversationId: msg?.conversationId ?? null, runId: typeof msg?.meta?.runId === 'number' ? (msg.meta.runId as number) : null, messageId: msg?.id ?? null });
+          // The chip remembers it was marked (on the reply that carried it).
+          if (msg && Array.isArray(msg.meta?.recall)) app.store.updateMessageMeta(msg.id, { recall: (msg.meta.recall as { kind?: string; ref?: string }[]).map((x) => (x?.kind === kind && x?.ref === ref ? { ...x, feedback: 'not-useful' } : x)) });
+          return send(res, 200, { ok: true, weight: r.after, before: r.before });
         }
       }
       if (a === 'memories') {

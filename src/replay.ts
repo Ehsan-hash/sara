@@ -507,6 +507,8 @@ export interface ReplayOptions {
   signal?: AbortSignal;
   /** Extra TurnHooks (tests, M9). */
   hooks?: TurnHooks;
+  /** Phase 85 (M10): recall on her own forced on/off (M9's triggers variant); unset = the settings. */
+  recall?: boolean;
 }
 
 export interface ReplayOutcome {
@@ -729,7 +731,7 @@ export async function* branchRun(app: AppContext, runId: number, opts: ReplayOpt
     const userText = edits.message !== undefined ? String(edits.message) : r.userMessage.content;
     status = 'stopped';
     try {
-      for await (const ev of runTurn(cx, r.conversation.id, userText, controller.signal, { resume: true, recorder: rec, replay, ...(opts.budget !== undefined ? { budget: opts.budget } : {}), ...(opts.hooks ? { hooks: opts.hooks } : {}) })) {
+      for await (const ev of runTurn(cx, r.conversation.id, userText, controller.signal, { resume: true, recorder: rec, replay, ...(opts.budget !== undefined ? { budget: opts.budget } : {}), ...(opts.hooks ? { hooks: opts.hooks } : {}), ...(opts.recall !== undefined ? { recall: opts.recall } : {}) })) {
         if (ev.type === 'done') {
           status = 'ok';
           replyId = ev.messageId;

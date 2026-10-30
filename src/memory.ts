@@ -9,9 +9,13 @@ import { bracketNote, DEFAULT_DECAY, type DecayPolicy, matchedWords, type PickNo
  * date: a date that matters to the owner (birthday, anniversary…), with onDate set (Phase 12).
  * reflection: something she noticed looking back over a week (Phase 12).
  */
-export type MemoryKind = 'summary' | 'fact' | 'self' | 'date' | 'reflection' | 'decision' | 'promise' | 'milestone';
-/** Phase 32: decision = decided together; promise = someone committed to something; milestone = part of your story. */
-export const MEMORY_KINDS: MemoryKind[] = ['summary', 'fact', 'self', 'date', 'reflection', 'decision', 'promise', 'milestone'];
+export type MemoryKind = 'summary' | 'fact' | 'self' | 'date' | 'reflection' | 'decision' | 'promise' | 'milestone' | 'lesson';
+/**
+ * Phase 32: decision = decided together; promise = someone committed to something; milestone = part of your story.
+ * Phase 85: lesson = what fixed a failure in a project, written by the recall triggers (src/triggers.ts) from
+ * recorded run evidence only; it comes back through the triggers, not the everyday notes.
+ */
+export const MEMORY_KINDS: MemoryKind[] = ['summary', 'fact', 'self', 'date', 'reflection', 'decision', 'promise', 'milestone', 'lesson'];
 
 export interface Memory {
   id: number;

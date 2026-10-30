@@ -423,8 +423,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
     const k=$('k');if(k)k.onclick=()=>webkit.messageHandlers.sara.postMessage({m:'retry'});
     const l=$('l');if(l)l.onclick=()=>webkit.messageHandlers.sara.postMessage({m:'setupLocal'});
     const go=()=>webkit.messageHandlers.sara.postMessage({m:'setServer',url:$('u').value});
-    $('b').onclick=go;$('u').onkeydown=e=>e.key==='Enter'&&go();</script></body></html>
+    $('b').onclick=go;$('u').onkeydown=e=>{if(e.key==='Enter')go();};</script></body></html>
     """
+    // 2.18: the key handler must not return a value: `e=>e.key==='Enter'&&go()` returned false for
+    // every other key, and an on… handler returning false cancels the key, so nothing could be typed.
     web.loadHTMLString(html, baseURL: nil)
   }
 

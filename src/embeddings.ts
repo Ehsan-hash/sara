@@ -29,7 +29,7 @@ const BATCH = 32;
 export const MIN_SCORE = 0.5;
 const MARGIN = 0.06;
 /** Kinds worth finding by meaning (dates and summaries have their own paths). */
-const KINDS = new Set(['fact', 'self', 'decision', 'promise', 'milestone', 'reflection', 'summary']);
+const KINDS = new Set(['fact', 'self', 'decision', 'promise', 'milestone', 'reflection', 'summary', 'lesson']);
 
 export interface EmbedTarget {
   config: ProviderConfig;

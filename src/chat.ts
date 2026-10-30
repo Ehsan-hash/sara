@@ -43,6 +43,7 @@ import { isCloudModelName } from './model-names.ts';
 import { projectSection } from './projectknow.ts';
 import { librarySection } from './library/use.ts';
 import { recipesSection } from './recipes.ts';
+import { RECALL_MARK, recallHooks, recallMode } from './triggers.ts';
 import { CHANGES_FILES } from './codemap/tools.ts';
 import { ToolStreamTracker, type ToolBuilding } from './tool-stream.ts';
 import { docsNote, type SharedDoc } from './library/intake.ts';
@@ -211,6 +212,8 @@ export interface AppContext {
   evals?: import('./evals.ts').Evals;
   /** Phase 78: run snapshots (per companion; unset off the record and in bare test apps). */
   runs?: import('./runs.ts').RunStore;
+  /** Phase 85 (harness M10): run signatures, lessons and trigger weights (src/triggers.ts). */
+  recall?: import('./triggers.ts').RecallIndex;
   /** Phase 56: every provider's model list, kept current (shared by every companion). */
   modelCatalog?: import('./model-catalog.ts').ModelCatalog;
   /** Phase 67: "Nothing leaves this computer" (server-wide state; the guard is src/net-guard.ts). */
@@ -265,6 +268,8 @@ export type ChatEvent =
   | { type: 'budget'; state: BudgetState }
   /** Phase 77: a planned call may go against a decision; not stopped, she mentions it (also every stop's outcome). */
   | { type: 'contradiction'; id: string; item: Contradiction }
+  /** Phase 85 (harness M10): a recall note that went into the next model call ("Remembered on her own"). */
+  | { type: 'recall'; item: import('./triggers.ts').RecallItem }
   /** An approved tool has started running. */
   | { type: 'tool_running'; id: string; name: string; summary: string }
   /** Phase 75: `card` is a small structured result (src/cards.ts) the app draws as a result card. */
@@ -824,6 +829,11 @@ export interface TurnOptions {
    * dates marked as mentioned, the drift check, the security pass) are left out.
    */
   replay?: ReplayInputs;
+  /**
+   * Phase 85 (harness M10): recall on her own forced on or off for this turn (M9's "triggers on/off"
+   * variant); unset = Settings → Memory → Recall on her own. Partner chats and groups never get it.
+   */
+  recall?: boolean;
 }
 
 /** Phase 83: what a replayed turn starts from (see TurnOptions.replay). */
@@ -933,6 +943,7 @@ function joinHooks(list: (TurnHooks | undefined)[]): Required<Omit<TurnHooks, 'b
         const r = await h.beforeModelCall?.(c);
         if (!r) continue;
         if (r.events?.length) out.events = [...(out.events ?? []), ...r.events];
+        if (r.recall?.length) out.recall = [...(out.recall ?? []), ...r.recall];
         if (r.ask || r.stop) return { ...out, ...(r.ask ? { ask: r.ask } : {}), ...(r.stop ? { stop: true } : {}) };
         if (r.switchTo && !out.switchTo) {
           out.switchTo = r.switchTo;
@@ -1242,6 +1253,8 @@ async function* runTurnInner(app: AppContext, conversationId: string, userText: 
   let usedMarked = false;
   let lastTime: string | undefined;
   let recalled: string | undefined;
+  /** Phase 85: the meaning matches of the message (reused by the recall triggers' task match). */
+  let relatedNotes: Awaited<ReturnType<MemoryVectors['related']>> = [];
   const memCfg = memorySettings(app);
   const budget = s.historyBudgetChars ?? HISTORY_BUDGET_CHARS;
   // Hardening M3: what another app's turn may draw on (notes from conversations it may know about).
@@ -1257,6 +1270,7 @@ async function* runTurnInner(app: AppContext, conversationId: string, userText: 
     // Phase 38: notes close in meaning, when the embeddings job is set (word search always runs).
     // Phase 76: the meaning scores are kept (they rank the notes and say how sure).
     const related = app.vectors ? await app.vectors.related(text).catch(() => []) : [];
+    relatedNotes = related;
     injection = selectMemories(app.memory, {
       related,
       userText: text,
@@ -1447,7 +1461,37 @@ async function* runTurnInner(app: AppContext, conversationId: string, userText: 
         },
       }
     : undefined;
-  const hooks = joinHooks([budgetHook, planHook, sandboxHook, securityHook, recorderHooks(app, rec), findingsHook, opts.hooks]);
+  // Phase 85 (harness M10): recall on her own. Every tool step's signatures go into the index (not on
+  // a replay); a failed command that passes later with a recorded change between becomes a lesson;
+  // matching notes (an error fixed before, a command that failed here, a file with a note, a task
+  // like one with a lesson, a package with a lesson) go into the next model call, capped, sourced
+  // and with the M1 bracket. Never in partner chats or groups; other apps get M1's notes rule.
+  const recallSet = recallMode(memCfg);
+  const recallHere = recallSet === 'everywhere' || (recallSet === 'coding' && workConv);
+  const spoken = Boolean(opts.videoCall || opts.liveFrame) || isVoiceRoomChannel(conv.channel);
+  const recallHook = app.recall && !conv.partner && !opts.group
+    ? recallHooks({
+        index: app.recall,
+        ...(app.memory && memCfg.enabled ? { memory: app.memory } : {}),
+        ...(app.runs ? { runs: app.runs } : {}),
+        scope: { conversationId: conv.id, workspace: conv.workspace, runId: rec.on ? rec.id : null, private: Boolean(conv.private), ...(appSafe ? { allow: appSafe } : {}) },
+        source: { conversationId: conv.id, workspace: conv.workspace, runId: rec.on ? rec.id : null, isPrivate: Boolean(conv.private), apps: sharedWithApps(conv) },
+        write: rec.on && !opts.replay,
+        lessons: rec.on && !opts.replay && recallSet !== 'off' && memCfg.enabled,
+        fire: memCfg.enabled && Boolean(app.memory) && (opts.recall ?? recallHere),
+        notes: !spoken,
+        text,
+        related: () => relatedNotes,
+        today: () => localDate(app.now().toISOString(), s.timeZone),
+        conv: (id) => {
+          const c = app.store.getConversation(id);
+          return c ? { private: Boolean(c.private) } : undefined;
+        },
+        saveMeta: (id, items) => store.updateMessageMeta(id, { recall: [...((store.messageById(id)?.meta?.recall as unknown[] | undefined) ?? []), ...items] }),
+        ...(opts.replay ? {} : { markUsed: (ids: number[]) => app.memory?.markUsed(ids, localDate(app.now().toISOString(), s.timeZone)) }),
+      })
+    : undefined;
+  const hooks = joinHooks([budgetHook, planHook, sandboxHook, securityHook, recallHook, recorderHooks(app, rec), findingsHook, opts.hooks]);
   // Phase 78: what the run is made of (M9 compares runs by these).
   const memPolicy = decayPolicy(memCfg).id;
   rec.setPolicy({ memoryPolicy: memPolicy, model: `${provider.config.id}/${model}`, tools: toolSetHash(tools.map((t) => t.spec.name)), mode: conv.mode, ...(conv.private ? { private: true } : {}) });
@@ -1557,7 +1601,8 @@ async function* runTurnInner(app: AppContext, conversationId: string, userText: 
     if (opts.replay && step === 0) {
       const inHist = new Set<ChatMessage>(hist.messages);
       const have = new Set(messages.slice(1).filter((m) => !inHist.has(m)).map((m) => m.content));
-      for (const x of opts.replay.extra) if (!have.has(x)) messages.push(x.startsWith('[Note from the app') ? { role: 'user', content: x } : { role: 'system', content: x });
+      // Phase 85: recorded recall notes are not replayed: the triggers decide again (an eval's "off" stays off).
+      for (const x of opts.replay.extra) if (!have.has(x) && !x.startsWith(RECALL_MARK)) messages.push(x.startsWith('[Note from the app') ? { role: 'user', content: x } : { role: 'system', content: x });
     }
     if (opts.resume && !opts.replay && !opts.budgetMore && step === 0 && hist.messages.at(-1)?.role === 'assistant') {
       messages.push({ role: 'user', content: '[Note from the app: your last reply was cut off (stopped, an error, or a restart). Continue from exactly where it stopped. Do not repeat what you already wrote and do not apologize; just carry on.]' });
@@ -1601,6 +1646,7 @@ async function* runTurnInner(app: AppContext, conversationId: string, userText: 
         plan = await hooks.beforeModelCall(mc);
       }
       for (const ev of plan.events ?? []) yield ev;
+      for (const ev of plan.recall ?? []) yield ev;
       if (plan.stop) break;
       if (plan.switchTo) {
         // Rung 1: the rest of the turn runs on the quick model; if it fails, the models of the turn take over.

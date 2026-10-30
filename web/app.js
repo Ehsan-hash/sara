@@ -24,14 +24,16 @@ import { addToMomentsButton, initMoments, loadMoments, openMoments, renderTodayM
 import { closeToday, initToday, renderTodayTiles, showToday, todayOpen } from './today.js';
 import { initBottomBar } from './bottom-bar.js';
 import { startsOnToday } from './start-view.js';
+import { DISMISS_KEY, SEEN_KEY, reloadNow, shouldCheck, shouldRemind, updatedNote, updatesShown, versionChanged } from './update-check.js';
 import { initHousehold, joinFromLink, loadAccount, loadHousehold, showPaused } from './household.js';
 import { initNav, relabelNav, revealNav, setMore } from './nav.js';
 import { emptyState, initTidy, overflowMenu } from './tidy.js';
-import { addStep, finishStep, hasSteps, memoryStep, runLink, runStep, setBudget, stepLine, waitStep } from './steps.js';
+import { addStep, finishStep, hasSteps, memoryStep, recallStep, runLink, runStep, setBudget, stepLine, waitStep } from './steps.js';
 import { budgetCard, budgetMeter, fillBudgetSelect, overrideNote } from './budget-view.js';
 import { sandboxButtons, sandboxFirstNote, sandboxFlag, sandboxSection, teamSandboxRow } from './sandbox-view.js';
 import { advisoryFlag, advisorySection, initFindings, openFindings, refreshFindings, securityCard, threatCard } from './findings-view.js';
 import { openRunView } from './run-view.js';
+import { recallChip, recallKindWords } from './recall-view.js';
 import { initEvals, onEvalEvent, openEvals } from './evals-view.js';
 import { renderCard, renderCards } from './result-cards.js';
 import { initLook, setContextRing, setLookBusy, showHeadChips } from './look.js';
@@ -149,6 +151,8 @@ async function boot() {
   // Phone apps: the owner is signed in, so the app can save its widget sign-in and set up
   // notifications (iPhone).
   window.SaraPhone?.ready?.();
+  // 2.18: "Sara was updated to X", the on-open update check and the version watch (web/update-check.js).
+  initUpdates(session);
   startEvents();
   void api('/settings').then((s) => applyAdminHelp(s.admin), () => {});
   await Promise.all([loadConversations(), loadProviders()]);
@@ -174,6 +178,8 @@ async function boot() {
   else if (!tourFromHash()) setTimeout(offerFirstTour, 4000);
   refreshSaraStatus();
   setInterval(refreshSaraStatus, 5 * 60_000);
+  // 2.18: the update check starts once the first-run windows (setup, the tour offer) had their turn.
+  startUpdateChecks();
   initVoice();
   // Opened while she's ringing (e.g. from the "Sara is calling" notification): show the call.
   const answer = JSON.parse(sessionStorage.getItem('sara.answer') ?? 'null');
@@ -875,6 +881,8 @@ initHerPanel({
   currentCompanion: () => state.companions?.companions.find((c) => c.current)?.id ?? null,
   convFacts,
   memKind: (k) => t(MEM_KIND_LABEL[k] ?? k),
+  // Phase 85: "Remembered on her own" chips in the panel (web/recall-view.js).
+  recallChip: (it, o = {}) => recallChip(it, { ...o, api }),
   openSara: () => openSara(),
   openToday: () => openToday(),
   openPlanner: (tab) => (tab ? openPlannerTab(tab) : $('#open-planner').click()),
@@ -1305,6 +1313,12 @@ function renderMessages(messages, opts = {}) {
     }
     // Phase 77: flags and finished stops of her plan check (`meta.contradictions`), under that step.
     if (m.role === 'assistant' && Array.isArray(m.meta?.contradictions)) for (const c of m.meta.contradictions) if (c?.note && c.status !== 'open') els.push(contradictionFlag(c));
+    // Phase 85: notes she remembered on her own for that step ("Not useful" lowers that trigger).
+    if (m.role === 'assistant' && Array.isArray(m.meta?.recall)) for (const it of m.meta.recall) if (it?.ref) {
+      els.push(recallChip(it, { api, messageId: m.id }));
+      // On the step line where it happened (after the step whose result set it off).
+      recallStep((turn.steps ??= newSteps()), recallKindWords(it.kind));
+    }
     // Phase 80: a command tried in a sandbox copy first (what it did and what you chose).
     if (m.role === 'tool' && m.meta?.sandbox?.decision) els.push(sandboxFlag({ ...m.meta.sandbox, callId: m.meta.toolCallId }));
     // Phase 81: an install the "Known vulnerability" card stopped, and your answer.
@@ -1783,6 +1797,10 @@ async function runStream(path, body, userBubble) {
           const node = contradictionFlag(ev.item);
           if (old) old.replaceWith(node);
           else place(node);
+        } else if (ev.type === 'recall') {
+          // Phase 85: a note she remembered on her own went into her next step.
+          recallStep(ensureSteps(), recallKindWords(ev.item.kind));
+          place(recallChip(ev.item, { api }));
         } else if (ev.type === 'sandbox_running') {
           // Phase 80: the command is being tried in a throwaway copy first.
           document.querySelector(`.approval[data-call="${CSS.escape(ev.id)}"]`)?.remove();
@@ -5015,6 +5033,8 @@ function startEvents() {
       notify(n.name, n.preview || '', n.conversationId);
     }
   });
+  // 2.18: back after a restart (an update?): a new server version reloads this page or offers to.
+  es.addEventListener('open', () => void checkServerVersion());
   es.onerror = () => {
     // EventSource reconnects by itself; if the session expired, stop.
     if (es.readyState === EventSource.CLOSED) state.events = null;
@@ -5500,6 +5520,8 @@ async function openMemory(opts = {}) {
   $('#mem-enabled').checked = s.enabled;
   $('#mem-quiet').value = String([10, 30, 60, 120].reduce((b, v) => (Math.abs(v - s.quietMinutes) < Math.abs(b - s.quietMinutes) ? v : b), 30));
   $('#mem-fade').value = s.fade ?? 'never';
+  // Phase 85: Recall on her own.
+  $('#mem-recall').value = s.recall ?? 'coding';
   // Phase 76: the decay policy (half-life slider for "Custom", and the rule in words).
   state.memDecay = s.decay ?? { halfLifeDays: 0, reuseWeight: 0.1, minStanding: 0.5 };
   $('#mem-halflife').value = String(Math.min(1095, Math.max(7, state.memDecay.halfLifeDays || 120)));
@@ -5546,7 +5568,7 @@ function showDecay() {
 $('#mem-fade').addEventListener('change', showDecay);
 $('#mem-halflife').addEventListener('input', showDecay);
 
-const MEM_KIND_LABEL = { fact: 'about you', self: 'about Sara', date: 'date', reflection: 'noticed', summary: 'conversation note', decision: 'decided together', promise: 'promise', milestone: 'your story' };
+const MEM_KIND_LABEL = { fact: 'about you', self: 'about Sara', date: 'date', reflection: 'noticed', summary: 'conversation note', decision: 'decided together', promise: 'promise', milestone: 'your story', lesson: 'lesson from a run' };
 const fmtOnDate = (d) => {
   const [y, m, day] = d.length === 5 ? [null, ...d.split('-')] : d.split('-');
   const s = new Date(Date.UTC(2000, Number(m) - 1, Number(day), 12)).toLocaleDateString(undefined, { month: 'long', day: 'numeric', timeZone: 'UTC' });
@@ -5660,7 +5682,7 @@ function memoryCard(m) {
   if (m.evidence) {
     const ev = document.createElement('div');
     ev.className = 'mem-evidence';
-    ev.textContent = m.sourceDocId ? `📄 ${t('From a document in her library')}: “${m.evidence}”` : m.evidence === 'You added this.' ? t('You added this.') : m.kind === 'reflection' ? m.evidence : ['decision', 'promise', 'milestone'].includes(m.kind) ? `“${m.evidence}”` : `${m.kind === 'self' ? t('She said') : t('You said')}: “${m.evidence}”`;
+    ev.textContent = m.sourceDocId ? `📄 ${t('From a document in her library')}: “${m.evidence}”` : m.evidence === 'You added this.' ? t('You added this.') : m.kind === 'reflection' || m.kind === 'lesson' ? m.evidence : ['decision', 'promise', 'milestone'].includes(m.kind) ? `“${m.evidence}”` : `${m.kind === 'self' ? t('She said') : t('You said')}: “${m.evidence}”`;
     if (m.sourceDocId) {
       ev.classList.add('linkish');
       ev.addEventListener('click', () => {
@@ -5772,6 +5794,7 @@ onSave($('#memory'), async () => {
       quietMinutes: Number($('#mem-quiet').value),
       injectBudgetChars: Number($('#mem-budget').value),
       fade: $('#mem-fade').value,
+      recall: $('#mem-recall').value,
       sharing: $('#mem-sharing').value,
       // Phase 76: the half-life only counts for "Custom"; the presets set their own.
       ...($('#mem-fade').value === 'custom' ? { decay: { halfLifeDays: Number($('#mem-halflife').value) } } : {}),
@@ -7643,6 +7666,10 @@ $('#ts-stop').addEventListener('click', async () => {
 
 // Updates (Phase 23).
 let upTimer = null;
+// After a click the server's updater picks the request up a moment later. Until its status changes
+// (a new time or state) the page keeps showing "Checking…" and keeps looking, so the first click
+// visibly works (it used to show the old status and stop, so it seemed to need a second click).
+let upWait = null;
 async function loadUpdates() {
   clearTimeout(upTimer);
   let u;
@@ -7654,9 +7681,16 @@ async function loadUpdates() {
     return;
   }
   $('#up-version').textContent = `${t('Sara')} ${u.version}${u.revision ? ` (${u.revision})` : ''}`;
+  // 2.18: the sidebar's "Update available" link follows what this page shows; a new version reloads.
+  upx.available = Boolean(u.available);
+  upx.status = u.status;
+  paintUpdateLink();
+  if (versionChanged(upx.version, u.version)) void onNewVersion(u.version);
   $('#up-manual').hidden = u.available;
   $('#up-check').hidden = !u.available;
   const st = u.status;
+  if (upWait && (Date.now() > upWait.until || (st.at ?? '') !== upWait.at || st.state !== upWait.state)) upWait = null;
+  if (upWait && !st.pending && st.state !== 'checking' && st.state !== 'updating') st.pending = upWait.action;
   const busy = Boolean(st.pending) || st.state === 'checking' || st.state === 'updating';
   $('#up-check').disabled = busy;
   $('#up-go').hidden = !u.available || st.state !== 'available';
@@ -7675,18 +7709,215 @@ async function loadUpdates() {
 }
 async function requestUpdate(action) {
   try {
-    await api('/update', { method: 'POST', body: { action } });
+    const before = await api('/update').catch(() => null);
+    const r = await api('/update', { method: 'POST', body: { action } });
+    // Windows / macOS answer with the result itself; the server's updater works in the background.
+    if (r?.how !== 'release' && before) upWait = { action, at: before.status?.at ?? '', state: before.status?.state ?? '', until: Date.now() + (action === 'update' ? 15 * 60_000 : 90_000) };
   } catch (err) {
     $('#up-message').textContent = err.message;
-    return;
+    return false;
   }
   loadUpdates();
+  return true;
 }
 $('#up-check').addEventListener('click', () => requestUpdate('check'));
 $('#up-go').addEventListener('click', () => {
   if (!confirm(t('Update now? Sara makes a backup, installs the new version and restarts (about a minute). If it does not start properly she goes back to this version.'))) return;
-  void requestUpdate('update');
+  watchForNewVersion(20 * 60_000);
+  void requestUpdate('update').then((ok) => {
+    if (ok) return;
+    clearTimeout(upx.watch);
+    upx.startedHere = false;
+  });
 });
+// Windows / macOS: the installer updates Sara and starts her again; this page then reloads by itself.
+$('#up-download').addEventListener('click', () => {
+  if (upx.status?.state === 'available') watchForNewVersion(3 * 60 * 60_000);
+});
+
+// 2.18: the update experience. Rules in web/update-check.js (tested in Node):
+// - when the app opens, and every hour while it is open, it looks at the last update check; when
+//   that is older than 12 hours it asks the server to check again (never in the demo, for a
+//   household member or in private local mode; one check at a time);
+// - a newer version shows "Sara X is available" (Update now / Later / Don't remind me about this
+//   version, remembered per version on this device) and the sidebar's "Update available" link;
+// - after an update the server answers with a new version: the page that started it reloads, others
+//   reload when nothing would be lost (or show "Sara was updated. Reload"), and after the reload
+//   "Sara was updated to X" shows. The desktop and phone apps show this same page, so it covers them.
+const upx = { version: '', demo: false, member: false, privateLocal: false, available: false, how: '', status: null, inFlight: false, tick: null, watch: null, startedHere: false, reloading: false, noteTimer: null };
+const LATER_KEY = 'sara.updateLater';
+const store = (area, key, value) => {
+  try {
+    if (value === undefined) return area.getItem(key);
+    area.setItem(key, value);
+  } catch {
+    /* private browsing: nothing is remembered */
+  }
+  return null;
+};
+function initUpdates(session) {
+  upx.version = session.version ?? '';
+  upx.demo = Boolean(session.demo);
+  upx.member = session.role === 'member';
+  upx.privateLocal = Boolean(session.privateLocal);
+  if (!upx.version) return;
+  if (updatedNote(store(localStorage, SEEN_KEY), upx.version)) showUpdateNote(t('Sara was updated to {version}.', { version: upx.version }), false);
+  store(localStorage, SEEN_KEY, upx.version);
+}
+function startUpdateChecks() {
+  if (!upx.version || upx.demo || upx.member || upx.tick) return;
+  upx.tick = setInterval(() => void updateTick(), 60 * 60_000);
+  setTimeout(() => void updateTick(), 6000);
+}
+async function updateTick() {
+  let u;
+  try {
+    u = await api('/update');
+  } catch {
+    return;
+  }
+  upx.available = Boolean(u.available);
+  upx.how = u.how;
+  upx.status = u.status;
+  if (versionChanged(upx.version, u.version)) return void onNewVersion(u.version);
+  if (shouldCheck({ ...upx, status: u.status })) {
+    upx.inFlight = true;
+    try {
+      const r = await api('/update', { method: 'POST', body: { action: 'check' } });
+      // Windows / macOS answer at once; the server's updater (Linux) answers a little later.
+      upx.status = r.how === 'release' ? r.status : await waitForCheck(u.status);
+    } catch {
+      /* private local mode, or a check or update is already running: keep the last answer */
+    } finally {
+      upx.inFlight = false;
+    }
+  }
+  paintUpdateLink();
+  offerUpdate();
+}
+async function waitForCheck(before) {
+  for (let i = 0; i < 30; i++) {
+    await new Promise((r) => setTimeout(r, 3000));
+    const s = (await api('/update').catch(() => null))?.status;
+    if (s && !s.pending && s.state !== 'checking' && (s.at ?? '') !== (before?.at ?? '')) return s;
+  }
+  return before;
+}
+function paintUpdateLink() {
+  const s = upx.status ?? {};
+  const on = updatesShown(upx) && s.state === 'available' && Boolean(s.latest);
+  $('#side-update').hidden = !on;
+  if (on) $('#side-update').title = t('Sara {latest} is available: open Settings → Updates', { latest: s.latest });
+}
+function offerUpdate() {
+  const s = upx.status ?? {};
+  if (!updatesShown(upx) || !shouldRemind({ status: s, version: upx.version, dismissed: store(localStorage, DISMISS_KEY), later: store(sessionStorage, LATER_KEY) })) return;
+  // Never on top of another window (setup, Settings…): the sidebar link stays, the next look offers it again.
+  if (document.querySelector('dialog[open]:not(.today-view)')) return;
+  $('#upp-title-text').textContent = t('Sara {latest} is available', { latest: s.latest });
+  $('#upp-changes').replaceChildren(...(s.changes ?? []).slice(0, 8).map((c) => el('li', '', c)));
+  $('#upp-dismiss').checked = false;
+  const release = upx.how === 'release';
+  $('#upp-go').hidden = release;
+  $('#upp-download').hidden = !release;
+  if (release && s.downloadUrl) $('#upp-download').href = s.downloadUrl;
+  $('#update-pop').dataset.latest = s.latest;
+  $('#update-pop').showModal();
+}
+// However the window closes (Later, Update now, ×, Esc): this version isn't offered again this
+// session, or never on this device with "Don't remind me about this version".
+$('#update-pop').addEventListener('close', () => {
+  const latest = $('#update-pop').dataset.latest ?? '';
+  if (latest) store($('#upp-dismiss').checked ? localStorage : sessionStorage, $('#upp-dismiss').checked ? DISMISS_KEY : LATER_KEY, latest);
+});
+function closeUpdatePop() {
+  if ($('#update-pop').open) $('#update-pop').close();
+}
+$('#upp-later').addEventListener('click', closeUpdatePop);
+$('#upp-go').addEventListener('click', () => {
+  closeUpdatePop();
+  // The window was the question; Settings → Updates shows the progress, then the page reloads.
+  watchForNewVersion(20 * 60_000);
+  void openSettings('dh-updates')
+    .then(() => requestUpdate('update'))
+    .then((ok) => {
+      if (ok) return;
+      clearTimeout(upx.watch);
+      upx.startedHere = false;
+    });
+});
+$('#upp-download').addEventListener('click', () => {
+  closeUpdatePop();
+  watchForNewVersion(3 * 60 * 60_000);
+  void openSettings('dh-updates');
+});
+$('#side-update').addEventListener('click', () => void openSettings('dh-updates'));
+async function serverVersion() {
+  try {
+    const r = await fetch('/api/session', { cache: 'no-store' });
+    return r.ok ? ((await r.json()).version ?? '') : '';
+  } catch {
+    return '';
+  }
+}
+async function checkServerVersion() {
+  if (!upx.version || upx.reloading) return;
+  const v = await serverVersion();
+  if (versionChanged(upx.version, v)) await onNewVersion(v);
+}
+// After "Update now" (or the installer download): look until the server answers with a new version.
+function watchForNewVersion(ms) {
+  if (!upx.version) return;
+  upx.startedHere = true;
+  clearTimeout(upx.watch);
+  const until = Date.now() + ms;
+  const look = async () => {
+    const v = await serverVersion();
+    if (versionChanged(upx.version, v)) return void onNewVersion(v);
+    // The server's updater went back to this version, or failed: Settings → Updates says why.
+    if (v && !upx.member) {
+      const st = (await api('/update').catch(() => null))?.status;
+      if (st && !st.pending && ['rolledback', 'failed'].includes(st.state)) return void (upx.startedHere = false);
+    }
+    if (Date.now() > until) {
+      upx.startedHere = false;
+      return void showUpdateNote(t("Sara hasn't come back on a new version yet. Reload when the update has finished."), true);
+    }
+    upx.watch = setTimeout(look, 4000);
+  };
+  upx.watch = setTimeout(look, 4000);
+}
+async function onNewVersion(v) {
+  clearTimeout(upx.watch);
+  if (upx.reloading) return;
+  const dialogOpen = Boolean(document.querySelector('dialog[open]:not(.today-view)'));
+  if (reloadNow({ composer: $('#input')?.value ?? '', dialogOpen, startedHere: upx.startedHere })) return void reloadOntoNewVersion();
+  showUpdateNote(t('Sara was updated to {version}. Reload to use it.', { version: v }), true);
+}
+async function reloadOntoNewVersion() {
+  upx.reloading = true;
+  // The service worker's new version (a new shell cache) is fetched before the reload.
+  try {
+    await (await navigator.serviceWorker?.getRegistration())?.update();
+  } catch {
+    /* no service worker here (desktop shells may not have one) */
+  }
+  location.reload();
+  // Still here a few seconds later: the button does it by hand.
+  setTimeout(() => {
+    upx.reloading = false;
+    showUpdateNote(t('Sara was updated. Reload to use the new version.'), true);
+  }, 6000);
+}
+function showUpdateNote(text, withReload) {
+  clearTimeout(upx.noteTimer);
+  $('#update-note-text').textContent = text;
+  $('#update-note-reload').hidden = !withReload;
+  $('#update-note').hidden = false;
+  if (!withReload) upx.noteTimer = setTimeout(() => ($('#update-note').hidden = true), 10_000);
+}
+$('#update-note-reload').addEventListener('click', () => location.reload());
+$('#update-note-close').addEventListener('click', () => ($('#update-note').hidden = true));
 
 // "Getting started" on the Today page (Phase 23).
 async function loadChecklist() {

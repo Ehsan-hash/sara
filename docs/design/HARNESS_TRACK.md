@@ -887,6 +887,60 @@ tasks are **the owner's own recorded turns**, not `.sara/evals/*.json` specs.
   `cart.js` gets the trigger; a different workspace → none; private runs only trigger in private
   conversations; at most one trigger per turn; external app turns never get it.
 
+**As built (Phase 85, 2.18.0):**
+
+- **Signatures** (`src/triggers.ts`, `signaturesOf`): from every recorded tool step: a *failure*
+  (tool + error class + the first error line, normalised by `normalizeMessage`: paths, `file:line:col`,
+  hex, UUIDs and long ids, timestamps, numbers and quoted values stripped, so the same error at another
+  path or line has the same signature and a different error doesn't), a *command* (`normalizeCommand`),
+  each *file* written, and *packages* named in an error or an install. A step failed when the tool
+  errored or the command's head line (`[exit code N, …]`, `[timed out …]`, also the M5 sandbox forms)
+  says so (`stepFailed`). Index: `recall_signatures` (kind, signature, workspace, conversation, private,
+  apps, partner, first/last run and step, count, outcome, `resolved_by`, lesson; conversation cascade).
+  Built live by the turn's `afterTool` hook (`RunWatcher`) and once over older runs by `backfill`
+  (chunks of 200 runs every few seconds off the turn, at most 5,000, only runs up to the newest at
+  first start; cursor in `recall_meta`).
+- **Lessons:** a new memory kind `lesson` (not shown in the everyday notes block; it comes back only
+  through the triggers). Written only when a command that failed passes later in the same run or the
+  next turn of the same conversation **and** she changed a file in between: the note quotes the error
+  line and the change (`old → new`, or the written file) verbatim from the recorded steps and links
+  the runs and steps (`recall_lessons`). No change in between, no lesson; never during a replay or an
+  eval; inherits the conversation's private/app scope.
+- **Triggers** (`TriggerMatcher`): *error* (a failure with the same signature in this workspace that
+  has a lesson: "Last time this error came up in this project … what fixed it was …"); *command* (the
+  latest run of the same command here failed: never after it passed); *file* (one of the owner's
+  decision/fact notes names the file she is about to change); *task* (`rankMemories` over lessons
+  with the owner's message: at least two of the lesson's own words, not words every lesson shares
+  like "test"/"fix", or meaning ≥ 0.7; reuses the turn's meaning matches, no second embedding call);
+  *package* (a lesson about the package she installs or that fails). Each note carries its source
+  (run and date) and M1's `[why: …; sure: …]`; spoken replies get it with no bracket (`notes:false`).
+- **Caps:** 2 notes per model call, 4 per turn, each source once per turn (`RecallQueue`).
+- **Feedback:** "Not useful" on a chip halves that trigger's weight (`recall_weights`; recorded in
+  `recall_feedback`); a trigger fires at score × weight ≥ 0.45, so one "Not useful" silences a
+  medium match and two silence a strong one.
+- **Rules:** Settings → Memory → *Recall on her own*: Off / Coding conversations only (default) /
+  Everywhere; memory off means off. Never in partner chats or groups; other-app and adult-channel
+  limits go through the same `appSafe` filter M1's notes use (test 8 checks the same verdicts as
+  `selectMemories`); a private conversation's lessons and signatures come back only in private
+  conversations.
+- **UI:** a *Remembered on her own* step on the step line, a chip under it (what came to mind, why/sure,
+  run · date, *Not useful*), and the same chips in her panel inside the folded *She remembered*.
+  Lessons show on the Memory page as *Lesson from a run* with the quotes. Routes:
+  `GET /api/memory/recall`, `POST /api/memory/recall/feedback`, `recall` in memory settings.
+- **M9 variant:** `VariantSpec.recall: 'on' | 'off'` ("Recall on her own" pick-list on the variant
+  card); `scripts/eval-recall.ts` runs it headlessly on a synthetic labelled set.
+- **Measured:** see [RESULTS.md](../RESULTS.md#recall-on-her-own-phase-85).
+- **Deviations:**
+  1. Table `recall_signatures` (+ `recall_lessons`, `recall_weights`, `recall_feedback`,
+     `recall_meta`), one row per signature, not `run_signatures` with FTS5: task similarity goes
+     through M1's `rankMemories` over the lesson notes (words + meaning), which already has FTS.
+  2. Up to 2 notes per step and 4 per turn (the Phase 85 brief), not "at most one trigger per turn".
+  3. Notes go into the next model call as one short system message (marked "Remembered on your
+     own"), not a prompt section next to `recipes`, so they arrive right after the step that set them off.
+  4. The file trigger uses the owner's decision/fact notes only; lessons come back on their error,
+     task or package. In the first eval run, lessons naming the file were the main false trigger.
+  5. "It took 2 tries" is not in the note: the note quotes the error and the change instead.
+
 ### M11 · Phase 86 · 2.19.0: red-team mode
 
 - **Ships:** "Try to break it" before shipping. In the throwaway sandbox Sara runs her own output
@@ -918,7 +972,7 @@ tasks are **the owner's own recorded turns**, not `.sara/evals/*.json` specs.
 | M7 threat pass | Yes (reviewer route) | Entry-point listing is code; the model only judges and must quote. A weak model drops findings it can't prove instead of inventing them | Reviewer only on a local model |
 | M8 time-travel | Re-runs the turn from the step (normal cost) | – | Works |
 | M9 eval loop | N reruns (N × normal cost; budget per variant from M4) | Works; slower | Works with local variants only |
-| M10 triggers | No | – | Works |
+| M10 triggers | No (code; the task trigger reuses the turn's meaning matches) | Notes are short (≤ 2 per step) | Works; nothing leaves |
 | M11 red-team | Yes: a small "pick probes" call and a reviewer call | Probes are a fixed catalogue, so a small model can't make them worse, only pick fewer | Works with local models; no network inside the sandbox anyway |
 
 **Pairing (from the brief):** the "attacker inside the sandbox" is the coding route's model

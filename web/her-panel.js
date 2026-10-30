@@ -8,7 +8,8 @@
 //   She remembered: the notes she used for the last reply (meta.memoryIds → GET /api/memories?ids=),
 //        each opens to its details. Never in off-the-record or private conversations. Phase 76:
 //        each row has a sureness chip and a "why" line from the reply's meta.memoryPicks (no extra
-//        request) and a Pin button (PATCH pinned: never fades).
+//        request) and a Pin button (PATCH pinned: never fades). Phase 85: below them, "Remembered on
+//        her own" (the recall triggers' notes of the last turn, from meta.recall) with Not useful.
 //   This conversation: model, workspace, privacy and how full it is (the context ring).
 // Wide screens (1100 px and up): a fold-away column on the right, open or closed remembered on this
 // device. Narrower: an overlay over the chat, closed until asked for. Phones (720 px and less): the
@@ -459,19 +460,31 @@ async function loadMemories() {
   const last = msgs.findLast((m) => m.role === 'assistant' && String(m.content ?? '').trim());
   // The notes of the whole last turn (a turn with tools has several of her messages).
   const ids = memoryIdsOfLastTurn(msgs);
+  // Phase 85: what she remembered on her own in the last turn (the notes' text rides on the reply).
+  const rec = recallOfLastTurn(msgs);
   const count = $('#hp-mem-count');
-  if (count) count.textContent = ids.length ? String(ids.length) : '';
+  if (count) count.textContent = ids.length + rec.length ? String(ids.length + rec.length) : '';
+  const recBox = $('#hp-recall');
+  const recList = $('#hp-recall-list');
   // Folded (the default, for privacy when someone else can see the screen): only the count shows,
   // and her notes aren't even fetched until the owner opens the section.
   if (!memOpen()) {
     list.replaceChildren();
+    if (recBox) recBox.hidden = true;
+    recList?.replaceChildren();
     ui.memKey = '';
     return;
+  }
+  if (recBox && recList) {
+    recBox.hidden = !rec.length;
+    // The chip comes from app.js (web/recall-view.js), like the other parts it hands the panel.
+    recList.replaceChildren(...rec.map((it) => ui.ctx.recallChip?.(it, { compact: true })).filter(Boolean));
   }
   const key = `${conv.id}:${last?.id ?? ''}:${ids.join(',')}`;
   if (key === ui.memKey) return;
   ui.memKey = key;
-  if (!ids.length) return void list.replaceChildren(el('li', 'hp-empty', last ? t('Her last reply used nothing from her memory.') : t('Nothing yet in this conversation.')));
+  // (Only notes she remembered on her own: they show below, so no "used nothing" line above them.)
+  if (!ids.length) return void list.replaceChildren(...(rec.length ? [] : [el('li', 'hp-empty', last ? t('Her last reply used nothing from her memory.') : t('Nothing yet in this conversation.'))]));
   let mems;
   try {
     mems = await ui.ctx.api(`/memories?ids=${ids.join(',')}`);
@@ -497,6 +510,14 @@ function setMemOpen(open) {
   list.hidden = !open;
   ui.memKey = '';
   void loadMemories();
+}
+
+/** Phase 85: the recall notes of the last turn (meta.recall on her replies after your last message), once each. */
+export function recallOfLastTurn(msgs) {
+  const from = msgs.findLastIndex((m) => m.role === 'user') + 1;
+  const out = [];
+  for (const m of msgs.slice(from)) if (m.role === 'assistant' && Array.isArray(m.meta?.recall)) for (const it of m.meta.recall) if (it?.ref && !out.some((x) => x.ref === it.ref && x.kind === it.kind)) out.push({ ...it, messageId: m.id });
+  return out;
 }
 
 /** The memory ids she used in the last turn: every reply of hers after your last message. */

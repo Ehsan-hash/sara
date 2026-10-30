@@ -14,7 +14,7 @@ Modellen deiner Wahl, in einer App für Web, Windows, Mac und Handy.
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="License: MIT"></a>
   <img src="https://img.shields.io/badge/node-%E2%89%A5%2024-339933" alt="Node 24 or newer">
   <img src="https://img.shields.io/badge/runtime%20dependencies-0-brightgreen" alt="Zero runtime dependencies">
-  <img src="https://img.shields.io/badge/tests-1081%20passing-brightgreen" alt="1081 tests passing">
+  <img src="https://img.shields.io/badge/tests-1105%20passing-brightgreen" alt="1105 tests passing">
   <a href="docs/RESULTS.md"><img src="https://img.shields.io/badge/HumanEval%20pass%401-96.3%25-informational" alt="HumanEval pass@1 96.3%"></a>
   <a href="https://github.com/farena-ai/sara/releases/latest"><img src="https://img.shields.io/github/v/release/farena-ai/sara?label=release" alt="Latest release"></a>
   <a href="https://github.com/farena-ai/sara/pkgs/container/sara"><img src="https://img.shields.io/badge/docker-amd64%20%7C%20arm64-2496ED" alt="Docker image for amd64 and arm64"></a>
@@ -28,7 +28,7 @@ Modellen deiner Wahl, in einer App für Web, Windows, Mac und Handy.
   <sub>Eine echte Sitzung mit einem lokalen Modell (qwen3.8 27B auf Ollama, eine RTX 5090) auf einem Wegwerf-Testserver, im Nacht-Look: Sie muntert ihr Gegenüber auf, schreibt eine kleine App samt Test, während das Modell sie streamt, fragt, bevor sie einen Befehl ausführt, findet über einen fehlschlagenden Test einen echten Fehler und behebt ihn, bis alle 7 Tests grün sind. Ausgewählte Bilder aus der Aufnahme; nichts darin wurde bearbeitet.</sub>
 </p>
 
-> **Status:** 2.17, MIT-Lizenz, mit achtundzwanzig Funktions-Releases seit 1.0 (alle unten). Mit 2.5 bis 2.8
+> **Status:** 2.18, MIT-Lizenz, mit neunundzwanzig Funktions-Releases seit 1.0 (alle unten). Mit 2.5 bis 2.8
 > hat die ganze App einen neuen Look bekommen. Die
 > [Android-App](https://play.google.com/store/apps/details?id=com.backstagecoding.sara) ist bei Google
 > Play; die iPhone-App und die Version für den Mac App Store folgen, sobald Apple sie freigibt.
@@ -70,6 +70,7 @@ für die Menschen, mit denen du lebst · [Videoanrufe](docs/VIDEO_CALLS.md) mit 
 
 | Version | Was du bekommst |
 |---|---|
+| **2.18** · Erinnern von selbst | **Sie erinnert sich ungefragt, wenn die Lage passt:** derselbe Fehler taucht in diesem Projekt wieder auf („letztes Mal war die Lösung…“), ein Befehl, der hier schon fehlschlug, eine Datei, zu der du etwas entschieden hast, eine Aufgabe wie eine, aus der sie etwas gelernt hat. Lektionen entstehen nur aus dem, was wirklich passiert ist (Fehlerzeile und behebende Änderung, zitiert). Jede Notiz nennt ihre Quelle und wie sicher sie ist, höchstens 2 pro Schritt, und *Nicht hilfreich* bringt es ihr bei. [So funktioniert es](docs/design/HARNESS_TRACK.md) |
 | **2.17** · Auswertungen an deiner eigenen Arbeit | **Welche Einstellung ist für dich wirklich besser?** Wähle bis zu 3 Varianten (Modell, Verblassen der Erinnerung, Sandbox-Modus, Budget), und sie spielt deine letzten echten Aufgaben mit jeder davon in Sandbox-Kopien nach. Bewertet werden bestandene Tests, deine Reaktion, Funde, Tokens, Zeit und Kosten, dazu optional ein Richtermodell, das zitieren muss. Ein Sieger wird nur genannt, wenn ein Vorzeichentest ihn bestätigt („+18 % bei 20 deiner Coding-Aufgaben, p=0,01“), mit dem Vergleich jedes Paares als Beleg. Sonst: *kein klarer Sieger*. [So funktioniert es](docs/design/HARNESS_TRACK.md) |
 | **2.16** · Zeitreise | **Verzweige jede frühere Aufgabe ab jedem Schritt:** Ändere an diesem Schritt ihre Nachricht, ein Werkzeugergebnis, die erinnerten Notizen oder das Modell und lass sie neu laufen. Frühere Schritte kommen aus dem Protokoll (nichts wird erneut ausgeführt). Coding-Zweige arbeiten in einer Kopie am aufgezeichneten Commit, nie in deinen Dateien. Ein Vergleich nebeneinander zeigt Schritte, Tokens, Kosten, Dateiänderungen und die Antwort. *Unverändert wiederholen* ist die Kontrolle. Antwort oder Dateien übernimmst du nur, wenn du willst. [So funktioniert es](docs/design/HARNESS_TRACK.md) |
 | **2.15** · Bedrohungsmodell | **Sie zeichnet auf, wie die Außenwelt deinen Code erreicht:** Nach einem Coding-Schritt findet sie die Einstiegspunkte (Routen, Uploads, Nachrichten-Handler, Kommandozeile in Express, Koa, Fastify, Flask, FastAPI, Django, Go) und verfolgt Eingaben über Dateien hinweg bis zu riskanten Zeilen (Shell, SQL, Dateipfade, ausgehende URLs, Weiterleitungen, HTML, eval). Eine Bedrohung wird nur gemeldet, wenn beide Zeilen zitiert und der Weg benannt ist. Ein Tab **Bedrohungsmodell** pro Projekt und **Diese beheben**: ein zweiter Durchgang, der nur sie behebt, auf einem lokalen Branch, mit erneut laufenden Tests. [So funktioniert es](docs/design/HARNESS_TRACK.md) |
@@ -288,8 +289,8 @@ wurden. Was sie heute beiträgt, ist die Arbeitsweise (sie lässt die Tests lauf
 riskanten Schritten, zeigt, was gelaufen ist), nicht ein höheres Ergebnis bei diesen Sätzen.
 Details, Ergebnisse pro Aufgabe und wie man es wiederholt: [docs/RESULTS.md](docs/RESULTS.md).
 
-Dazu `npm run check`: eine Typprüfung und 1093 automatische Tests mit einem geskripteten
-Schein-Modell (ohne Netz, ohne GPU): 1081 laufen unter Windows durch, die anderen 8 sind
+Dazu `npm run check`: eine Typprüfung und 1117 automatische Tests mit einem geskripteten
+Schein-Modell (ohne Netz, ohne GPU): 1105 laufen unter Windows durch, die anderen 8 sind
 Linux-spezifische Sandbox-Tests, die auf einem Linux-Server laufen.
 
 ## Sara im Vergleich

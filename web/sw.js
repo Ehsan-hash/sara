@@ -17,15 +17,21 @@ const OFFLINE = '/offline.html';
 //   Phase 82 had caches.open('sara-shell-v15'); every older cache is deleted below.
 // v17 (Phase 84): evals (evals-view.js: the Evals window, variant cards, the result card).
 //   Phase 83 had caches.open('sara-shell-v16'); every older cache is deleted below.
+// v18 (Phase 85): recall on her own (recall-view.js: "Remembered on her own" chips, Settings → Memory).
+//   Phase 84 had caches.open('sara-shell-v17'); every older cache is deleted below.
+// v19 (2.18): the update experience (update-check.js: "Sara X is available", the sidebar's "Update
+//   available" link, the reload onto a new version). A new version's worker takes over at once
+//   (skipWaiting + clients.claim below) and the page reloads onto the new shell.
+//   Phase 85 had caches.open('sara-shell-v18'); every older cache is deleted below.
 const SHELL = [OFFLINE, '/offline.css', '/offline.js', '/theme.css', '/theme-boot.js', '/icon-192.png'];
 
 self.addEventListener('install', (event) => {
-  event.waitUntil(caches.open('sara-shell-v17').then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));
+  event.waitUntil(caches.open('sara-shell-v19').then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));
 });
 
 self.addEventListener('activate', (event) => {
-  // Every older cache goes (sara-shell-v16 from Phase 83, sara-shell-v15 from Phase 82, sara-shell-v14 from Phase 81, sara-shell-v13 from Phase 80, sara-shell-v12 from Phase 79, sara-shell-v11 from Phase 78, sara-shell-v10 from Phase 77 and before).
-  event.waitUntil(caches.keys().then((keys) => Promise.all(keys.filter((k) => k !== 'sara-shell-v17').map((k) => caches.delete(k)))).then(() => self.clients.claim()));
+  // Every older cache goes (sara-shell-v18 from Phase 85, sara-shell-v17 from Phase 84, sara-shell-v16 from Phase 83, sara-shell-v15 from Phase 82, sara-shell-v14 from Phase 81, sara-shell-v13 from Phase 80, sara-shell-v12 from Phase 79, sara-shell-v11 from Phase 78, sara-shell-v10 from Phase 77 and before).
+  event.waitUntil(caches.keys().then((keys) => Promise.all(keys.filter((k) => k !== 'sara-shell-v19').map((k) => caches.delete(k)))).then(() => self.clients.claim()));
 });
 
 self.addEventListener('fetch', (event) => {

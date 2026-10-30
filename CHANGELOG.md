@@ -5,6 +5,41 @@ Format: newest first. Semantic versions since 1.0.0 (before that `0.<phase>.<pat
 
 ## Unreleased
 
+## 2.18.0 (2026-10-30): recall on her own (harness track, Phase 85)
+
+- **She recalls without being asked when the run matches something she has seen:** the same error
+  signature in this project with a lesson for it, a command whose last run here failed, a file one of
+  your decisions or facts names, a task like one she has a lesson for, a package a lesson mentions.
+  Each note goes into her next model call with its source (run and date) and the
+  `[why: …; sure: …]` bracket; at most 2 a step and 4 a turn. Never silently: the chat shows a
+  *Remembered on her own* chip, the step line and her panel too, with **Not useful** (lowers that
+  trigger's weight).
+- **Lessons only from evidence:** written when a command failed, she changed a file and the same command
+  then passed. The error line and the change are quoted, the runs linked. Never from replays or evals.
+- Error signatures ignore paths, line numbers, ids, hex and timestamps, so the same error matches
+  across files. Older runs are indexed once in the background.
+- Settings → Memory → *Recall on her own*: Off / Coding conversations only (default) / Everywhere.
+  Private, other-app, adult-channel and partner rules as for memory. Voice calls get the note without
+  the bracket. Evals can compare recall on and off.
+- **Measured honestly:** the right note fired on 6 of 6 repeated errors and on none of 4 near misses,
+  but with a 12B local model it didn't fix them faster (no clear winner, [RESULTS](docs/RESULTS.md)).
+- **Updates you notice:** when Sara opens (and every 12 hours at most) she checks for a new version;
+  a popup shows what's new with *Update now* / *Later* and *Don't remind me about this version* (a
+  newer version asks again). A small **Update available** link sits under Sara / Help / Settings
+  (amber in Night, blue in Day; in the More drawer on phones) and opens Settings → Updates. Never in
+  private local mode or the demo, and only for the owner.
+- **After an update the app reloads itself** onto the new version and says *Sara was updated to X*
+  (browser, home-screen app, the Windows and Mac apps and the phone apps alike). Other open tabs or
+  devices reload by themselves only when nothing is being typed; otherwise they show a *Reload* bar.
+- **Fix (Mac and Windows apps):** you couldn't type in the *Address* field of *Connect to your Sara* /
+  *Add a Sara* (the caret showed, no letters appeared): the page's Enter-key handler cancelled every
+  other key. Typing, Enter and the sign-in code after it now work.
+- **Mac disk image:** opens as an install window with Sara, an arrow and your Applications folder:
+  *Drag Sara to Applications*.
+- **Fix:** *Check for updates* and *Update now* needed two clicks: the page read the old status in the
+  moment before the server's updater started and stopped looking. The updater now marks itself as
+  started first, and the page keeps showing *Checking…* until the status really changes.
+
 ## 2.17.0 (2026-10-30): evals on your own work (harness track, Phase 84)
 
 - **Evals** (sidebar → More → Evals): pick your last 5–50 real turns (coding by default), compare your

@@ -653,6 +653,60 @@ when an exact two-sided sign test says so (p < 0.05, divided by the number of va
   first, and got the eval's automatic No. The six real workspaces (198 files, sha256 before/after) and the six
   conversations' message counts were unchanged; all branch copies were deleted.
 
+## Recall on her own (Phase 85)
+
+Harness M10 (`src/triggers.ts`): when an error, command, file, task or package matches something
+from her earlier runs in the same project, a short sourced note goes into her next model call and
+shows as *Remembered on her own*.
+
+- Tests (`test/phase85.test.ts`): the same error at other paths, lines, ids and times gives one
+  signature, and different errors differ. The index is built step by step, and the backfill is
+  bounded. A lesson is written only after a recorded fail → change → pass. Each trigger fires on a
+  match and not on a near miss. Caps are 2 per step and 4 per turn. "Not useful" halves the weight.
+  The privacy rules for private chats, other apps, the adult channel and partner chats give the
+  same verdicts as M1, voice gets no bracket, and Off means off. The trigger check takes a median
+  of **0.24 ms** (max 2.4 ms) per tool step with 10,000 signatures; the target is 10 ms.
+- Measured (2026-10-30, Windows, `scripts/eval-recall.ts`, `gemma4:12b` through Ollama, 18.8 min).
+  The synthetic labelled set has six small Node projects (git, `node --test`). Each has a real
+  earlier run: `npm test` fails with a specific error, the known fix is applied, and `npm test`
+  passes, so the code writes one lesson per project. The bug then comes back as a new commit, and
+  the owner asks "The tests in this project are failing again…" (6 *repeat* tasks). Four
+  *near-miss* tasks put a different bug, with a different error, into four of the projects. The M9
+  loop replays all 10 tasks with recall on (the control) and off (the variant). Approvals are
+  answered No; shell and edit are set to run without asking in the scratch data folder.
+
+  | Set | Recall | Tests pass | Mean steps | Mean tokens | Recall notes |
+  |---|---|---|---|---|---|
+  | 6 repeat | on | 4 / 6 | 6.8 | 24.0k | 6 (all the project's own lesson) |
+  | 6 repeat | off | 4 / 6 | 6.0 | 21.1k | 0 |
+  | 4 near-miss | on | 3 / 4 | 7.3 | 28.0k | **0** |
+  | 4 near-miss | off | 2 / 4 | 5.8 | 17.7k | 0 |
+
+  Triggers: 6 of 6 repeat runs got the right note on their first failing `npm test`, and the near
+  misses got none, so the **false-trigger rate is 0 of 6**. Outcome: **no gain on this set with
+  this model.** The success rate was the same (4/6). On the two repeat tasks both variants fixed,
+  recall used more steps and tokens (8 vs 6.5 steps, 25.1k vs 19.7k tokens). The M9 headline was
+  "No clear winner on 10 tasks (wins 5, ties 1, losses 4; p = 1.00)". Two repeat runs failed even
+  with the note. The run-to-run spread of a 12B local model is larger than any effect at n = 6.
+  Before this run, a first pass with lessons also coming back through the file trigger gave false
+  notes on near misses (the old lesson named the same file). The file trigger now uses only the
+  owner's decision and fact notes (HARNESS_TRACK M10 deviation 4).
+- Live (same day, throwaway server, `gemma4:12b`, a git project with one failing test,
+  `TypeError: Cannot read properties of null (reading 'price')`). Every approval was read and
+  answered by an allowlist (only `npm test`, and edits under `src/` or `test/`).
+  1. Turn 1: she ran the tests, read the files and fixed the bug in 8 steps (78 s). The lesson was
+     written with the error line and her edit quoted.
+  2. The bug came back. Turn 2 had no chip: she read the code first and fixed it without ever
+     running the failing test, so nothing matched (144 s, the model was shared with the eval).
+  3. The bug came back again, and turn 3 asked her to run the tests first. The failing run fired
+     *Remembered on her own: the same error before* with "[why: same error signature (TypeError)
+     in this project; sure: high]" and "run 1 · Oct 30, 2026". She fixed it in 5 steps (26 s). The
+     chip, the step line entry and the panel entry showed, and *Not useful* moved that trigger's
+     weight from 1 to 0.5, recorded in `recall_feedback`.
+
+  Turn 3 was faster than turn 1, but the prompts differed and the machine was shared, so this is
+  not evidence that recall helps.
+
 ## Code map
 
 `scripts/eval-codemap.ts` copies Sara's own code into a workspace and asks 8 "where is…?"
