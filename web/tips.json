@@ -1,6 +1,10 @@
 {
   "_about": "Phase 41: the ? tips for settings that have none written into index.html. Each entry: id of the control → [tip text, guide section in /help]. Plain words, how to tune it, an example. app.js adds a ? next to each control; the server's settings_guide tool reads this file and every data-tip in index.html.",
   "tips": {
+    "dk-quick": [
+      "The keys that open the small quick-ask window over any app, so you can ask her something without opening Sara. If another app already uses them it says so: pick other keys, or Off. Try it opens the window now.",
+      "desktop"
+    ],
     "my-name": [
       "What she's called everywhere: in chat, notifications and calls. Example: Sara, Mia, Alex.",
       "shaping"

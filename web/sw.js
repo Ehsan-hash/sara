@@ -1,13 +1,15 @@
 // Sara service worker: makes the app installable, shows push notifications, and gives a friendly
 // page when the server can't be reached. It never caches API data or conversations.
 const OFFLINE = '/offline.html';
+// v6 (Phase 75, stage 3): the offline page uses the app's theme files too.
+const SHELL = [OFFLINE, '/offline.css', '/offline.js', '/theme.css', '/theme-boot.js', '/icon-192.png'];
 
 self.addEventListener('install', (event) => {
-  event.waitUntil(caches.open('sara-shell-v5').then((c) => c.addAll([OFFLINE, '/offline.css', '/offline.js', '/icon-192.png'])).then(() => self.skipWaiting()));
+  event.waitUntil(caches.open('sara-shell-v6').then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));
 });
 
 self.addEventListener('activate', (event) => {
-  event.waitUntil(caches.keys().then((keys) => Promise.all(keys.filter((k) => k !== 'sara-shell-v5').map((k) => caches.delete(k)))).then(() => self.clients.claim()));
+  event.waitUntil(caches.keys().then((keys) => Promise.all(keys.filter((k) => k !== 'sara-shell-v6').map((k) => caches.delete(k)))).then(() => self.clients.claim()));
 });
 
 self.addEventListener('fetch', (event) => {
@@ -18,7 +20,7 @@ self.addEventListener('fetch', (event) => {
 // The offline page's own files come from the cache when the server is down.
 self.addEventListener('fetch', (event) => {
   const path = new URL(event.request.url).pathname;
-  if (event.request.mode === 'navigate' || !['/offline.css', '/offline.js', '/icon-192.png'].includes(path)) return;
+  if (event.request.mode === 'navigate' || !SHELL.includes(path) || path === OFFLINE) return;
   event.respondWith(fetch(event.request).catch(() => caches.match(path)));
 });
 

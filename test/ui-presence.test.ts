@@ -164,7 +164,7 @@ test('command bar wiring: every group, the settings search reused, shortcuts kep
   const help = web('help.html');
   assert.match(help, /<strong>Her panel<\/strong>/);
   assert.match(help, /<strong>Search and go:<\/strong> press <em>Ctrl\+K<\/em>/);
-  assert.match(web('sw.js'), /sara-shell-v5/);
+  assert.ok(Number(/sara-shell-v(\d+)/.exec(web('sw.js'))?.[1]) >= 5, 'the offline cache was bumped (stage 2: v5)');
 });
 
 test('GET /api/memories?ids=: just the notes asked for, in that order, capped, nothing else', async (t) => {

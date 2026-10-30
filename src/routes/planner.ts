@@ -43,6 +43,55 @@ function listFiles(root: string, max: number): { files: { path: string; size: nu
   return { files: out.slice(0, max).map(({ ms: _ms, ...f }) => f), truncated };
 }
 
+/** The weather tile's facts: now, today's high/low and rain chance, the next few hours (WMO codes). */
+export interface TodayWeather {
+  place: string;
+  units: 'F' | 'C';
+  now: number | null;
+  code: number | null;
+  high: number | null;
+  low: number | null;
+  rain: number | null;
+  /** Daylight now (false at night: the tile shows a moon for a clear sky). */
+  day: boolean;
+  hours: { time: string; temp: number | null; code: number | null; day: boolean }[];
+}
+const WEATHER_MS = 15 * 60_000;
+let weatherCache: { key: string; at: number; data: TodayWeather } | undefined;
+/** Tests: forget the cached weather. */
+export const clearWeatherCache = (): void => void (weatherCache = undefined);
+
+async function todayWeather(place: { name: string; lat: number; lon: number }, units: 'F' | 'C'): Promise<TodayWeather> {
+  const url =
+    `https://api.open-meteo.com/v1/forecast?latitude=${place.lat}&longitude=${place.lon}` +
+    '&current=temperature_2m,weather_code,is_day&hourly=temperature_2m,weather_code,is_day' +
+    '&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max,weather_code' +
+    `&timezone=auto&forecast_days=2${units === 'F' ? '&temperature_unit=fahrenheit' : ''}`;
+  const res = await netFetch(url, { signal: AbortSignal.timeout(12_000) });
+  if (!res.ok) throw new Error(`weather HTTP ${res.status}`);
+  const d = (await res.json()) as {
+    current?: { time?: string; temperature_2m?: number; weather_code?: number; is_day?: number };
+    hourly?: { time?: string[]; temperature_2m?: number[]; weather_code?: number[]; is_day?: number[] };
+    daily?: { temperature_2m_max?: number[]; temperature_2m_min?: number[]; precipitation_probability_max?: number[]; weather_code?: number[] };
+  };
+  const num = (n: unknown) => (typeof n === 'number' && Number.isFinite(n) ? Math.round(n) : null);
+  // The next four hours on the hour after the current reading (local times as Open-Meteo gives them).
+  const times = d.hourly?.time ?? [];
+  const from = Math.max(0, times.findIndex((x) => x > String(d.current?.time ?? '')));
+  const hours = times.slice(from, from + 4).map((time, i) => ({ time, temp: num(d.hourly?.temperature_2m?.[from + i]), code: num(d.hourly?.weather_code?.[from + i]), day: d.hourly?.is_day?.[from + i] !== 0 }));
+  return {
+    place: place.name.split(',')[0],
+    units,
+    now: num(d.current?.temperature_2m),
+    code: num(d.current?.weather_code ?? d.daily?.weather_code?.[0]),
+    high: num(d.daily?.temperature_2m_max?.[0]),
+    low: num(d.daily?.temperature_2m_min?.[0]),
+    rain: num(d.daily?.precipitation_probability_max?.[0]),
+    day: d.current?.is_day !== 0,
+    hours,
+  };
+}
+
 export function createPlannerRoutes(ctx: RouteCtx): RouteHandler {
   const { app, opts, rootDir } = ctx;
   function needPlanner(): PlannerStore {
@@ -69,6 +118,24 @@ export function createPlannerRoutes(ctx: RouteCtx): RouteHandler {
       // Phase 70: "On this day" from the album (never on the demo; adults-only photos only with Adult mode, never in the phone apps).
       const otd = opts.demo ? undefined : app.moments?.onThisDay(app.now(), app.settings.get().timeZone, { adultOk: adultModeOn(app.settings.get()) && !fromPhoneApp(req) });
       return send(res, 200, otd ? { ...today, onThisDay: { kind: otd.kind, ...(otd.years ? { years: otd.years } : {}), items: otd.items.map((m) => ({ id: m.id, image: m.image, caption: m.caption, text: m.text.slice(0, 200), takenAt: m.takenAt, from: m.from })) } } : today);
+    }
+
+    // Phase 75 (stage 3): the Today page's weather tile. Read-only, from the place set for the morning
+    // briefing (Open-Meteo, free, no key); nothing set up → { setUp: false } and the tile stays away.
+    // Never on the demo. Cached for 15 minutes; a failed lookup says so instead of guessing.
+    if (a === 'today' && b === 'weather' && !c && method === 'GET') {
+      const cfg = briefingSettings(app);
+      if (opts.demo || !cfg.place) return send(res, 200, { setUp: false });
+      const units = cfg.units ?? defaultUnits(app.settings.get().timeZone);
+      const key = `${cfg.place.lat},${cfg.place.lon},${units}`;
+      if (!weatherCache || weatherCache.key !== key || Date.now() - weatherCache.at > WEATHER_MS) {
+        try {
+          weatherCache = { key, at: Date.now(), data: await todayWeather(cfg.place, units) };
+        } catch {
+          return send(res, 200, { setUp: true, place: cfg.place.name.split(',')[0], units, error: true });
+        }
+      }
+      return send(res, 200, { setUp: true, ...weatherCache.data });
     }
 
     if (a === 'planner' && !b && method === 'GET') {

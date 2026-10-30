@@ -20,7 +20,9 @@ import { initImport, loadImport } from './import.js';
 import { initLocalModels, loadLocalModels, setPrivateBadge } from './local-models.js';
 import { faceUrl, groupTag, initGroups, isGroup, openGroupDialog, showGroupButton, speakerHeader } from './group.js';
 import { appLink, inPhoneApp, phoneKind } from './pair-link.js';
-import { addToMomentsButton, initMoments, loadMoments, openMoments, renderTodayMoments } from './moments.js';
+import { addToMomentsButton, initMoments, loadMoments, openMoments, renderTodayMoments, renderTodayPhotos } from './moments.js';
+import { closeToday, initToday, renderTodayTiles, showToday, todayOpen } from './today.js';
+import { initBottomBar } from './bottom-bar.js';
 import { initHousehold, joinFromLink, loadAccount, loadHousehold, showPaused } from './household.js';
 import { initNav, relabelNav, revealNav, setMore } from './nav.js';
 import { emptyState, initTidy, overflowMenu } from './tidy.js';
@@ -549,6 +551,7 @@ function convMenu(c, anchor) {
 }
 
 async function newConversation(projectId = null, offRecord = false) {
+  if (todayOpen()) closeToday({ focus: false });
   const conv = await api('/conversations', { method: 'POST', body: offRecord ? { offRecord: true } : projectId ? { projectId } : {} });
   state.conversations.unshift(conv);
   if (projectId) collapsed.delete(`p${projectId}`);
@@ -648,6 +651,7 @@ $('#dc-delete').addEventListener('click', async () => {
 // Phase 22: long conversations load in pages (the latest PAGE messages; earlier ones on demand).
 const PAGE = 150;
 async function openConversation(id) {
+  if (todayOpen()) closeToday({ focus: false });
   stopWatching();
   const conv = await api(`/conversations/${id}?limit=${PAGE}`);
   // Phase 49: another conversation's app preview doesn't stay open beside this one.
@@ -956,7 +960,36 @@ const closeSidebar = () => $('#main').classList.remove('show-sidebar');
 $('#close-sidebar').addEventListener('click', closeSidebar);
 $('#sidebar-scrim').addEventListener('click', closeSidebar);
 document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape' && $('#main').classList.contains('show-sidebar') && !document.querySelector('dialog[open]')) closeSidebar();
+  if (e.key === 'Escape' && $('#main').classList.contains('show-sidebar') && !document.querySelector('dialog[open]:not(#today)')) closeSidebar();
+});
+// Phase 75 (stage 3): Today's tiles (web/today.js) and the phone's bottom bar (web/bottom-bar.js).
+/** Puts words in the message box for the owner to check and send (smart-home asks from Today). */
+async function askInChat(text) {
+  if (!state.currentId || state.conv?.offRecord) await newConversation();
+  $('#input').value = text;
+  $('#input').dispatchEvent(new Event('input'));
+  $('#input').focus();
+}
+initToday({
+  api,
+  status: (msg) => ($('#td-status').textContent = msg),
+  member: isMember,
+  demo: () => document.body.classList.contains('demo'),
+  openConversation: (id) => openConversation(id),
+  openSettings: (page) => openSettings(page),
+  ask: askInChat,
+  renderPhotos: renderTodayPhotos,
+});
+initBottomBar({
+  openToday: () => openToday(),
+  closeToday,
+  todayOpen,
+  openPlanner: () => $('#open-planner').click(),
+  openMore: () => {
+    $('#main').classList.add('show-sidebar');
+    setMore(true);
+  },
+  closeSidebar,
 });
 
 // ---------- messages ----------
@@ -1546,6 +1579,15 @@ $('#input').addEventListener('paste', (e) => {
     addFiles(files);
   }
 });
+// Phase 75: files from the desktop apps (Explorer's Send To → Sara, `Sara.exe <files>`, the Mac Dock icon)
+// land in the message box like a drop; nothing is sent until the owner presses Send. Refused while
+// signed out (no conversation open) and on the demo; off-the-record chats refuse documents in addDocs.
+window.saraDesktopAttach = (files) => {
+  if (document.body.classList.contains('demo') || !state.currentId || !files?.length) return false;
+  addFiles(files);
+  $('#input').focus();
+  return true;
+};
 for (const ev of ['dragover', 'drop']) {
   $('#chat').addEventListener(ev, (e) => {
     if (!e.dataTransfer?.types.includes('Files')) return;
@@ -6410,42 +6452,30 @@ async function loadToday(fresh = false) {
   $('#td-greeting').textContent = d.greetingKey && d.owner ? t('{greeting}, {name}', { greeting: hello, name: d.owner }) : hello;
   $('#td-date').textContent = d.day ? new Date(`${d.day}T12:00:00`).toLocaleDateString(locale(), { weekday: 'long', month: 'long', day: 'numeric' }) : d.date;
   const list = (id) => $(`#${id} .today-list`);
-  const { tasks, reminders } = d.agenda;
-  list('td-agenda').replaceChildren(
-    ...tasks.map((x) => todayRow(x.title, x.dueAt ? (x.overdue ? `${t('overdue')} · ${fmtDue(x.dueAt)}` : timeOf(x.dueAt)) : t('important'), x.overdue ? 'overdue' : '')),
-    ...reminders.map((r) => todayRow(`⏰ ${r.text}`, timeOf(r.dueAt))),
-    ...(!tasks.length && !reminders.length ? [el('p', 'muted small', t('Nothing due today.'))] : []),
-  );
-  $('#td-calendar').hidden = !d.calendar;
-  if (d.calendar)
-    list('td-calendar').replaceChildren(
-      ...(d.calendar.error ? [el('p', 'error small', d.calendar.error)] : []),
-      ...d.calendar.events.map((e) => todayRow(e.title, e.allDay ? t('all day') : `${timeOf(e.start)}${e.end ? `–${timeOf(e.end)}` : ''}${e.location ? ` · ${e.location}` : ''}`, Date.parse(e.end ?? e.start) < Date.now() && !e.allDay ? 'past' : '')),
-      ...(!d.calendar.events.length && !d.calendar.error ? [el('p', 'muted small', t('Nothing on the calendar today.'))] : []),
-    );
+  // Phase 75 (stage 3): your day (reminders + calendar), the Planner and the rest are tiles (web/today.js).
   $('#td-mail').hidden = !d.mail;
   if (d.mail)
     list('td-mail').replaceChildren(
       el('p', 'small', d.mail.error ? d.mail.error : d.mail.important.length ? t('{n} unread in your inbox. Looks important:', { n: d.mail.unread }) : t('{n} unread in your inbox.', { n: d.mail.unread })),
       ...d.mail.important.map((m) => todayRow(m.subject, m.from)),
     );
+  // The greeting's mood line under her name (the AI notice sits beside her face).
   $('#td-her').hidden = !d.her;
   if (d.her) {
     $('#td-her-name').textContent = d.her.name;
+    $('#td-mood-text').textContent = t('Feeling {mood}, {energy}.', { mood: t(d.her.mood), energy: t(d.her.energy) });
     const box = $('#td-her .today-her');
-    const face = el('img', 'today-face');
-    face.src = $('#sidebar img.avatar')?.src ?? '/sara-avatar.jpg'; // her current face (custom looks too)
-    face.alt = '';
-    const words = el('div', '');
-    words.append(el('p', '', t('Feeling {mood}, {energy}.', { mood: t(d.her.mood), energy: t(d.her.energy) })));
+    box.replaceChildren();
     if (d.her.day) {
-      const day = el('p', 'muted small', d.her.day);
+      const day = el('p', 'td-her-day muted small', d.her.day);
       day.dataset.raw = '';
       day.title = t('Show all');
-      day.addEventListener('click', () => day.classList.toggle('open'));
-      words.append(day);
+      day.tabIndex = 0;
+      const toggle = () => day.classList.toggle('open');
+      day.addEventListener('click', toggle);
+      day.addEventListener('keydown', (e) => (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), toggle()));
+      box.append(day);
     }
-    box.replaceChildren(face, words);
   }
   renderTodayMoments(d);
   $('#td-dates').hidden = !d.dates.length;
@@ -6455,14 +6485,20 @@ async function loadToday(fresh = false) {
   // UX 19: the server sends the facts too (modelItems), so the sentence is in the app language.
   const modelLines = d.modelItems?.length ? d.modelItems.map(modelNoticeText) : (d.models ?? []);
   list('td-models').replaceChildren(...modelLines.map((line) => todayRow(`🔄 ${line}`, '', 'wrap')));
-  $('#td-jobs').hidden = !d.jobs.length;
-  list('td-jobs').replaceChildren(...d.jobs.map((j) => todayRow(`⏳ ${j.label}`, t('since {time}', { time: timeOf(j.startedAt) }))));
+  await renderTodayTiles(d, { fmtDue });
 }
+/** Today, the home screen: over the chat column (web/today.js); the tiles fill in as they load. */
 async function openToday() {
+  const first = !todayOpen();
+  if (first) showToday();
   await Promise.all([loadToday(), loadChecklist()]);
-  if (!$('#today').open) $('#today').showModal();
 }
 $('#open-today').addEventListener('click', openToday);
+// Her face and name at the top of the sidebar go to Today too (on phones, the list closes).
+$('#brand-today').addEventListener('click', () => {
+  $('#main').classList.remove('show-sidebar');
+  void openToday();
+});
 $('#td-refresh').addEventListener('click', () => loadToday(true));
 $('#td-otd-open').addEventListener('click', () => {
   $('#today').close();
@@ -6478,7 +6514,8 @@ $('#td-ask').addEventListener('click', async () => {
 // ---------- keyboard shortcuts (Phase 15) ----------
 const SHORTCUTS = { KeyT: openToday, KeyP: () => $('#open-planner').click(), KeyM: () => $('#open-memory').click(), KeyL: () => $('#open-library').click(), KeyB: () => $('#open-scrapbook').click(), KeyY: () => $('#open-story').click(), KeyH: () => $('#open-sara').click(), KeyN: () => $('#new-chat').click() };
 document.addEventListener('keydown', (e) => {
-  if (document.querySelector('dialog[open]')) return;
+  // Today is a view, not a window: the shortcuts work on it too.
+  if (document.querySelector('dialog[open]:not(#today)')) return;
   if ((e.ctrlKey || e.metaKey) && e.key === ',') {
     e.preventDefault();
     return void openSettings();
@@ -6540,7 +6577,9 @@ const TOURS = {
     { before: sidebar(false), sel: '#her-face', title: t('Her panel'), text: t('Her face opens her panel: her mood, what she is doing right now, approvals waiting, your day and what she remembered for this reply. On a phone it slides up from the bottom.') },
     { before: sidebar(false), sel: '#cmd-open', title: t('Search and go'), text: t('Press Ctrl+K (⌘K on a Mac) or this button to jump to any place, conversation, setting or action.') },
     { before: async () => { sidebar(false)(); await showHeadChips(); }, sel: '#conv-settings-btn', title: t('This conversation'), text: t('The model, workspace and mode (chat or coding) for this conversation only. Private keeps everything on your server.') },
-    { before: navStep('#open-today'), sel: '#open-today', title: t('Today'), text: t('Your day at a glance: reminders, to-dos, the weather and what she has been up to.') },
+    { when: () => !phoneWidth(), before: navStep('#open-today'), sel: '#open-today', title: t('Today'), text: t('Your home screen: the weather, your day, the Planner, what she remembered, photos, background work and your home, as tiles. Her face at the top of the list opens it too.') },
+    { when: () => phoneWidth(), before: sidebar(false), sel: '#bottom-bar', title: t('The bar at the bottom'), text: t('Chat, Today, the Planner, and More for every other place. ☰ at the top still lists your conversations.') },
+    { before: async () => { sidebar(false)(); await openToday(); }, sel: '#td-tiles', title: t('Your day as tiles'), text: t('Press a tile to open its place. Tiles with nothing in them stay away; Add to your day sets up the weather, your calendar or your home.') },
     { before: navStep('#open-planner'), sel: '#open-planner', title: t('Planner'), text: t('To-dos, reminders and notes. You can also just ask her: "remind me to call Mom at 5".') },
     { before: navStep('#open-memory'), sel: '#open-memory', title: t('Memory'), text: t('What she remembers about you. Look through it, correct it or make her forget something.') },
     { before: navStep('#open-library'), sel: '#open-library', title: t('Library'), text: t('Give her documents to keep (PDFs, Word, spreadsheets, slides, e-books). She remembers the key points and looks things up in them when you ask.') },
@@ -6574,8 +6613,10 @@ const TOURS = {
     { sel: '#team-detail', title: t('Progress and receipts'), text: t('Each helper\'s work with what actually ran. Her report at the end only claims what the receipts show.') },
   ],
 };
+/** The phone layout (the bottom bar shows): some tour steps are for it, some for wider screens. */
+const phoneWidth = () => matchMedia('(max-width: 720px)').matches;
 function runTour(name) {
-  const steps = TOURS[name];
+  const steps = TOURS[name]?.filter((s) => !s.when || s.when());
   if (!steps) return;
   $('#help-menu').close();
   localStorage.setItem('sara.tour.first', 'seen');
@@ -6597,7 +6638,7 @@ function tourFromHash() {
 window.addEventListener('hashchange', tourFromHash);
 /** Offered once on each device after setup: a small card, never in the way. */
 function offerFirstTour() {
-  if (localStorage.getItem('sara.tour.first') || tourRunning() || document.querySelector('dialog[open]')) return;
+  if (localStorage.getItem('sara.tour.first') || tourRunning() || document.querySelector('dialog[open]:not(#today)')) return;
   localStorage.setItem('sara.tour.first', 'offered');
   const box = el('div', 'tour-offer');
   box.setAttribute('role', 'status');
@@ -9360,6 +9401,28 @@ async function loadDesktop() {
   $('#dk-keep').checked = p.keepRunning !== false;
   $('#dk-notify').checked = p.notifications !== false;
   $('#dk-version').textContent = `${t('Sara for {platform}', { platform: p.platform === 'mac' ? 'Mac' : 'Windows' })} ${p.version ?? ''} · ${t('connected to {host}', { host: location.host })}`;
+  fillQuickAsk(p);
+}
+/**
+ * Phase 75 (stage 3): the quick-ask shortcut, read and set through the app's bridge
+ * (docs/desktop.md → Quick ask). Older apps without it don't send the list: the row stays hidden.
+ */
+function quickAskOptions(p) {
+  const list = Array.isArray(p?.quickAskShortcuts) ? p.quickAskShortcuts.filter((x) => x && typeof x.id === 'string') : [];
+  return list.map((x) => ({ id: x.id, label: x.id === 'off' ? t('Off') : String(x.label ?? x.id) }));
+}
+function fillQuickAsk(p) {
+  const opts = quickAskOptions(p);
+  $('#dk-quick-row').hidden = !opts.length;
+  if (!opts.length) return;
+  const sel = $('#dk-quick');
+  if (document.activeElement !== sel) {
+    sel.replaceChildren(...opts.map((o) => new Option(o.label, o.id)));
+    sel.value = p.quickAskShortcut ?? opts[0].id;
+  }
+  const off = p.quickAskShortcut === 'off';
+  $('#dk-quick-try').disabled = false;
+  $('#dk-quick-note').textContent = !off && p.quickAskShortcutFree === false ? t('(used by another app)') : '';
 }
 if (window.SaraDesktop) {
   document.documentElement.classList.add('in-desktop');
@@ -9371,6 +9434,13 @@ if (window.SaraDesktop) {
     });
   }
   $('#dk-server').addEventListener('click', () => openServers());
+  $('#dk-quick').addEventListener('change', async () => {
+    const r = await window.SaraDesktop.call('setPref', { key: 'quickAskShortcut', value: $('#dk-quick').value }).catch((err) => ({ error: String(err) }));
+    $('#dk-status').textContent = r?.error ? r.error : t('Saved');
+    if (r && !r.error && r.quickAskShortcuts) fillQuickAsk(r);
+    else await loadDesktop();
+  });
+  $('#dk-quick-try').addEventListener('click', () => void window.SaraDesktop.call('quickAsk').catch(() => {}));
   $('#dk-test').addEventListener('click', () => window.SaraDesktop.call('testNotification', { title: t('Sara'), body: t('Notifications from Sara will look like this.') }));
 }
 

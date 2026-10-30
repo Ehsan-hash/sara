@@ -88,11 +88,6 @@
 
 /* ---------- Her portrait, the glow that follows her mood ---------- */
 .hp-her { display: grid; justify-items: center; gap: 8px; padding: 6px 0 4px; text-align: center; }
-.hp-glow[data-mood="happy"] { --mood-a: #f5b452; --mood-b: #e0607e; }
-.hp-glow[data-mood="caring"] { --mood-a: #e0607e; --mood-b: #f08aa5; }
-.hp-glow[data-mood="playful"] { --mood-a: #ff6bb5; --mood-b: #9b6bff; }
-.hp-glow[data-mood="sleepy"] { --mood-a: #9b6bff; --mood-b: #5f73e6; }
-.hp-glow[data-mood="hurt"] { --mood-a: #7d89c9; --mood-b: #9b6bff; }
 .hp-glow {
   --mood-a: var(--accent-from);
   --mood-b: var(--accent-to);
@@ -120,11 +115,11 @@
   inset: -26px;
   border-radius: 50%;
   background:
-    radial-gradient(2px 2px at 14% 30%, color-mix(in srgb, var(--mood-a) 90%, #fff), transparent 60%),
-    radial-gradient(1.5px 1.5px at 86% 22%, color-mix(in srgb, var(--mood-b) 90%, #fff), transparent 60%),
-    radial-gradient(2px 2px at 92% 70%, color-mix(in srgb, var(--mood-a) 80%, #fff), transparent 60%),
-    radial-gradient(1.5px 1.5px at 8% 76%, color-mix(in srgb, var(--mood-b) 80%, #fff), transparent 60%),
-    radial-gradient(1.5px 1.5px at 50% 2%, color-mix(in srgb, var(--mood-a) 70%, #fff), transparent 60%),
+    radial-gradient(2px 2px at 14% 30%, color-mix(in srgb, var(--mood-a) 90%, var(--sparkle)), transparent 60%),
+    radial-gradient(1.5px 1.5px at 86% 22%, color-mix(in srgb, var(--mood-b) 90%, var(--sparkle)), transparent 60%),
+    radial-gradient(2px 2px at 92% 70%, color-mix(in srgb, var(--mood-a) 80%, var(--sparkle)), transparent 60%),
+    radial-gradient(1.5px 1.5px at 8% 76%, color-mix(in srgb, var(--mood-b) 80%, var(--sparkle)), transparent 60%),
+    radial-gradient(1.5px 1.5px at 50% 2%, color-mix(in srgb, var(--mood-a) 70%, var(--sparkle)), transparent 60%),
     radial-gradient(closest-side, color-mix(in srgb, var(--mood-b) 20%, transparent), transparent);
   opacity: .9;
 }
@@ -268,7 +263,7 @@ summary.hp-row::-webkit-details-marker { display: none; }
   transition: transform var(--dur-slow) var(--ease-out), visibility 0s linear var(--dur-slow);
 }
 .her-panel.mode-overlay.is-open { transform: none; transition: transform var(--dur-slow) var(--ease-out), visibility 0s; }
-.her-scrim:not([hidden]) { display: block; position: fixed; z-index: 47; inset: 0; margin: 0; padding: 0; border: 0; border-radius: 0; background: rgb(8 6 14 / .42); cursor: pointer; }
+.her-scrim:not([hidden]) { display: block; position: fixed; z-index: 47; inset: 0; margin: 0; padding: 0; border: 0; border-radius: 0; background: var(--scrim-soft); cursor: pointer; }
 
 /* ---------- Phones: a bottom sheet pulled up from her face ---------- */
 .her-panel.mode-sheet {
@@ -286,7 +281,7 @@ summary.hp-row::-webkit-details-marker { display: none; }
     var(--glass-strong);
   -webkit-backdrop-filter: var(--glass-filter);
   backdrop-filter: var(--glass-filter);
-  box-shadow: 0 -18px 48px rgb(0 0 0 / .45);
+  box-shadow: var(--shadow-up);
   transform: translateY(var(--sheet-y, 100%));
   transition: transform var(--dur-slow) var(--ease-out), visibility 0s linear var(--dur-slow);
   padding-bottom: env(safe-area-inset-bottom);
@@ -360,11 +355,11 @@ dialog#cmdbar {
   background: var(--glass-strong);
   -webkit-backdrop-filter: var(--glass-filter);
   backdrop-filter: var(--glass-filter);
-  box-shadow: var(--shadow-2), 0 0 0 1px rgb(255 255 255 / .02), 0 30px 80px -30px var(--violet-glow);
+  box-shadow: var(--shadow-2), 0 0 0 1px var(--hairline), 0 30px 80px -30px var(--violet-glow);
   color: var(--text-1);
 }
 dialog#cmdbar[open] { display: flex; flex-direction: column; animation: cmd-in var(--dur) var(--ease-out) both; }
-dialog#cmdbar::backdrop { background: rgb(8 6 14 / .5); -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px); }
+dialog#cmdbar::backdrop { background: var(--scrim); -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px); }
 @keyframes cmd-in { from { opacity: 0; transform: translateY(-6px) scale(.99); } }
 .cmd-box { display: flex; align-items: center; gap: 10px; padding: 8px 10px 8px 16px; border-bottom: 1px solid var(--hairline); }
 .cmd-glass { flex: none; width: 20px; height: 20px; color: var(--accent-text); }

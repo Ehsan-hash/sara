@@ -291,3 +291,19 @@ The apps tell the page they can host its header in the title bar; the page answe
   notice is shown above the question. Off on the demo.
 - **Tray / menu bar:** her face and mood at the top, *Ask Sara…*, then *Now*: approvals waiting (Allow /
   Deny / Open in Sara) and running jobs. Refreshed every 45 s, when the menu opens and on job/turn events.
+
+## Notifications and files (2.7)
+
+- **Notifications:** Windows toasts (app ID `BackstageCoding.Sara`, set on the Start-menu shortcut by the
+  installer and the app) and Mac `UNUserNotificationCenter`. Approvals waiting show the command with Allow /
+  Deny / Open in Sara; reminders have Done / Snooze 10 min. Allow / Deny call the same approval route as the
+  chat card, and only for an approval this app showed, on the server in use, that is still waiting; anything
+  else just opens the conversation. Off on the demo, when signed out, with notifications switched off, and
+  while Sara's window or quick ask is in front. The page's own notifications go through the app
+  (`SaraDesktop.notify`, WebView2 `NotificationReceived`), so nothing shows twice.
+- **Files:** Explorer → Send to → Sara (made on first start, a tray switch removes it) and `Sara.exe <files>`
+  (a second start hands the paths to the running app, at most 10 files); the Mac Dock icon (50 MB each).
+  The app calls the page's `window.saraDesktopAttach(files)`, which puts them in the message box with the
+  normal type and size checks; nothing is sent until the owner presses Send.
+- **Quick ask voice:** records up to 2 minutes and uses the server's `/api/voice/transcribe`; the mic shows
+  only when her hearing is set up.

@@ -162,7 +162,7 @@ body.demo .side-dest:is([data-dest="planner"], [data-dest="memory"], [data-dest=
 .sb-photo-acts .linkish { font-size: 12.5px; text-decoration: none; text-align: left; }
 .sb-photo-acts .linkish:not(.danger-text) { color: var(--muted); }
 .sb-photo-acts .linkish:hover, .sb-photo-acts .linkish:focus-visible { text-decoration: underline; color: var(--text); }
-.sb-confirm { display: grid; gap: 6px; margin-top: 4px; padding: 8px 10px; border: 1px solid #b3383d; border-radius: 10px; background: var(--panel-2); }
+.sb-confirm { display: grid; gap: 6px; margin-top: 4px; padding: 8px 10px; border: 1px solid var(--danger-fill); border-radius: 10px; background: var(--panel-2); }
 .sb-confirm p { margin: 0; line-height: 1.4; }
 /* While asking, the photo takes the whole row: the photo on the left, the warning beside it. */
 .sb-photo.confirming { grid-column: 1 / -1; grid-template-columns: minmax(110px, 170px) minmax(0, 1fr); column-gap: 14px; }
@@ -237,7 +237,6 @@ body.demo .side-dest:is([data-dest="planner"], [data-dest="memory"], [data-dest=
   --radius-card: 12px;
   --radius-pill: 999px;
   --card-bg: color-mix(in srgb, var(--panel-2) 55%, var(--panel));
-  --danger-fill: #b3383d;
 }
 
 /* ---------- Shared pieces ---------- */
@@ -256,8 +255,8 @@ body.demo .side-dest:is([data-dest="planner"], [data-dest="memory"], [data-dest=
   background: color-mix(in srgb, var(--accent) 15%, transparent); color: var(--accent-2);
   font-size: 11px; font-weight: 650; letter-spacing: .03em; line-height: 1.6; text-transform: uppercase; white-space: nowrap;
 }
-button.danger { background: var(--danger-fill); color: #fff; border: 1px solid var(--danger-fill); }
-button.danger:hover { background: color-mix(in srgb, var(--danger-fill) 82%, #000); }
+button.danger { background: var(--danger-fill); color: var(--on-danger); border: 1px solid var(--danger-fill); }
+button.danger:hover { background: color-mix(in srgb, var(--danger-fill) 82%, var(--surface-0)); }
 button.ghost.danger-text:hover { border-color: currentColor; }
 .empty-state {
   display: grid; justify-items: center; gap: var(--space-1); margin: 0; padding: 22px 16px; list-style: none;

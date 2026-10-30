@@ -220,9 +220,14 @@ test('wave 2: the offline page matches the app and the old sidebar CSS is gone',
   const offlineCss = readFileSync(join(ROOT, 'web', 'offline.css'), 'utf8');
   assert.match(offline, /Can't reach your Sara/);
   assert.doesNotMatch(offlineCss, /#c76b98/i, 'no old pink');
-  for (const v of ['--bg: #121016', '--accent: #e0789a', '--bg: #faf7fb', '--accent: #c94f78']) assert.ok(offlineCss.includes(v), v);
-  // v3 cached the new offline page; later versions (Phase 75: v4) only bump it.
-  assert.ok(Number(/sara-shell-v(\d+)/.exec(readFileSync(join(ROOT, 'web', 'sw.js'), 'utf8'))?.[1]) >= 3, 'the service worker caches the new offline page');
+  // Phase 75 (stage 3): the app's own tokens and theme (Night / Day) instead of a copy of the colours.
+  assert.match(offline, /<script src="\/theme-boot.js"><\/script>\s*<link rel="stylesheet" href="\/theme.css">\s*<link rel="stylesheet" href="\/offline.css">/);
+  assert.doesNotMatch(offlineCss, /#[0-9a-f]{3,8}\b|rgba?\(/i, 'no colours of its own');
+  for (const v of ['var(--surface-0)', 'var(--text-1)', 'var(--btn-fill)']) assert.ok(offlineCss.includes(v), v);
+  // v3 cached the new offline page; later versions (Phase 75: v4, v6 with the theme files) only bump it.
+  const sw = readFileSync(join(ROOT, 'web', 'sw.js'), 'utf8');
+  assert.ok(Number(/sara-shell-v(\d+)/.exec(sw)?.[1]) >= 6, 'the service worker caches the new offline page');
+  for (const f of ['/offline.css', '/theme.css', '/theme-boot.js']) assert.ok(sw.includes(`'${f}'`), `cached: ${f}`);
   // Removed with the wave 1 sidebar: no rules for classes the page no longer has.
   for (const gone of ['.side-bar', '.side-foot ', '.help-box', '.help-btn', '.route-help', 'section.settings-tab']) assert.ok(!css.includes(gone), gone);
 });

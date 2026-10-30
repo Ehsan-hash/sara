@@ -1,4 +1,7 @@
-# The new look (Phase 75, 2.5 → 2.7)
+# The new look (Phase 75, 2.5 → 2.7) ✅ built
+
+All three stages shipped on 2026-10-29 (2.5.0, 2.6.0, 2.7.0). What each one ended up doing is in CHANGELOG.md;
+the app side is described in docs/desktop.md.
 
 The owner's brief (2026-10-29): "This is an advanced system that really can do a lot and will do a lot
 more. It seems like we could build this to make it look like the advanced system that it is instead of

@@ -23,6 +23,14 @@
 // page (desktop/shared/quick-ask.html, shared with the Mac app) is served by this app AT the
 // server's own address in the same WebView2 profile, so it talks to the server with the same
 // sign-in through the normal routes (the AI notice, private mode, household and demo rules apply).
+// Phase 75 stage 3: native notifications. Windows toasts (toast.h) for approvals waiting (Allow / Deny
+// / Open in Sara, with the command in the text, so an Allow is an informed OK, exactly like the tray's
+// Allow; never decided by itself) and reminders (Done / Snooze 10 min), and for the page's own
+// notifications (messages, calls), which replace the old tray balloons; a toast for the same event
+// replaces the page's instead of adding a second one. Files: "Send to → Sara" in Explorer and
+// Sara.exe <files> hand files to the running app (a second start forwards them with WM_COPYDATA);
+// they are put into the message box as attachments by the page's own attach code, never sent by
+// themselves. The tray menu is dark while the page shows Night.
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
 #include <windows.h>
@@ -43,6 +51,10 @@
 #include "WebView2.h"
 #include "resource.h"
 #include "page-logo.h"
+#include "toast.h"
+#include <propkey.h>
+#include <propvarutil.h>
+#include <set>
 
 using Microsoft::WRL::Callback;
 using Microsoft::WRL::ComPtr;
@@ -61,12 +73,15 @@ static const UINT WM_APP_SHOW = WM_APP + 2;
 static const UINT WM_APP_BALLOON = WM_APP + 3;
 static const UINT WM_APP_SWITCH = WM_APP + 4;   // switch to g_switchTo (from the message loop)
 static const UINT WM_APP_REMOVED = WM_APP + 5;  // finish removing a server (sign-in cleared)
+static const UINT WM_APP_TOAST = WM_APP + 6;    // Phase 75 stage 3: a click on a toast (queued)
+static const ULONG_PTR kCopyFiles = 0x53415246; // 'SARF': WM_COPYDATA with file paths from a second start
+static const size_t kMaxFiles = 10;
 static const UINT kTrayId = 1;
 static const UINT_PTR kRemoveTimer = 7;
 static const UINT_PTR kNowTimer = 8;            // Phase 75 stage 2: "Now" in the tray menu, every 45 s
 static const int kHotkeyId = 1;                 // the quick-ask shortcut (RegisterHotKey)
 enum MenuId {
-  ID_OPEN = 100, ID_LOGIN, ID_QUIT, ID_CHANGE, ID_SETTINGS, ID_HELP, ID_ASK, ID_HEADER, ID_SHORTCUT_OFF,
+  ID_OPEN = 100, ID_LOGIN, ID_QUIT, ID_CHANGE, ID_SETTINGS, ID_HELP, ID_ASK, ID_HEADER, ID_SHORTCUT_OFF, ID_SENDTO,
   ID_SERVER0 = 200, ID_NOW0 = 300, ID_ALLOW0 = 340, ID_DENY0 = 380, ID_SHORTCUT0 = 420
 };
 static const size_t kNowMax = 10;
@@ -106,6 +121,24 @@ static std::wstring dataDir() {
   return dir;
 }
 static std::wstring iniPath() { return dataDir() + L"\\desktop.ini"; }
+/** A test run (test builds with SARA_DESKTOP_TEST_DIR): its own AUMID, toast activator, single-instance
+ *  lock and Send To entry, so it never touches the real app's on this PC. */
+static bool testRun() {
+#ifdef SARA_TEST_HOOKS
+  return GetEnvironmentVariableW(L"SARA_DESKTOP_TEST_DIR", nullptr, 0) > 0;
+#else
+  return false;
+#endif
+}
+// Phase 75 stage 3: who Sara is to Windows (toasts, taskbar grouping) and the COM class that takes
+// clicks on her toasts. The installer's Start-menu shortcut carries the same two (sara.iss).
+static const wchar_t* kAumid = L"BackstageCoding.Sara";
+static const wchar_t* kToastClsidText = L"{57448757-B168-47CE-9852-892129855C82}";
+static const CLSID kToastClsid = {0x57448757, 0xb168, 0x47ce, {0x98, 0x52, 0x89, 0x21, 0x29, 0x85, 0x5c, 0x82}};
+static const CLSID kToastClsidTest = {0x06518ab6, 0xe425, 0x4c52, {0xa9, 0x2f, 0xfb, 0x52, 0xbe, 0x78, 0x67, 0xe6}};
+static const wchar_t* aumid() { return testRun() ? L"BackstageCoding.Sara.Test" : kAumid; }
+static const wchar_t* toastClsidText() { return testRun() ? L"{06518AB6-E425-4C52-A92F-FB52BE7867E6}" : kToastClsidText; }
+static const CLSID& toastClsid() { return testRun() ? kToastClsidTest : kToastClsid; }
 static std::wstring getPref(const wchar_t* key, const wchar_t* def = L"") {
   wchar_t buf[2048];
   GetPrivateProfileStringW(L"sara", key, def, buf, 2048, iniPath().c_str());
@@ -440,6 +473,98 @@ static void setStartAtLogin(bool on) {
   RegCloseKey(k);
 }
 
+// ---------- Phase 75 stage 3: shortcuts that say they are Sara (AUMID + toast activator) ----------
+/** Puts Sara's AUMID and toast activator on a shortcut, so the taskbar groups the window with its
+ *  pin and Windows knows whose toasts they are. */
+static bool stampLink(IShellLinkW* link) {
+  ComPtr<IPropertyStore> props;
+  if (!link || FAILED(link->QueryInterface(IID_PPV_ARGS(&props)))) return false;
+  PROPVARIANT v;
+  bool ok = SUCCEEDED(InitPropVariantFromString(aumid(), &v));
+  if (ok) {
+    ok = SUCCEEDED(props->SetValue(PKEY_AppUserModel_ID, v));
+    PropVariantClear(&v);
+  }
+  if (ok && SUCCEEDED(InitPropVariantFromCLSID(toastClsid(), &v))) {
+    props->SetValue(PKEY_AppUserModel_ToastActivatorCLSID, v);
+    PropVariantClear(&v);
+  }
+  return ok && SUCCEEDED(props->Commit());
+}
+/** An existing shortcut to this exe (Start menu, a taskbar pin) made before 2.7: stamped once. */
+static void stampShortcut(const std::wstring& lnk, const std::wstring& target) {
+  if (!fileExists(lnk)) return;
+  ComPtr<IShellLinkW> link;
+  ComPtr<IPersistFile> file;
+  if (FAILED(CoCreateInstance(CLSID_ShellLink, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&link))) || FAILED(link.As(&file)) || FAILED(file->Load(lnk.c_str(), STGM_READWRITE))) return;
+  wchar_t path[MAX_PATH] = L"";
+  if (FAILED(link->GetPath(path, MAX_PATH, nullptr, SLGP_RAWPATH)) || _wcsicmp(path, target.c_str()) != 0) return;
+  ComPtr<IPropertyStore> props;
+  PROPVARIANT v;
+  PropVariantInit(&v);
+  if (SUCCEEDED(link.As(&props)) && SUCCEEDED(props->GetValue(PKEY_AppUserModel_ID, &v)) && v.vt == VT_LPWSTR && v.pwszVal && wcscmp(v.pwszVal, aumid()) == 0) {
+    PropVariantClear(&v);
+    return;
+  }
+  PropVariantClear(&v);
+  if (stampLink(link.Get())) file->Save(lnk.c_str(), TRUE);
+}
+static void stampShortcuts() {
+  std::wstring exe = exePath();
+  for (auto id : {FOLDERID_Programs, FOLDERID_CommonPrograms}) {
+    wchar_t* p = nullptr;
+    if (SUCCEEDED(SHGetKnownFolderPath(id, 0, nullptr, &p))) stampShortcut(std::wstring(p) + L"\\Sara.lnk", exe);  // the common one only with the rights to
+    CoTaskMemFree(p);
+  }
+  wchar_t* p = nullptr;
+  if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_RoamingAppData, 0, nullptr, &p))) stampShortcut(std::wstring(p) + L"\\Microsoft\\Internet Explorer\\Quick Launch\\User Pinned\\TaskBar\\Sara.lnk", exe);
+  CoTaskMemFree(p);
+}
+
+// ---------- Phase 75 stage 3: "Send to → Sara" in Explorer ----------
+// A shortcut in the user's SendTo folder, made on the first start and kept pointing at this exe;
+// the tray menu turns it off and on (desktop.ini sendTo=0/1). Explorer starts Sara.exe with the
+// files; a running Sara gets them from that second start (WM_COPYDATA) and puts them in the
+// message box as attachments.
+static std::wstring sendToPath() {
+  wchar_t* p = nullptr;
+  std::wstring out;
+  if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_SendTo, 0, nullptr, &p))) out = std::wstring(p) + (testRun() ? L"\\Sara (test).lnk" : L"\\Sara.lnk");
+  CoTaskMemFree(p);
+  return out;
+}
+static bool sendToOn() { return getPref(L"sendTo") == L"1"; }
+static void makeSendTo() {
+  std::wstring lnk = sendToPath();
+  if (lnk.empty()) return;
+  ComPtr<IShellLinkW> link;
+  if (FAILED(CoCreateInstance(CLSID_ShellLink, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&link)))) return;
+  link->SetPath(exePath().c_str());
+  link->SetDescription(L"Give these files to Sara: they're attached to your message in her window, and you send it.");
+  link->SetIconLocation(exePath().c_str(), 0);
+  stampLink(link.Get());
+  ComPtr<IPersistFile> file;
+  if (SUCCEEDED(link.As(&file))) file->Save(lnk.c_str(), TRUE);
+}
+static void setSendTo(bool on) {
+  setPref(L"sendTo", on ? L"1" : L"0");
+  if (on) makeSendTo();
+  else if (!sendToPath().empty()) DeleteFileW(sendToPath().c_str());
+}
+/** First start: on. Later: kept as the owner left it, pointing at this exe (it may have moved). */
+static void ensureSendTo() {
+  if (getPref(L"sendTo").empty()) return setSendTo(true);
+  if (!sendToOn()) return;
+  std::wstring lnk = sendToPath();
+  ComPtr<IShellLinkW> link;
+  ComPtr<IPersistFile> file;
+  wchar_t path[MAX_PATH] = L"";
+  if (fileExists(lnk) && SUCCEEDED(CoCreateInstance(CLSID_ShellLink, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&link))) && SUCCEEDED(link.As(&file)) &&
+      SUCCEEDED(file->Load(lnk.c_str(), STGM_READ)) && SUCCEEDED(link->GetPath(path, MAX_PATH, nullptr, SLGP_RAWPATH)) && _wcsicmp(path, exePath().c_str()) == 0)
+    return;
+  makeSendTo();
+}
+
 // ---------- install (a downloaded Sara.exe puts itself in the user's Programs and Start menu) ----------
 static bool installIfNeeded() {
   wchar_t* p = nullptr;
@@ -460,6 +585,7 @@ static bool installIfNeeded() {
       link->SetPath(target.c_str());
       link->SetDescription(L"Sara, your companion");
       link->SetIconLocation(target.c_str(), 0);
+      stampLink(link.Get());  // Phase 75 stage 3: toasts and taskbar pins know it's Sara
       ComPtr<IPersistFile> file;
       if (SUCCEEDED(link.As(&file))) file->Save(lnk.c_str(), TRUE);
     }
@@ -509,6 +635,9 @@ static void uninstall() {
   }
   setStartAtLogin(false);
   RegDeleteTreeW(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\SaraDesktop");
+  // Phase 75 stage 3: her Send To entry, her toasts and their registration.
+  if (!sendToPath().empty()) DeleteFileW(sendToPath().c_str());
+  saratoast::unregisterApp(aumid(), toastClsidText());
   wchar_t* p = nullptr;
   if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_Programs, 0, nullptr, &p))) {
     DeleteFileW((std::wstring(p) + L"\\Sara.lnk").c_str());
@@ -630,6 +759,7 @@ static void extendFrame() {
   DwmExtendFrameIntoClientArea(g_wnd, &m);
 }
 
+static void themeMenus();
 /** Title bar colours, Mica and the web view's background for the theme shown now. */
 static void applyTheme() {
   if (!g_wnd) return;
@@ -660,6 +790,7 @@ static void applyTheme() {
   ComPtr<ICoreWebView2Controller2> c2;
   COLORREF c = themeColor();
   if (g_controller && SUCCEEDED(g_controller.As(&c2))) c2->put_DefaultBackgroundColor({(BYTE)(g_mica ? 0 : 255), GetRValue(c), GetGValue(c), GetBValue(c)});
+  themeMenus();
   // Windows 10 repaints the caption only when the frame changes.
   extendFrame();
   SetWindowPos(g_wnd, nullptr, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
@@ -852,6 +983,7 @@ static std::wstring shortcutLabel() {
   const Shortcut* s = currentShortcut();
   return s ? s->label : L"";
 }
+static void notifyPlain(const std::wstring& title, const std::wstring& body);
 /** (Re)registers the shortcut; a clash with another app is said once, in plain words. */
 static void registerShortcut(bool tell) {
   if (!g_wnd) return;
@@ -864,7 +996,7 @@ static void registerShortcut(bool tell) {
     logLine(std::wstring(L"quick ask: ") + s->label + L" is used by another app (" + std::to_wstring(GetLastError()) + L")");
     if (tell) {
       g_pendingConv.clear();
-      trayBalloon(L"Choose another shortcut for Ask Sara", std::wstring(s->label) + L" is already used by another app. Right-click Sara's icon next to the clock → Quick ask shortcut to pick another one.");
+      notifyPlain(L"Choose another shortcut for Ask Sara", std::wstring(s->label) + L" is already used by another app. Right-click Sara's icon next to the clock → Quick ask shortcut to pick another one.");
     }
   }
 }
@@ -972,6 +1104,10 @@ static void updateTrayTip() {
   }
 }
 
+static void postSwitch(const std::wstring& id, const std::wstring& path);
+static void notifyApprovals(const std::wstring& lines);
+static void notifyReminder(std::map<std::wstring, std::wstring>& m);
+static void runToastQueue();
 /** {a:'state', …} from the quick-ask page: who she is, her mood and face, and "Now". */
 static void takeNow(std::map<std::wstring, std::wstring>& m) {
   NowState n;
@@ -1014,6 +1150,14 @@ static void takeNow(std::map<std::wstring, std::wstring>& m) {
   }
   g_now = n;
   updateTrayTip();
+  // Phase 75 stage 3: approvals waiting → a toast with Allow / Deny (once each); decided ones go away.
+  notifyApprovals(n.signedIn && !n.demo ? m[L"asks"] : L"");
+  // While a turn runs (an approval can come any moment) ask every 5 s, else every 45 s: the hidden
+  // quick-ask page's own timers are slowed down by the web view.
+  bool busy = m[L"busy"] == L"true";
+  static bool wasBusy = false;
+  if (g_wnd && busy != wasBusy) SetTimer(g_wnd, kNowTimer, busy ? 5000 : 45000, nullptr);
+  wasBusy = busy;
 }
 
 static void layoutQuickAsk() {
@@ -1129,6 +1273,7 @@ static void onQuickMessage(const std::wstring& json, const std::wstring& source)
   if (a == L"ready") {
     g_qaReady = true;
     if (g_qaWantShow) showQuickAsk();
+    runToastQueue();  // a toast's Allow / Snooze that came before the page was there
   } else if (a == L"hide") {
     hideQuickAsk();
   } else if (a == L"size") {
@@ -1147,6 +1292,8 @@ static void onQuickMessage(const std::wstring& json, const std::wstring& source)
     openConversation(m[L"conv"]);
   } else if (a == L"state") {
     takeNow(m);
+  } else if (a == L"reminder") {
+    notifyReminder(m);  // Phase 75 stage 3: a reminder went off (the page's /api/events)
   }
 }
 
@@ -1315,8 +1462,16 @@ static void ensureQuickAsk() {
       }).Get());
       return S_OK;
     }).Get(), nullptr);
+    // Phase 75 stage 3: the microphone for talking instead of typing (its own page only); nothing else.
     g_qaWeb->add_PermissionRequested(Callback<ICoreWebView2PermissionRequestedEventHandler>([](ICoreWebView2*, ICoreWebView2PermissionRequestedEventArgs* a) -> HRESULT {
-      a->put_State(COREWEBVIEW2_PERMISSION_STATE_DENY);
+      LPWSTR uri = nullptr;
+      a->get_Uri(&uri);
+      std::wstring u = uri ? uri : L"";
+      CoTaskMemFree(uri);
+      COREWEBVIEW2_PERMISSION_KIND k;
+      a->get_PermissionKind(&k);
+      bool mic = k == COREWEBVIEW2_PERMISSION_KIND_MICROPHONE && !g_qaServer.empty() && u.rfind(g_qaServer + kQuickPath, 0) == 0;
+      a->put_State(mic ? COREWEBVIEW2_PERMISSION_STATE_ALLOW : COREWEBVIEW2_PERMISSION_STATE_DENY);
       return S_OK;
     }).Get(), nullptr);
     g_qaWeb->add_WebMessageReceived(Callback<ICoreWebView2WebMessageReceivedEventHandler>([](ICoreWebView2*, ICoreWebView2WebMessageReceivedEventArgs* a) -> HRESULT {
@@ -1373,6 +1528,260 @@ static void ensureQuickAsk() {
   g_env->CreateCoreWebView2Controller(g_qa, done.Get());
 }
 
+// ---------- Phase 75 stage 3: native notifications (toasts with buttons) ----------
+// What shows a toast, and the rule against two notifications for one event:
+//   - approvals waiting (the quick-ask page's "Now", asked every 45 s, every few seconds while a turn
+//     runs, and on /api/events): one toast each, with what she wants to run (summary + command) and
+//     Allow / Deny / Open in Sara. Only while the window isn't in front (the card is there) and the
+//     quick-ask window isn't either. Decided anywhere else: the toast goes away. The web app never
+//     notifies for approvals, so there is nothing to replace.
+//   - reminders going off (the quick-ask page's /api/events 'message' with reason 'reminder'): a
+//     toast with Done / Snooze 10 min. The page in the main window also says the same reminder
+//     through SaraDesktop.notify(); both carry the same tag (her conversation + the text), so the
+//     one with the buttons replaces the page's, and the page's is dropped when ours came first.
+//   - everything the page says through SaraDesktop.notify() (messages, calls, sign-in requests) and
+//     any web Notification it shows (WebView2 NotificationReceived): a plain toast that opens that
+//     conversation. The old tray balloon is the fallback when toasts don't work here.
+// Off with the page's Settings → This computer → Notifications switch, signed out, and on the demo.
+// A button press is only ever acted on for an approval this app showed, for the server in use, that
+// is still waiting: Allow then calls the same route as the tray's Allow and the chat's card. Anything
+// else (a click after a restart, another server's) opens the conversation so the owner decides there.
+static bool g_toastOk = false;                                   // toasts work on this PC
+static std::wstring g_toastProfile;                              // the server the approval toasts are for
+static std::map<std::wstring, std::wstring> g_toastApprovals;    // approval id → its toast's tag
+struct ToastReminder {
+  std::wstring rid, conv, text;
+  DWORD at = 0;
+};
+static std::map<std::wstring, ToastReminder> g_toastReminders;   // tag → a reminder we showed
+static std::map<std::wstring, DWORD> g_pageToasts;               // tag → when the page's own notify showed it
+static std::vector<std::wstring> g_toastQueue;                   // clicks waiting for the window / the page
+static const DWORD kSameEventMs = 5 * 60 * 1000;
+
+/** Ids from the server go into toast arguments as they are only if they're plain. */
+static std::wstring plainId(const std::wstring& s, size_t max = 80) {
+  std::wstring o;
+  for (wchar_t c : s.substr(0, max))
+    if (iswalnum(c) || c == L'-' || c == L'_') o += c;
+  return o;
+}
+static std::wstring clip(const std::wstring& s, size_t n) { return s.size() <= n ? s : s.substr(0, n - 1) + L"…"; }
+/** A short stable tag (toasts allow 64 characters): FNV-1a 64 of the key. */
+static std::wstring toastTag(const wchar_t* prefix, const std::wstring& key) {
+  unsigned long long h = 1469598103934665603ULL;
+  for (wchar_t c : key) {
+    h ^= (unsigned long long)c;
+    h *= 1099511628211ULL;
+  }
+  wchar_t b[24];
+  swprintf(b, 24, L"%016llx", h);
+  return prefix + std::wstring(b);
+}
+/** The same event from the page and from us: her conversation and the text. */
+static std::wstring messageTag(const std::wstring& conv, const std::wstring& body) { return toastTag(L"m", conv + L"\n" + body.substr(0, 500)); }
+static void forgetOld(std::map<std::wstring, DWORD>& m) {
+  for (auto it = m.begin(); it != m.end();) it = GetTickCount() - it->second > kSameEventMs ? m.erase(it) : std::next(it);
+}
+
+/** Her icon as a PNG for the toast (written once, next to the settings). */
+static std::wstring toastIconPath() {
+  std::wstring path = dataDir() + L"\\toast-icon.png";
+  if (fileExists(path)) return path;
+  HICON icon = (HICON)LoadImageW(g_inst, MAKEINTRESOURCEW(IDI_SARA), IMAGE_ICON, 256, 256, 0);
+  ComPtr<IWICImagingFactory> f;
+  ComPtr<IWICBitmap> bmp;
+  ComPtr<IWICStream> st;
+  ComPtr<IWICBitmapEncoder> enc;
+  ComPtr<IWICBitmapFrameEncode> frame;
+  bool ok = icon && SUCCEEDED(CoCreateInstance(CLSID_WICImagingFactory, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&f))) && SUCCEEDED(f->CreateBitmapFromHICON(icon, &bmp)) &&
+            SUCCEEDED(f->CreateStream(&st)) && SUCCEEDED(st->InitializeFromFilename(path.c_str(), GENERIC_WRITE)) && SUCCEEDED(f->CreateEncoder(GUID_ContainerFormatPng, nullptr, &enc)) &&
+            SUCCEEDED(enc->Initialize(st.Get(), WICBitmapEncoderNoCache)) && SUCCEEDED(enc->CreateNewFrame(&frame, nullptr)) && SUCCEEDED(frame->Initialize(nullptr)) &&
+            SUCCEEDED(frame->WriteSource(bmp.Get(), nullptr)) && SUCCEEDED(frame->Commit()) && SUCCEEDED(enc->Commit());
+  if (icon) DestroyIcon(icon);
+  if (!ok) {
+    st.Reset();
+    DeleteFileW(path.c_str());
+    return L"";
+  }
+  return path;
+}
+
+/** Once at start: who she is to Windows, her toast registration and the activator for clicks. */
+static void initToasts() {
+  saratoast::registerApp(aumid(), toastClsidText(), testRun() ? L"Sara (test)" : L"Sara", toastIconPath(), exePath());
+  saratoast::state().onActivate = [](const std::wstring& who, const std::wstring& args) {
+    if (!who.empty() && _wcsicmp(who.c_str(), aumid()) != 0) return;
+    if (g_toastQueue.size() < 20) g_toastQueue.push_back(args.substr(0, 2048));
+    if (g_wnd) PostMessageW(g_wnd, WM_APP_TOAST, 0, 0);
+  };
+  if (!saratoast::registerActivator(toastClsid())) logLine(L"toasts: couldn't take clicks on them");
+  g_toastOk = saratoast::init(aumid());
+  if (!g_toastOk) logLine(L"toasts: not available here; using the tray balloon");
+  stampShortcuts();
+}
+
+/** Notifications are on, and the owner isn't already looking at Sara. */
+static bool notifyNow() { return prefOn(L"notifications", true) && !windowInFront() && !(quickAskVisible() && GetForegroundWindow() == g_qa); }
+
+/** A plain toast (title, text) that opens that conversation; the tray balloon if toasts don't work. */
+static bool toastMessage(const std::wstring& title, const std::wstring& body, const std::wstring& conv, const std::wstring& tag, const std::wstring& group) {
+  if (g_toastOk) {
+    std::wstring launch = L"a=open&p=" + plainId(g_profile) + L"&c=" + plainId(conv, 64);
+    std::wstring x = L"<toast launch=\"" + saratoast::xml(launch) + L"\"><visual><binding template=\"ToastGeneric\"><text>" + saratoast::xml(clip(title, 120)) + L"</text><text>" +
+                     saratoast::xml(clip(body, 400)) + L"</text></binding></visual></toast>";
+    if (saratoast::show(x, tag, group)) return true;
+  }
+  g_pendingConv = conv;
+  trayBalloon(title, body);
+  return false;
+}
+/** The app's own messages ("Sara is still here", a shortcut clash). */
+static void notifyPlain(const std::wstring& title, const std::wstring& body) { toastMessage(title, body, L"", toastTag(L"p", title), L"app"); }
+
+/** SaraDesktop.notify() and web notifications from the page: one toast each (see above). */
+static void notifyFromPage(const std::wstring& title, const std::wstring& body, const std::wstring& conv) {
+  if (!prefOn(L"notifications", true) || windowInFront()) return;
+  std::wstring tag = messageTag(plainId(conv, 64), body);
+  auto r = g_toastReminders.find(tag);
+  if (r != g_toastReminders.end() && GetTickCount() - r->second.at < kSameEventMs) return;  // ours (with Done / Snooze) is there
+  forgetOld(g_pageToasts);
+  g_pageToasts[tag] = GetTickCount();
+  toastMessage(title, body, conv, tag, L"msg");
+}
+
+/** Approvals waiting ("id\tconv\tsummary\tcommand" lines from the page): a toast for each new one,
+ *  and the toasts of the ones no longer waiting removed. */
+static void notifyApprovals(const std::wstring& lines) {
+  if (g_toastProfile != g_profile) {
+    for (auto& t : g_toastApprovals) saratoast::remove(t.second, L"approval");
+    g_toastApprovals.clear();
+    g_toastProfile = g_profile;
+  }
+  std::set<std::wstring> waiting;
+  size_t start = 0;
+  while (start < lines.size() && waiting.size() < kNowMax) {
+    size_t end = lines.find(L'\n', start);
+    std::wstring line = lines.substr(start, end == std::wstring::npos ? std::wstring::npos : end - start);
+    start = end == std::wstring::npos ? lines.size() : end + 1;
+    std::vector<std::wstring> f;
+    size_t a = 0;
+    for (size_t b; (b = line.find(L'\t', a)) != std::wstring::npos; a = b + 1) f.push_back(line.substr(a, b - a));
+    f.push_back(line.substr(a));
+    if (f.size() != 4) continue;
+    std::wstring id = plainId(f[0]), conv = plainId(f[1], 64);
+    if (id.empty() || id != f[0]) continue;
+    waiting.insert(id);
+    if (g_toastApprovals.count(id) || !notifyNow()) continue;
+    std::wstring tag = toastTag(L"a", id);
+    std::wstring who = g_now.name.empty() ? L"Sara" : g_now.name;
+    std::wstring base = L"&id=" + id + L"&p=" + plainId(g_profile) + L"&c=" + conv;
+    // What she wants to do and the command itself, so an Allow from here is an informed OK.
+    std::wstring x = L"<toast launch=\"" + saratoast::xml(L"a=open" + base) + L"\"><visual><binding template=\"ToastGeneric\"><text>" + saratoast::xml(clip(who, 60) + L" wants your OK") +
+                     L"</text><text>" + saratoast::xml(clip(f[2], 160)) + L"</text>" + (f[3].empty() ? L"" : L"<text>" + saratoast::xml(clip(f[3], 300)) + L"</text>") +
+                     L"<text placement=\"attribution\">Allow only if you expected this</text></binding></visual><actions>"
+                     L"<action content=\"Allow\" arguments=\"" + saratoast::xml(L"a=allow" + base) + L"\" activationType=\"background\"/>"
+                     L"<action content=\"Deny\" arguments=\"" + saratoast::xml(L"a=deny" + base) + L"\" activationType=\"background\"/>"
+                     L"<action content=\"Open in Sara\" arguments=\"" + saratoast::xml(L"a=open" + base) + L"\" activationType=\"foreground\"/></actions></toast>";
+    if (g_toastOk && saratoast::show(x, tag, L"approval")) g_toastApprovals[id] = tag;
+    else if (!g_toastOk) {
+      // No toasts here: one balloon (no buttons); the tray menu's "Now" has Allow / Deny.
+      g_toastApprovals[id] = L"";
+      g_pendingConv = conv;
+      trayBalloon(clip(who, 60) + L" wants your OK", clip(f[2], 120) + L". Right-click her icon → Now to allow or deny.");
+    }
+  }
+  for (auto it = g_toastApprovals.begin(); it != g_toastApprovals.end();) {
+    if (waiting.count(it->first)) {
+      ++it;
+      continue;
+    }
+    saratoast::remove(it->second, L"approval");
+    it = g_toastApprovals.erase(it);
+  }
+}
+
+/** {a:'reminder', conv, rid, text} from the quick-ask page: a toast with Done / Snooze 10 min. */
+static void notifyReminder(std::map<std::wstring, std::wstring>& m) {
+  if (!g_now.signedIn || g_now.demo || !notifyNow()) return;
+  std::wstring conv = plainId(m[L"conv"], 64), rid = plainId(m[L"rid"], 20), text = m[L"text"].substr(0, 2000);
+  if (text.empty()) return;
+  std::wstring tag = messageTag(conv, text);
+  for (auto it = g_toastReminders.begin(); it != g_toastReminders.end();) it = GetTickCount() - it->second.at > 60 * 60 * 1000 ? g_toastReminders.erase(it) : std::next(it);
+  g_toastReminders[tag] = ToastReminder{rid, conv, text, GetTickCount()};
+  std::wstring base = L"&t=" + tag + L"&r=" + rid + L"&p=" + plainId(g_profile) + L"&c=" + conv;
+  std::wstring x = L"<toast scenario=\"reminder\" launch=\"" + saratoast::xml(L"a=open" + base) + L"\"><visual><binding template=\"ToastGeneric\"><text>Reminder</text><text>" +
+                   saratoast::xml(clip(text, 400)) + L"</text></binding></visual><actions>"
+                   L"<action content=\"Done\" arguments=\"" + saratoast::xml(L"a=done" + base) + L"\" activationType=\"background\"/>"
+                   L"<action content=\"Snooze 10 min\" arguments=\"" + saratoast::xml(L"a=snooze" + base) + L"\" activationType=\"background\"/></actions></toast>";
+  if (g_toastOk && saratoast::show(x, tag, L"msg")) return;
+  forgetOld(g_pageToasts);
+  if (!g_pageToasts.count(tag)) toastMessage(L"Reminder", text, conv, tag, L"msg");  // the page didn't say it yet
+}
+
+/** "a=allow&id=…&p=…" → its fields. */
+static std::map<std::wstring, std::wstring> toastArgs(const std::wstring& s) {
+  std::map<std::wstring, std::wstring> out;
+  size_t a = 0;
+  while (a <= s.size()) {
+    size_t b = s.find(L'&', a);
+    std::wstring kv = s.substr(a, b == std::wstring::npos ? std::wstring::npos : b - a);
+    size_t eq = kv.find(L'=');
+    if (eq != std::wstring::npos) out[kv.substr(0, eq)] = kv.substr(eq + 1);
+    if (b == std::wstring::npos) break;
+    a = b + 1;
+  }
+  return out;
+}
+
+/** One click on a toast. Returns false when it has to wait for the quick-ask page. */
+static bool handleToast(const std::wstring& args) {
+  auto kv = toastArgs(args);
+  const std::wstring& a = kv[L"a"];
+  std::wstring p = plainId(kv[L"p"]), conv = plainId(kv[L"c"], 64);
+  bool here = !p.empty() && p == g_profile;
+  if (a == L"allow" || a == L"deny") {
+    std::wstring id = plainId(kv[L"id"]);
+    auto it = g_toastApprovals.find(id);
+    bool stillWaiting = false;
+    for (auto& i : g_now.items) stillWaiting = stillWaiting || (i.kind == L"approval" && i.id == id);
+    if (here && it != g_toastApprovals.end() && stillWaiting) {
+      if (!g_qaReady) return false;
+      // The owner's explicit OK (or no) for exactly what the toast showed: the tray's Allow / Deny.
+      logLine(std::wstring(L"toast: ") + (a == L"allow" ? L"allowed " : L"denied ") + id);
+      decideFromTray(id, a == L"allow");
+      saratoast::remove(it->second, L"approval");
+      g_toastApprovals.erase(it);
+      return true;
+    }
+    // Not one we can vouch for (after a restart, another server, already decided): the owner decides on the card.
+  } else if (a == L"snooze") {
+    if (!here) return true;
+    if (!g_qaReady) return false;
+    auto it = g_toastReminders.find(kv[L"t"]);
+    std::wstring rid = it != g_toastReminders.end() ? it->second.rid : plainId(kv[L"r"], 20);
+    std::wstring text = it != g_toastReminders.end() ? it->second.text : L"";
+    if (rid.empty() && text.empty()) return true;
+    g_qaWeb->ExecuteScript((L"window.saraQuick&&saraQuick.snooze(\"" + jsonEscape(rid) + L"\",\"" + jsonEscape(conv) + L"\",\"" + jsonEscape(text) + L"\")").c_str(), nullptr);
+    return true;
+  } else if (a == L"done") {
+    return true;  // it went off already; the toast is gone
+  }
+  // The toast itself / Open in Sara: her window with that conversation (switching to its server).
+  if (!p.empty() && !here && !loadProfile(p).url.empty()) {
+    postSwitch(p, conv.empty() ? L"/" : L"/#c=" + conv);
+    return true;
+  }
+  showWindow();
+  if (!conv.empty()) openConversation(conv);
+  return true;
+}
+static void runToastQueue() {
+  std::vector<std::wstring> later;
+  for (auto& args : std::vector<std::wstring>(g_toastQueue))
+    if (!handleToast(args)) later.push_back(args);
+  g_toastQueue = later;
+}
+
 /** Menu text: '&' would underline the next letter. */
 static std::wstring menuText(const std::wstring& s) {
   std::wstring o;
@@ -1388,6 +1797,25 @@ static std::wstring serverLabel(const Profile& p) {
   std::wstring host = hostOfUrl(p.url);
   std::wstring label = (p.emoji.empty() ? L"" : p.emoji + L" ") + p.name;
   return lower(p.name) == lower(host) ? label : label + L"  (" + host + L")";
+}
+
+/** Phase 75 stage 3: the tray menu (and the window's other menus) dark while the page shows Night.
+ *  uxtheme's unnamed exports: SetPreferredAppMode (ordinal 135, Windows 10 1903+), AllowDarkModeForWindow
+ *  (133) and FlushMenuThemes (136). Older Windows, or a uxtheme without them: the normal light menu. */
+static void themeMenus() {
+  if (windowsBuild() < 18362) return;
+  static HMODULE ux = LoadLibraryExW(L"uxtheme.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+  if (!ux) return;
+  using SetPreferredAppModeFn = int(WINAPI*)(int);
+  using AllowDarkModeForWindowFn = BOOL(WINAPI*)(HWND, BOOL);
+  using FlushMenuThemesFn = void(WINAPI*)();
+  static auto setMode = reinterpret_cast<SetPreferredAppModeFn>(reinterpret_cast<void*>(GetProcAddress(ux, MAKEINTRESOURCEA(135))));
+  static auto allowWindow = reinterpret_cast<AllowDarkModeForWindowFn>(reinterpret_cast<void*>(GetProcAddress(ux, MAKEINTRESOURCEA(133))));
+  static auto flush = reinterpret_cast<FlushMenuThemesFn>(reinterpret_cast<void*>(GetProcAddress(ux, MAKEINTRESOURCEA(136))));
+  if (!setMode) return;
+  setMode(g_day ? 3 : 2);  // 2 = ForceDark, 3 = ForceLight (follows the page, not the system)
+  if (allowWindow && g_wnd) allowWindow(g_wnd, g_day ? FALSE : TRUE);
+  if (flush) flush();
 }
 
 /** The tray menu, the same order as the Mac's menu bar menu:
@@ -1454,6 +1882,8 @@ static void trayMenu() {
   AppendMenuW(keys, MF_SEPARATOR, 0, nullptr);
   AppendMenuW(keys, MF_STRING | (cur == L"off" ? MF_CHECKED : 0), ID_SHORTCUT_OFF, L"Off");
   AppendMenuW(m, MF_POPUP, (UINT_PTR)keys, L"Quick ask shortcut");
+  // Phase 75 stage 3: "Send to → Sara" in Explorer's right-click menu (made on the first start).
+  AppendMenuW(m, MF_STRING | (sendToOn() ? MF_CHECKED : 0), ID_SENDTO, L"Send to Sara in Explorer");
   AppendMenuW(m, MF_STRING | needsServer, ID_HELP, L"Help");
   AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
   AppendMenuW(m, MF_STRING, ID_QUIT, L"Quit Sara");
@@ -1461,6 +1891,7 @@ static void trayMenu() {
   POINT pt;
   GetCursorPos(&pt);
   SetForegroundWindow(g_wnd);
+  themeMenus();
   refreshNow();  // fresh for the next time it opens
   TrackPopupMenu(m, TPM_RIGHTBUTTON, pt.x, pt.y, 0, g_wnd, nullptr);
   PostMessageW(g_wnd, WM_NULL, 0, 0);  // so the menu closes when you click elsewhere
@@ -1685,7 +2116,32 @@ static const wchar_t* kShim = LR"JS(
     const d = e.data || {};
     if (d.id && pending.has(d.id)) { const p = pending.get(d.id); pending.delete(d.id); d.error ? p.reject(new Error(d.error)) : p.resolve(d.result); }
     if (d.open) location.hash = 'c=' + d.open;
+    // Phase 75 stage 3: files from Explorer's Send To / Sara.exe <files>: into the message box as
+    // attachments (never sent by themselves). The page's own hook when it has one, else its attach
+    // button's file input, so the page's own rules (types, sizes, how many) apply as for a drop.
+    if (d.attach) attach(e.additionalObjects ? [...e.additionalObjects] : []);
   });
+  const attach = async (handles) => {
+    const files = [];
+    for (const h of handles) {
+      try { files.push(h && typeof h.getFile === 'function' ? await h.getFile() : h); } catch (err) { /* gone meanwhile */ }
+    }
+    let ok = false;
+    try {
+      if (files.length && typeof window.saraDesktopAttach === 'function') ok = (await window.saraDesktopAttach(files)) !== false;
+      else {
+        const input = document.getElementById('attach-file');
+        if (files.length && input && !document.body.classList.contains('demo')) {
+          const dt = new DataTransfer();
+          for (const f of files) dt.items.add(f);
+          input.files = dt.files;
+          input.dispatchEvent(new Event('change', { bubbles: true }));
+          ok = true;
+        }
+      }
+    } catch (err) { ok = false; }
+    post({ m: 'attached', ok, n: files.length });
+  };
   const post = (o) => chrome.webview.postMessage(o);
   window.SaraDesktop = {
     platform: 'windows',
@@ -1702,13 +2158,81 @@ static void reply(const std::wstring& id, const std::wstring& resultJson, const 
   g_web->PostWebMessageAsJson(msg.c_str());
 }
 
+// ---------- Phase 75 stage 3: files from Explorer (Send To → Sara, Sara.exe <files>) ----------
+// The files go to the page as read-only file handles (WebView2 PostWebMessageAsJsonWithAdditionalObjects);
+// the bridge script above puts them into the message box. Nothing is uploaded or sent here: the page
+// uploads them with its own routes and rules when the owner presses Send.
+static std::vector<std::wstring> g_pendingFiles;
+static bool g_filesInFlight = false;
+/** Only files (not folders) that exist, at most kMaxFiles. */
+static std::vector<std::wstring> realFiles(const std::vector<std::wstring>& in) {
+  std::vector<std::wstring> out;
+  for (auto& f : in) {
+    if (out.size() >= kMaxFiles) break;
+    if (f.empty() || f.size() > 4096) continue;
+    DWORD at = GetFileAttributesW(f.c_str());
+    if (at == INVALID_FILE_ATTRIBUTES || (at & FILE_ATTRIBUTE_DIRECTORY)) continue;
+    wchar_t full[4096];
+    DWORD n = GetFullPathNameW(f.c_str(), 4096, full, nullptr);
+    if (n > 0 && n < 4096) out.push_back(full);
+  }
+  return out;
+}
+/** Hands the waiting files to her page (once it's her page, signed in). */
+static void deliverFiles() {
+  if (g_pendingFiles.empty() || g_filesInFlight || !g_web || !g_env) return;
+  LPWSTR src = nullptr;
+  g_web->get_Source(&src);
+  bool onServer = src && sameOrigin(src) && wcsstr(src, L"/pair") == nullptr;
+  CoTaskMemFree(src);
+  if (!onServer) return;  // the address page, can't reach, the sign-in: they wait
+  ComPtr<ICoreWebView2Environment14> e14;
+  ComPtr<ICoreWebView2_23> w23;
+  if (FAILED(g_env.As(&e14)) || FAILED(g_web.As(&w23))) {
+    g_pendingFiles.clear();
+    notifyPlain(L"Drag the files into Sara's window", L"This version of Microsoft Edge WebView2 can't hand files to Sara this way. Drag them into her window instead.");
+    return;
+  }
+  std::vector<ComPtr<ICoreWebView2FileSystemHandle>> handles;
+  std::vector<IUnknown*> raw;
+  for (auto& f : g_pendingFiles) {
+    ComPtr<ICoreWebView2FileSystemHandle> h;
+    if (SUCCEEDED(e14->CreateWebFileSystemFileHandle(f.c_str(), COREWEBVIEW2_FILE_SYSTEM_HANDLE_PERMISSION_READ_ONLY, &h)) && h) {
+      raw.push_back(h.Get());
+      handles.push_back(h);
+    }
+  }
+  g_pendingFiles.clear();
+  ComPtr<ICoreWebView2ObjectCollection> list;
+  if (raw.empty() || FAILED(e14->CreateObjectCollection((UINT32)raw.size(), raw.data(), &list)) || FAILED(w23->PostWebMessageAsJsonWithAdditionalObjects(L"{\"attach\":true}", list.Get()))) {
+    logLine(L"files: couldn't hand them to the page");
+    return;
+  }
+  g_filesInFlight = true;
+  logLine(L"files: " + std::to_wstring(raw.size()) + L" handed to the page");
+}
+/** The page took them (or had no message box: not signed in yet, the demo). */
+static void filesAttached(bool ok) {
+  g_filesInFlight = false;
+  if (!ok) notifyPlain(L"Sara couldn't take the files yet", L"Sign in to her in the window first (and not on the demo), then send them again.");
+}
+/** Files from a second start or the command line: shown in the window, attached when her page is there. */
+static void takeFiles(const std::vector<std::wstring>& paths) {
+  auto files = realFiles(paths);
+  if (files.empty()) return;
+  for (auto& f : files)
+    if (g_pendingFiles.size() < kMaxFiles) g_pendingFiles.push_back(f);
+  showWindow();
+  deliverFiles();
+}
+
 static std::wstring prefsJson() {
   return std::wstring(L"{\"platform\":\"windows\",\"version\":\"") + kVersion + L"\",\"startAtLogin\":" + (startAtLogin() ? L"true" : L"false") +
          L",\"keepRunning\":" + (prefOn(L"keepRunning", true) ? L"true" : L"false") + L",\"notifications\":" + (prefOn(L"notifications", true) ? L"true" : L"false") +
          L",\"server\":\"" + jsonEscape(g_server) + L"\",\"theme\":\"" + g_themePref + L"\",\"titlebar\":" + std::to_wstring(g_customFrame ? kTitlebarDip : 0) +
          // Phase 75 stage 2: the quick-ask shortcut, the choices, and whether another app has it.
          L",\"quickAskShortcut\":\"" + shortcutId() + L"\",\"quickAskShortcutLabel\":\"" + shortcutLabel() + L"\",\"quickAskShortcutFree\":" + (g_shortcutTaken ? L"false" : L"true") +
-         L",\"quickAskShortcuts\":" + shortcutsJson() + L"}";
+         L",\"quickAskShortcuts\":" + shortcutsJson() + L",\"sendTo\":" + (sendToOn() ? L"true" : L"false") + L",\"toasts\":" + (g_toastOk ? L"true" : L"false") + L"}";
 }
 
 static void onMessage(const std::wstring& json, const std::wstring& source) {
@@ -1791,21 +2315,18 @@ static void onMessage(const std::wstring& json, const std::wstring& source) {
     if (key == L"quickAskShortcut") {
       if (!setShortcut(m[L"value"])) return reply(id, L"null", L"Unknown shortcut");
     } else if (key == L"startAtLogin") setStartAtLogin(on);
+    else if (key == L"sendTo") setSendTo(on);  // Phase 75 stage 3: "Send to → Sara" in Explorer
     else if (key == L"keepRunning" || key == L"notifications") setPref(key.c_str(), on ? L"1" : L"0");
     else return reply(id, L"null", L"Unknown setting");
     return reply(id, prefsJson());
   }
   if (kind == L"testNotification") {
     g_pendingConv.clear();
-    trayBalloon(m[L"title"], m[L"body"]);
+    toastMessage(m[L"title"], m[L"body"], L"", toastTag(L"t", std::to_wstring(GetTickCount())), L"test");
     return reply(id, L"true");
   }
-  if (kind == L"notify") {
-    if (!prefOn(L"notifications", true) || windowInFront()) return;
-    g_pendingConv = m[L"conv"];
-    trayBalloon(m[L"title"], m[L"body"]);
-    return;
-  }
+  if (kind == L"notify") return notifyFromPage(m[L"title"], m[L"body"], m[L"conv"]);
+  if (kind == L"attached") return filesAttached(m[L"ok"] == L"true");
   if (kind == L"attention") {
     // A call: bring the window up (Windows may only flash the taskbar button if another app is busy).
     showWindow();
@@ -1893,6 +2414,8 @@ static void createController() {
             std::wstring u = uri ? uri : L"";
             CoTaskMemFree(uri);
             if (!ok && sameOrigin(u) && st != COREWEBVIEW2_WEB_ERROR_STATUS_OPERATION_CANCELED) showOffline();
+            // Phase 75 stage 3: files that came while her page wasn't there yet.
+            if (ok && sameOrigin(u)) deliverFiles();
             // Phase 68: removing a server that wasn't in use: now it's open, sign out there.
             if (!g_removeAfterLoad.empty() && g_removeAfterLoad == g_profile && sameOrigin(u)) {
               g_removeAfterLoad.clear();
@@ -1923,6 +2446,28 @@ static void createController() {
             onMessage(j, s);
             return S_OK;
           }).Get(), nullptr);
+          // Phase 75 stage 3: a web Notification from the page (new Notification(), a service
+          // worker's) becomes the app's own toast, under the same one-per-event rule, never a second one.
+          ComPtr<ICoreWebView2_24> w24;
+          if (SUCCEEDED(g_web.As(&w24))) {
+            w24->add_NotificationReceived(Callback<ICoreWebView2NotificationReceivedEventHandler>([](ICoreWebView2*, ICoreWebView2NotificationReceivedEventArgs* a) -> HRESULT {
+              a->put_Handled(TRUE);
+              LPWSTR origin = nullptr;
+              a->get_SenderOrigin(&origin);
+              bool mine = origin && sameOrigin(origin);
+              CoTaskMemFree(origin);
+              ComPtr<ICoreWebView2Notification> n;
+              if (!mine || FAILED(a->get_Notification(&n)) || !n) return S_OK;
+              LPWSTR title = nullptr, body = nullptr;
+              n->get_Title(&title);
+              n->get_Body(&body);
+              notifyFromPage(title ? title : L"Sara", body ? body : L"", L"");
+              CoTaskMemFree(title);
+              CoTaskMemFree(body);
+              n->ReportShown();
+              return S_OK;
+            }).Get(), nullptr);
+          }
           // Phase 75: window.saraShell and <html class="shell-windows"> before any page script.
           g_web->AddScriptToExecuteOnDocumentCreated(shellScript().c_str(), nullptr);
           // Open the server only once the bridge script is registered, or the first page misses it.
@@ -2116,7 +2661,7 @@ static LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
           g_toldAboutTray = true;
           setPref(L"toldTray", L"1");
           g_pendingConv.clear();
-          trayBalloon(L"Sara is still here", L"She keeps running next to the clock so she can reach you. Right-click her icon to quit.");
+          notifyPlain(L"Sara is still here", L"She keeps running next to the clock so she can reach you. Right-click her icon to quit.");
         }
         return 0;
       }
@@ -2138,6 +2683,7 @@ static LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
       return 0;
     case WM_DESTROY:
       UnregisterHotKey(h, kHotkeyId);
+      saratoast::unregisterActivator();
       KillTimer(h, kNowTimer);
       closeQuickAskWebView();
       if (g_qa) DestroyWindow(g_qa);
@@ -2161,6 +2707,21 @@ static LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
     case WM_APP_REMOVED:
       afterRemove();
       return 0;
+    case WM_APP_TOAST:
+      runToastQueue();  // Phase 75 stage 3: clicks on her toasts
+      return 0;
+    case WM_COPYDATA: {
+      // Phase 75 stage 3: a second start (Send To, Sara.exe <files>) hands its files over.
+      auto* cd = reinterpret_cast<const COPYDATASTRUCT*>(lp);
+      if (!cd || cd->dwData != kCopyFiles || !cd->lpData || cd->cbData == 0 || cd->cbData > 64 * 1024 || cd->cbData % sizeof(wchar_t)) return FALSE;
+      std::wstring all(static_cast<const wchar_t*>(cd->lpData), cd->cbData / sizeof(wchar_t));
+      std::vector<std::wstring> paths;
+      size_t a = 0;
+      for (size_t b; (b = all.find(L'\n', a)) != std::wstring::npos; a = b + 1) paths.push_back(all.substr(a, b - a));
+      paths.push_back(all.substr(a));
+      takeFiles(paths);
+      return TRUE;
+    }
     case WM_TIMER:
       if (wp == kRemoveTimer) finishRemove();
       if (wp == kNowTimer) refreshNow();
@@ -2193,6 +2754,7 @@ static LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
         case ID_HEADER: showWindow(); break;
         case ID_ASK: showQuickAsk(); break;
         case ID_SHORTCUT_OFF: setShortcut(L"off"); break;
+        case ID_SENDTO: setSendTo(!sendToOn()); break;
         default:
           if (LOWORD(wp) >= ID_NOW0 && LOWORD(wp) < ID_NOW0 + kNowMax) {
             size_t i = LOWORD(wp) - ID_NOW0;
@@ -2227,23 +2789,79 @@ static LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
   return DefWindowProcW(h, msg, wp, lp);
 }
 
+/** Phase 75 stage 3: the running Sara's window, for a second start (shared by name, so a test run
+ *  and the real app never find each other's window by its class). */
+static HANDLE g_windowShare = nullptr;
+static const wchar_t* windowShareName() { return testRun() ? L"Local\\SaraDesktopAppTestWindow" : L"Local\\SaraDesktopAppWindow"; }
+static void shareWindow(HWND w) {
+  g_windowShare = CreateFileMappingW(INVALID_HANDLE_VALUE, nullptr, PAGE_READWRITE, 0, sizeof(unsigned long long), windowShareName());
+  if (!g_windowShare) return;
+  if (auto* v = static_cast<unsigned long long*>(MapViewOfFile(g_windowShare, FILE_MAP_WRITE, 0, 0, sizeof(unsigned long long)))) {
+    *v = (unsigned long long)(ULONG_PTR)w;
+    UnmapViewOfFile(v);
+  }
+}
+static HWND sharedWindow() {
+  HWND w = nullptr;
+  if (HANDLE m = OpenFileMappingW(FILE_MAP_READ, FALSE, windowShareName())) {
+    if (auto* v = static_cast<unsigned long long*>(MapViewOfFile(m, FILE_MAP_READ, 0, 0, sizeof(unsigned long long)))) {
+      w = (HWND)(ULONG_PTR)*v;
+      UnmapViewOfFile(v);
+    }
+    CloseHandle(m);
+  }
+  wchar_t cls[64] = L"";
+  if (w && (!IsWindow(w) || !GetClassNameW(w, cls, 64) || wcscmp(cls, kWindowClass) != 0)) w = nullptr;
+  // A Sara from before 2.7 doesn't share it: found by its class, as before (never for a test run).
+  if (!w && !testRun()) w = FindWindowW(kWindowClass, nullptr);
+  return w;
+}
+
 int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR cmd, int show) {
   g_inst = inst;
   bool background = wcsstr(cmd, L"--background") != nullptr;
   bool portable = wcsstr(cmd, L"--portable") != nullptr;
+  // Phase 75 stage 3: who she is to Windows (toasts, taskbar); started by a click on a toast
+  // (-ToastActivated, COM's -Embedding); files from Send To or "Sara.exe <files>".
+  SetCurrentProcessExplicitAppUserModelID(aumid());
+  bool fromToast = wcsstr(cmd, L"-ToastActivated") != nullptr || wcsstr(cmd, L"-Embedding") != nullptr;
+  if (fromToast) background = true;  // the click itself says whether to show the window
+  std::vector<std::wstring> files;
+  {
+    int argc = 0;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
+    for (int i = 1; argv && i < argc; i++) {
+      if (wcscmp(argv[i], L"--server") == 0) {
+        i++;
+        continue;
+      }
+      if (argv[i][0] == L'-') continue;  // --background, --portable, -ToastActivated, …
+      files.push_back(argv[i]);
+    }
+    if (argv) LocalFree(argv);
+    files = realFiles(files);
+  }
   if (wcsstr(cmd, L"--uninstall")) {
     CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
     uninstall();
     return 0;
   }
   // One Sara at a time: a second start just shows the first.
-#ifdef SARA_TEST_HOOKS
-  HANDLE single = CreateMutexW(nullptr, TRUE, GetEnvironmentVariableW(L"SARA_DESKTOP_TEST_DIR", nullptr, 0) > 0 ? L"Local\\SaraDesktopAppTest" : L"Local\\SaraDesktopApp");
-#else
-  HANDLE single = CreateMutexW(nullptr, TRUE, L"Local\\SaraDesktopApp");
-#endif
+  HANDLE single = CreateMutexW(nullptr, TRUE, testRun() ? L"Local\\SaraDesktopAppTest" : L"Local\\SaraDesktopApp");
   if (GetLastError() == ERROR_ALREADY_EXISTS) {
-    if (HWND other = FindWindowW(kWindowClass, nullptr)) PostMessageW(other, WM_APP_SHOW, 0, 0);
+    // Phase 75 stage 3: files go to the running Sara (WM_COPYDATA); otherwise she just shows up.
+    if (HWND other = sharedWindow()) {
+      DWORD pid = 0;
+      GetWindowThreadProcessId(other, &pid);
+      AllowSetForegroundWindow(pid);
+      if (!files.empty()) {
+        std::wstring all;
+        for (auto& f : files) all += (all.empty() ? L"" : L"\n") + f;
+        COPYDATASTRUCT cd{kCopyFiles, (DWORD)(all.size() * sizeof(wchar_t)), all.data()};
+        DWORD_PTR r = 0;
+        SendMessageTimeoutW(other, WM_COPYDATA, 0, (LPARAM)&cd, SMTO_ABORTIFHUNG, 5000, &r);
+      } else if (!fromToast) PostMessageW(other, WM_APP_SHOW, 0, 0);
+    }
     return 0;
   }
   CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
@@ -2324,11 +2942,17 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR cmd, int show) {
     SetWindowPos(g_wnd, nullptr, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
   }
   addTray();
+  shareWindow(g_wnd);
+  // Phase 75 stage 3: toasts (and clicks on them, also the one that started us) and Send To.
+  initToasts();
+  ensureSendTo();
   // Phase 75 stage 2: the quick-ask shortcut (a clash is said once per start), "Now" every 45 s.
   registerShortcut(true);
   SetTimer(g_wnd, kNowTimer, 45000, nullptr);
-  if (!background) ShowWindow(g_wnd, maximized ? SW_SHOWMAXIMIZED : show);
+  if (!background || !files.empty()) ShowWindow(g_wnd, maximized ? SW_SHOWMAXIMIZED : show);
   createWebView();
+  if (!files.empty()) takeFiles(files);  // attached once her page has loaded
+  if (!g_toastQueue.empty()) PostMessageW(g_wnd, WM_APP_TOAST, 0, 0);
 
   MSG msg;
   while (GetMessageW(&msg, nullptr, 0, 0)) {
@@ -2337,6 +2961,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR cmd, int show) {
   }
   BufferedPaintUnInit();
   CoUninitialize();
+  if (g_windowShare) CloseHandle(g_windowShare);
   CloseHandle(single);
   return (int)msg.wParam;
 }

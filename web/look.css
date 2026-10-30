@@ -14,7 +14,7 @@ body { background: var(--surface-0); -webkit-font-smoothing: antialiased; }
 #conversations a.active { background: var(--accent-soft); color: var(--text-1); box-shadow: inset 2px 0 0 var(--accent-solid); }
 #conversations a:hover:not(.active) { background: color-mix(in srgb, var(--surface-2) 80%, transparent); }
 .side-go.is-open { background: var(--accent-soft); }
-#new-chat { background: var(--accent-grad); color: #fff; border-radius: var(--r-pill); box-shadow: 0 4px 14px -6px var(--accent-glow); }
+#new-chat { background: var(--accent-grad); color: var(--on-mine); border-radius: var(--r-pill); box-shadow: 0 4px 14px -6px var(--accent-glow); }
 #new-chat:hover { filter: brightness(1.08); }
 #chat { position: relative; min-height: 0; }
 
@@ -422,7 +422,7 @@ li.step { animation: step-in var(--dur-slow) var(--ease-out) both; }
 #composer-plus { font-size: 26px; font-weight: 300; line-height: 1; }
 #composer-plus.on { transform: rotate(45deg); }
 #composer-plus { transition: transform var(--dur) var(--ease-out), background var(--dur-fast); }
-#mic.recording, #call.active { background: var(--accent-grad); color: #fff; }
+#mic.recording, #call.active { background: var(--accent-grad); color: var(--on-mine); }
 #composer #send {
   flex: none;
   display: grid;
@@ -432,7 +432,7 @@ li.step { animation: step-in var(--dur-slow) var(--ease-out) both; }
   padding: 0;
   border-radius: 50%;
   background: var(--accent-grad);
-  color: #fff;
+  color: var(--on-mine);
   box-shadow: 0 6px 18px -6px var(--accent-glow);
   transition: transform var(--dur-fast) var(--ease-out), filter var(--dur-fast);
 }

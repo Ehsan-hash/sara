@@ -14,6 +14,8 @@
 // Phase 75 stage 2 (QuickAsk.swift): a global shortcut (⌥⇧S) for a floating quick-ask panel, her
 // face, mood and "Now" (jobs, approvals with Allow / Deny) at the top of the menu bar menu, her mood
 // in the menu bar icon's tooltip.
+// Phase 75 stage 3 (Notify.swift): notifications with buttons for approvals (Allow / Deny / Open) and
+// reminders (Done / Snooze 10 min), files dropped on the Dock icon go into the message box.
 import AppKit
 import ServiceManagement
 import UserNotifications
@@ -129,6 +131,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
   var mouseDownMonitor: Any?
   /// Phase 75 stage 2: the quick-ask panel, its shortcut and "Now" (QuickAsk.swift).
   var quick: QuickAsk?
+  /// Phase 75 stage 3: the notifications this app showed, and files waiting for her page (Notify.swift).
+  let notes = NativeNotes()
 
   // MARK: start-up
   /// The web view, on the data store of the server it shows (Phase 68: one store per server).
@@ -188,7 +192,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
     statusItem.menu = statusMenu()
 
     UNUserNotificationCenter.current().delegate = self
-    UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { _, _ in }
+    // Phase 75 stage 3: the kinds with buttons; permission is asked the first time there's something to show.
+    registerNoteCategories()
 
     let background = ProcessInfo.processInfo.arguments.contains("--background")
       || (NSAppleEventManager.shared().currentAppleEvent?.paramDescriptor(forKeyword: keyAELaunchedAsLogInItem) != nil)
@@ -519,9 +524,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
       postNotification(title: body["title"] as? String ?? "Sara", body: body["body"] as? String ?? "", conv: "")
       replyHandler(true, nil)
     case "notify":
-      if notificationsOn && !(window.isKeyWindow && NSApp.isActive) {
-        postNotification(title: body["title"] as? String ?? "Sara", body: body["body"] as? String ?? "", conv: body["conv"] as? String ?? "")
-      }
+      notifyFromPage(title: body["title"] as? String ?? "Sara", body: body["body"] as? String ?? "", conv: body["conv"] as? String ?? "")
       replyHandler(true, nil)
     case "attention":
       showWindow()
@@ -564,12 +567,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
 
   // MARK: notifications
   func postNotification(title: String, body: String, conv: String) {
-    let c = UNMutableNotificationContent()
-    c.title = title
-    c.body = body
-    c.sound = .default
-    if !conv.isEmpty { c.userInfo = ["conv": conv] }
-    UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: UUID().uuidString, content: c, trigger: nil))
+    addNote(id: UUID().uuidString, title: title, body: body, info: conv.isEmpty ? [:] : ["conv": conv])
   }
 
   func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent n: UNNotification, withCompletionHandler done: @escaping (UNNotificationPresentationOptions) -> Void) {
@@ -577,11 +575,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
   }
 
   func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive r: UNNotificationResponse, withCompletionHandler done: @escaping () -> Void) {
-    showWindow()
-    if let conv = r.notification.request.content.userInfo["conv"] as? String, !conv.isEmpty,
-       let data = try? JSONSerialization.data(withJSONObject: [conv]), let arr = String(data: data, encoding: .utf8) {
-      web.evaluateJavaScript("location.hash = 'c=' + \(arr)[0]")
-    }
+    // Phase 75 stage 3: Allow / Deny / Done / Snooze or the notification itself (Notify.swift).
+    handleNoteResponse(r)
     done()
   }
 
@@ -604,6 +599,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
   }
 
   func webView(_ webView: WKWebView, didFinish nav: WKNavigation!) {
+    // Phase 75 stage 3: files dropped on the Dock icon while her page wasn't there yet.
+    if isServer(webView.url) { deliverDockFiles() }
     // Phase 68: removing a server that wasn't in use: now it's open, sign out there.
     if let r = pendingRemove, r == Servers.activeId, isServer(webView.url) {
       pendingRemove = nil

@@ -16,6 +16,13 @@
   <key>NSMicrophoneUsageDescription</key><string>Sara uses the microphone for calls and voice messages with her.</string>
   <key>NSCameraUsageDescription</key><string>Sara uses the camera only on video calls, when you turn your camera on, so she can see what you show her.</string>
   <key>NSAppTransportSecurity</key><dict><key>NSAllowsArbitraryLoads</key><true/></dict>
+  <!-- Phase 75 stage 3: files dropped on the Dock icon (or Open With → Sara) go into her message box. Never the default app for anything. -->
+  <key>CFBundleDocumentTypes</key><array><dict>
+    <key>CFBundleTypeName</key><string>Files for Sara</string>
+    <key>CFBundleTypeRole</key><string>Viewer</string>
+    <key>LSHandlerRank</key><string>Alternate</string>
+    <key>LSItemContentTypes</key><array><string>public.data</string><string>public.content</string></array>
+  </dict></array>
   <key>NSHumanReadableCopyright</key><string>Backstage Coding</string>
 </dict>
 </plist>

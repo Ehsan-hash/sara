@@ -1,29 +1,33 @@
-/* Privacy, support and help pages (served to everyone; the app's CSP allows no inline styles). */
-body { margin: 0; background: #121016; color: #eee9f3; font: 16px/1.6 system-ui, -apple-system, "Segoe UI", sans-serif; }
+/* Privacy, support and help pages (served to everyone; the app's CSP allows no inline styles).
+   Phase 75 (stage 3): on the design tokens of theme.css (Night by default, Day when picked on this
+   device, the same as the app; web/theme-boot.js sets it before anything draws). */
+body { margin: 0; background: var(--page-glow), var(--surface-0); background-attachment: fixed; color: var(--text-1); font: 16px/1.6 var(--font-ui); -webkit-font-smoothing: antialiased; }
 main { max-width: 760px; margin: 0 auto; padding: 40px 22px 80px; }
-h1 { font-size: 28px; margin: 0 0 4px; } h2 { font-size: 19px; margin: 30px 0 6px; }
-p, li { color: #d9d2e2; } .muted { color: #a49cae; font-size: 14px; } a { color: #f3a6bf; }
-code { background: #241f2b; padding: 1px 5px; border-radius: 5px; }
+h1 { font-size: 28px; margin: 0 0 4px; letter-spacing: -0.02em; font-weight: 650; } h2 { font-size: 19px; margin: 30px 0 6px; letter-spacing: var(--tracking-tight); font-weight: 650; }
+p, li { color: var(--text-1); } .muted { color: var(--text-2); font-size: 14px; } a { color: var(--accent-text); }
+a:focus-visible { outline: 2px solid var(--accent-text); outline-offset: 2px; border-radius: 4px; }
+code { background: var(--surface-2); border: 1px solid var(--hairline); padding: 1px 5px; border-radius: 5px; font-family: var(--font-mono); font-size: .92em; }
+em, strong, b { color: var(--text-1); }
 
 /* Help page */
 .wrap { display: grid; grid-template-columns: 230px 1fr; max-width: 1080px; margin: 0 auto; gap: 34px; padding: 34px 22px 90px; }
-nav { position: sticky; top: 20px; align-self: start; font-size: 14px; }
-nav a { display: block; padding: 5px 10px; border-radius: 8px; color: #d9d2e2; text-decoration: none; }
-nav a:hover { background: #241f2b; }
-nav .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 18px; margin-bottom: 14px; color: #eee9f3; }
-nav .brand img { width: 30px; height: 30px; border-radius: 50%; }
+nav { position: sticky; top: 20px; align-self: start; max-height: calc(100vh - 40px); overflow-y: auto; font-size: 14px; padding: 12px; border: 1px solid var(--hairline-strong); border-radius: 18px; background: var(--glass); -webkit-backdrop-filter: var(--glass-filter); backdrop-filter: var(--glass-filter); scrollbar-width: thin; scrollbar-color: var(--hairline-strong) transparent; }
+nav a { display: block; padding: 5px 10px; border-radius: 8px; color: var(--text-2); text-decoration: none; }
+nav a:hover { background: color-mix(in srgb, var(--surface-3) 70%, transparent); color: var(--text-1); }
+nav .brand { display: flex; align-items: center; gap: 10px; font-weight: 650; font-size: 18px; margin-bottom: 14px; color: var(--text-1); letter-spacing: var(--tracking-tight); }
+nav .brand img { width: 30px; height: 30px; border-radius: 50%; box-shadow: 0 0 0 1px var(--hairline-strong), 0 0 14px -3px var(--accent-glow); }
 body.help main { max-width: none; margin: 0; padding: 0; min-width: 0; }
-body.help h1 { font-size: 30px; margin: 0 0 6px; } body.help h2 { font-size: 21px; margin: 44px 0 8px; padding-top: 6px; border-top: 1px solid #322b3a; } h3 { font-size: 16px; margin: 20px 0 4px; }
+body.help h1 { font-size: 30px; margin: 0 0 6px; } body.help h2 { font-size: 21px; margin: 44px 0 8px; padding-top: 14px; border-top: 1px solid var(--hairline-strong); } h3 { font-size: 16px; margin: 20px 0 4px; font-weight: 600; }
 table { border-collapse: collapse; width: 100%; font-size: 14px; margin: 10px 0; }
-th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid #322b3a; vertical-align: top; }
-th { color: #a49cae; font-weight: 600; }
-.tip { background: #1b1820; border: 1px solid #322b3a; border-radius: 12px; padding: 10px 14px; margin: 12px 0; }
-@media (max-width: 760px) { .wrap { grid-template-columns: 1fr; gap: 10px; } nav { position: static; display: flex; flex-wrap: wrap; gap: 4px; } nav .brand { width: 100%; } nav a { padding: 3px 8px; border: 1px solid #322b3a; } }
+th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--hairline-strong); vertical-align: top; }
+th { color: var(--text-2); font-weight: 600; }
+.tip { background: linear-gradient(165deg, color-mix(in srgb, var(--surface-2) 92%, var(--accent-to)), var(--surface-1) 75%); border: 1px solid var(--hairline-strong); border-radius: 14px; padding: 10px 14px; margin: 12px 0; box-shadow: var(--glow-edge); }
+@media (max-width: 760px) { .wrap { grid-template-columns: 1fr; gap: 10px; } nav { position: static; max-height: none; display: flex; flex-wrap: wrap; gap: 4px; } nav .brand { width: 100%; } nav a { padding: 3px 8px; border: 1px solid var(--hairline-strong); } }
 
 /* Phase 34: the dial guide */
 .guide-dials { width: 100%; border-collapse: collapse; margin: 6px 0 14px; font-size: 14px; }
-.guide-dials th, .guide-dials td { text-align: left; vertical-align: top; padding: 6px 8px; border-bottom: 1px solid rgba(127,127,127,0.25); }
-.guide-dials th { font-size: 12px; text-transform: uppercase; letter-spacing: .05em; opacity: .7; }
+.guide-dials th, .guide-dials td { text-align: left; vertical-align: top; padding: 6px 8px; border-bottom: 1px solid var(--hairline-strong); }
+.guide-dials th { font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--text-2); }
 .guide-dials td:first-child { width: 22%; }
 .small { font-size: 12px; }
 @media (max-width: 640px) { .guide-dials { font-size: 13px; } .guide-dials td, .guide-dials th { padding: 5px 4px; } }

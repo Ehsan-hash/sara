@@ -50,7 +50,7 @@ final class QuickPanel: NSPanel {
   override func cancelOperation(_ sender: Any?) { onCancel?() }
 }
 
-final class QuickAsk: NSObject, WKScriptMessageHandler, WKNavigationDelegate, NSWindowDelegate {
+final class QuickAsk: NSObject, WKScriptMessageHandler, WKNavigationDelegate, WKUIDelegate, NSWindowDelegate {
   weak var app: AppDelegate?
   var panel: QuickPanel?
   var web: WKWebView?
@@ -167,6 +167,7 @@ final class QuickAsk: NSObject, WKScriptMessageHandler, WKNavigationDelegate, NS
     w.autoresizingMask = [.width, .height]
     w.setValue(false, forKey: "drawsBackground")
     w.navigationDelegate = self
+    w.uiDelegate = self  // Phase 75 stage 3: the microphone for talking instead of typing
     if #available(macOS 13.3, *) { w.isInspectable = false }
     effect?.addSubview(w)
     web = w
@@ -234,6 +235,7 @@ final class QuickAsk: NSObject, WKScriptMessageHandler, WKNavigationDelegate, NS
     guard let panel, panel.isVisible else { return }
     prefs.set(NSStringFromPoint(panel.frame.origin), forKey: "quickAskOrigin")
     panel.orderOut(nil)
+    web?.evaluateJavaScript("window.saraQuick&&saraQuick.hidden()")  // a recording stops
   }
 
   /// Where it was last time (if still on a screen), else centred near the top of the main screen.
@@ -274,6 +276,18 @@ final class QuickAsk: NSObject, WKScriptMessageHandler, WKNavigationDelegate, NS
     web.evaluateJavaScript("window.saraQuick&&saraQuick.decide(\(arr)[0],\(ok))")
   }
 
+  /// Phase 75 stage 3: Snooze 10 min from a reminder's notification (the normal reminders route).
+  func snooze(rid: String, conv: String, text: String) {
+    guard ready, let web, let data = try? JSONSerialization.data(withJSONObject: [rid, conv, text]), let arr = String(data: data, encoding: .utf8) else { return }
+    web.evaluateJavaScript("window.saraQuick&&saraQuick.snooze(...\(arr))")
+  }
+
+  /// Phase 75 stage 3: the microphone, for this page on the server in use only (macOS asks once).
+  func webView(_ webView: WKWebView, requestMediaCapturePermissionFor origin: WKSecurityOrigin, initiatedByFrame frame: WKFrameInfo, type: WKMediaCaptureType, decisionHandler: @escaping (WKPermissionDecision) -> Void) {
+    let o = originOf("\(origin.protocol)://\(origin.host)" + (origin.port > 0 ? ":\(origin.port)" : ""))
+    decisionHandler(type == .microphone && o != nil && o == app?.server && o == pageServer && frame.isMainFrame ? .grant : .deny)
+  }
+
   // MARK: the page's messages
 
   func userContentController(_ ucc: WKUserContentController, didReceive message: WKScriptMessage) {
@@ -310,6 +324,8 @@ final class QuickAsk: NSObject, WKScriptMessageHandler, WKNavigationDelegate, NS
       app.openConversation(body["conv"] as? String ?? "")
     case "state":
       take(body)
+    case "reminder":
+      app.notifyReminder(conv: body["conv"] as? String ?? "", rid: body["rid"] as? String ?? "", text: body["text"] as? String ?? "")
     default: break
     }
   }
@@ -329,6 +345,14 @@ final class QuickAsk: NSObject, WKScriptMessageHandler, WKNavigationDelegate, NS
       try? data.write(to: faceCacheURL)
     }
     app?.updateStatusTip()
+    // Phase 75 stage 3: approvals waiting → a notification with Allow / Deny; decided ones go away.
+    app?.notifyApprovals(signedIn && !demo ? b["asks"] as? String ?? "" : "")
+    // While a turn runs, ask every 5 s (an approval can come any moment), else every 45 s.
+    let busy = b["busy"] as? Bool ?? false
+    if busy != (timer?.timeInterval == 5) {
+      timer?.invalidate()
+      timer = Timer.scheduledTimer(withTimeInterval: busy ? 5 : 45, repeats: true) { [weak self] _ in self?.refresh() }
+    }
   }
 
   /// Her face, cached per server address (in this app's own caches folder) so the menu has it from

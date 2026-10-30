@@ -47,6 +47,34 @@
   --shadow-2: 0 1px 0 rgb(255 255 255 / .05) inset, 0 18px 48px rgb(0 0 0 / .5);
   --glow-edge: 0 1px 0 rgb(255 255 255 / .05) inset, 0 14px 36px -22px var(--accent-glow), 0 8px 24px -16px rgb(0 0 0 / .6);
   --page-glow: radial-gradient(1200px 600px at 70% -10%, rgb(155 107 255 / .10), transparent 60%), radial-gradient(900px 500px at 0% 110%, rgb(224 96 126 / .08), transparent 60%);
+  /* Stage 3: the rest of the palette as tokens (every screen, no colours of their own). */
+  --scrim: rgb(8 6 14 / .55);
+  --scrim-soft: rgb(8 6 14 / .38);
+  --shadow-up: 0 -18px 48px rgb(0 0 0 / .45);
+  --danger-fill: #b3383d;
+  --on-danger: #ffffff;
+  --info: #8fb4ff;
+  --spk-0: #f08aa5;
+  --spk-1: #7fa8ff;
+  --spk-2: #4fd1a5;
+  --spk-3: #f5b452;
+  /* Ink that stays light on photos, the call screen and the lightbox (always dark there). */
+  --on-photo: #ffffff;
+  --photo-scrim: rgb(0 0 0 / .45);
+  --photo-scrim-strong: rgb(0 0 0 / .65);
+  --call-bg: #08070a;
+  --call-glass: rgb(255 255 255 / .12);
+  --call-glass-strong: rgb(255 255 255 / .88);
+  --call-line: rgb(255 255 255 / .24);
+  --call-text-2: rgb(255 255 255 / .7);
+  --call-live: #ff5a6e;
+  --call-end: #d43a4f;
+  --call-answer: #2e9e5b;
+  --call-decline: #c94848;
+  --call-video: #3a6fd8;
+  /* A QR code and a web app preview need a white page whatever the theme. */
+  --paper: #ffffff;
+  --sparkle: #ffffff;
 }
 
 :root[data-theme="light"] {
@@ -82,6 +110,15 @@
   --shadow-2: 0 2px 6px rgb(60 30 70 / .08), 0 18px 44px rgb(60 30 70 / .14);
   --glow-edge: 0 1px 2px rgb(60 30 70 / .05), 0 12px 30px -18px var(--accent-glow);
   --page-glow: radial-gradient(1200px 600px at 70% -10%, rgb(155 107 255 / .07), transparent 60%), radial-gradient(900px 500px at 0% 110%, rgb(224 96 126 / .06), transparent 60%);
+  --scrim: rgb(40 20 50 / .2);
+  --scrim-soft: rgb(40 20 50 / .14);
+  --shadow-up: 0 -12px 40px rgb(60 30 70 / .16);
+  --danger-fill: #b42a3a;
+  --info: #2f5fc4;
+  --spk-0: #b8436a;
+  --spk-1: #2f5fc4;
+  --spk-2: #17805d;
+  --spk-3: #92600c;
 }
 
 :root {
@@ -125,3 +162,42 @@
     scroll-behavior: auto !important;
   }
 }
+
+/* Stage 3: primary buttons (the deep rose → violet of your messages, white text at 5:1+). A picked
+   accent colour (Settings → Look → Accent) fills them instead, with its own text colour. */
+:root { --btn-fill: var(--mine-grad); --on-btn: var(--on-mine); }
+
+/* The accent colours you can pick, and their swatches. */
+:root[data-accent="lavender"] { --accent: #a78bfa; --accent-2: #c4b5fd; --on-accent: #160f26; --btn-fill: var(--accent); --on-btn: var(--on-accent); }
+:root[data-accent="ocean"] { --accent: #4fb3d9; --accent-2: #8fd3ec; --on-accent: #06171e; --btn-fill: var(--accent); --on-btn: var(--on-accent); }
+:root[data-accent="forest"] { --accent: #5fbf8a; --accent-2: #93dbb2; --on-accent: #07190f; --btn-fill: var(--accent); --on-btn: var(--on-accent); }
+:root[data-accent="amber"] { --accent: #e8a948; --accent-2: #f3c886; --on-accent: #1e1405; --btn-fill: var(--accent); --on-btn: var(--on-accent); }
+:root[data-accent="mono"] { --accent: #c9c4d0; --accent-2: #e6e2ea; --on-accent: #141217; --btn-fill: var(--accent); --on-btn: var(--on-accent); }
+:root[data-theme="light"][data-accent="lavender"] { --accent: #7c5cd6; --accent-2: #6643c4; --on-accent: #fff; --btn-fill: var(--accent); --on-btn: var(--on-accent); }
+:root[data-theme="light"][data-accent="ocean"] { --accent: #1f7fa8; --accent-2: #17698c; --on-accent: #fff; --btn-fill: var(--accent); --on-btn: var(--on-accent); }
+:root[data-theme="light"][data-accent="forest"] { --accent: #2f8a57; --accent-2: #246f45; --on-accent: #fff; --btn-fill: var(--accent); --on-btn: var(--on-accent); }
+:root[data-theme="light"][data-accent="amber"] { --accent: #b9761a; --accent-2: #9a6213; --on-accent: #fff; --btn-fill: var(--accent); --on-btn: var(--on-accent); }
+:root[data-theme="light"][data-accent="mono"] { --accent: #4a4452; --accent-2: #2f2a35; --on-accent: #fff; --btn-fill: var(--accent); --on-btn: var(--on-accent); }
+.ap-swatch[data-accent="lavender"] { background: #a78bfa; }
+.ap-swatch[data-accent="ocean"] { background: #4fb3d9; }
+.ap-swatch[data-accent="forest"] { background: #5fbf8a; }
+.ap-swatch[data-accent="amber"] { background: #e8a948; }
+.ap-swatch[data-accent="mono"] { background: #c9c4d0; }
+
+/* Her glow's colours by mood (her panel and Today). */
+.hp-glow[data-mood="happy"] { --mood-a: #f5b452; --mood-b: #e0607e; }
+.hp-glow[data-mood="caring"] { --mood-a: #e0607e; --mood-b: #f08aa5; }
+.hp-glow[data-mood="playful"] { --mood-a: #ff6bb5; --mood-b: #9b6bff; }
+.hp-glow[data-mood="sleepy"] { --mood-a: #9b6bff; --mood-b: #5f73e6; }
+.hp-glow[data-mood="hurt"] { --mood-a: #7d89c9; --mood-b: #9b6bff; }
+
+/* The chat background "Night sky". */
+:root[data-chatbg="stars"] #messages {
+  background:
+    radial-gradient(1px 1px at 12% 18%, rgba(255,255,255,.55), transparent 60%), radial-gradient(1px 1px at 72% 12%, rgba(255,255,255,.45), transparent 60%),
+    radial-gradient(1.5px 1.5px at 42% 62%, rgba(255,255,255,.4), transparent 60%), radial-gradient(1px 1px at 88% 48%, rgba(255,255,255,.5), transparent 60%),
+    radial-gradient(1px 1px at 22% 82%, rgba(255,255,255,.35), transparent 60%), radial-gradient(1.5px 1.5px at 60% 30%, rgba(255,255,255,.3), transparent 60%),
+    linear-gradient(180deg, #0d1022 0%, #15122a 60%, var(--bg) 100%);
+  background-attachment: local;
+}
+:root[data-theme="light"][data-chatbg="stars"] #messages { background: linear-gradient(180deg, #e8e6f6 0%, var(--bg) 80%); }

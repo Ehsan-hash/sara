@@ -86,16 +86,23 @@ Source: "{#Stage}\bin\sara.cmd"; DestDir: "{app}\bin"; Flags: ignoreversion; Che
 Source: "{#Stage}\server\*"; DestDir: "{app}\server"; Flags: ignoreversion recursesubdirs createallsubdirs; Check: not IsRemote
 
 [Icons]
-Name: "{autoprograms}\Sara"; Filename: "{app}\Sara.exe"; Comment: "Sara, your companion"
+; Phase 75 stage 3: the shortcut says it is Sara (the AUMID the app sets for itself) and names the
+; COM class that takes clicks on her notifications (desktop/windows/src/main.cpp, kToastClsid).
+Name: "{autoprograms}\Sara"; Filename: "{app}\Sara.exe"; Comment: "Sara, your companion"; AppUserModelID: "BackstageCoding.Sara"; AppUserModelToastActivatorCLSID: "57448757-B168-47CE-9852-892129855C82"
 
 [Registry]
 ; "Only while I'm signed in": her server starts when this user signs in.
 Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "Sara server"; ValueData: """{app}\SaraService.exe"" --run"; Flags: uninsdeletevalue; Check: (not IsAdminInstallMode) and (not IsRemote)
+; Phase 75 stage 3: what the app registers for its notifications (per user, when it runs) goes on uninstall.
+Root: HKCU; Subkey: "Software\Classes\AppUserModelId\BackstageCoding.Sara"; Flags: uninsdeletekey dontcreatekey
+Root: HKCU; Subkey: "Software\Classes\CLSID\{{57448757-B168-47CE-9852-892129855C82}"; Flags: uninsdeletekey dontcreatekey
 
 [Run]
 Filename: "{app}\Sara.exe"; Parameters: "{code:OpenParams}"; Description: "Open Sara"; Flags: postinstall nowait skipifsilent runasoriginaluser
 
 [UninstallDelete]
+; Phase 75 stage 3: the app's "Send to → Sara" entry in Explorer.
+Type: files; Name: "{usersendto}\Sara.lnk"
 Type: files; Name: "{app}\sara.env"
 Type: filesandordirs; Name: "{app}\server"
 Type: dirifempty; Name: "{app}\bin"

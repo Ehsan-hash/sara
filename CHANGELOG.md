@@ -5,6 +5,25 @@ Format: newest first. Semantic versions since 1.0.0 (before that `0.<phase>.<pat
 
 ## Unreleased
 
+## 2.7.0 (2026-10-29): the new look, part 3: Today and the apps
+
+- **Today as tiles:** her face, mood and a greeting, then weather (from the briefing's place; hidden when
+  none is set), your day, the Planner with ticks, *She remembered*, Moments, background work and your home
+  (state, with *Ask Sara* so smart-home approvals still apply). Four columns on a big screen, one on a
+  phone. Her face at the top of the sidebar opens it.
+- **Phones get a bottom bar:** Chat, Today, Planner, More. It hides while you type.
+- **Every screen on the new look:** Settings, setup, sign-in, the AI notice, Help, the offline page and
+  every window now use the Night / Day colours; the old pinks are gone.
+- **Windows and Mac apps:**
+  - Notifications with buttons: an approval waiting shows the command with **Allow / Deny / Open in
+    Sara**; a reminder has **Done / Snooze 10 min**. Never allowed by itself, never on the demo, no
+    double notifications with the page's own.
+  - Files: Windows Explorer → **Send to → Sara** (or `Sara.exe <files>`), the Mac Dock icon: the files
+    land in the message box, nothing is sent until you press Send.
+  - Quick ask listens too (the mic, when her hearing is set up); the Windows tray menu is dark in Night.
+  - Settings → This computer: pick the quick-ask shortcut and try it.
+- `GET /api/today/weather` (signed in; from the briefing place; Open-Meteo through the network guard).
+
 ## 2.6.0 (2026-10-29): the new look, part 2: her presence
 
 - **Her panel:** a fold-away column on the right (Ctrl+\\ / ⌘\\) with her portrait glowing in her mood's

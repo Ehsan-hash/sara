@@ -2,12 +2,17 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Sara · offline</title>
-  <!-- Shown by the service worker when the server can't be reached: only cached files are used. -->
+  <meta name="theme-color" content="#0f0d17">
+  <!-- Shown by the service worker when the server can't be reached: only cached files are used.
+       Phase 75 (stage 3): the same theme (Night by default, Day when picked) and tokens as the app. -->
+  <script src="/theme-boot.js"></script>
+  <link rel="stylesheet" href="/theme.css">
   <link rel="stylesheet" href="/offline.css">
 </head>
 <body>
+  <div class="shell-drag" aria-hidden="true"></div>
   <div class="card">
     <img src="/icon-192.png" alt="">
     <h1>Can't reach your Sara</h1>

@@ -350,20 +350,36 @@ export function renderTodayMoments(d) {
   const otd = d.onThisDay;
   $('#td-otd').hidden = !otd?.items?.length;
   if (!otd?.items?.length) return;
-  $('#td-otd-title').textContent = otd.kind === 'year' ? (otd.years > 1 ? t('On this day, {n} years ago', { n: otd.years }) : t('On this day, a year ago')) : t('On this day, a month ago');
-  const photos = otd.items.filter((m) => m.image);
+  renderTodayPhotos(otd.items.slice(0, 3), otd.kind === 'year' ? (otd.years > 1 ? t('On this day, {n} years ago', { n: otd.years }) : t('On this day, a year ago')) : t('On this day, a month ago'));
+}
+
+/** Phase 75 (stage 3): the Today tile's photos (On this day, or the newest ones), each opening the lightbox. */
+export function renderTodayPhotos(items, title) {
+  $('#td-otd').hidden = !items.length;
+  $('#td-otd-title').textContent = title;
+  const photos = items.filter((m) => m.image);
   $('#td-otd .today-otd').replaceChildren(
-    ...otd.items.slice(0, 3).map((m) => {
+    ...items.map((m) => {
       const fig = el('figure', 'td-otd-item');
       if (m.image) {
         const img = document.createElement('img');
         img.src = src(m);
         img.alt = m.caption || '';
         img.className = 'zoomable';
-        img.addEventListener('click', () => openLightbox(photos.map(lightItem), Math.max(0, photos.indexOf(m))));
+        const open = () => openLightbox(photos.map(lightItem), Math.max(0, photos.indexOf(m)));
+        img.addEventListener('click', open);
+        // Keyboard: the photo is focusable and opens with Enter or Space.
+        img.tabIndex = 0;
+        img.addEventListener('keydown', (e) => {
+          if (e.key !== 'Enter' && e.key !== ' ') return;
+          e.preventDefault();
+          open();
+        });
         fig.append(img);
       }
-      fig.append(el('figcaption', 'small', m.caption || m.text || ''));
+      const cap = el('figcaption', 'small', m.caption || m.text || '');
+      cap.dataset.raw = '';
+      fig.append(cap);
       return fig;
     }),
   );

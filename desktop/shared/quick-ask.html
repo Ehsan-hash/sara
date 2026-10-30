@@ -12,7 +12,15 @@
   demo's read-only rules all apply exactly as in the web app. Nothing here can accept the AI notice:
   if it hasn't been accepted, the window shows it and sends you to the main window.
   Native → page: saraQuick.show({theme, solid, shortcut}), saraQuick.refresh(), saraQuick.decide(id, ok),
-  saraQuick.hidden(). Page → native: {m:'qa', a:'ready'|'hide'|'size'|'open'|'drag'|'state', …}.
+  saraQuick.snooze(reminderId, conv, text), saraQuick.hidden(). Page → native: {m:'qa', a:'ready'|'hide'|'size'|
+  'open'|'drag'|'state'|'reminder', …}.
+  Phase 75 stage 3: the apps' native notifications come from here too: 'state' carries the approvals
+  waiting with what each wants to run (asks: "id\tconv\tsummary\tcommand" lines; the app shows one
+  notification each with Allow / Deny, which call saraQuick.decide, the same route as the tray and
+  the chat's card), 'reminder' a reminder that just went off (/api/events), and snooze() sets it
+  again in 10 minutes through the normal reminders route. Talking instead of typing: the mic button
+  records here and the server's own /api/voice/transcribe turns it into the question (shown only
+  when her hearing is set up, as in the web app).
 -->
 <head>
 <meta charset="utf-8">
@@ -49,6 +57,9 @@ textarea{flex:1;resize:none;border:0;outline:0;background:transparent;color:var(
 textarea::placeholder{color:var(--muted)}
 #send{width:36px;height:36px;border-radius:10px;padding:0;font-size:17px;flex:0 0 auto}
 #send:disabled{opacity:.45;cursor:default}
+#mic{width:36px;height:36px;flex:0 0 auto;font-size:16px}
+#mic.on{color:var(--on-accent);background:var(--grad);border-color:transparent}
+#mic:disabled{opacity:.45;cursor:default}
 #out{overflow-y:auto;padding:0 18px;max-height:380px;-webkit-user-select:text;user-select:text}
 #out:empty{display:none}
 .q{color:var(--muted);font-size:13px;margin:4px 0 6px}
@@ -86,6 +97,7 @@ kbd{font:11px ui-monospace,Consolas,Menlo,monospace;border:1px solid var(--borde
   </header>
   <form id="ask" autocomplete="off">
     <textarea id="q" rows="1" placeholder="Ask Sara anything…" aria-label="Your question" spellcheck="true"></textarea>
+    <button id="mic" class="icon" type="button" hidden aria-label="Talk instead of typing" title="Talk instead of typing (click again when you're done)">🎙</button>
     <button id="send" class="primary" type="submit" aria-label="Ask" title="Ask (Enter)">↑</button>
   </form>
   <div class="info" id="info" hidden></div>
@@ -208,6 +220,13 @@ kbd{font:11px ui-monospace,Consolas,Menlo,monospace;border:1px solid var(--borde
   });
 
   const clean = (s, n) => String(s || '').replace(/[\t\r\n]+/g, ' ').trim().slice(0, n);
+  /** The command (or the main argument) an approval is about, for the notification's text. */
+  const detailOf = (ap) => {
+    const a = ap && ap.args && typeof ap.args === 'object' ? ap.args : {};
+    const v = a.command || a.cmd || a.script || a.code || a.url || a.path || a.query || '';
+    return clean(typeof v === 'string' && v ? v : Object.keys(a).length ? JSON.stringify(a) : '', 300);
+  };
+  let fastPoll = null;
   const since = (iso) => {
     const m = Math.max(0, Math.round((Date.now() - Date.parse(iso)) / 60000));
     return m < 1 ? 'just started' : m < 60 ? m + ' min' : Math.floor(m / 60) + ' h ' + (m % 60) + ' min';
@@ -236,6 +255,7 @@ kbd{font:11px ui-monospace,Consolas,Menlo,monospace;border:1px solid var(--borde
       const mood = her && her.enabled ? her.mood : '';
       $('mood').textContent = her && her.enabled ? her.mood + ' · ' + her.energy : '';
       const lines = [];
+      const asks = [];
       // Approvals waiting (in a turn that's still running: the conversation says "working").
       const convs = await api('/conversations').catch(() => []);
       const working = (Array.isArray(convs) ? convs : []).filter((c) => c.working && !c.offRecord).slice(0, 6);
@@ -243,8 +263,14 @@ kbd{font:11px ui-monospace,Consolas,Menlo,monospace;border:1px solid var(--borde
         const d = await api('/conversations/' + encodeURIComponent(c.id) + '?limit=20').catch(() => null);
         for (const ap of (d && d.activity && d.activity.approvals) || []) {
           lines.push(['approval', clean(ap.approvalId, 80), clean(c.id, 60), clean('Wants to: ' + (ap.summary || ap.name), 90)].join('\t'));
+          // For the app's notification: what she wants to do and the command itself (already
+          // scrubbed of secrets by the server), so Allow there is an informed OK.
+          asks.push([clean(ap.approvalId, 80), clean(c.id, 60), clean(ap.summary || ap.name, 160), detailOf(ap)].join('\t'));
         }
       }
+      // While a turn runs, look again soon (a new approval shows up within seconds).
+      clearTimeout(fastPoll);
+      if (working.length) fastPoll = setTimeout(refresh, 5000);
       // Background jobs (builds, tests, coding helpers) still running.
       const jobs = await api('/jobs').catch(() => []);
       for (const j of (Array.isArray(jobs) ? jobs : []).filter((x) => x.status === 'running').slice(0, 6)) {
@@ -259,7 +285,8 @@ kbd{font:11px ui-monospace,Consolas,Menlo,monospace;border:1px solid var(--borde
       const faceImg = $('face');
       faceImg.src = url;
       faceImg.hidden = false;
-      post({ a: 'state', online: true, signedIn: true, demo: false, name, mood, face, now: lines.slice(0, 10).join('\n') });
+      post({ a: 'state', online: true, signedIn: true, demo: false, name, mood, face, now: lines.slice(0, 10).join('\n'), asks: asks.slice(0, 10).join('\n'), busy: working.length > 0 });
+      checkVoice();
     })().finally(() => { refreshing = null; });
     return refreshing;
   };
@@ -271,6 +298,16 @@ kbd{font:11px ui-monospace,Consolas,Menlo,monospace;border:1px solid var(--borde
     es = new EventSource('/api/events');
     const later = () => { clearTimeout(soon); soon = setTimeout(refresh, 1500); };
     for (const t of ['job', 'turn', 'team']) es.addEventListener(t, later);
+    // Phase 75 stage 3: a reminder going off → the app's notification with Done / Snooze. The text
+    // is the one the web app shows for it (so the app can tell the two are the same event).
+    es.addEventListener('message', (e) => {
+      let d = null;
+      try { d = JSON.parse(e.data); } catch (err) { return; }
+      if (!d || d.type !== 'message' || d.reason !== 'reminder' || !d.message || d.message.role === 'notice') return;
+      const meta = d.message.meta || {};
+      const rid = meta.reminder && meta.reminder.id != null ? String(meta.reminder.id) : '';
+      post({ a: 'reminder', conv: String(d.conversationId || ''), rid, text: String(d.message.content || '').replace(/^Reminder: /, '').slice(0, 2000) });
+    });
     es.onerror = () => { es.close(); es = null; setTimeout(listen, 30000); };
   };
 
@@ -397,6 +434,87 @@ kbd{font:11px ui-monospace,Consolas,Menlo,monospace;border:1px solid var(--borde
     if (e.button === 0 && !e.target.closest('button,.badge')) { e.preventDefault(); post({ a: 'drag' }); }
   });
 
+  // ---------- talking instead of typing (Phase 75 stage 3) ----------
+  // Click the mic, talk, click again: the recording (16 kHz mono WAV, at most 2 minutes) goes to the
+  // server's /api/voice/transcribe (her hearing, as set up in Settings → Voice) and the words are
+  // asked like typed ones. Shown only when her hearing is on and the page may use the microphone.
+  const mic = $('mic');
+  let rec = null;
+  let voiceChecked = false;
+  const checkVoice = async () => {
+    if (voiceChecked || blocked()) return;
+    voiceChecked = true;
+    const v = await api('/voice').catch(() => null);
+    const st = v && v.settings, local = (v && v.local) || {};
+    const canHear = Boolean(st) && (st.stt === 'openai' || (st.stt === 'local' && local.stt));
+    mic.hidden = !(canHear && navigator.mediaDevices && navigator.mediaDevices.getUserMedia && window.isSecureContext);
+    fit();
+  };
+  const wav = (chunks, rate) => {
+    let n = 0;
+    for (const c of chunks) n += c.length;
+    const all = new Float32Array(n);
+    let o = 0;
+    for (const c of chunks) { all.set(c, o); o += c.length; }
+    const ratio = rate / 16000, len = Math.floor(all.length / ratio);
+    const buf = new ArrayBuffer(44 + len * 2), dv = new DataView(buf);
+    const w = (p, s) => { for (let i = 0; i < s.length; i++) dv.setUint8(p + i, s.charCodeAt(i)); };
+    w(0, 'RIFF'); dv.setUint32(4, 36 + len * 2, true); w(8, 'WAVE'); w(12, 'fmt ');
+    dv.setUint32(16, 16, true); dv.setUint16(20, 1, true); dv.setUint16(22, 1, true); dv.setUint32(24, 16000, true);
+    dv.setUint32(28, 32000, true); dv.setUint16(32, 2, true); dv.setUint16(34, 16, true); w(36, 'data'); dv.setUint32(40, len * 2, true);
+    for (let i = 0; i < len; i++) {
+      const x = Math.max(-1, Math.min(1, all[Math.floor(i * ratio)] || 0));
+      dv.setInt16(44 + i * 2, x < 0 ? x * 0x8000 : x * 0x7fff, true);
+    }
+    return new Blob([buf], { type: 'audio/wav' });
+  };
+  const stopMic = async (use) => {
+    if (!rec) return;
+    const r = rec;
+    rec = null;
+    clearTimeout(r.limit);
+    try { r.node.disconnect(); r.src.disconnect(); } catch (e) { /* already */ }
+    r.stream.getTracks().forEach((t) => t.stop());
+    const rate = r.ctx.sampleRate;
+    r.ctx.close().catch(() => {});
+    mic.classList.remove('on');
+    q.placeholder = r.placeholder;
+    if (!use || r.chunks.reduce((a, c) => a + c.length, 0) < rate * 0.4) return;
+    mic.disabled = true;
+    q.placeholder = 'Listening back…';
+    try {
+      const res = await fetch('/api/voice/transcribe', { method: 'POST', credentials: 'same-origin', headers: { 'content-type': 'audio/wav' }, body: wav(r.chunks, rate) });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'HTTP ' + res.status);
+      const text = String(data.text || '').trim();
+      if (text) ask(text);
+    } catch (err) {
+      add('err', esc('Microphone: ' + err.message));
+    } finally {
+      mic.disabled = false;
+      q.placeholder = r.placeholder;
+    }
+  };
+  mic.onclick = async () => {
+    if (rec) return stopMic(true);
+    if (blocked() || busy) return;
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
+      const ctx = new AudioContext();
+      const src = ctx.createMediaStreamSource(stream);
+      const node = ctx.createScriptProcessor(4096, 1, 1);
+      const chunks = [];
+      node.onaudioprocess = (e) => chunks.push(new Float32Array(e.inputBuffer.getChannelData(0)));
+      src.connect(node);
+      node.connect(ctx.destination);
+      rec = { stream, ctx, src, node, chunks, placeholder: q.placeholder, limit: setTimeout(() => stopMic(true), 120000) };
+      mic.classList.add('on');
+      q.placeholder = 'Listening… click the mic again when you\'re done';
+    } catch (err) {
+      add('err', esc('Microphone: ' + (err && err.message ? err.message : 'not allowed')));
+    }
+  };
+
   window.saraQuick = {
     show(o = {}) {
       document.documentElement.classList.toggle('day', o.theme === 'day');
@@ -412,7 +530,20 @@ kbd{font:11px ui-monospace,Consolas,Menlo,monospace;border:1px solid var(--borde
     decide(id, ok) {
       return api('/approvals/' + encodeURIComponent(id), { method: 'POST', body: { approved: Boolean(ok) } }).then(() => refresh(), () => refresh());
     },
-    hidden() { return true; },
+    /** Snooze 10 min from the notification: the same reminder again, through the normal route. */
+    async snooze(rid, conv, text) {
+      let t = String(text || '');
+      if (rid) {
+        const p = await api('/planner').catch(() => null);
+        const r = p && [...(p.recentReminders || []), ...(p.reminders || [])].find((x) => String(x.id) === String(rid));
+        if (r && r.text) t = r.text;
+      }
+      t = t.replace(/^Reminder(?: \([^)]*\))?: /, '').replace(/ \(this was due [^)]*; sorry it's late\)$/, '').trim().slice(0, 500);
+      if (!t || blocked()) return false;
+      await api('/reminders', { method: 'POST', body: Object.assign({ text: t, when: 'in 10 minutes' }, conv ? { conversationId: String(conv) } : {}) });
+      return true;
+    },
+    hidden() { stopMic(false); return true; },
     state() { return { state: document.body.dataset.state || '', conv: conv ? conv.id : '', text: out.innerText.slice(0, 2000) }; },
   };
   fit();
