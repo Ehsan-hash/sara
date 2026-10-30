@@ -6,6 +6,8 @@
 #define SARA_VERSION_COMMAS 0,0,0,0
 #endif
 IDI_SARA ICON "sara.ico"
+// Phase 75 stage 2: the quick-ask page, shared with the Mac app.
+IDR_QUICKASK RCDATA "../../shared/quick-ask.html"
 1 RT_MANIFEST "sara.manifest"
 VS_VERSION_INFO VERSIONINFO
 FILEVERSION SARA_VERSION_COMMAS

@@ -3,11 +3,11 @@
 const OFFLINE = '/offline.html';
 
 self.addEventListener('install', (event) => {
-  event.waitUntil(caches.open('sara-shell-v4').then((c) => c.addAll([OFFLINE, '/offline.css', '/offline.js', '/icon-192.png'])).then(() => self.skipWaiting()));
+  event.waitUntil(caches.open('sara-shell-v5').then((c) => c.addAll([OFFLINE, '/offline.css', '/offline.js', '/icon-192.png'])).then(() => self.skipWaiting()));
 });
 
 self.addEventListener('activate', (event) => {
-  event.waitUntil(caches.keys().then((keys) => Promise.all(keys.filter((k) => k !== 'sara-shell-v4').map((k) => caches.delete(k)))).then(() => self.clients.claim()));
+  event.waitUntil(caches.keys().then((keys) => Promise.all(keys.filter((k) => k !== 'sara-shell-v5').map((k) => caches.delete(k)))).then(() => self.clients.claim()));
 });
 
 self.addEventListener('fetch', (event) => {

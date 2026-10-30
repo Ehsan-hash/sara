@@ -16,6 +16,13 @@
 // (DWM draws them; snap layouts on the maximize button keep working), and the theme colour from the
 // first frame so there is never a white flash. Older Windows or an older WebView2: the normal title
 // bar, dark or light. The page learns all of it from window.saraShell (kShellScript below).
+// Phase 75 stage 2: worth installing. A global shortcut (Alt+Shift+S by default, changeable from the
+// tray menu or the page's settings through the bridge) opens a small floating quick-ask window over
+// any app; her face and mood head the tray menu with a "Now" section (background jobs running,
+// approvals waiting with Allow / Deny / Open), and the tray tooltip shows her mood. The quick-ask
+// page (desktop/shared/quick-ask.html, shared with the Mac app) is served by this app AT the
+// server's own address in the same WebView2 profile, so it talks to the server with the same
+// sign-in through the normal routes (the AI notice, private mode, household and demo rules apply).
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
 #include <windows.h>
@@ -31,6 +38,8 @@
 #include <vector>
 #include <ctime>
 #include <windowsx.h>
+#include <wincodec.h>
+#include <wincrypt.h>
 #include "WebView2.h"
 #include "resource.h"
 #include "page-logo.h"
@@ -54,7 +63,13 @@ static const UINT WM_APP_SWITCH = WM_APP + 4;   // switch to g_switchTo (from th
 static const UINT WM_APP_REMOVED = WM_APP + 5;  // finish removing a server (sign-in cleared)
 static const UINT kTrayId = 1;
 static const UINT_PTR kRemoveTimer = 7;
-enum MenuId { ID_OPEN = 100, ID_LOGIN, ID_QUIT, ID_CHANGE, ID_SETTINGS, ID_HELP, ID_SERVER0 = 200 };
+static const UINT_PTR kNowTimer = 8;            // Phase 75 stage 2: "Now" in the tray menu, every 45 s
+static const int kHotkeyId = 1;                 // the quick-ask shortcut (RegisterHotKey)
+enum MenuId {
+  ID_OPEN = 100, ID_LOGIN, ID_QUIT, ID_CHANGE, ID_SETTINGS, ID_HELP, ID_ASK, ID_HEADER, ID_SHORTCUT_OFF,
+  ID_SERVER0 = 200, ID_NOW0 = 300, ID_ALLOW0 = 340, ID_DENY0 = 380, ID_SHORTCUT0 = 420
+};
+static const size_t kNowMax = 10;
 
 static HINSTANCE g_inst;
 static HWND g_wnd;
@@ -363,6 +378,7 @@ static std::wstring profileFor(const std::wstring& url) {
   setProfileIds(ids);
   return id;
 }
+static void updateTrayTip();
 /** Makes it the one in use (the address is also kept in "server", as before 1.8). */
 static void activate(const std::wstring& id) {
   Profile p = loadProfile(id);
@@ -372,12 +388,7 @@ static void activate(const std::wstring& id) {
   g_server = p.url;
   setIni(L"servers", L"active", id);
   setPref(L"server", p.url);
-  std::wstring tip = L"Sara · " + p.name;
-  wcsncpy_s(g_tray.szTip, tip.c_str(), _TRUNCATE);
-  if (g_tray.hWnd) {
-    g_tray.uFlags = NIF_TIP;
-    Shell_NotifyIconW(NIM_MODIFY, &g_tray);
-  }
+  updateTrayTip();
 }
 /** The one server saved before 1.8 becomes profile s1, with its sign-in, with nothing to do. */
 static void migrateProfiles() {
@@ -773,6 +784,605 @@ static void addTray() {
   if (!Shell_NotifyIconW(NIM_ADD, &g_tray)) logLine(L"tray icon failed (" + std::to_wstring(GetLastError()) + L")");
 }
 
+// ---------- Phase 75 stage 2: the quick-ask window, its shortcut, "Now" and her face ----------
+// The quick-ask page (desktop/shared/quick-ask.html, RCDATA IDR_QUICKASK) is answered by this app at
+// <server>/__sara_desktop/quick-ask (WebResourceRequested), in a second web view on the SAME WebView2
+// environment and profile as the main window. It is therefore same-origin with the server and uses
+// the sign-in the main window has (a household member's own, too). It also polls the server for
+// her mood, face and "Now" (asked every 45 s while the app runs, sooner on /api/events) and tells
+// the app, which shows them in the tray menu and tooltip.
+static const wchar_t* kQuickClass = L"SaraQuickAsk";
+static const wchar_t* kQuickPath = L"/__sara_desktop/quick-ask";
+static const int kQuickWidthDip = 640;
+static HWND g_qa;                                // the quick-ask window (hidden when not in use)
+static ComPtr<ICoreWebView2Controller> g_qaCtl;
+static ComPtr<ICoreWebView2> g_qaWeb;
+static std::wstring g_qaServer;                  // the server the quick-ask page was made for
+static bool g_qaReady = false;                   // the page said it's there
+static bool g_qaWantShow = false;                // shown as soon as it's ready
+static bool g_qaAcrylic = false;                 // Windows 11's acrylic behind it
+static DWORD g_qaShownAt = 0;
+static int g_qaHeightDip = 132;
+static bool g_qaCreating = false;
+
+struct NowItem {
+  std::wstring kind, id, conv, text;  // kind: job | approval
+};
+struct NowState {
+  bool online = false, signedIn = false, demo = false;
+  std::wstring name = L"Sara", mood;
+  std::vector<NowItem> items;
+};
+static NowState g_now;
+static std::vector<NowItem> g_menuNow;            // what the open tray menu shows (stable ids)
+static std::vector<BYTE> g_facePng;               // her face as the page drew it (64 px, round)
+static HBITMAP g_faceBmp = nullptr;
+static int g_faceBmpSize = 0;
+
+// The shortcut: a few combinations that don't clash with Windows' own (Win+Shift+S is the snipping
+// tool, Alt+Space the window menu), or off. Kept in desktop.ini (quickAskShortcut).
+struct Shortcut {
+  const wchar_t* id;
+  const wchar_t* label;
+  UINT mods;
+  UINT vk;
+};
+static const Shortcut kShortcuts[] = {
+    {L"alt+shift+s", L"Alt+Shift+S", MOD_ALT | MOD_SHIFT, 'S'},
+    {L"ctrl+alt+s", L"Ctrl+Alt+S", MOD_CONTROL | MOD_ALT, 'S'},
+    {L"ctrl+shift+space", L"Ctrl+Shift+Space", MOD_CONTROL | MOD_SHIFT, VK_SPACE},
+    {L"ctrl+alt+space", L"Ctrl+Alt+Space", MOD_CONTROL | MOD_ALT, VK_SPACE},
+    {L"alt+shift+a", L"Alt+Shift+A", MOD_ALT | MOD_SHIFT, 'A'},
+};
+static bool g_shortcutTaken = false;  // another app already uses it (RegisterHotKey failed)
+static std::wstring shortcutId() {
+  std::wstring id = getPref(L"quickAskShortcut", L"alt+shift+s");
+  if (id == L"off") return id;
+  for (auto& s : kShortcuts)
+    if (id == s.id) return id;
+  return L"alt+shift+s";
+}
+static const Shortcut* currentShortcut() {
+  std::wstring id = shortcutId();
+  for (auto& s : kShortcuts)
+    if (id == s.id) return &s;
+  return nullptr;
+}
+static std::wstring shortcutLabel() {
+  const Shortcut* s = currentShortcut();
+  return s ? s->label : L"";
+}
+/** (Re)registers the shortcut; a clash with another app is said once, in plain words. */
+static void registerShortcut(bool tell) {
+  if (!g_wnd) return;
+  UnregisterHotKey(g_wnd, kHotkeyId);
+  g_shortcutTaken = false;
+  const Shortcut* s = currentShortcut();
+  if (!s) return;
+  if (!RegisterHotKey(g_wnd, kHotkeyId, s->mods | MOD_NOREPEAT, s->vk)) {
+    g_shortcutTaken = true;
+    logLine(std::wstring(L"quick ask: ") + s->label + L" is used by another app (" + std::to_wstring(GetLastError()) + L")");
+    if (tell) {
+      g_pendingConv.clear();
+      trayBalloon(L"Choose another shortcut for Ask Sara", std::wstring(s->label) + L" is already used by another app. Right-click Sara's icon next to the clock → Quick ask shortcut to pick another one.");
+    }
+  }
+}
+static bool setShortcut(const std::wstring& id) {
+  bool known = id == L"off";
+  for (auto& s : kShortcuts) known = known || id == s.id;
+  if (!known) return false;
+  setPref(L"quickAskShortcut", id);
+  registerShortcut(true);
+  return true;
+}
+static std::wstring shortcutsJson() {
+  std::wstring out = L"[";
+  for (auto& s : kShortcuts) out += std::wstring(out.size() > 1 ? L"," : L"") + L"{\"id\":\"" + s.id + L"\",\"label\":\"" + s.label + L"\"}";
+  return out + L",{\"id\":\"off\",\"label\":\"Off\"}]";
+}
+
+/** The page, from the program's own resources (UTF-8). */
+static std::string quickAskHtml() {
+  HRSRC r = FindResourceW(g_inst, MAKEINTRESOURCEW(IDR_QUICKASK), RT_RCDATA);
+  HGLOBAL g = r ? LoadResource(g_inst, r) : nullptr;
+  const char* p = g ? static_cast<const char*>(LockResource(g)) : nullptr;
+  return p ? std::string(p, SizeofResource(g_inst, r)) : std::string("<!doctype html><p>Quick ask is missing from this build.</p>");
+}
+
+// Her face for the tray menu: the page's PNG, decoded and scaled with WIC (premultiplied alpha).
+static std::vector<BYTE> base64Decode(const std::string& b64) {
+  DWORD n = 0;
+  if (!CryptStringToBinaryA(b64.c_str(), (DWORD)b64.size(), CRYPT_STRING_BASE64, nullptr, &n, nullptr, nullptr) || n == 0 || n > 512 * 1024) return {};
+  std::vector<BYTE> out(n);
+  if (!CryptStringToBinaryA(b64.c_str(), (DWORD)b64.size(), CRYPT_STRING_BASE64, out.data(), &n, nullptr, nullptr)) return {};
+  out.resize(n);
+  return out;
+}
+static HBITMAP bitmapFromPng(const std::vector<BYTE>& png, int size) {
+  if (png.empty() || size <= 0) return nullptr;
+  ComPtr<IWICImagingFactory> f;
+  ComPtr<IWICStream> st;
+  ComPtr<IWICBitmapDecoder> dec;
+  ComPtr<IWICBitmapFrameDecode> frame;
+  ComPtr<IWICBitmapScaler> sc;
+  ComPtr<IWICFormatConverter> cv;
+  if (FAILED(CoCreateInstance(CLSID_WICImagingFactory, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&f))) || FAILED(f->CreateStream(&st)) ||
+      FAILED(st->InitializeFromMemory(const_cast<BYTE*>(png.data()), (DWORD)png.size())) || FAILED(f->CreateDecoderFromStream(st.Get(), nullptr, WICDecodeMetadataCacheOnLoad, &dec)) ||
+      FAILED(dec->GetFrame(0, &frame)) || FAILED(f->CreateBitmapScaler(&sc)) || FAILED(sc->Initialize(frame.Get(), (UINT)size, (UINT)size, WICBitmapInterpolationModeFant)) ||
+      FAILED(f->CreateFormatConverter(&cv)) || FAILED(cv->Initialize(sc.Get(), GUID_WICPixelFormat32bppPBGRA, WICBitmapDitherTypeNone, nullptr, 0, WICBitmapPaletteTypeCustom)))
+    return nullptr;
+  BITMAPINFO bi{};
+  bi.bmiHeader.biSize = sizeof(bi.bmiHeader);
+  bi.bmiHeader.biWidth = size;
+  bi.bmiHeader.biHeight = -size;  // top-down
+  bi.bmiHeader.biPlanes = 1;
+  bi.bmiHeader.biBitCount = 32;
+  bi.bmiHeader.biCompression = BI_RGB;
+  void* bits = nullptr;
+  HBITMAP bmp = CreateDIBSection(nullptr, &bi, DIB_RGB_COLORS, &bits, nullptr, 0);
+  if (!bmp) return nullptr;
+  if (FAILED(cv->CopyPixels(nullptr, (UINT)size * 4, (UINT)(size * size * 4), static_cast<BYTE*>(bits)))) {
+    DeleteObject(bmp);
+    return nullptr;
+  }
+  return bmp;
+}
+/** Cached per server address (face-<host_port>.png), so the menu shows her face from the first click after a start. */
+static std::wstring faceCachePath() {
+  std::wstring host;
+  for (wchar_t c : hostOfUrl(g_server)) host += iswalnum(c) || c == L'.' || c == L'-' ? c : L'_';
+  return dataDir() + L"\\face-" + (host.empty() ? L"none" : host.substr(0, 100)) + L".png";
+}
+static void loadCachedFace() {
+  g_facePng.clear();
+  if (g_faceBmp) DeleteObject(g_faceBmp);
+  g_faceBmp = nullptr;
+  FILE* f = nullptr;
+  if (_wfopen_s(&f, faceCachePath().c_str(), L"rb") != 0 || !f) return;
+  BYTE buf[8192];
+  size_t n;
+  while ((n = fread(buf, 1, sizeof(buf), f)) > 0 && g_facePng.size() < 512 * 1024) g_facePng.insert(g_facePng.end(), buf, buf + n);
+  fclose(f);
+}
+static HBITMAP faceBitmap() {
+  int size = MulDiv(28, (int)(g_wnd ? GetDpiForWindow(g_wnd) : 96), 96);
+  if (g_faceBmp && g_faceBmpSize == size) return g_faceBmp;
+  if (g_faceBmp) DeleteObject(g_faceBmp);
+  g_faceBmp = bitmapFromPng(g_facePng, size);
+  g_faceBmpSize = size;
+  return g_faceBmp;
+}
+
+/** The tray tooltip: "Sara · relaxed" (+ approvals waiting, + which Sara when there are several). */
+static void updateTrayTip() {
+  std::wstring tip = g_now.name.empty() ? L"Sara" : g_now.name;
+  if (!g_now.mood.empty()) tip += L" · " + g_now.mood;
+  size_t waiting = 0;
+  for (auto& i : g_now.items) waiting += i.kind == L"approval";
+  if (waiting) tip += L" · " + std::to_wstring(waiting) + L" waiting for your OK";
+  if (profiles().size() > 1 && !g_profile.empty()) tip += L"\n" + loadProfile(g_profile).name;
+#ifdef SARA_TEST_HOOKS
+  if (tip != g_tray.szTip) logLine(L"tray tooltip: " + tip);  // test builds: the tooltip can't be read from outside
+#endif
+  wcsncpy_s(g_tray.szTip, tip.c_str(), _TRUNCATE);
+  if (g_tray.hWnd) {
+    g_tray.uFlags = NIF_TIP;
+    Shell_NotifyIconW(NIM_MODIFY, &g_tray);
+  }
+}
+
+/** {a:'state', …} from the quick-ask page: who she is, her mood and face, and "Now". */
+static void takeNow(std::map<std::wstring, std::wstring>& m) {
+  NowState n;
+  n.online = m[L"online"] == L"true";
+  n.signedIn = m[L"signedIn"] == L"true";
+  n.demo = m[L"demo"] == L"true";
+  if (!m[L"name"].empty()) n.name = m[L"name"].substr(0, 60);
+  n.mood = m[L"mood"].substr(0, 40);
+  if (!n.online) {
+    // Offline for a moment: keep what we knew, say nothing new.
+    g_now.online = false;
+    return;
+  }
+  std::wstring lines = m[L"now"];
+  size_t start = 0;
+  while (start < lines.size() && n.items.size() < kNowMax) {
+    size_t end = lines.find(L'\n', start);
+    std::wstring line = lines.substr(start, end == std::wstring::npos ? std::wstring::npos : end - start);
+    start = end == std::wstring::npos ? lines.size() : end + 1;
+    std::vector<std::wstring> f;
+    size_t a = 0;
+    for (size_t b; (b = line.find(L'\t', a)) != std::wstring::npos; a = b + 1) f.push_back(line.substr(a, b - a));
+    f.push_back(line.substr(a));
+    if (f.size() == 4 && (f[0] == L"job" || f[0] == L"approval")) n.items.push_back({f[0], f[1], f[2], f[3]});
+  }
+  std::wstring face = m[L"face"];
+  const std::wstring prefix = L"data:image/png;base64,";
+  if (face.rfind(prefix, 0) == 0) {
+    auto png = base64Decode(toUtf8(face.substr(prefix.size())));
+    if (png.size() > 8 && png[1] == 'P' && png[2] == 'N' && png[3] == 'G') {
+      g_facePng = png;
+      if (g_faceBmp) DeleteObject(g_faceBmp);
+      g_faceBmp = nullptr;
+      FILE* f = nullptr;
+      if (_wfopen_s(&f, faceCachePath().c_str(), L"wb") == 0 && f) {
+        fwrite(png.data(), 1, png.size(), f);
+        fclose(f);
+      }
+    }
+  }
+  g_now = n;
+  updateTrayTip();
+}
+
+static void layoutQuickAsk() {
+  if (!g_qa || !g_qaCtl) return;
+  RECT rc;
+  GetClientRect(g_qa, &rc);
+  g_qaCtl->put_Bounds(rc);
+}
+/** Frosted where Windows 11 can (acrylic: DWMSBT_TRANSIENTWINDOW), rounded corners, theme colours. */
+static void styleQuickAsk() {
+  if (!g_qa) return;
+  BOOL dark = g_day ? FALSE : TRUE;
+  if (FAILED(DwmSetWindowAttribute(g_qa, DWMWA_USE_IMMERSIVE_DARK_MODE, &dark, sizeof(dark)))) DwmSetWindowAttribute(g_qa, 19, &dark, sizeof(dark));
+  DWM_WINDOW_CORNER_PREFERENCE corner = DWMWCP_ROUND;
+  DwmSetWindowAttribute(g_qa, DWMWA_WINDOW_CORNER_PREFERENCE, &corner, sizeof(corner));
+  g_qaAcrylic = false;
+  if (windowsBuild() >= 22621) {
+    MARGINS m{-1, -1, -1, -1};
+    DwmExtendFrameIntoClientArea(g_qa, &m);
+    DWM_SYSTEMBACKDROP_TYPE type = DWMSBT_TRANSIENTWINDOW;
+    g_qaAcrylic = SUCCEEDED(DwmSetWindowAttribute(g_qa, DWMWA_SYSTEMBACKDROP_TYPE, &type, sizeof(type)));
+  }
+  ComPtr<ICoreWebView2Controller2> c2;
+  COLORREF c = themeColor();
+  if (g_qaCtl && SUCCEEDED(g_qaCtl.As(&c2))) c2->put_DefaultBackgroundColor({(BYTE)(g_qaAcrylic ? 0 : 255), GetRValue(c), GetGValue(c), GetBValue(c)});
+  InvalidateRect(g_qa, nullptr, TRUE);
+}
+static void saveQuickPlace() {
+  if (!g_qa || !IsWindowVisible(g_qa)) return;
+  RECT r;
+  GetWindowRect(g_qa, &r);
+  setPref(L"quickAskPlace", std::to_wstring(r.left) + L"," + std::to_wstring(r.top));
+}
+/** Where it was last time (if that's still on a screen), else centred near the top of the screen
+ *  the mouse is on. */
+static void placeQuickAsk() {
+  POINT cur;
+  GetCursorPos(&cur);
+  HMONITOR mon = MonitorFromPoint(cur, MONITOR_DEFAULTTONEAREST);
+  UINT dpiX = 96, dpiY = 96;
+  using GetDpiForMonitorFn = HRESULT(WINAPI*)(HMONITOR, int, UINT*, UINT*);
+  if (HMODULE shcore = LoadLibraryW(L"shcore.dll")) {
+    if (auto fn = reinterpret_cast<GetDpiForMonitorFn>(reinterpret_cast<void*>(GetProcAddress(shcore, "GetDpiForMonitor")))) fn(mon, 0, &dpiX, &dpiY);
+    FreeLibrary(shcore);
+  }
+  int w = MulDiv(kQuickWidthDip, (int)dpiX, 96), h = MulDiv(g_qaHeightDip, (int)dpiX, 96);
+  int x = 0, y = 0;
+  std::wstring place = getPref(L"quickAskPlace");
+  if (swscanf_s(place.c_str(), L"%d,%d", &x, &y) == 2 && MonitorFromPoint(POINT{x + 40, y + 20}, MONITOR_DEFAULTTONULL)) {
+    SetWindowPos(g_qa, HWND_TOPMOST, x, y, 0, 0, SWP_NOSIZE | SWP_NOACTIVATE);
+    // The size follows the DPI of the screen it is on (WM_DPICHANGED may not come for a hidden window).
+    UINT dpi = GetDpiForWindow(g_qa);
+    SetWindowPos(g_qa, HWND_TOPMOST, 0, 0, MulDiv(kQuickWidthDip, (int)dpi, 96), MulDiv(g_qaHeightDip, (int)dpi, 96), SWP_NOMOVE | SWP_NOACTIVATE);
+    return;
+  }
+  MONITORINFO mi{sizeof(mi)};
+  GetMonitorInfoW(mon, &mi);
+  RECT wa = mi.rcWork;
+  x = wa.left + (wa.right - wa.left - w) / 2;
+  y = wa.top + (wa.bottom - wa.top) / 6;
+  SetWindowPos(g_qa, HWND_TOPMOST, x, y, w, h, SWP_NOACTIVATE);
+}
+static bool quickAskVisible() { return g_qa && IsWindowVisible(g_qa); }
+static void hideQuickAsk() {
+  if (!quickAskVisible()) return;
+  saveQuickPlace();
+  ShowWindow(g_qa, SW_HIDE);
+  if (g_qaWeb) g_qaWeb->ExecuteScript(L"window.saraQuick&&saraQuick.hidden()", nullptr);
+}
+static void ensureQuickAsk();
+/** The shortcut (or the tray's "Ask Sara…"): show it over whatever is in front, typing ready. */
+static void showQuickAsk() {
+  if (g_server.empty()) return showWindow();  // nothing to ask yet: the window sets her up
+  ensureQuickAsk();
+  if (!g_qaReady || !g_qaWeb) {
+    g_qaWantShow = true;
+    return;
+  }
+  g_qaWantShow = false;
+  placeQuickAsk();
+  styleQuickAsk();
+  g_qaShownAt = GetTickCount();
+  ShowWindow(g_qa, SW_SHOW);
+  SetWindowPos(g_qa, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
+  SetForegroundWindow(g_qa);
+  g_qaCtl->put_IsVisible(TRUE);
+  g_qaCtl->MoveFocus(COREWEBVIEW2_MOVE_FOCUS_REASON_PROGRAMMATIC);
+  std::wstring js = std::wstring(L"window.saraQuick&&saraQuick.show({theme:'") + (g_day ? L"day" : L"night") + L"',solid:" + (g_qaAcrylic ? L"false" : L"true") +
+                    L",shortcut:'" + jsonEscape(shortcutLabel()) + L"'})";
+  g_qaWeb->ExecuteScript(js.c_str(), nullptr);
+}
+static void toggleQuickAsk() {
+  if (quickAskVisible() && GetForegroundWindow() == g_qa) hideQuickAsk();
+  else showQuickAsk();
+}
+/** Asks the page to fetch "Now", her mood and face again (the timer, the tray menu, a decision). */
+static void refreshNow() {
+  if (g_qaReady && g_qaWeb) g_qaWeb->ExecuteScript(L"window.saraQuick&&saraQuick.refresh()", nullptr);
+}
+/** Allow / Deny from the tray menu: the same route the approval card in the chat uses. */
+static void decideFromTray(const std::wstring& approvalId, bool ok) {
+  if (!g_qaReady || !g_qaWeb || approvalId.empty()) return;
+  g_qaWeb->ExecuteScript((L"window.saraQuick&&saraQuick.decide(\"" + jsonEscape(approvalId) + L"\"," + (ok ? L"true" : L"false") + L")").c_str(), nullptr);
+}
+static void openConversation(const std::wstring& conv);
+
+static void onQuickMessage(const std::wstring& json, const std::wstring& source) {
+  // Only the quick-ask page this app served for the server in use.
+  if (g_qaServer.empty() || g_qaServer != g_server || source.rfind(g_qaServer + kQuickPath, 0) != 0) return;
+  auto m = parseFlatJson(json);
+  if (m[L"m"] != L"qa") return;
+  const std::wstring& a = m[L"a"];
+  if (a == L"ready") {
+    g_qaReady = true;
+    if (g_qaWantShow) showQuickAsk();
+  } else if (a == L"hide") {
+    hideQuickAsk();
+  } else if (a == L"size") {
+    int h = std::max(96, std::min(560, _wtoi(m[L"h"].c_str())));
+    if (h == g_qaHeightDip) return;
+    g_qaHeightDip = h;
+    if (!g_qa) return;
+    UINT dpi = GetDpiForWindow(g_qa);
+    RECT r;
+    GetWindowRect(g_qa, &r);
+    SetWindowPos(g_qa, nullptr, 0, 0, r.right - r.left, MulDiv(h, (int)dpi, 96), SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
+  } else if (a == L"open") {
+    // "Open in Sara": the conversation continues in the main window.
+    hideQuickAsk();
+    showWindow();
+    openConversation(m[L"conv"]);
+  } else if (a == L"state") {
+    takeNow(m);
+  }
+}
+
+static LRESULT CALLBACK QuickProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
+  switch (msg) {
+    case WM_NCCALCSIZE:
+      if (wp) return 0;  // no frame: the page draws everything (DWM keeps the shadow and corners)
+      break;
+    case WM_ACTIVATE:
+      // Clicking anywhere else hides it (not in the first moment after showing).
+      if (LOWORD(wp) == WA_INACTIVE && GetTickCount() - g_qaShownAt > 400) hideQuickAsk();
+      break;
+    case WM_EXITSIZEMOVE:
+      saveQuickPlace();
+      break;
+    case WM_SIZE:
+      layoutQuickAsk();
+      return 0;
+    case WM_DPICHANGED: {
+      const RECT* r = reinterpret_cast<const RECT*>(lp);
+      SetWindowPos(h, nullptr, r->left, r->top, r->right - r->left, r->bottom - r->top, SWP_NOZORDER | SWP_NOACTIVATE);
+      return 0;
+    }
+    case WM_ERASEBKGND:
+      return 1;
+    case WM_PAINT: {
+      PAINTSTRUCT ps;
+      HDC dc = BeginPaint(h, &ps);
+      HBRUSH b = g_qaAcrylic ? (HBRUSH)GetStockObject(BLACK_BRUSH) : CreateSolidBrush(themeColor());
+      FillRect(dc, &ps.rcPaint, b);
+      if (!g_qaAcrylic) DeleteObject(b);
+      EndPaint(h, &ps);
+      return 0;
+    }
+    case WM_CLOSE:
+      hideQuickAsk();
+      return 0;
+  }
+  return DefWindowProcW(h, msg, wp, lp);
+}
+
+static void closeQuickAskWebView() {
+  g_qaReady = false;
+  g_qaServer.clear();
+  if (g_qaCtl) g_qaCtl->Close();
+  g_qaCtl.Reset();
+  g_qaWeb.Reset();
+}
+
+/** Answers <server>/__sara_desktop/quick-ask with the page from the program's resources; nothing
+ *  for that address ever reaches the server. (The quick-ask view bypasses the server's service
+ *  worker, which would otherwise forward the navigation with its own fetch: see ensureQuickAsk.) */
+static void serveQuickAskFrom(ICoreWebView2* web) {
+  if (!web || g_server.empty()) return;
+  std::wstring filter = g_server + kQuickPath + L"*";
+  ComPtr<ICoreWebView2> w(web);
+  ComPtr<ICoreWebView2_22> w22;
+  if (SUCCEEDED(w.As(&w22))) w22->AddWebResourceRequestedFilterWithRequestSourceKinds(filter.c_str(), COREWEBVIEW2_WEB_RESOURCE_CONTEXT_ALL, COREWEBVIEW2_WEB_RESOURCE_REQUEST_SOURCE_KINDS_ALL);
+  else web->AddWebResourceRequestedFilter(filter.c_str(), COREWEBVIEW2_WEB_RESOURCE_CONTEXT_ALL);
+  web->add_WebResourceRequested(Callback<ICoreWebView2WebResourceRequestedEventHandler>([](ICoreWebView2*, ICoreWebView2WebResourceRequestedEventArgs* a) -> HRESULT {
+    ComPtr<ICoreWebView2WebResourceRequest> req;
+    a->get_Request(&req);
+    LPWSTR uri = nullptr;
+    req->get_Uri(&uri);
+    std::wstring u = uri ? uri : L"";
+    CoTaskMemFree(uri);
+    if (g_server.empty() || u.rfind(g_server + kQuickPath, 0) != 0) return S_OK;
+    std::string html = quickAskHtml();
+    ComPtr<IStream> body;
+    body.Attach(SHCreateMemStream(reinterpret_cast<const BYTE*>(html.data()), (UINT)html.size()));
+    ComPtr<ICoreWebView2WebResourceResponse> resp;
+    // Its own rules: scripts and styles only from itself, requests only to this server.
+    if (g_env && SUCCEEDED(g_env->CreateWebResourceResponse(body.Get(), 200, L"OK",
+                                                             L"Content-Type: text/html; charset=utf-8\r\nCache-Control: no-store\r\n"
+                                                             L"Content-Security-Policy: default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; base-uri 'none'; form-action 'none'",
+                                                             &resp)))
+      a->put_Response(resp.Get());
+    return S_OK;
+  }).Get(), nullptr);
+}
+
+/** The quick-ask window (once) and its web view for the server in use (again after a switch). */
+static void ensureQuickAsk() {
+  if (!g_qa) {
+    WNDCLASSEXW wc{sizeof(wc)};
+    wc.lpfnWndProc = QuickProc;
+    wc.hInstance = g_inst;
+    wc.hCursor = LoadCursorW(nullptr, IDC_ARROW);
+    wc.lpszClassName = kQuickClass;
+    RegisterClassExW(&wc);
+    // A tool window (no taskbar button), above other apps; WS_THICKFRAME for DWM's shadow and acrylic.
+    g_qa = CreateWindowExW(WS_EX_TOOLWINDOW | WS_EX_TOPMOST, kQuickClass, L"Ask Sara", WS_POPUP | WS_THICKFRAME, 0, 0, MulDiv(kQuickWidthDip, (int)windowDpi(), 96),
+                           MulDiv(g_qaHeightDip, (int)windowDpi(), 96), nullptr, nullptr, g_inst, nullptr);
+    styleQuickAsk();
+  }
+  if (g_server.empty() || !g_env) return;
+  if (g_qaCtl && g_qaServer == g_server) return;
+  if (g_qaCreating) return;
+  closeQuickAskWebView();
+  g_qaCreating = true;
+  std::wstring server = g_server;
+  auto done = Callback<ICoreWebView2CreateCoreWebView2ControllerCompletedHandler>([server](HRESULT r, ICoreWebView2Controller* ctl) -> HRESULT {
+    g_qaCreating = false;
+    if (FAILED(r) || !ctl) {
+      logLine(L"quick ask: no web view (" + std::to_wstring(r) + L")");
+      return S_OK;
+    }
+    if (server != g_server) {  // switched meanwhile: make it for the new one
+      ctl->Close();
+      ensureQuickAsk();
+      return S_OK;
+    }
+    g_qaCtl = ctl;
+    g_qaCtl->get_CoreWebView2(&g_qaWeb);
+    g_qaServer = server;
+    styleQuickAsk();
+    layoutQuickAsk();
+    ComPtr<ICoreWebView2Settings> settings;
+    g_qaWeb->get_Settings(&settings);
+    settings->put_AreDevToolsEnabled(FALSE);
+    settings->put_IsStatusBarEnabled(FALSE);
+    settings->put_AreDefaultContextMenusEnabled(TRUE);
+    settings->put_IsZoomControlEnabled(FALSE);
+    ComPtr<ICoreWebView2Settings9> s9;
+    if (SUCCEEDED(settings.As(&s9))) s9->put_IsNonClientRegionSupportEnabled(TRUE);  // the header moves the window
+    ComPtr<ICoreWebView2Settings2> s2;
+    if (SUCCEEDED(settings.As(&s2))) {
+      LPWSTR ua = nullptr;
+      s2->get_UserAgent(&ua);
+      std::wstring full = std::wstring(ua ? ua : L"") + L" SaraDesktop/1 (Windows)";
+      CoTaskMemFree(ua);
+      s2->put_UserAgent(full.c_str());
+    }
+    // The page itself: answered here, never fetched from the server.
+    std::wstring page = g_qaServer + kQuickPath;
+    serveQuickAskFrom(g_qaWeb.Get());
+    // Nothing else opens in it: links go to the browser.
+    g_qaWeb->add_NavigationStarting(Callback<ICoreWebView2NavigationStartingEventHandler>([](ICoreWebView2*, ICoreWebView2NavigationStartingEventArgs* a) -> HRESULT {
+      LPWSTR uri = nullptr;
+      a->get_Uri(&uri);
+      std::wstring u = uri ? uri : L"";
+      CoTaskMemFree(uri);
+      if ((!g_qaServer.empty() && u.rfind(g_qaServer + kQuickPath, 0) == 0) || u == L"about:blank") return S_OK;
+      a->put_Cancel(TRUE);
+      if (u.rfind(L"http", 0) == 0) ShellExecuteW(nullptr, L"open", u.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+      return S_OK;
+    }).Get(), nullptr);
+    g_qaWeb->add_NewWindowRequested(Callback<ICoreWebView2NewWindowRequestedEventHandler>([](ICoreWebView2*, ICoreWebView2NewWindowRequestedEventArgs* a) -> HRESULT {
+      a->put_Handled(TRUE);
+      return S_OK;
+    }).Get(), nullptr);
+    // Only ever the quick-ask page: anything else that loads here (it never should) is closed at once.
+    g_qaWeb->add_NavigationCompleted(Callback<ICoreWebView2NavigationCompletedEventHandler>([](ICoreWebView2* w, ICoreWebView2NavigationCompletedEventArgs*) -> HRESULT {
+      LPWSTR src = nullptr;
+      w->get_Source(&src);
+      bool blank = src && wcscmp(src, L"about:blank") == 0;
+      CoTaskMemFree(src);
+      if (blank) return S_OK;
+      w->ExecuteScript(L"typeof window.saraQuick === 'object' && document.title === 'Ask Sara'", Callback<ICoreWebView2ExecuteScriptCompletedHandler>([](HRESULT, LPCWSTR result) -> HRESULT {
+        if (result && wcscmp(result, L"true") != 0 && g_qaWeb) {
+          logLine(L"quick ask: the page that loaded wasn't the quick-ask page; closed it");
+          g_qaReady = false;
+          g_qaWeb->Navigate(L"about:blank");
+        }
+        return S_OK;
+      }).Get());
+      return S_OK;
+    }).Get(), nullptr);
+    g_qaWeb->add_PermissionRequested(Callback<ICoreWebView2PermissionRequestedEventHandler>([](ICoreWebView2*, ICoreWebView2PermissionRequestedEventArgs* a) -> HRESULT {
+      a->put_State(COREWEBVIEW2_PERMISSION_STATE_DENY);
+      return S_OK;
+    }).Get(), nullptr);
+    g_qaWeb->add_WebMessageReceived(Callback<ICoreWebView2WebMessageReceivedEventHandler>([](ICoreWebView2*, ICoreWebView2WebMessageReceivedEventArgs* a) -> HRESULT {
+      LPWSTR json = nullptr, src = nullptr;
+      a->get_WebMessageAsJson(&json);
+      a->get_Source(&src);
+      std::wstring j = json ? json : L"", s = src ? src : L"";
+      CoTaskMemFree(json);
+      CoTaskMemFree(src);
+      onQuickMessage(j, s);
+      return S_OK;
+    }).Get(), nullptr);
+    // Escape hides it even when the page has no focus.
+    g_qaCtl->add_AcceleratorKeyPressed(Callback<ICoreWebView2AcceleratorKeyPressedEventHandler>([](ICoreWebView2Controller*, ICoreWebView2AcceleratorKeyPressedEventArgs* a) -> HRESULT {
+      COREWEBVIEW2_KEY_EVENT_KIND kind;
+      UINT key = 0;
+      a->get_KeyEventKind(&kind);
+      a->get_VirtualKey(&key);
+      if (key == VK_ESCAPE && kind == COREWEBVIEW2_KEY_EVENT_KIND_KEY_DOWN) {
+        a->put_Handled(TRUE);
+        PostMessageW(g_qa, WM_CLOSE, 0, 0);
+      }
+      return S_OK;
+    }).Get(), nullptr);
+    // web/sw.js answers every navigation on her address with its own fetch, which WebView2 doesn't
+    // hand to WebResourceRequested: this view (only this one) bypasses service workers, then opens
+    // the page. The main window keeps the worker (its offline page).
+    std::wstring target = page;
+    auto go = [target](HRESULT r2, LPCWSTR) -> HRESULT {
+      if (FAILED(r2)) logLine(L"quick ask: couldn't bypass the service worker (" + std::to_wstring(r2) + L")");
+      if (g_qaWeb) g_qaWeb->Navigate(target.c_str());
+      return S_OK;
+    };
+    // (setBypassServiceWorker only takes effect with the Network domain on.)
+    HRESULT hr = g_qaWeb->CallDevToolsProtocolMethod(L"Network.enable", L"{}", Callback<ICoreWebView2CallDevToolsProtocolMethodCompletedHandler>([go](HRESULT, LPCWSTR) -> HRESULT {
+                                                       if (!g_qaWeb || FAILED(g_qaWeb->CallDevToolsProtocolMethod(L"Network.setBypassServiceWorker", L"{\"bypass\":true}",
+                                                                                                                 Callback<ICoreWebView2CallDevToolsProtocolMethodCompletedHandler>(go).Get())))
+                                                         go(E_FAIL, nullptr);
+                                                       return S_OK;
+                                                     }).Get());
+    if (FAILED(hr)) g_qaWeb->Navigate(page.c_str());
+    return S_OK;
+  });
+  // The same profile as the main window for this server, so it has the same sign-in.
+  ComPtr<ICoreWebView2Environment10> env10;
+  if (!g_profile.empty() && g_profile != L"s1" && SUCCEEDED(g_env.As(&env10))) {
+    ComPtr<ICoreWebView2ControllerOptions> opts;
+    if (SUCCEEDED(env10->CreateCoreWebView2ControllerOptions(&opts))) {
+      opts->put_ProfileName((L"sara-" + g_profile).c_str());
+      env10->CreateCoreWebView2ControllerWithOptions(g_qa, opts.Get(), done.Get());
+      return;
+    }
+  }
+  g_env->CreateCoreWebView2Controller(g_qa, done.Get());
+}
+
+/** Menu text: '&' would underline the next letter. */
+static std::wstring menuText(const std::wstring& s) {
+  std::wstring o;
+  for (wchar_t c : s) {
+    if (c == L'&') o += L"&&";
+    else if (c != L'\t') o += c;
+  }
+  return o;
+}
+
 /** A saved server as the tray menu and pages show it: "🌸 Sara (host)", or just the host. */
 static std::wstring serverLabel(const Profile& p) {
   std::wstring host = hostOfUrl(p.url);
@@ -781,10 +1391,45 @@ static std::wstring serverLabel(const Profile& p) {
 }
 
 /** The tray menu, the same order as the Mac's menu bar menu:
- *    Open Sara · Settings… | Your Saras ▸ | Start with Windows · Help | Quit Sara */
+ *    her face · mood | Ask Sara… | Now (jobs, approvals) |
+ *    Open Sara · Settings… | Your Saras ▸ | Start with Windows · Quick ask shortcut ▸ · Help | Quit Sara */
 static void trayMenu() {
   HMENU m = CreatePopupMenu();
   UINT needsServer = g_server.empty() ? MF_GRAYED : 0;
+  g_menuNow = g_now.signedIn && !g_now.demo ? g_now.items : std::vector<NowItem>{};
+  if (!g_server.empty()) {
+    // Phase 75 stage 2: her face and mood at the top (a click opens the window).
+    std::wstring head = menuText(g_now.name + (g_now.mood.empty() ? L"" : L" · " + g_now.mood));
+    MENUITEMINFOW mi{sizeof(mi)};
+    mi.fMask = MIIM_STRING | MIIM_ID | MIIM_FTYPE | (faceBitmap() ? MIIM_BITMAP : 0u);
+    mi.fType = MFT_STRING;
+    mi.wID = ID_HEADER;
+    mi.dwTypeData = head.data();
+    mi.hbmpItem = faceBitmap();
+    InsertMenuItemW(m, 0, TRUE, &mi);
+    // Quick ask: off on the demo (read-only) and until she's signed in.
+    std::wstring ask = L"Ask " + menuText(g_now.name) + L"…" + (shortcutLabel().empty() || g_shortcutTaken ? L"" : L"\t" + shortcutLabel());
+    AppendMenuW(m, MF_STRING | (g_now.demo || !g_now.signedIn ? MF_GRAYED : 0), ID_ASK, ask.c_str());
+    if (g_now.signedIn && !g_now.demo) {
+      // "Now": background jobs still running and approvals waiting (refreshed every 45 s).
+      AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
+      AppendMenuW(m, MF_STRING | MF_GRAYED, 0, g_menuNow.empty() ? L"Now: nothing running" : L"Now");
+      for (size_t i = 0; i < g_menuNow.size() && i < kNowMax; i++) {
+        const NowItem& it = g_menuNow[i];
+        if (it.kind == L"approval") {
+          HMENU sub = CreatePopupMenu();
+          AppendMenuW(sub, MF_STRING, ID_ALLOW0 + i, L"Allow");
+          AppendMenuW(sub, MF_STRING, ID_DENY0 + i, L"Deny");
+          AppendMenuW(sub, MF_SEPARATOR, 0, nullptr);
+          AppendMenuW(sub, MF_STRING, ID_NOW0 + i, L"Open in Sara");
+          AppendMenuW(m, MF_POPUP, (UINT_PTR)sub, menuText(it.text).c_str());  // "Wants to: …" ▸ Allow / Deny / Open
+        } else {
+          AppendMenuW(m, MF_STRING, ID_NOW0 + i, menuText(it.text).c_str());  // "Writing tests… 4 min" (opens its chat)
+        }
+      }
+    }
+    AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
+  }
   AppendMenuW(m, MF_STRING, ID_OPEN, L"Open Sara");
   AppendMenuW(m, MF_STRING | needsServer, ID_SETTINGS, L"Settings…");
   AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
@@ -798,6 +1443,17 @@ static void trayMenu() {
   AppendMenuW(m, MF_POPUP, (UINT_PTR)saras, L"Your Saras");
   AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
   AppendMenuW(m, MF_STRING | (startAtLogin() ? MF_CHECKED : 0), ID_LOGIN, L"Start with Windows");
+  // Phase 75 stage 2: the quick-ask shortcut (a clash with another app is marked).
+  HMENU keys = CreatePopupMenu();
+  std::wstring cur = shortcutId();
+  for (size_t i = 0; i < std::size(kShortcuts); i++) {
+    bool on = cur == kShortcuts[i].id;
+    std::wstring label = std::wstring(kShortcuts[i].label) + (on && g_shortcutTaken ? L"  (used by another app)" : L"");
+    AppendMenuW(keys, MF_STRING | (on ? MF_CHECKED : 0), ID_SHORTCUT0 + i, label.c_str());
+  }
+  AppendMenuW(keys, MF_SEPARATOR, 0, nullptr);
+  AppendMenuW(keys, MF_STRING | (cur == L"off" ? MF_CHECKED : 0), ID_SHORTCUT_OFF, L"Off");
+  AppendMenuW(m, MF_POPUP, (UINT_PTR)keys, L"Quick ask shortcut");
   AppendMenuW(m, MF_STRING | needsServer, ID_HELP, L"Help");
   AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
   AppendMenuW(m, MF_STRING, ID_QUIT, L"Quit Sara");
@@ -805,9 +1461,10 @@ static void trayMenu() {
   POINT pt;
   GetCursorPos(&pt);
   SetForegroundWindow(g_wnd);
+  refreshNow();  // fresh for the next time it opens
   TrackPopupMenu(m, TPM_RIGHTBUTTON, pt.x, pt.y, 0, g_wnd, nullptr);
   PostMessageW(g_wnd, WM_NULL, 0, 0);  // so the menu closes when you click elsewhere
-  DestroyMenu(m);  // also destroys the "Your Saras" submenu
+  DestroyMenu(m);  // also destroys the submenus
 }
 
 // ---------- pages shown before the server is known or when it can't be reached ----------
@@ -915,6 +1572,20 @@ static void openServer(const std::wstring& path = L"/") {
   if (g_web) g_web->Navigate((g_server + path).c_str());
 }
 
+/** A conversation in the main window (quick ask's "Open in Sara", the tray's "Now" items). */
+static void openConversation(const std::wstring& conv) {
+  bool ok = !conv.empty() && conv.size() <= 64;
+  for (wchar_t c : conv) ok = ok && (iswxdigit(c) || c == L'-');
+  if (!ok || g_server.empty() || !g_web) return;
+  LPWSTR src = nullptr;
+  g_web->get_Source(&src);
+  bool onServer = src && sameOrigin(src);
+  CoTaskMemFree(src);
+  // On her page the bridge opens it (location.hash = 'c=…'); elsewhere load it.
+  if (onServer) g_web->PostWebMessageAsJson((L"{\"open\":\"" + conv + L"\"}").c_str());
+  else openServer(L"/#c=" + conv);
+}
+
 /** Tray menu → Settings… / Help: opens that view of the web app (its #view= links). */
 static void openView(const wchar_t* view) {
   showWindow();
@@ -938,6 +1609,8 @@ static void switchTo(const std::wstring& id, const std::wstring& path = L"/") {
   }
   activate(id);
   g_nextPath = path;
+  hideQuickAsk();
+  closeQuickAskWebView();  // its profile belongs to the old server
   if (g_controller) g_controller->Close();
   g_controller.Reset();
   g_web.Reset();
@@ -1032,7 +1705,10 @@ static void reply(const std::wstring& id, const std::wstring& resultJson, const 
 static std::wstring prefsJson() {
   return std::wstring(L"{\"platform\":\"windows\",\"version\":\"") + kVersion + L"\",\"startAtLogin\":" + (startAtLogin() ? L"true" : L"false") +
          L",\"keepRunning\":" + (prefOn(L"keepRunning", true) ? L"true" : L"false") + L",\"notifications\":" + (prefOn(L"notifications", true) ? L"true" : L"false") +
-         L",\"server\":\"" + jsonEscape(g_server) + L"\",\"theme\":\"" + g_themePref + L"\",\"titlebar\":" + std::to_wstring(g_customFrame ? kTitlebarDip : 0) + L"}";
+         L",\"server\":\"" + jsonEscape(g_server) + L"\",\"theme\":\"" + g_themePref + L"\",\"titlebar\":" + std::to_wstring(g_customFrame ? kTitlebarDip : 0) +
+         // Phase 75 stage 2: the quick-ask shortcut, the choices, and whether another app has it.
+         L",\"quickAskShortcut\":\"" + shortcutId() + L"\",\"quickAskShortcutLabel\":\"" + shortcutLabel() + L"\",\"quickAskShortcutFree\":" + (g_shortcutTaken ? L"false" : L"true") +
+         L",\"quickAskShortcuts\":" + shortcutsJson() + L"}";
 }
 
 static void onMessage(const std::wstring& json, const std::wstring& source) {
@@ -1104,10 +1780,17 @@ static void onMessage(const std::wstring& json, const std::wstring& source) {
     return reply(id, serversJson());
   }
   if (kind == L"loggedOut") return finishRemove();
+  // Phase 75 stage 2: the page can open the quick-ask window (e.g. to try the shortcut's window).
+  if (kind == L"quickAsk") {
+    reply(id, L"true");
+    return showQuickAsk();
+  }
   if (kind == L"setPref") {
     const std::wstring& key = m[L"key"];
     bool on = m[L"value"] == L"true";
-    if (key == L"startAtLogin") setStartAtLogin(on);
+    if (key == L"quickAskShortcut") {
+      if (!setShortcut(m[L"value"])) return reply(id, L"null", L"Unknown shortcut");
+    } else if (key == L"startAtLogin") setStartAtLogin(on);
     else if (key == L"keepRunning" || key == L"notifications") setPref(key.c_str(), on ? L"1" : L"0");
     else return reply(id, L"null", L"Unknown setting");
     return reply(id, prefsJson());
@@ -1159,6 +1842,13 @@ static void createController() {
             setCustomFrame(false);
           }
           layoutWebView();
+          // Phase 75 stage 2: the quick-ask page (and "Now") for this server, in the same profile.
+          if (g_qaServer != g_server) {
+            g_now = NowState{};
+            loadCachedFace();
+            updateTrayTip();
+          }
+          ensureQuickAsk();
           ComPtr<ICoreWebView2Settings2> s2;
           if (SUCCEEDED(settings.As(&s2))) {
             LPWSTR ua = nullptr;
@@ -1442,7 +2132,15 @@ static LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
         DestroyWindow(h);
       }
       return 0;
+    case WM_HOTKEY:
+      // Phase 75 stage 2: the quick-ask shortcut, from any app.
+      if (wp == kHotkeyId) toggleQuickAsk();
+      return 0;
     case WM_DESTROY:
+      UnregisterHotKey(h, kHotkeyId);
+      KillTimer(h, kNowTimer);
+      closeQuickAskWebView();
+      if (g_qa) DestroyWindow(g_qa);
       Shell_NotifyIconW(NIM_DELETE, &g_tray);
       PostQuitMessage(0);
       return 0;
@@ -1465,6 +2163,7 @@ static LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
       return 0;
     case WM_TIMER:
       if (wp == kRemoveTimer) finishRemove();
+      if (wp == kNowTimer) refreshNow();
       return 0;
     case WM_APP_TRAY:
       switch (LOWORD(lp)) {
@@ -1491,7 +2190,24 @@ static LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
         case ID_SETTINGS: openView(L"settings"); break;
         case ID_HELP: openView(L"help"); break;
         case ID_CHANGE: changeServerFromMenu(); break;
+        case ID_HEADER: showWindow(); break;
+        case ID_ASK: showQuickAsk(); break;
+        case ID_SHORTCUT_OFF: setShortcut(L"off"); break;
         default:
+          if (LOWORD(wp) >= ID_NOW0 && LOWORD(wp) < ID_NOW0 + kNowMax) {
+            size_t i = LOWORD(wp) - ID_NOW0;
+            if (i < g_menuNow.size()) {
+              showWindow();
+              openConversation(g_menuNow[i].conv);
+            }
+          } else if (LOWORD(wp) >= ID_ALLOW0 && LOWORD(wp) < ID_DENY0 + kNowMax) {
+            // Allow / Deny an approval from the tray, as on its card in the chat.
+            bool allow = LOWORD(wp) < ID_DENY0;
+            size_t i = LOWORD(wp) - (allow ? ID_ALLOW0 : ID_DENY0);
+            if (i < g_menuNow.size() && g_menuNow[i].kind == L"approval") decideFromTray(g_menuNow[i].id, allow);
+          } else if (LOWORD(wp) >= ID_SHORTCUT0 && LOWORD(wp) < ID_SHORTCUT0 + std::size(kShortcuts)) {
+            setShortcut(kShortcuts[LOWORD(wp) - ID_SHORTCUT0].id);
+          }
           if (LOWORD(wp) >= ID_SERVER0 && LOWORD(wp) < ID_SERVER0 + 50) {
             auto list = profiles();
             size_t i = LOWORD(wp) - ID_SERVER0;
@@ -1608,6 +2324,9 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR cmd, int show) {
     SetWindowPos(g_wnd, nullptr, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
   }
   addTray();
+  // Phase 75 stage 2: the quick-ask shortcut (a clash is said once per start), "Now" every 45 s.
+  registerShortcut(true);
+  SetTimer(g_wnd, kNowTimer, 45000, nullptr);
   if (!background) ShowWindow(g_wnd, maximized ? SW_SHOWMAXIMIZED : show);
   createWebView();
 

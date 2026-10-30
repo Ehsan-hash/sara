@@ -277,3 +277,17 @@ The apps tell the page they can host its header in the title bar; the page answe
   Windows 10 or a WebView2 runtime older than 123. Mac: full-size content view, transparent title bar,
   traffic lights inset; WebKit has no `app-region`, so a press on the strip calls `performDrag`.
 - Test in a browser with `?shell=windows&titlebar=32` or `?shell=mac` (stand-in window buttons).
+
+## Quick ask and the tray "Now" (2.6)
+
+- **Shortcut:** Alt+Shift+S (Windows, `RegisterHotKey`) / ⌥⇧S (Mac, Carbon `RegisterEventHotKey`, no
+  Accessibility permission). Change it in the tray / menu-bar menu → *Quick ask shortcut* (or Off); if
+  another app holds it, the menu says so. The page can read and set it through the bridge:
+  `getPrefs().quickAskShortcut(s)`, `setPref({key:'quickAskShortcut', value})`, `SaraDesktop.call('quickAsk')`.
+- **Window:** `desktop/shared/quick-ask.html`, served by the app at `<server in use>/__sara_desktop/quick-ask`
+  so it shares the main window's sign-in; only that view bypasses the service worker. A new conversation
+  per question (follow-ups stay in it); *Open in Sara* continues it in the main window. It never accepts
+  the AI notice for you: until the notice is accepted it shows the notice and *Open Sara*; the session
+  notice is shown above the question. Off on the demo.
+- **Tray / menu bar:** her face and mood at the top, *Ask Sara…*, then *Now*: approvals waiting (Allow /
+  Deny / Open in Sara) and running jobs. Refreshed every 45 s, when the menu opens and on job/turn events.

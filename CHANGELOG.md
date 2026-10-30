@@ -5,6 +5,25 @@ Format: newest first. Semantic versions since 1.0.0 (before that `0.<phase>.<pat
 
 ## Unreleased
 
+## 2.6.0 (2026-10-29): the new look, part 2: her presence
+
+- **Her panel:** a fold-away column on the right (Ctrl+\\ / ⌘\\) with her portrait glowing in her mood's
+  colour, breathing while she works; **Now** (what she is doing, approvals waiting with Allow / Deny,
+  background jobs with their last line and Stop), **Today** (the next three things), **She remembered**
+  (the notes she used for the last reply, each with where she learned it) and **This conversation**
+  (model, workspace, privacy, how full it is). In group chats it shows whoever spoke last.
+- **On phones the same panel** pulls up from her face as a sheet: a peek with her mood and Now, full height
+  with everything; drag down or Back to close.
+- **Command bar:** Ctrl+K / ⌘K (or the magnifier) jumps to any place, conversation (also by words inside
+  messages), settings page or single setting, or runs an action: new conversation, off the record, call,
+  switch companion, switch theme, show me around…
+- **Windows and Mac apps:** **Quick ask** on a global shortcut (Alt+Shift+S / ⌥⇧S, changeable in the tray /
+  menu-bar menu): a small frosted window over any app; the reply streams in, follow-ups stay in the same
+  conversation and "Open in Sara" continues it in the main window. It shows the AI notice exactly as the
+  app does and is off on the demo. The tray / menu-bar menu starts with her face and mood and a **Now**
+  section: approvals waiting (Allow / Deny right there) and running jobs; the tooltip shows her mood.
+- `GET /api/memories?ids=…` returns the listed notes (read-only, at most 50).
+
 ## 2.5.0 (2026-10-29): the new look, part 1: her work on screen
 
 - **Night by default:** a new dark look (deep plum, frosted panels, a rose-to-violet accent) on every

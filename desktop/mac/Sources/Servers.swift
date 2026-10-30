@@ -137,7 +137,7 @@ extension AppDelegate {
     Servers.update(id) { $0.lastUsed = Date().timeIntervalSince1970 }
     Servers.save(Servers.list(), active: id)
     prefs.set(p.url == local.localURL, forKey: "localServer")
-    statusItem?.button?.toolTip = "Sara · \(p.name)"
+    statusItem?.button?.toolTip = "Sara · \(p.name)"  // her mood replaces it once the quick-ask page says it
     if changing { makeWebView(store: Servers.dataStore(p), for: p.id) }
     openServer(path)
     refreshServerState()

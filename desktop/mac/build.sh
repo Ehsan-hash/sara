@@ -43,6 +43,8 @@ for s in 16 32 128 256 512; do
   d=$((s * 2)); sips -z $d $d AppIcon.png --out "build/Sara.iconset/icon_${s}x${s}@2x.png" >/dev/null
 done
 iconutil -c icns build/Sara.iconset -o "$APP/Resources/Sara.icns"
+# Phase 75 stage 2: the quick-ask page, shared with the Windows app (QuickAsk.swift loads it).
+cp ../shared/quick-ask.html "$APP/Resources/quick-ask.html"
 
 # Node: both official builds, checked, merged into one universal program (+ npm for her commands).
 mkdir -p "$CACHE"

@@ -42,6 +42,13 @@ export function createMemoryRoutes(ctx: RouteCtx): RouteHandler {
         };
         if (!b && method === 'GET') {
           const url = new URL(req.url ?? '/', 'http://x');
+          // Phase 75: the presence panel's "She remembered": just the notes used in one reply
+          // (`?ids=3,7,12`, up to 50), in the order asked; ids that are gone are left out.
+          const ids = url.searchParams.get('ids');
+          if (ids !== null) {
+            const want = [...new Set(ids.split(',').map((x) => Number(x.trim())).filter((n) => Number.isInteger(n) && n > 0))].slice(0, 50);
+            return send(res, 200, want.map((id) => mem.get(id)).filter((m): m is Memory => Boolean(m)).map(view));
+          }
           const kind = url.searchParams.get('kind');
           return send(res, 200, mem.list({ kind: MEMORY_KINDS.includes(kind as MemoryKind) ? (kind as MemoryKind) : undefined, q: url.searchParams.get('q') ?? undefined }).map(view));
         }

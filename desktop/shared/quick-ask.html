@@ -1,0 +1,424 @@
+<!doctype html>
+<html lang="en" class="night">
+<!--
+  Phase 75 stage 2 (native): the quick-ask window of the Windows and Mac apps, and the source of
+  the tray / menu-bar "Now" section. One page for both apps (Windows: RCDATA in sara.rc; Mac:
+  Contents/Resources/quick-ask.html). The app serves it AT THE SARA SERVER'S OWN ADDRESS
+  (<server>/__sara_desktop/quick-ask: Windows answers that request itself through WebView2's
+  WebResourceRequested, the Mac loads it with loadHTMLString(baseURL:)), in the same web view
+  profile / WKWebsiteDataStore as the main window. So every request below is an ordinary
+  same-origin request with the owner's (or a household member's) own sign-in cookie, through the
+  server's normal routes and rules: the AI disclosure, private local mode, household limits and the
+  demo's read-only rules all apply exactly as in the web app. Nothing here can accept the AI notice:
+  if it hasn't been accepted, the window shows it and sends you to the main window.
+  Native → page: saraQuick.show({theme, solid, shortcut}), saraQuick.refresh(), saraQuick.decide(id, ok),
+  saraQuick.hidden(). Page → native: {m:'qa', a:'ready'|'hide'|'size'|'open'|'drag'|'state', …}.
+-->
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width">
+<title>Ask Sara</title>
+<style>
+:root{--bg:rgba(15,13,23,.74);--solid:#0f0d17;--panel:rgba(30,26,41,.78);--panel-2:rgba(255,255,255,.06);--text:#eee9f3;--muted:#a9a0b8;--accent:#f08aa5;--grad:linear-gradient(135deg,#e0607e,#9b6bff);--border:rgba(255,255,255,.10);--border-2:rgba(255,255,255,.18);--error:#ff6b7d;--ok:#4fd1a5;--warn:#f5b452;--on-accent:#160c14;color-scheme:dark}
+html.day{--bg:rgba(250,247,245,.78);--solid:#faf7f5;--panel:rgba(255,255,255,.82);--panel-2:rgba(36,28,43,.05);--text:#241c2b;--muted:#665d70;--accent:#b8436a;--border:rgba(36,28,43,.10);--border-2:rgba(36,28,43,.22);--error:#c0303a;--ok:#1f8a66;--warn:#9a6110;color-scheme:light}
+html.solid{--bg:var(--solid)}
+*{box-sizing:border-box}
+html,body{margin:0;background:transparent;height:auto}
+body{color:var(--text);font:15px/1.5 Inter,'Segoe UI Variable Text','Segoe UI',-apple-system,system-ui,sans-serif;-webkit-user-select:none;user-select:none;overflow:hidden}
+#box{background:var(--bg);border-radius:14px;border:1px solid var(--border);min-height:100vh;display:flex;flex-direction:column}
+html.mac #box{border:0}
+header{display:flex;align-items:center;gap:10px;padding:12px 14px 6px;app-region:drag;-webkit-app-region:drag}
+header button,header .badge{app-region:no-drag;-webkit-app-region:no-drag}
+#face{width:28px;height:28px;border-radius:50%;flex:0 0 auto;background:var(--panel-2);box-shadow:0 0 0 1.5px rgba(240,138,165,.45),0 0 14px rgba(155,107,255,.35);object-fit:cover}
+#face[hidden]{display:none}
+.who{flex:1;min-width:0;line-height:1.2}
+.who b{font-weight:600;font-size:14px;letter-spacing:-.01em}
+.who span{display:block;font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.badge{font-size:12px;color:var(--muted);border:1px solid var(--border-2);border-radius:999px;padding:2px 8px}
+button{font:inherit;cursor:pointer;border-radius:10px;border:1px solid var(--border-2);background:transparent;color:var(--text);padding:5px 12px;font-size:13px;font-weight:500}
+button:hover{border-color:var(--accent)}
+button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+button.icon{width:30px;height:30px;padding:0;border-color:transparent;font-size:16px;line-height:1;color:var(--muted)}
+button.icon:hover{color:var(--text);border-color:var(--border-2)}
+button.primary{background:var(--grad);border:0;color:var(--on-accent);font-weight:600}
+button[hidden]{display:none}
+#ask{display:flex;align-items:flex-end;gap:8px;margin:6px 14px 12px;padding:6px 6px 6px 14px;background:var(--panel);border:1px solid var(--border-2);border-radius:14px}
+#ask:focus-within{border-color:var(--accent)}
+#ask[hidden]{display:none}
+textarea{flex:1;resize:none;border:0;outline:0;background:transparent;color:var(--text);font:inherit;font-size:16px;line-height:1.45;padding:6px 0;max-height:132px;min-height:30px;-webkit-user-select:text;user-select:text}
+textarea::placeholder{color:var(--muted)}
+#send{width:36px;height:36px;border-radius:10px;padding:0;font-size:17px;flex:0 0 auto}
+#send:disabled{opacity:.45;cursor:default}
+#out{overflow-y:auto;padding:0 18px;max-height:380px;-webkit-user-select:text;user-select:text}
+#out:empty{display:none}
+.q{color:var(--muted);font-size:13px;margin:4px 0 6px}
+.a{border-left:2px solid;border-image:var(--grad) 1;padding:2px 0 2px 12px;margin:0 0 10px;white-space:normal;word-wrap:break-word}
+.a p{margin:0 0 8px}.a p:last-child{margin:0}
+.a pre{background:var(--panel-2);border:1px solid var(--border);border-radius:10px;padding:8px 10px;overflow-x:auto;font:13px/1.45 ui-monospace,'Cascadia Code',Consolas,Menlo,monospace;white-space:pre}
+.a code{font:13px ui-monospace,'Cascadia Code',Consolas,Menlo,monospace;background:var(--panel-2);border-radius:5px;padding:0 4px}
+.a.typing::after{content:'';display:inline-block;width:7px;height:7px;margin-left:4px;border-radius:50%;background:var(--accent);animation:pulse 1s ease-in-out infinite}
+.notice{font-size:13px;color:var(--text);background:var(--panel-2);border:1px solid var(--border-2);border-radius:10px;padding:8px 12px;margin:0 0 10px}
+.notice.disclosure::before{content:'AI · ';font-weight:600;color:var(--accent)}
+.step{font-size:13px;color:var(--muted);margin:0 0 8px}
+.err{color:var(--error);font-size:14px;margin:0 0 10px}
+.card{background:var(--panel);border:1px solid var(--border-2);border-radius:12px;padding:10px 12px;margin:0 0 10px;font-size:14px}
+.card .row{display:flex;gap:8px;margin-top:8px;flex-wrap:wrap}
+.info{padding:2px 18px 14px;color:var(--muted);font-size:14px}
+.info p{margin:0 0 10px}
+.info[hidden]{display:none}
+footer{display:flex;align-items:center;gap:8px;padding:0 14px 12px;font-size:12px;color:var(--muted)}
+footer[hidden]{display:none}
+footer .grow{flex:1}
+kbd{font:11px ui-monospace,Consolas,Menlo,monospace;border:1px solid var(--border-2);border-radius:5px;padding:0 4px}
+@keyframes pulse{0%,100%{opacity:.35}50%{opacity:1}}
+@media (prefers-reduced-motion:reduce){.a.typing::after{animation:none}}
+</style>
+</head>
+<body>
+<div id="box"><div id="inner">
+  <header>
+    <img id="face" alt="" hidden>
+    <div class="who"><b id="name">Sara</b><span id="mood"></span></div>
+    <span class="badge" id="private" hidden title="Private local mode: nothing leaves this computer">🔒 Only this computer</span>
+    <button id="open" hidden title="Continue this conversation in the main window">Open in Sara</button>
+    <button id="new" class="icon" hidden title="Ask something new" aria-label="Ask something new">＋</button>
+    <button id="close" class="icon" title="Close (Esc)" aria-label="Close">✕</button>
+  </header>
+  <form id="ask" autocomplete="off">
+    <textarea id="q" rows="1" placeholder="Ask Sara anything…" aria-label="Your question" spellcheck="true"></textarea>
+    <button id="send" class="primary" type="submit" aria-label="Ask" title="Ask (Enter)">↑</button>
+  </form>
+  <div class="info" id="info" hidden></div>
+  <div id="out" aria-live="polite"></div>
+  <footer id="foot"><span class="grow" id="hint">Enter to ask · Shift+Enter for a new line · Esc to close</span><span id="shortcut"></span></footer>
+</div></div>
+<script>
+(() => {
+  'use strict';
+  const $ = (id) => document.getElementById(id);
+  const isMac = Boolean(window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.quick);
+  document.documentElement.classList.toggle('mac', isMac);
+  const post = (o) => {
+    const msg = Object.assign({ m: 'qa' }, o);
+    try {
+      if (window.chrome && window.chrome.webview) window.chrome.webview.postMessage(msg);
+      else if (isMac) window.webkit.messageHandlers.quick.postMessage(msg);
+    } catch (e) { /* the app is going away */ }
+  };
+  const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+  /** Her reply, lightly formatted: paragraphs, ```code```, `code`, **bold**. No links or HTML. */
+  const render = (text) => {
+    const parts = String(text).split(/```/);
+    let html = '';
+    parts.forEach((p, i) => {
+      if (i % 2) { html += '<pre>' + esc(p.replace(/^[\w+-]*\n/, '')) + '</pre>'; return; }
+      for (const para of p.split(/\n{2,}/)) {
+        if (!para.trim()) continue;
+        html += '<p>' + esc(para).replace(/`([^`\n]+)`/g, '<code>$1</code>').replace(/\*\*([^*\n]+)\*\*/g, '<b>$1</b>').replace(/\n/g, '<br>') + '</p>';
+      }
+    });
+    return html;
+  };
+  const api = async (path, opts = {}) => {
+    const res = await fetch('/api' + path, {
+      method: opts.method || 'GET',
+      credentials: 'same-origin',
+      headers: opts.body !== undefined ? { 'content-type': 'application/json' } : {},
+      body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
+      signal: opts.signal,
+    });
+    if (opts.raw) return res;
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw Object.assign(new Error(data.error || data.message || 'HTTP ' + res.status), { status: res.status, data });
+    return data;
+  };
+
+  // ---------- the session: who is signed in, the AI notice, demo, private mode ----------
+  let session = null;   // GET /api/session
+  let her = null;       // GET /api/sara/state
+  let conv = null;      // the conversation this window's question went to
+  let busy = null;      // AbortController of the reply being streamed
+  let lastFace = '';
+  let refreshing = null;
+  let lastSize = 0;
+
+  const out = $('out');
+  const info = $('info');
+  const q = $('q');
+
+  const fit = () => {
+    q.style.height = 'auto';
+    q.style.height = Math.min(132, q.scrollHeight) + 'px';
+    // The content's own height (the frosted box fills the window, so it can't be measured).
+    const h = Math.ceil($('inner').getBoundingClientRect().height) + 2;
+    if (h !== lastSize) { lastSize = h; post({ a: 'size', h }); }
+  };
+  new ResizeObserver(fit).observe($('inner'));
+
+  const blocked = () => {
+    // Quick ask works only for a signed-in, non-demo session that accepted the AI notice.
+    if (!session) return 'loading';
+    if (session.demo) return 'demo';
+    if (!session.authenticated) return 'signin';
+    if (!session.disclosureAccepted) return 'disclosure';
+    return '';
+  };
+  const showInfo = () => {
+    const why = blocked();
+    document.body.dataset.state = why || 'ready';
+    q.disabled = Boolean(why) && why !== 'loading';
+    $('send').disabled = q.disabled || Boolean(busy);
+    // Signed out, the AI notice not accepted yet, or the demo: no box to type in, only what to do.
+    $('ask').hidden = $('foot').hidden = q.disabled;
+    if (!why || why === 'loading') { info.hidden = true; info.textContent = ''; fit(); return; }
+    let html = '';
+    if (why === 'demo') html = '<p><b>Quick ask is off on the demo.</b> The demo server is read-only for apps; open Sara to try her in the main window.</p><button id=go class=primary>Open Sara</button>';
+    if (why === 'signin') html = '<p>Sign in to this Sara in the main window first, then ask her from anywhere.</p><button id=go class=primary>Open Sara</button>';
+    if (why === 'disclosure') html = '<div class="notice disclosure">' + esc(session.disclosure || '') + '</div><p>Read and accept this notice in the main window once; then you can ask her from here.</p><button id=go class=primary>Open Sara</button>';
+    info.innerHTML = html;
+    info.hidden = false;
+    const go = $('go');
+    if (go) go.onclick = () => post({ a: 'open', conv: '' });
+    fit();
+  };
+
+  /** Her face as a small round PNG for the tray / menu bar (64 px; the app scales it). */
+  const faceUrl = () => {
+    if (her && her.customAvatar) return '/api/sara/avatar?t=' + (Date.now() >> 16);
+    const x = her && her.expression && her.expression !== 'default' ? her.expression : '';
+    return x ? '/sara/avatar-' + encodeURIComponent(x) + '.jpg' : '/sara-avatar.jpg';
+  };
+  const makeFace = (url) => new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      try {
+        const c = document.createElement('canvas');
+        c.width = c.height = 64;
+        const g = c.getContext('2d');
+        g.beginPath();
+        g.arc(32, 32, 32, 0, Math.PI * 2);
+        g.clip();
+        const s = Math.min(img.naturalWidth, img.naturalHeight);
+        g.drawImage(img, (img.naturalWidth - s) / 2, Math.max(0, (img.naturalHeight - s) / 4), s, s, 0, 0, 64, 64);
+        resolve(c.toDataURL('image/png'));
+      } catch (e) { resolve(''); }
+    };
+    img.onerror = () => resolve('');
+    img.src = url;
+  });
+
+  const clean = (s, n) => String(s || '').replace(/[\t\r\n]+/g, ' ').trim().slice(0, n);
+  const since = (iso) => {
+    const m = Math.max(0, Math.round((Date.now() - Date.parse(iso)) / 60000));
+    return m < 1 ? 'just started' : m < 60 ? m + ' min' : Math.floor(m / 60) + ' h ' + (m % 60) + ' min';
+  };
+
+  /** Session, mood, face, and "Now" (background jobs running, approvals waiting) for the app. */
+  const refresh = () => {
+    if (refreshing) return refreshing;
+    refreshing = (async () => {
+      try {
+        session = await api('/session');
+      } catch (e) {
+        session = null;
+        post({ a: 'state', online: false });
+        return;
+      } finally { showInfo(); }
+      const name = (session.identity && session.identity.name) || 'Sara';
+      $('name').textContent = name;
+      $('private').hidden = !session.privateLocal;
+      q.placeholder = 'Ask ' + name + ' anything…';
+      if (!session.authenticated || session.demo) {
+        post({ a: 'state', online: true, signedIn: Boolean(session.authenticated), demo: Boolean(session.demo), name, mood: '', face: '', now: '' });
+        return;
+      }
+      her = await api('/sara/state').catch(() => null);
+      const mood = her && her.enabled ? her.mood : '';
+      $('mood').textContent = her && her.enabled ? her.mood + ' · ' + her.energy : '';
+      const lines = [];
+      // Approvals waiting (in a turn that's still running: the conversation says "working").
+      const convs = await api('/conversations').catch(() => []);
+      const working = (Array.isArray(convs) ? convs : []).filter((c) => c.working && !c.offRecord).slice(0, 6);
+      for (const c of working) {
+        const d = await api('/conversations/' + encodeURIComponent(c.id) + '?limit=20').catch(() => null);
+        for (const ap of (d && d.activity && d.activity.approvals) || []) {
+          lines.push(['approval', clean(ap.approvalId, 80), clean(c.id, 60), clean('Wants to: ' + (ap.summary || ap.name), 90)].join('\t'));
+        }
+      }
+      // Background jobs (builds, tests, coding helpers) still running.
+      const jobs = await api('/jobs').catch(() => []);
+      for (const j of (Array.isArray(jobs) ? jobs : []).filter((x) => x.status === 'running').slice(0, 6)) {
+        lines.push(['job', String(j.id), clean(j.conversationId, 60), clean(j.label, 70) + '… ' + since(j.startedAt)].join('\t'));
+      }
+      const url = faceUrl();
+      let face = '';
+      if (url !== lastFace) {
+        face = await makeFace(url);
+        if (face) lastFace = url;
+      }
+      const faceImg = $('face');
+      faceImg.src = url;
+      faceImg.hidden = false;
+      post({ a: 'state', online: true, signedIn: true, demo: false, name, mood, face, now: lines.slice(0, 10).join('\n') });
+    })().finally(() => { refreshing = null; });
+    return refreshing;
+  };
+
+  // Live updates: a job or turn starting/ending refreshes "Now" (the app also asks every 45 s).
+  let es = null, soon = null;
+  const listen = () => {
+    if (es || !session || !session.authenticated || session.demo) return;
+    es = new EventSource('/api/events');
+    const later = () => { clearTimeout(soon); soon = setTimeout(refresh, 1500); };
+    for (const t of ['job', 'turn', 'team']) es.addEventListener(t, later);
+    es.onerror = () => { es.close(); es = null; setTimeout(listen, 30000); };
+  };
+
+  // ---------- asking ----------
+  const add = (cls, html) => {
+    const d = document.createElement('div');
+    d.className = cls;
+    d.innerHTML = html;
+    out.appendChild(d);
+    out.scrollTop = out.scrollHeight;
+    fit();
+    return d;
+  };
+  const approvalCard = (ev) => {
+    const card = add('card', '<div>' + esc(ev.summary || ev.name) + '</div><div class=row><button class=primary data-ok=1>Allow</button><button data-ok=0>Deny</button><button data-open=1>Open in Sara</button></div>');
+    card.onclick = async (e) => {
+      const b = e.target.closest('button');
+      if (!b) return;
+      if (b.dataset.open) return post({ a: 'open', conv: conv ? conv.id : '' });
+      card.querySelectorAll('button').forEach((x) => (x.disabled = true));
+      try {
+        await api('/approvals/' + encodeURIComponent(ev.approvalId), { method: 'POST', body: { approved: b.dataset.ok === '1' } });
+        card.querySelector('div').textContent = (b.dataset.ok === '1' ? 'Allowed: ' : 'Denied: ') + (ev.summary || ev.name);
+      } catch (err) { card.querySelector('div').textContent = err.message; }
+      card.querySelector('.row').remove();
+      fit();
+    };
+  };
+
+  const ask = async (text) => {
+    if (blocked() || busy) return;
+    $('new').hidden = false;
+    add('q', esc(text));
+    const reply = add('a typing', '');
+    let raw = '';
+    busy = new AbortController();
+    showInfo();
+    try {
+      // One new conversation per quick question; the server titles it from the question. Follow-up
+      // questions in this window go to the same one, and "Open in Sara" continues it there.
+      if (!conv) conv = await api('/conversations', { method: 'POST', body: {} });
+      $('open').hidden = false;
+      const res = await api('/conversations/' + encodeURIComponent(conv.id) + '/messages', { method: 'POST', body: { content: text }, raw: true, signal: busy.signal });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        if (res.status === 403 && /disclosure/i.test(data.error || '')) { session.disclosureAccepted = false; showInfo(); }
+        throw new Error(data.error || 'HTTP ' + res.status);
+      }
+      const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
+      let buf = '';
+      for (;;) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buf += value;
+        let i;
+        while ((i = buf.indexOf('\n\n')) >= 0) {
+          const block = buf.slice(0, i);
+          buf = buf.slice(i + 2);
+          const line = block.split('\n').find((l) => l.startsWith('data: '));
+          if (!line) continue;
+          let ev;
+          try { ev = JSON.parse(line.slice(6)); } catch (e) { continue; }
+          if (ev.type === 'notice') {
+            // The AI notice (start of a session, then every few hours) and crisis help: shown
+            // exactly as the server words them, before her reply, as in the main window.
+            const n = document.createElement('div');
+            n.className = 'notice ' + esc(ev.kind || '');
+            n.textContent = ev.text;
+            out.insertBefore(n, reply.previousSibling || reply);
+          } else if (ev.type === 'token') {
+            raw += ev.text;
+            reply.innerHTML = render(raw);
+          } else if (ev.type === 'replace') {
+            raw = ev.text;
+            reply.innerHTML = render(raw);
+          } else if (ev.type === 'tool_call' || ev.type === 'tool_running') {
+            add('step', esc('… ' + (ev.summary || ev.name)));
+          } else if (ev.type === 'approval') {
+            approvalCard(ev);
+          } else if (ev.type === 'error') {
+            add('err', esc(ev.message));
+          }
+          out.scrollTop = out.scrollHeight;
+          fit();
+        }
+      }
+    } catch (err) {
+      if (err.name !== 'AbortError') add('err', esc(err.message));
+    } finally {
+      reply.classList.remove('typing');
+      if (!raw) reply.remove();
+      busy = null;
+      showInfo();
+      fit();
+      q.focus();
+    }
+  };
+
+  $('ask').onsubmit = (e) => {
+    e.preventDefault();
+    const text = q.value.trim();
+    if (!text) return;
+    q.value = '';
+    fit();
+    ask(text);
+  };
+  q.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); $('ask').requestSubmit(); }
+  });
+  q.addEventListener('input', fit);
+  addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.preventDefault(); post({ a: 'hide' }); } });
+  $('close').onclick = () => post({ a: 'hide' });
+  $('open').onclick = () => post({ a: 'open', conv: conv ? conv.id : '' });
+  $('new').onclick = () => {
+    if (busy) busy.abort();
+    conv = null;
+    out.textContent = '';
+    $('open').hidden = $('new').hidden = true;
+    q.focus();
+    fit();
+  };
+  // The Mac has no CSS app-region: a press on the header (not on a button) moves the window.
+  if (isMac) document.querySelector('header').addEventListener('mousedown', (e) => {
+    if (e.button === 0 && !e.target.closest('button,.badge')) { e.preventDefault(); post({ a: 'drag' }); }
+  });
+
+  window.saraQuick = {
+    show(o = {}) {
+      document.documentElement.classList.toggle('day', o.theme === 'day');
+      document.documentElement.classList.toggle('night', o.theme !== 'day');
+      document.documentElement.classList.toggle('solid', Boolean(o.solid));
+      $('shortcut').innerHTML = o.shortcut ? '<kbd>' + esc(o.shortcut) + '</kbd>' : '';
+      q.focus();
+      refresh().then(() => { listen(); showInfo(); q.focus(); });
+      fit();
+      return blocked() || 'ready';
+    },
+    refresh() { refresh().then(listen); return true; },
+    decide(id, ok) {
+      return api('/approvals/' + encodeURIComponent(id), { method: 'POST', body: { approved: Boolean(ok) } }).then(() => refresh(), () => refresh());
+    },
+    hidden() { return true; },
+    state() { return { state: document.body.dataset.state || '', conv: conv ? conv.id : '', text: out.innerText.slice(0, 2000) }; },
+  };
+  fit();
+  post({ a: 'ready' });
+  refresh().then(listen);
+})();
+</script>
+</body>
+</html>

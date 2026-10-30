@@ -11,6 +11,9 @@
 // Phase 75: the new look's window (Shell.swift): the page drawn under a transparent title bar with
 // the traffic lights inset into its header, dark or light following the page's theme, optional
 // vibrancy, and the theme colour from the first frame (no white flash).
+// Phase 75 stage 2 (QuickAsk.swift): a global shortcut (⌥⇧S) for a floating quick-ask panel, her
+// face, mood and "Now" (jobs, approvals with Allow / Deny) at the top of the menu bar menu, her mood
+// in the menu bar icon's tooltip.
 import AppKit
 import ServiceManagement
 import UserNotifications
@@ -124,6 +127,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
   var pageTitleOrigin = ""
   var lastMouseDown: NSEvent?
   var mouseDownMonitor: Any?
+  /// Phase 75 stage 2: the quick-ask panel, its shortcut and "Now" (QuickAsk.swift).
+  var quick: QuickAsk?
 
   // MARK: start-up
   /// The web view, on the data store of the server it shows (Phase 68: one store per server).
@@ -149,6 +154,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
     if let z = prefs.object(forKey: "zoom") as? Double { web.pageZoom = z }
     webServerId = id
     attachWebView(old: old)
+    // Phase 75 stage 2: the quick-ask page follows the server in use (same data store).
+    quick?.reset()
   }
 
   func applicationDidFinishLaunching(_ note: Notification) {
@@ -174,6 +181,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
       statusItem.button?.image = img
     } else { statusItem.button?.title = "S" }
     statusItem.button?.toolTip = current.map { "Sara · \($0.name)" } ?? "Sara"
+    // Phase 75 stage 2: the quick-ask shortcut (a clash is said once per start) and its page.
+    quick = QuickAsk(app: self)
+    quick?.registerShortcut(tell: true)
+    quick?.ensure()
     statusItem.menu = statusMenu()
 
     UNUserNotificationCenter.current().delegate = self
@@ -187,6 +198,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
     refreshServerState()
     Timer.scheduledTimer(withTimeInterval: 10, repeats: true) { [weak self] _ in self?.refreshServerState() }
     #if DEBUG
+    runQuickTest()
     if let t = ProcessInfo.processInfo.environment["SARA_TEST_SETUP"], server == nil, !local.configured {
       // Test builds: "agent,local,7861" sets up without the sheet (no screen over SSH; the first
       // field is the old run mode and is ignored: she always runs while you're signed in).
@@ -336,6 +348,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
     addSubmenus(to: m)
     m.addItem(.separator())
     m.addItem(withTitle: "Open at login", action: #selector(toggleLogin), keyEquivalent: "")
+    // Phase 75 stage 2: the quick-ask shortcut (her face, mood, Ask and "Now" are put at the top
+    // each time the menu opens: refreshNowItems in QuickAsk.swift).
+    let keys = NSMenuItem(title: "Quick ask shortcut", action: nil, keyEquivalent: "")
+    keys.submenu = shortcutMenu()
+    liveSubmenus.append((item: keys, make: { [unowned self] in self.shortcutMenu() }))
+    m.addItem(keys)
     m.addItem(withTitle: "Help", action: #selector(openHelp), keyEquivalent: "")
     m.addItem(.separator())
     m.addItem(withTitle: "Quit Sara", action: #selector(quit), keyEquivalent: "")
@@ -478,6 +496,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
     guard fromServer else { return replyHandler(nil, "Not allowed") }  // everything else only from the owner's own server
     switch kind {
     case "getPrefs": replyHandler(prefsDict(), nil)
+    // Phase 75 stage 2: the page can open the quick-ask panel.
+    case "quickAsk":
+      replyHandler(true, nil)
+      quick?.show()
     // Phase 75: the page's theme (night | day | system) and backdrop (solid | vibrancy).
     case "theme", "backdrop":
       handleShellMessage(kind, body, origin: pageOrigin(message.frameInfo))
@@ -485,6 +507,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
     case "setPref":
       let on = body["value"] as? Bool ?? false
       switch body["key"] as? String {
+      case "quickAskShortcut":
+        guard quick?.setShortcut(body["value"] as? String ?? "") == true else { return replyHandler(nil, "Unknown shortcut") }
       case "startAtLogin": setStartAtLogin(on)
       case "keepRunning": prefs.set(on, forKey: "keepRunning")
       case "notifications": prefs.set(on, forKey: "notifications")
@@ -523,7 +547,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
           s.name = Servers.uniqueName(name, url: s.url, except: s.id)
           if byUser { s.named = true }
         }
-        if id == Servers.activeId { statusItem?.button?.toolTip = "Sara · \(Servers.active?.name ?? name)" }
+        if id == Servers.activeId { updateStatusTip() }
       }
       replyHandler(Servers.json(), nil)
     default: replyHandler(nil, "Unknown")
@@ -531,8 +555,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
   }
 
   func prefsDict() -> [String: Any] {
-    ["platform": "mac", "version": appVersion, "startAtLogin": startAtLogin, "keepRunning": keepRunning, "notifications": notificationsOn, "server": server ?? "",
-     "theme": Shell.themePref, "titlebar": Int(macTitlebar)]
+    var d: [String: Any] = ["platform": "mac", "version": appVersion, "startAtLogin": startAtLogin, "keepRunning": keepRunning, "notifications": notificationsOn, "server": server ?? "",
+                            "theme": Shell.themePref, "titlebar": Int(macTitlebar)]
+    // Phase 75 stage 2: the quick-ask shortcut, the choices, and whether another app has it.
+    for (k, v) in quick?.prefs_ ?? [:] { d[k] = v }
+    return d
   }
 
   // MARK: notifications
@@ -690,6 +717,11 @@ extension AppDelegate: NSMenuDelegate {
   func menuNeedsUpdate(_ menu: NSMenu) {
     menu.item(withTitle: "Open at login")?.state = startAtLogin ? .on : .off
     for s in liveSubmenus where s.item.menu === menu { s.item.submenu = s.make() }
+    // Phase 75 stage 2: her face, mood, Ask and "Now" at the top of the menu bar menu.
+    if menu === statusItem?.menu {
+      refreshNowItems(in: menu)
+      quick?.refresh()  // fresh for the next time it opens
+    }
   }
 }
 

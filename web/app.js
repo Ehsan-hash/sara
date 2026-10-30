@@ -27,6 +27,8 @@ import { emptyState, initTidy, overflowMenu } from './tidy.js';
 import { addStep, finishStep, hasSteps, memoryStep, runStep, stepLine, waitStep } from './steps.js';
 import { renderCard, renderCards } from './result-cards.js';
 import { initLook, setContextRing, setLookBusy, showHeadChips } from './look.js';
+import { closePanel, initHerPanel, openPanel, panelConv, panelFace, panelJobs, panelMessages, panelMood, panelNow, panelOpen, togglePanel } from './her-panel.js';
+import { initCommandBar, openCommandBar, score as cmdScore } from './command-bar.js';
 /** Phase 71: a household member (their own space; owner-only pages and loaders are left out). */
 const isMember = () => document.body.classList.contains('member');
 const $ = (sel) => document.querySelector(sel);
@@ -797,6 +799,7 @@ function setActivity(status, detail = '', startedAt) {
     activity.status = '';
     document.title = t('Sara');
     setLookBusy(null);
+    panelNow(null);
     return;
   }
   if (!activity.timer) activity.startedAt = startedAt ?? Date.now();
@@ -817,6 +820,8 @@ function renderActivity() {
   $('#activity-text').textContent = `${ACTIVITY_LABEL[activity.status] ? t(ACTIVITY_LABEL[activity.status]) : activity.status}${activity.detail ? `: ${/^.*?: (Remember|Add a to-do|Save a note): /.test(activity.detail) ? appApprovalText({ id: 'app-', summary: activity.detail }) : activity.detail}` : '…'}`;
   const step = activity.status === 'running' || activity.status === 'waiting' ? `${fmtSecs(now - activity.stepAt)} · ` : '';
   $('#activity-time').textContent = `${step}${t('total {time}', { time: fmtSecs(now - activity.startedAt) })}`;
+  // Phase 75: her panel's "Now" says the same, in its own words.
+  panelNow(activity.status, activity.status === 'answering' ? activity.detail : '', activity.startedAt);
 }
 
 $('#new-chat').addEventListener('click', () => newConversation());
@@ -836,6 +841,116 @@ $('#toggle-sidebar').addEventListener('click', () => $('#main').classList.toggle
 initNav();
 initTidy();
 initLook();
+// Phase 75 (stage 2): her panel (web/her-panel.js) and the command bar (web/command-bar.js).
+initHerPanel({
+  api,
+  conv: () => state.conv,
+  messages: () => state.messages,
+  isGroup,
+  faceUrl,
+  currentCompanion: () => state.companions?.companions.find((c) => c.current)?.id ?? null,
+  convFacts,
+  memKind: (k) => t(MEM_KIND_LABEL[k] ?? k),
+  openSara: () => openSara(),
+  openToday: () => openToday(),
+  openPlanner: (tab) => (tab ? openPlannerTab(tab) : $('#open-planner').click()),
+  openConvSettings: () => $('#conv-settings-btn').click(),
+  jumpTo: (convId, msgId) => openAtMessage(convId, msgId),
+  openMemory: (text) => {
+    $('#open-memory').click();
+    setTimeout(() => {
+      $('#mem-q').value = String(text ?? '').split(/\s+/).slice(0, 6).join(' ');
+      $('#mem-q').dispatchEvent(new Event('input'));
+    }, 60);
+  },
+});
+/** A control can be used here (not hidden for this person, the demo or this device). */
+const usable = (n) => Boolean(n) && !n.hidden && !n.closest('[hidden]:not(#side-more-menu)') && getComputedStyle(n).display !== 'none' && !(isMember() && n.closest('[data-owner-only]'));
+/** A place's line under its name: its tooltip without the name or the shortcut again. */
+const placeSub = (btn) => {
+  const name = btn.querySelector('span')?.textContent?.trim() ?? '';
+  const sub = btn.title.replace(/\s*\((Alt|Ctrl)\+[^)]*\)$/, '').trim();
+  const rest = sub.toLowerCase().startsWith(`${name.toLowerCase()}:`) ? sub.slice(name.length + 1).trim() : sub;
+  return rest.toLowerCase() === name.toLowerCase() ? '' : rest.charAt(0).toLocaleUpperCase() + rest.slice(1);
+};
+const placeKey = { today: 'Alt+T', planner: 'Alt+P', memory: 'Alt+M', library: 'Alt+L', scrapbook: 'Alt+B', story: 'Alt+Y' };
+const PLACE_ICON = { today: '☀️', planner: '🗓', memory: '🧠', library: '📚', scrapbook: '📔', moments: '🖼', story: '🧵', team: '👥' };
+initCommandBar({
+  api,
+  places: () => [
+    ...[...document.querySelectorAll('#side-nav .side-dest')]
+      .map((row) => ({ row, btn: row.querySelector('.side-go') }))
+      .filter(({ row, btn }) => btn && !(isMember() && row.hasAttribute('data-owner-only')) && getComputedStyle(row).display !== 'none')
+      .map(({ row, btn }) => ({ key: `place:${row.dataset.dest}`, icon: PLACE_ICON[row.dataset.dest] ?? '•', label: btn.querySelector('span')?.textContent?.trim() || row.dataset.dest, sub: placeSub(btn), hint: placeKey[row.dataset.dest] ?? '', run: () => btn.click() })),
+    { key: 'place:her', icon: '💗', label: t('Her page'), sub: t('Her day, mood and character'), hint: 'Alt+H', run: () => openSara() },
+    { key: 'place:settings', icon: '⚙️', label: t('Settings'), hint: 'Ctrl+,', run: () => openSettings() },
+    { key: 'place:help', icon: '❓', label: t('Help'), sub: t('Tours and the guide'), run: () => $('#open-help').click() },
+  ],
+  conversations: () =>
+    state.conversations
+      .filter((c) => !String(c.channel ?? '').startsWith('import-'))
+      .sort((a, b) => Number(Boolean(a.archivedAt)) - Number(Boolean(b.archivedAt)))
+      .map((c) => ({ key: `conv:${c.id}`, icon: c.offRecord ? '🕶' : isGroup(c) ? '👥' : '💬', label: c.title || t('New conversation'), sub: c.archivedAt ? t('Archived') : '', raw: true, run: () => { $('#main').classList.remove('show-sidebar'); return openConversation(c.id); } })),
+  settings: () => settingsPages().map((p) => ({ key: `settings:${p.dataset.page}`, icon: '⚙️', label: t(p.dataset.title), sub: t(p.dataset.group), run: () => openSettings(p.dataset.page) })),
+  // The Settings window's own tiered search for pages, plus every setting's label on its own.
+  searchSettings: (q) => {
+    const pages = settingsPages();
+    const pageItem = (p) => ({ key: `settings:${p.dataset.page}`, icon: '⚙️', label: t(p.dataset.title), sub: t(p.dataset.group), run: () => openSettings(p.dataset.page) });
+    // Pages: the ones whose name fits first, then the Settings window's tiered search.
+    const named = pages.filter((p) => cmdScore(q, t(p.dataset.title), p.dataset.title));
+    const tiered = matchSettings(q, pages).filter((p) => !named.includes(p));
+    const seen = new Set();
+    const labels = [];
+    for (const p of pages) {
+      for (const n of p.querySelectorAll('label, h3, h4, legend')) {
+        // The label's own words: without the choices of a list inside it or its ? button.
+        const words = n.cloneNode(true);
+        for (const x of words.querySelectorAll('select, option, input, textarea, button, .muted')) x.remove();
+        const text = words.textContent.replace(/\s+/g, ' ').replace(/[:：]\s*$/, '').trim();
+        if (!text || text.length > 90 || seen.has(text)) continue;
+        const sc = cmdScore(q, text);
+        if (!sc) continue;
+        seen.add(text);
+        labels.push({ sc, key: `settings:${p.dataset.page}`, icon: '🔧', label: text, sub: `${t(p.dataset.group)} → ${t(p.dataset.title)}`, run: async () => {
+          await openSettings(p.dataset.page);
+          n.scrollIntoView({ block: 'center' });
+          (n.querySelector('input, select, textarea') ?? n.nextElementSibling?.querySelector?.('input, select, textarea'))?.focus({ preventScroll: true });
+          n.classList.add('cmd-found');
+          setTimeout(() => n.classList.remove('cmd-found'), 2200);
+        } });
+      }
+    }
+    labels.sort((a, b) => b.sc - a.sc);
+    const strong = labels.filter((x) => x.sc >= 3);
+    const weak = labels.filter((x) => x.sc < 3);
+    return [...named.slice(0, 3).map(pageItem), ...strong.slice(0, 4), ...tiered.slice(0, 2).map(pageItem), ...weak].slice(0, 6);
+  },
+  actions: () => {
+    const list = [];
+    const add = (key, icon, label, run, hint = '', words = '') => list.push({ key: `action:${key}`, icon, label, run, hint, words });
+    if (usable($('#new-chat'))) add('new', '✏️', t('New conversation'), () => $('#new-chat').click(), 'Alt+N');
+    if (usable($('#new-project'))) add('project', '📁', t('New project'), () => $('#new-project').click());
+    if (usable($('#new-offrecord'))) add('offrecord', '🕶', t('Off the record'), () => $('#new-offrecord').click(), '', t('private conversation not saved'));
+    if (usable($('#new-group'))) add('group', '👥', t('New group chat'), () => $('#new-group').click());
+    if (usable($('#call'))) add('call', '📞', t('Start a call'), () => $('#call').click(), '', t('voice talk'));
+    if (usable($('#video-call-btn'))) add('video', '🎥', t('Start a video call'), () => $('#video-call-btn').click());
+    for (const c of state.companions?.companions ?? []) if (!c.current) add(`companion:${c.id}`, '⇄', t('Switch to {name}', { name: c.name }), () => switchCompanion(c.id), '', t('switch companion'));
+    const light = document.documentElement.dataset.theme === 'light';
+    add('theme', light ? '🌙' : '☀️', light ? t('Switch to Night') : t('Switch to Day'), () => {
+      const sel = $('#ap-theme');
+      sel.value = light ? 'dark' : 'light';
+      sel.dispatchEvent(new Event('change'));
+    }, '', t('switch theme dark light'));
+    add('panel', '◧', panelOpen() ? t('Fold her panel away') : t('Show her panel'), () => togglePanel(), 'Ctrl+\\');
+    if (usable($('#server-btn'))) add('servers', '🖥', t('Open Your Saras'), () => $('#server-btn').click(), '', t('servers switch'));
+    add('search', '🔎', t('Search messages, memories and notes'), () => {
+      $('#main').classList.add('show-sidebar');
+      $('#conv-search').focus();
+    });
+    add('tour', '🧭', t('Show me around'), () => runTour('first'), '', t('tour'));
+    return list;
+  },
+});
 // On a phone the list slides over the chat: ✕, a tap beside it, or Escape closes it.
 const closeSidebar = () => $('#main').classList.remove('show-sidebar');
 $('#close-sidebar').addEventListener('click', closeSidebar);
@@ -1193,6 +1308,7 @@ function renderMessages(messages, opts = {}) {
   }
   if (!opts.keepScroll) box.scrollTop = box.scrollHeight;
   updateContextRing();
+  panelMessages();
 }
 
 function continueBar() {
@@ -2219,6 +2335,7 @@ function renderConvSummary() {
   if (isGroup(c)) {
     const style = { fits: t('Whoever fits'), everyone: t('Everyone answers'), turns: t('Take turns'), mention: t('@mention only') }[c.group?.turnStyle] ?? '';
     $('#conv-summary').textContent = `${groupTag(c)} · ${style}${c.group?.banter ? ` · ${t('Banter: {n}', { n: c.group.banter })}` : ''}`;
+    panelConv();
     return;
   }
   const demo = document.body.classList.contains('demo');
@@ -2235,6 +2352,33 @@ function renderConvSummary() {
   // Phase 71: members have no workspace folders (the file tools are the owner's), so no folder part.
   const folder = isMember() ? '' : `${c.workspace === 'main' ? `📁 ${t('main folder')}` : `📁 ${c.workspace}`} · `;
   $('#conv-summary').textContent = `${c.mode === 'coding' ? `${t('Coding')} · ` : ''}${folder}${model || label}${plan}`;
+  panelConv();
+}
+
+/** Phase 75: "This conversation" in her panel: [label, value, class] rows from the same facts. */
+function convFacts() {
+  const c = state.conv;
+  if (!c) return [];
+  if (isGroup(c)) {
+    const style = { fits: t('Whoever fits'), everyone: t('Everyone answers'), turns: t('Take turns'), mention: t('@mention only') }[c.group?.turnStyle] ?? '';
+    return [
+      [t('Who is here'), (c.group?.members ?? []).map((m) => m.name).join(', ')],
+      ...(style ? [[t('Who answers'), style]] : []),
+      [t('Privacy'), c.private ? t('Private: local models only, nothing leaves your server') : t('Saved: she remembers what matters'), c.private ? 'hp-private' : ''],
+    ];
+  }
+  const s = state.providers;
+  const prov = c.providerId ?? s.defaultProviderId;
+  const model = c.model ?? (c.providerId ? null : s.defaultModel) ?? '';
+  const label = s.providers.find((p) => p.id === prov)?.label ?? prov ?? t('no provider');
+  const demo = document.body.classList.contains('demo');
+  const privacy = c.offRecord ? [t('Off the record: nothing is saved'), 'hp-offrecord'] : c.private ? [t('Private: local models only, nothing leaves your server'), 'hp-private'] : demo ? [t('Demo: not saved, gone after a few hours'), 'hp-offrecord'] : [t('Saved: she remembers what matters'), ''];
+  return [
+    [t('Model'), model ? `${model} · ${label}` : label],
+    ...(isMember() || demo ? [] : [[t('Workspace'), c.workspace === 'main' ? t('main folder') : String(c.workspace ?? '')]]),
+    ...(c.mode === 'coding' ? [[t('Mode'), t('Coding')]] : []),
+    [t('Privacy'), privacy[0], privacy[1]],
+  ];
 }
 
 async function csLoadModels(selected) {
@@ -2335,6 +2479,7 @@ async function refreshSaraStatus() {
     el.hidden = !st.enabled;
     if (st.enabled) el.textContent = `${t(st.mood)} · ${t(st.energy)}`;
     setFace(st);
+    panelMood(st);
     return st;
   } catch {
     return null;
@@ -2353,6 +2498,7 @@ function setFace(st) {
   for (const img of document.querySelectorAll('img.avatar')) if (!img.src.endsWith(avatar)) img.src = avatar;
   state.expression = x ?? 'default';
   state.customAvatar = custom ? avatar : null;
+  panelFace({ avatar, portrait, expression: state.expression });
   for (const pr of [sdPresence, callPresence]) pr.setExpression(state.expression, state.customAvatar);
   if (videoView.open) videoView.backdrop();
   $('#avatar-reset').hidden = !custom;
@@ -3932,6 +4078,7 @@ function renderJobs() {
       return row;
     }),
   );
+  panelJobs([...(state.jobs?.values() ?? [])]);
   clearInterval(state.jobTimer);
   if (mine.length) state.jobTimer = setInterval(() => document.querySelectorAll('#jobs-strip .job-time').forEach((t, i) => (t.textContent = jobElapsed(mine[i]))), 1000);
 }
@@ -4413,6 +4560,7 @@ function startEvents() {
   es.addEventListener('history-import', (e) => renderHistStatus(JSON.parse(e.data).status));
   es.addEventListener('planner', () => {
     if ($('#planner').open) loadPlanner();
+    window.dispatchEvent(new Event('sara:planner'));
   });
   es.addEventListener('ring', (e) => onRing(JSON.parse(e.data).ring));
   // A turn started or ended somewhere else (another device, Telegram, Discord): follow along.
@@ -6335,9 +6483,10 @@ document.addEventListener('keydown', (e) => {
     e.preventDefault();
     return void openSettings();
   }
-  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+  // Ctrl+K / ⌘K opens the command bar (web/command-bar.js). Ctrl+\ / ⌘\ folds her panel.
+  if ((e.ctrlKey || e.metaKey) && !e.altKey && e.code === 'Backslash') {
     e.preventDefault();
-    return $('#conv-search').focus();
+    return togglePanel();
   }
   if (e.altKey && !e.ctrlKey && !e.metaKey && SHORTCUTS[e.code]) {
     e.preventDefault();
@@ -6388,6 +6537,8 @@ const TOURS = {
   first: [
     { sel: '#new-chat', title: t('New conversation'), text: t('Start a fresh chat any time. Old ones stay in the list below, with search.'), before: sidebar(true) },
     { before: sidebar(false), sel: '#input', title: t('Talk to her'), text: t('Type here, or use the microphone. The + button attaches a photo or a file, or starts something to do together.') },
+    { before: sidebar(false), sel: '#her-face', title: t('Her panel'), text: t('Her face opens her panel: her mood, what she is doing right now, approvals waiting, your day and what she remembered for this reply. On a phone it slides up from the bottom.') },
+    { before: sidebar(false), sel: '#cmd-open', title: t('Search and go'), text: t('Press Ctrl+K (⌘K on a Mac) or this button to jump to any place, conversation, setting or action.') },
     { before: async () => { sidebar(false)(); await showHeadChips(); }, sel: '#conv-settings-btn', title: t('This conversation'), text: t('The model, workspace and mode (chat or coding) for this conversation only. Private keeps everything on your server.') },
     { before: navStep('#open-today'), sel: '#open-today', title: t('Today'), text: t('Your day at a glance: reminders, to-dos, the weather and what she has been up to.') },
     { before: navStep('#open-planner'), sel: '#open-planner', title: t('Planner'), text: t('To-dos, reminders and notes. You can also just ask her: "remind me to call Mom at 5".') },

@@ -17,6 +17,7 @@
   <link rel="stylesheet" href="/style.css">
   <link rel="stylesheet" href="/ui-tidy.css">
   <link rel="stylesheet" href="/look.css">
+  <link rel="stylesheet" href="/her-panel.css">
   <script type="module" src="/app.js"></script>
 </head>
 <body>
@@ -179,7 +180,7 @@
     <main id="chat">
       <header id="chat-head">
         <button id="toggle-sidebar" class="ghost" aria-label="Conversations">☰</button>
-        <img class="avatar head-face" src="/sara-avatar.jpg" alt="">
+        <button id="her-face" class="head-face-btn" type="button" aria-label="Her mood and what she is doing now" aria-controls="her-panel" aria-expanded="false"><img class="avatar head-face" src="/sara-avatar.jpg" alt=""></button>
         <div class="title-wrap">
           <h2 id="chat-title">Sara</h2>
           <button id="sara-status" class="sara-status" type="button" title="How Sara is doing (open Sara's page)" hidden></button>
@@ -200,6 +201,9 @@
         </div>
         <button id="pl-badge" class="pl-badge" type="button" title="Nothing leaves this computer: private local mode is on" hidden>🔒 <span>Only this computer</span></button>
         <span class="ai-badge" title="Sara is an AI companion">AI companion</span>
+        <!-- Phase 75 (stage 2): the command bar (Ctrl+K / ⌘K) and her panel (web/command-bar.js, web/her-panel.js) -->
+        <button id="cmd-open" class="ghost icon head-icon" type="button" aria-label="Search and go (Ctrl+K)" title="Search and go (Ctrl+K)" aria-haspopup="dialog"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.2-4.2"/></svg></button>
+        <button id="panel-toggle" class="ghost icon head-icon" type="button" aria-label="Her panel (Ctrl+\)" title="Her panel (Ctrl+\)" aria-controls="her-panel" aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="4.5" width="17" height="15" rx="3"/><path d="M14.5 4.5v15"/></svg></button>
       </header>
       <dialog id="ring" class="ring" aria-labelledby="ring-title" data-required="1">
         <img id="ring-face" class="ring-face" alt="">
@@ -280,6 +284,46 @@
         <button id="stop" type="button" class="ghost" hidden>Stop</button>
       </form>
     </main>
+    <!-- Phase 75 (stage 2): her presence. A fold-away panel on the right on wide screens, an overlay
+         below 1100 px, a bottom sheet pulled up from her face on phones (web/her-panel.js). -->
+    <button id="her-scrim" class="her-scrim" type="button" tabindex="-1" aria-label="Close her panel" hidden></button>
+    <aside id="her-panel" class="her-panel" aria-labelledby="hp-name" hidden>
+      <button id="hp-handle" class="hp-handle" type="button" aria-label="Show more or less of her panel"><span aria-hidden="true"></span></button>
+      <div class="hp-scroll">
+        <div class="hp-top">
+          <h2 id="hp-name" class="hp-name" data-raw>Sara</h2>
+          <button id="hp-close" class="ghost icon hp-close" type="button" aria-label="Fold her panel away" title="Fold her panel away"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg></button>
+        </div>
+        <div class="hp-her">
+          <button id="hp-open-her" class="hp-glow" type="button" data-mood="default" aria-label="Her page: her day, mood and character"><img id="hp-portrait" class="hp-portrait" src="/sara-portrait.jpg" alt=""></button>
+          <p class="hp-mood"><span class="hp-dot" aria-hidden="true"></span><span id="hp-mood-text"></span></p>
+          <p id="hp-status" class="hp-status"></p>
+          <div id="hp-who" class="hp-who" role="group" aria-label="Who is in this group" hidden></div>
+        </div>
+        <section id="hp-now" class="hp-sec" aria-labelledby="hp-now-h">
+          <h3 id="hp-now-h" class="hp-h">Now</h3>
+          <p id="hp-now-line" class="hp-now-line" aria-live="polite"></p>
+          <div id="hp-approvals" class="hp-approvals"></div>
+          <div id="hp-jobs" class="hp-jobs"></div>
+        </section>
+        <section id="hp-today" class="hp-sec" aria-labelledby="hp-today-h">
+          <h3 id="hp-today-h" class="hp-h">Today <button id="hp-planner" class="hp-link" type="button">Planner</button></h3>
+          <ul id="hp-today-list" class="hp-list"></ul>
+        </section>
+        <section id="hp-mem" class="hp-sec" aria-labelledby="hp-mem-h">
+          <h3 id="hp-mem-h" class="hp-h">She remembered</h3>
+          <ul id="hp-mem-list" class="hp-list"></ul>
+        </section>
+        <section id="hp-conv" class="hp-sec" aria-labelledby="hp-conv-h">
+          <h3 id="hp-conv-h" class="hp-h">This conversation <button id="hp-conv-edit" class="hp-link" type="button">Change</button></h3>
+          <dl id="hp-conv-list" class="hp-facts"></dl>
+          <div id="hp-ctx" class="hp-ctx" hidden>
+            <span id="hp-ctx-ring" class="ctx-ring hp-ctx-ring" aria-hidden="true"><span id="hp-ctx-pct" class="ctx-pct"></span></span>
+            <p id="hp-ctx-text" class="hp-ctx-text"></p>
+          </div>
+        </section>
+      </div>
+    </aside>
     <!-- Phase 49: a web app she runs, beside the chat (full screen on phones). Sandboxed: no allow-same-origin. -->
     <aside id="preview-pane" class="preview-pane" hidden aria-label="Preview of her app">
       <div class="preview-bar">
@@ -297,6 +341,18 @@
       </div>
     </aside>
   </section>
+
+  <!-- Phase 75 (stage 2): the command bar, Ctrl+K / ⌘K (web/command-bar.js) -->
+  <dialog id="cmdbar" class="cmdbar" aria-label="Search and go" data-wired="1">
+    <div class="cmd-box">
+      <svg class="cmd-glass" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.2-4.2"/></svg>
+      <input id="search-cmd-q" class="cmd-q" type="text" role="combobox" aria-expanded="true" aria-controls="cmd-list" aria-autocomplete="list" aria-label="Search places, conversations, settings and actions" placeholder="Search places, chats, settings, actions…" autocomplete="off" spellcheck="false">
+      <button id="cmd-close" class="ghost small cmd-close" type="button" aria-label="Close">✕</button>
+    </div>
+    <div id="cmd-list" class="cmd-list" role="listbox" aria-label="Results"></div>
+    <p class="cmd-foot muted small" aria-hidden="true"><span>↑↓ move</span><span>Enter open</span><span>Esc close</span></p>
+    <p id="cmd-status" class="cmd-sr" role="status" aria-live="polite"></p>
+  </dialog>
 
   <!-- Phase 39: the team she leads -->
   <dialog id="team" aria-label="Team">
