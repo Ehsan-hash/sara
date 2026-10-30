@@ -10,6 +10,8 @@
 // sidebar, her panel and the phone's bottom bar stay usable beside it. It keeps its old ids and
 // deep link (/#view=today, Alt+T). Since 2.7.1 the app opens on Today (web/start-view.js).
 import { locale, t } from './naming.js';
+import { icon } from './icons.js';
+import { ring, share, sparkline, weatherArt } from './viz.js';
 
 const $ = (sel) => document.querySelector(sel);
 const el = (tag, cls, text) => {
@@ -155,11 +157,22 @@ function afterClose(focus) {
 const time = (ms) => new Date(ms).toLocaleTimeString(locale(), { hour: 'numeric', minute: '2-digit' });
 const hourOf = (iso) => new Date(iso).toLocaleTimeString(locale(), { hour: 'numeric' });
 
+/** 2.8: each tile's small line icon (web/icons.js), beside its title. */
+const TILE_ICON = { 'td-weather': 'weather', 'td-calendar': 'calendar', 'td-agenda': 'planner', 'td-memories': 'memory', 'td-otd': 'moments', 'td-jobs': 'job', 'td-home': 'home', 'td-mail': 'mail', 'td-dates': 'heart', 'td-models': 'sparkle', 'td-setup': 'plus' };
+function tileIcon(id) {
+  const svg = icon(TILE_ICON[id] ?? '');
+  if (!svg) return [];
+  const span = el('span', 'td-tile-ic');
+  span.setAttribute('aria-hidden', 'true');
+  span.append(svg);
+  return [span];
+}
+
 function tileHead(tile, title, extra) {
   const h = tile.querySelector('.td-tile-head') ?? el('div', 'td-tile-head');
   const h3 = h.querySelector('h3') ?? el('h3');
   h3.textContent = title;
-  h.replaceChildren(h3, ...(extra ? [extra] : []));
+  h.replaceChildren(...tileIcon(tile.id), h3, ...(Array.isArray(extra) ? extra : extra ? [extra] : []));
   if (!h.parentNode) tile.prepend(h);
   return h;
 }
@@ -181,20 +194,22 @@ export function renderWeather(w) {
   const k = weatherKind(w.code, w.day !== false);
   const unit = w.units === 'C' ? '°C' : '°F';
   const main = el('div', 'td-wx-main');
-  const icon = el('span', 'td-wx-icon', k.icon);
-  icon.setAttribute('aria-hidden', 'true');
+  // 2.8: a small illustration of the sky instead of an emoji (decorative: the words say it).
+  const art = weatherArt(k.kind, w.day !== false, 'td-wx-art');
   const temp = el('span', 'td-wx-temp', w.now === null ? '–' : `${w.now}°`);
   const words = el('span', 'td-wx-words', weatherWords(k.kind));
-  main.append(icon, temp, words);
+  main.append(art, temp, words);
   const meta = el('p', 'td-wx-meta', [w.high !== null && w.low !== null ? t('High {hi}, low {lo}', { hi: `${w.high}°`, lo: `${w.low}°` }) : '', w.rain !== null ? t('Rain: {n}%', { n: w.rain }) : ''].filter(Boolean).join(' · '));
   const hours = el('ol', 'td-wx-hours');
   hours.setAttribute('aria-label', t('The next hours'));
   for (const h of w.hours ?? []) {
     const li = el('li', 'td-wx-hour');
-    li.append(el('span', 'td-wx-h', hourOf(h.time)), el('span', '', weatherKind(h.code, h.day !== false).icon), el('span', 'td-wx-ht', h.temp === null ? '–' : `${h.temp}°`));
+    li.append(el('span', 'td-wx-h', hourOf(h.time)), weatherArt(weatherKind(h.code, h.day !== false).kind, h.day !== false), el('span', 'td-wx-ht', h.temp === null ? '–' : `${h.temp}°`));
     hours.append(li);
   }
-  body.replaceChildren(main, meta, ...(w.hours?.length ? [hours] : []));
+  // The temperatures from now through the next hours as a tiny line (only the numbers we have).
+  const spark = sparkline([w.now, ...(w.hours ?? []).map((h) => h.temp)], { w: 200, h: 30, cls: 'td-wx-spark' });
+  body.replaceChildren(main, meta, ...(spark ? [spark] : []), ...(w.hours?.length ? [hours] : []));
   temp.title = `${w.now ?? '–'}${unit}`;
 }
 
@@ -212,7 +227,9 @@ export function renderDay(d) {
     const dot = el('span', 'td-dot');
     dot.setAttribute('aria-hidden', 'true');
     const what = el('span', 'td-what');
-    const title = el('span', 'td-what-title', x.kind === 'reminder' ? `⏰ ${x.title}` : x.title);
+    const title = el('span', 'td-what-title', x.title);
+    const bell = x.kind === 'reminder' ? icon('reminder') : null;
+    if (bell) title.prepend(bell);
     title.dataset.raw = '';
     title.title = x.title;
     what.append(title);
@@ -238,7 +255,7 @@ export function renderPlanner(d, fmtDue) {
   if (!tile) return;
   const tasks = d.agenda?.tasks ?? [];
   const list = tile.querySelector('.today-list');
-  tileHead(tile, t('Planner'), el('span', 'td-count', tasks.length === 1 ? t('1 to-do') : t('To-dos: {n}', { n: tasks.length })));
+  tileHead(tile, t('Planner'), [el('span', 'td-count', tasks.length === 1 ? t('1 to-do') : t('To-dos: {n}', { n: tasks.length })), ...doneRing(tasks.length)]);
   const ul = el('ul', 'td-tasks');
   for (const x of tasks.slice(0, 6)) {
     const li = el('li', `td-task${x.overdue ? ' overdue' : ''}`);
@@ -268,6 +285,25 @@ export function renderPlanner(d, fmtDue) {
     $('#open-planner')?.click();
   });
   list.replaceChildren(...(tasks.length ? [ul] : [el('p', 'muted small', t('Nothing due today.'))]), ...(tasks.length > 6 ? [el('p', 'muted small', t('And {n} more in the Planner.', { n: tasks.length - 6 }))] : []), open);
+}
+
+/** To-dos ticked off today (from the Planner's own list), set by loadDoneToday. */
+let doneToday = null;
+/** How many to-dos have `doneAt` on the same local day as `now` (null without a list). */
+export function countDoneToday(tasks, now = Date.now()) {
+  if (!Array.isArray(tasks)) return null;
+  const day = new Date(now).toDateString();
+  return tasks.filter((x) => x && x.status === 'done' && x.doneAt && new Date(x.doneAt).toDateString() === day).length;
+}
+/** The Planner tile's ring: done today out of done today + still due today. Nothing done and nothing due: no ring. */
+function doneRing(open) {
+  if (doneToday === null || doneToday + open === 0) return [];
+  const f = share(doneToday, doneToday + open);
+  return [ring(f, { size: 34, stroke: 3.5, text: String(doneToday), label: t('Done today: {done} of {total}', { done: doneToday, total: doneToday + open }), cls: 'td-done-ring' })];
+}
+async function loadDoneToday() {
+  const p = await ctx.api('/planner').catch(() => null);
+  doneToday = countDoneToday(p?.tasks);
 }
 
 /** She remembered: the newest notes she learned (memory off or empty: the tile stays away). */
@@ -322,8 +358,11 @@ async function renderWork() {
   if (tile.hidden) return;
   tileHead(tile, any ? t('Working on it') : t('Background work'), any ? el('span', 'td-live', t('Running')) : null);
   const box = tile.querySelector('.today-list');
-  const card = (label, sub, tail, j) => {
+  const card = (label, sub, tail, j, progress) => {
     const c = el('div', 'td-job');
+    // 2.8: a ring beside each job: a moving arc while it runs (jobs report no percentage), full when it
+    // finished, the share of steps done for a team task.
+    if (progress !== undefined) c.append(ring(progress, { size: 30, stroke: 3, cls: progress === 1 ? 'pring-done' : '' }));
     const name = el('p', 'td-job-name', label);
     name.dataset.raw = '';
     name.title = label;
@@ -355,11 +394,11 @@ async function renderWork() {
   const since = (iso) => t('Running since {time}', { time: time(Date.parse(iso)) });
   const ended = (j) => (j.status === 'ok' ? t('Finished at {time}', { time: time(Date.parse(j.endedAt)) }) : t('Stopped at {time}', { time: time(Date.parse(j.endedAt)) }));
   box.replaceChildren(
-    ...w.jobs.map((j) => card(j.label, since(j.startedAt), lastLine(j.tail), j)),
+    ...w.jobs.map((j) => card(j.label, since(j.startedAt), lastLine(j.tail), j, null)),
     ...w.tasks.map((x) => {
       const done = (x.steps ?? []).filter((s) => s.endedAt).length;
       const total = (x.steps ?? []).length;
-      const c = card(t('Team: {goal}', { goal: x.goal }), x.status === 'waiting' ? t('Waiting for your OK') : total ? t('Steps done: {done} of {total}', { done, total }) : t('Planning'), '', null);
+      const c = card(t('Team: {goal}', { goal: x.goal }), x.status === 'waiting' ? t('Waiting for your OK') : total ? t('Steps done: {done} of {total}', { done, total }) : t('Planning'), '', null, total ? share(done, total) : null);
       if (total) {
         const bar = el('progress', 'td-progress');
         bar.max = total;
@@ -373,7 +412,7 @@ async function renderWork() {
       }));
       return c;
     }),
-    ...(w.recent ? [card(w.recent.label, ended(w.recent), lastLine(w.recent.tail), w.recent)] : []),
+    ...(w.recent ? [card(w.recent.label, ended(w.recent), lastLine(w.recent.tail), w.recent, w.recent.status === 'ok' ? 1 : undefined)] : []),
   );
 }
 
@@ -536,7 +575,11 @@ function renderSetup(items) {
 export async function renderTodayTiles(d, { fmtDue }) {
   const face = $('#td-face');
   if (face) face.src = $('#hp-portrait')?.getAttribute('src') || $('#sidebar img.avatar')?.getAttribute('src') || '/sara-portrait.jpg';
+  // 2.8: her halo here takes the colours of her mood, like her panel's.
+  const mood = $('#hp-open-her')?.dataset.mood;
+  if (mood) $('#td-face-btn')?.setAttribute('data-mood', mood);
   renderDay(d);
+  await loadDoneToday();
   renderPlanner(d, fmtDue);
   const [weather, home] = await Promise.all([
     ctx.demo() ? Promise.resolve({ setUp: false }) : ctx.api('/today/weather').catch(() => null),

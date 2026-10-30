@@ -15,6 +15,17 @@
 // Everything comes from routes the signed-in person may use; a 403 (household members, the demo)
 // quietly hides that part.
 import { currentIdentity, locale, t } from './naming.js';
+import { icon as lineIcon } from './icons.js';
+import { ring } from './viz.js';
+
+/** A row's small line icon (web/icons.js); decorative, the words beside it say what it is. */
+const rowIcon = (cls, name) => {
+  const span = el('span', cls);
+  span.setAttribute('aria-hidden', 'true');
+  const svg = lineIcon(name);
+  if (svg) span.append(svg);
+  return span;
+};
 
 const $ = (s) => document.querySelector(s);
 const KEY = 'sara.herPanel';
@@ -324,7 +335,8 @@ function renderJobs() {
       label.dataset.raw = '';
       const time = el('span', 'hp-job-time', elapsed(Date.now() - Date.parse(j.startedAt)));
       time.dataset.started = String(Date.parse(j.startedAt));
-      head.append(el('span', 'hp-job-icon', '⏳'), label, time);
+      // 2.8: a moving ring (jobs report no percentage; a known one fills the ring).
+      head.append(ring(Number.isFinite(j.progress) ? Math.max(0, Math.min(1, j.progress / 100)) : null, { size: 20, stroke: 2.5 }), label, time);
       const bar = el('div', 'hp-bar');
       bar.setAttribute('role', 'progressbar');
       bar.setAttribute('aria-label', t('Job #{id}', { id: j.id }));
@@ -401,11 +413,11 @@ function renderToday() {
       const li = el('li', `hp-item hp-${x.kind}${x.overdue ? ' overdue' : ''}`);
       const b = el('button', 'hp-row');
       b.type = 'button';
-      const icon = { event: '📅', reminder: '⏰', task: '☐' }[x.kind];
+      const icon = { event: 'calendar', reminder: 'reminder', task: 'todo' }[x.kind];
       const when = x.overdue ? t('overdue') : x.allDay ? t('all day') : x.at ? time(x.at) : t('today');
       const title = el('span', 'hp-row-main', x.title);
       title.dataset.raw = '';
-      b.append(el('span', 'hp-row-icon', icon), title, el('span', 'hp-row-side', when));
+      b.append(rowIcon('hp-row-icon', icon), title, el('span', 'hp-row-side', when));
       b.addEventListener('click', () => {
         if (panelMode() !== 'side') closePanel({ restoreFocus: false });
         if (x.kind === 'event') ui.ctx.openToday();
@@ -464,7 +476,7 @@ function memoryItem(m) {
   const s = el('summary', 'hp-row');
   const text = el('span', 'hp-row-main hp-memo-text', m.content);
   text.dataset.raw = '';
-  s.append(el('span', 'hp-row-icon', m.kind === 'date' ? '📅' : m.kind === 'promise' ? '🤝' : m.kind === 'summary' ? '🗒' : '🧠'), text);
+  s.append(rowIcon('hp-row-icon', m.kind === 'date' ? 'calendar' : m.kind === 'promise' ? 'promise' : m.kind === 'summary' ? 'memo' : 'memory'), text);
   d.append(s);
   const body = el('div', 'hp-memo-body');
   const kind = ui.ctx.memKind(m.kind);
@@ -563,6 +575,8 @@ function renderHer() {
   name.textContent = shown?.name ?? (currentIdentity().name || t('Sara'));
   const glow = $('#hp-open-her');
   glow.dataset.mood = isMe ? (MOOD_OF[ui.face.expression] ?? 'default') : 'default';
+  // 2.8: her halo in the chat header and on Today follows the same mood colours.
+  for (const n of [$('#her-face'), $('#td-face-btn')]) n?.setAttribute('data-mood', glow.dataset.mood);
   glow.disabled = !isMe;
   const mood = $('#hp-mood-text');
   const st = ui.mood;

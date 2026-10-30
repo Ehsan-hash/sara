@@ -7,6 +7,7 @@ import assert from 'node:assert/strict';
 import { readdirSync, readFileSync } from 'node:fs';
 import type { AddressInfo } from 'node:net';
 import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { test } from 'node:test';
 import { OwnerAuth } from '../src/auth.ts';
 import { setNetTransport } from '../src/net-guard.ts';
@@ -142,6 +143,7 @@ function todayDom() {
   const doc = {
     body,
     createElement: (t: string) => new Node(t),
+    createElementNS: (_ns: string, t: string) => new Node(t),
     querySelector: (sel: string) => body.querySelector(sel),
     querySelectorAll: (sel: string) => body.querySelectorAll(sel),
   };
@@ -153,7 +155,9 @@ async function load(file: string) {
   const g = globalThis as Record<string, unknown>;
   g.matchMedia ??= () => ({ matches: false, addEventListener() {} });
   const stub = "const t = (s, p = {}) => s.replace(/\\{(\\w+)\\}/g, (m, k) => (k in p ? String(p[k]) : m)); const locale = () => 'en-US';";
-  const src = web(file).replace(/^import \{[^}]*\} from '\.\/naming\.js';$/m, stub);
+  const src = web(file).replace(/^import \{[^}]*\} from '\.\/naming\.js';$/m, stub)
+    // 2.8: the icon set and the small charts are plain modules; a data: URL module imports them by their file URL.
+    .replace(/from '\.\/(icons|viz)\.js';/g, (_m, name: string) => `from '${pathToFileURL(join(ROOT, 'web', `${name}.js`)).href}';`);
   return import(`data:text/javascript;base64,${Buffer.from(src).toString('base64')}`);
 }
 
@@ -258,7 +262,9 @@ test('Today tiles render from the data (weather, your day, Planner) and stay awa
     assert.match(wx.textContent, /58°/);
     assert.match(wx.textContent, /Clear/);
     assert.match(wx.textContent, /High 70°, low 49° · Rain: 10%/);
-    assert.match(wx.textContent, /🌙/);
+    // 2.8: a clear night is drawn as the moon (web/viz.js weather art), not an emoji.
+    assert.ok(wx.all().some((n) => /\bwx-moon\b/.test(n.getAttribute('class') ?? '')), 'the moon art');
+    assert.doesNotMatch(wx.textContent, /🌙/);
     m.renderWeather({ setUp: true, place: 'Chicago', error: true });
     assert.match(wx.textContent, /Couldn’t get the weather right now/, 'a failed lookup says so');
     assert.doesNotMatch(wx.textContent, /°/);
@@ -321,7 +327,7 @@ test('bottom bar: Chat, Today, Planner, More at phone width, 44 px targets, safe
   assert.deepEqual([...bar.matchAll(/<button id="(bb-[a-z]+)" class="bb-btn" type="button" data-bb="([a-z]+)"/g)].map((m) => `${m[1]}:${m[2]}`), ['bb-chat:chat', 'bb-today:today', 'bb-planner:planner', 'bb-more:more']);
   assert.match(bar, /data-bb="more" aria-controls="sidebar" aria-expanded="false"/);
   // The drawer stays for conversations.
-  assert.match(html, /<button id="toggle-sidebar" class="ghost" aria-label="Conversations">☰<\/button>/);
+  assert.match(html, /<button id="toggle-sidebar" class="ghost" aria-label="Conversations"><i class="ic" data-icon="menu"><\/i><\/button>/);
   assert.match(todayCss, /\.bottom-bar \{ display: none; \}\n@media \(max-width: 720px\) \{/);
   const phone = todayCss.slice(todayCss.indexOf('@media (max-width: 720px) {'));
   assert.match(phone, /padding: 4px max\(6px, env\(safe-area-inset-left\)\) var\(--safe-b\) /, 'above the home indicator (2.7.1: through --safe-b, theme.css)');

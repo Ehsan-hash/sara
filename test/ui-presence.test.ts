@@ -6,6 +6,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import type { AddressInfo } from 'node:net';
 import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { test } from 'node:test';
 import { OwnerAuth } from '../src/auth.ts';
 import { createSaraServer } from '../src/server.ts';
@@ -26,7 +27,9 @@ async function load(file: string) {
   const g = globalThis as Record<string, unknown>;
   g.matchMedia ??= () => ({ matches: false, addEventListener() {} });
   const stub = "const t = (s, p = {}) => s.replace(/\{(\w+)\}/g, (m, k) => (k in p ? String(p[k]) : m)); const locale = () => 'en-US'; const currentIdentity = () => ({ name: 'Sara' });";
-  const src = web(file).replace(/^import \{[^}]*\} from '\.\/naming\.js';$/m, stub);
+  const src = web(file).replace(/^import \{[^}]*\} from '\.\/naming\.js';$/m, stub)
+    // 2.8: the icon set and the small charts are plain modules; a data: URL module imports them by their file URL.
+    .replace(/from '\.\/(icons|viz)\.js';/g, (_m, name: string) => `from '${pathToFileURL(join(ROOT, 'web', `${name}.js`)).href}';`);
   assert.ok(src.includes(stub), `${file} imports naming.js`);
   return import(`data:text/javascript;base64,${Buffer.from(src).toString('base64')}`);
 }

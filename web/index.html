@@ -21,9 +21,12 @@
   <link rel="stylesheet" href="/her-panel.css">
   <link rel="stylesheet" href="/today.css">
   <link rel="stylesheet" href="/screens.css">
+  <link rel="stylesheet" href="/polish.css">
   <script type="module" src="/app.js"></script>
 </head>
 <body>
+  <!-- 2.8: the slow aurora behind the glass (web/polish.css; still with reduced motion) -->
+  <div id="aurora" class="aurora" aria-hidden="true"><i class="au-1"></i><i class="au-2"></i><i class="au-3"></i><i class="au-grain"></i></div>
   <div id="shell-drag" class="shell-drag" aria-hidden="true"></div>
   <!-- Sign in -->
   <section id="login" class="screen card-screen" hidden>
@@ -136,19 +139,19 @@
 
   <!-- App -->
   <section id="main" class="screen" hidden>
-    <div id="other-note" class="other-note" role="status" hidden><span id="other-note-text"></span> <button id="other-note-go" type="button" class="small"></button> <button id="other-note-x" type="button" class="ghost small" aria-label="Dismiss">✕</button></div>
+    <div id="other-note" class="other-note" role="status" hidden><span id="other-note-text"></span> <button id="other-note-go" type="button" class="small"></button> <button id="other-note-x" type="button" class="ghost small" aria-label="Dismiss"><i class="ic" data-icon="close"></i></button></div>
     <aside id="sidebar">
       <div class="side-head">
         <button id="brand-today" class="brand" type="button" title="Today (Alt+T)"><img class="avatar" src="/sara-avatar.jpg" alt=""><span class="brand-name">Sara</span></button>
-        <button id="companion-switch" type="button" class="ghost small" hidden aria-haspopup="menu" aria-expanded="false" title="Talk to another companion">⇄</button>
+        <button id="companion-switch" type="button" class="ghost small" hidden aria-haspopup="menu" aria-expanded="false" title="Talk to another companion"><i class="ic" data-icon="switch"></i></button>
         <div id="companion-menu" class="companion-menu" role="menu" hidden></div>
         <button id="new-chat" title="New conversation (not in a project)">+ New</button>
-        <button id="close-sidebar" type="button" class="ghost small" aria-label="Close the list">✕</button>
+        <button id="close-sidebar" type="button" class="ghost small" aria-label="Close the list"><i class="ic" data-icon="close"></i></button>
       </div>
       <div class="side-tools">
         <button id="new-project" type="button" class="ghost small" title="Group conversations, to-dos and notes for one project">+ Project</button>
-        <button id="new-offrecord" type="button" class="ghost small" title="A conversation that is never saved: no memory, not in backups, gone when you close it">🕶 Off the record</button>
-        <button id="new-group" type="button" class="ghost small" title="A group chat with two to four of your companions" hidden>👥 Group</button>
+        <button id="new-offrecord" type="button" class="ghost small" title="A conversation that is never saved: no memory, not in backups, gone when you close it"><i class="ic" data-icon="offrecord"></i>Off the record</button>
+        <button id="new-group" type="button" class="ghost small" title="A group chat with two to four of your companions" hidden><i class="ic" data-icon="group"></i>Group</button>
       </div>
       <div class="side-search"><input id="conv-search" type="search" placeholder="Search everything" autocomplete="off" aria-label="Search conversations, memories, notes, to-dos and files"></div>
       <div id="tag-filter" class="tag-filter" hidden></div>
@@ -156,33 +159,33 @@
       <!-- Sidebar navigation: pinned places, the rest under More (web/nav.js), her and Settings/Help below -->
       <nav id="side-nav" class="side-nav" aria-label="Sara">
         <div id="side-pinned" class="side-pinned"></div>
-        <button id="side-more" type="button" class="side-more" aria-haspopup="true" aria-expanded="false" aria-controls="side-more-menu" title="More places: memory, scrapbook, your story…"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="3.5" width="7" height="7" rx="1.8"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.8"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.8"/><rect x="13.5" y="13.5" width="7" height="7" rx="1.8"/></svg><span>More</span><i id="more-dot" class="side-dot" hidden></i><svg class="side-chev" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg></button>
+        <button id="side-more" type="button" class="side-more" aria-haspopup="true" aria-expanded="false" aria-controls="side-more-menu" title="More places: memory, scrapbook, your story…"><i class="ic" data-icon="more"></i><span>More</span><i id="more-dot" class="side-dot" hidden></i><i class="ic side-chev" data-icon="chevron-right"></i></button>
         <div id="side-more-menu" class="side-more-menu" role="group" aria-label="More places" hidden>
           <p class="side-more-head">More places</p>
           <div id="side-more-list" class="side-more-list">
-          <div class="side-dest" data-dest="today"><button class="side-go" id="open-today" type="button" title="Today (Alt+T)"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg><span>Today</span></button></div>
-          <div class="side-dest" data-dest="planner"><button class="side-go" id="open-planner" type="button" title="Planner: to-dos, reminders, notes (Alt+P)"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="17" rx="2"/><path d="M8 2v4M16 2v4M8 11l2 2 4-4M8 17h8"/></svg><span>Planner</span></button></div>
-          <div class="side-dest" data-dest="memory"><button class="side-go" id="open-memory" type="button" title="What she remembers (Alt+M)"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 11c0 5.6-7 10-7 10z"/><path d="M9 11h6M12 8v6"/></svg><span>Memory</span></button></div>
-          <div class="side-dest" data-dest="library"><button class="side-go" id="open-library" type="button" title="Library: documents she keeps and knows (Alt+L)"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19V5a2 2 0 0 1 2-2h4v18H6a2 2 0 0 1-2-2z"/><path d="M10 3h4v18h-4z"/><path d="M15.5 4.2l3.9-1 3 16.4-3.9 1z"/></svg><span>Library</span></button></div>
-          <div class="side-dest" data-dest="scrapbook"><button class="side-go" id="open-scrapbook" type="button" title="Scrapbook (Alt+B)"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="15" rx="2"/><circle cx="9" cy="11" r="2"/><path d="M21 17l-5-5-8 8"/></svg><span>Scrapbook</span></button></div>
-          <div class="side-dest" data-dest="moments"><button class="side-go" id="open-moments" type="button" title="Our moments: your photo album with her captions"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="3" width="15" height="13" rx="2"/><path d="M3 7v12a2 2 0 0 0 2 2h12"/><path d="M6 13l4-4 3 3 2-2 6 6"/><circle cx="16" cy="7.5" r="1.3"/></svg><span>Moments</span></button></div>
-          <div class="side-dest" data-dest="story"><button class="side-go" id="open-story" type="button" title="Your story: your time together, in order (Alt+Y)"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3v18"/><circle cx="6" cy="7" r="2"/><circle cx="6" cy="17" r="2"/><path d="M10 7h10M10 17h7M10 12h5"/></svg><span>Your story</span></button></div>
-          <div class="side-dest" data-dest="team" data-owner-only><button class="side-go" id="open-team" type="button" data-owner-only title="Team: helpers she leads on bigger jobs"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><circle cx="17" cy="9" r="2.5"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6M15 14.5c.6-.3 1.3-.5 2-.5 2.8 0 4 2 4 5"/></svg><span>Team</span><i id="team-dot" class="side-dot" hidden></i></button></div>
+          <div class="side-dest" data-dest="today"><button class="side-go" id="open-today" type="button" title="Today (Alt+T)"><i class="ic" data-icon="today"></i><span>Today</span></button></div>
+          <div class="side-dest" data-dest="planner"><button class="side-go" id="open-planner" type="button" title="Planner: to-dos, reminders, notes (Alt+P)"><i class="ic" data-icon="planner"></i><span>Planner</span></button></div>
+          <div class="side-dest" data-dest="memory"><button class="side-go" id="open-memory" type="button" title="What she remembers (Alt+M)"><i class="ic" data-icon="memory"></i><span>Memory</span></button></div>
+          <div class="side-dest" data-dest="library"><button class="side-go" id="open-library" type="button" title="Library: documents she keeps and knows (Alt+L)"><i class="ic" data-icon="library"></i><span>Library</span></button></div>
+          <div class="side-dest" data-dest="scrapbook"><button class="side-go" id="open-scrapbook" type="button" title="Scrapbook (Alt+B)"><i class="ic" data-icon="scrapbook"></i><span>Scrapbook</span></button></div>
+          <div class="side-dest" data-dest="moments"><button class="side-go" id="open-moments" type="button" title="Our moments: your photo album with her captions"><i class="ic" data-icon="moments"></i><span>Moments</span></button></div>
+          <div class="side-dest" data-dest="story"><button class="side-go" id="open-story" type="button" title="Your story: your time together, in order (Alt+Y)"><i class="ic" data-icon="story"></i><span>Your story</span></button></div>
+          <div class="side-dest" data-dest="team" data-owner-only><button class="side-go" id="open-team" type="button" data-owner-only title="Team: helpers she leads on bigger jobs"><i class="ic" data-icon="team"></i><span>Team</span><i id="team-dot" class="side-dot" hidden></i></button></div>
           </div>
           <p id="side-more-empty" class="muted small side-more-note" hidden>Everything is pinned to your sidebar.</p>
           <p class="muted small side-more-note">Use the pin to keep a place in your sidebar. Pins are saved on this device.</p>
         </div>
         <div class="side-foot-row">
           <button id="open-sara" type="button" title="Her page: her day, mood, character (Alt+H)"><img class="side-face avatar" src="/sara-avatar.jpg" alt=""><span class="side-her">Sara</span></button>
-          <button id="open-help" type="button" class="side-icon" title="Help: tours, the guide, and asking her" aria-label="Help"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.3a2.6 2.6 0 0 1 5 .9c0 1.7-2.5 2.3-2.5 3.8M12 17.2v.1"/></svg></button>
-          <button id="open-settings" type="button" class="side-icon" title="Settings (Ctrl+,)" aria-label="Settings"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>
+          <button id="open-help" type="button" class="side-icon" title="Help: tours, the guide, and asking her" aria-label="Help"><i class="ic" data-icon="help"></i></button>
+          <button id="open-settings" type="button" class="side-icon" title="Settings (Ctrl+,)" aria-label="Settings"><i class="ic" data-icon="settings"></i></button>
         </div>
       </nav>
     </aside>
     <button id="sidebar-scrim" type="button" tabindex="-1" aria-label="Close the list"></button>
     <main id="chat">
       <header id="chat-head">
-        <button id="toggle-sidebar" class="ghost" aria-label="Conversations">☰</button>
+        <button id="toggle-sidebar" class="ghost" aria-label="Conversations"><i class="ic" data-icon="menu"></i></button>
         <button id="her-face" class="head-face-btn" type="button" aria-label="Her mood and what she is doing now" aria-controls="her-panel" aria-expanded="false"><img class="avatar head-face" src="/sara-avatar.jpg" alt=""></button>
         <div class="title-wrap">
           <h2 id="chat-title">Sara</h2>
@@ -198,15 +201,15 @@
         </div>
         <button id="head-more" class="ghost icon head-more" type="button" aria-label="This conversation: model, voice and server" aria-expanded="false" aria-controls="head-chips">⋯</button>
         <div id="head-chips" class="head-chips">
-          <button id="conv-settings-btn" class="ghost small" type="button" title="Model, workspace and mode for this conversation"><span id="conv-summary">…</span></button>
-          <button id="speak-toggle" class="ghost small icon" type="button" title="Read her replies aloud" aria-pressed="false" hidden>🔈</button>
-          <button id="server-btn" class="server-btn" type="button" title="Which server this app shows. Switch to another one" hidden>⇄ <span id="server-btn-name">Sara</span></button>
+          <button id="conv-settings-btn" class="ghost small" type="button" title="Model, workspace and mode for this conversation"><i class="ic" data-icon="settings"></i><span id="conv-summary">…</span></button>
+          <button id="speak-toggle" class="ghost small icon" type="button" title="Read her replies aloud" aria-pressed="false" hidden><i class="ic" data-icon="speaker"></i></button>
+          <button id="server-btn" class="server-btn" type="button" title="Which server this app shows. Switch to another one" hidden><i class="ic" data-icon="switch"></i><span id="server-btn-name">Sara</span></button>
         </div>
-        <button id="pl-badge" class="pl-badge" type="button" title="Nothing leaves this computer: private local mode is on" hidden>🔒 <span>Only this computer</span></button>
+        <button id="pl-badge" class="pl-badge" type="button" title="Nothing leaves this computer: private local mode is on" hidden><i class="ic" data-icon="lock"></i><span>Only this computer</span></button>
         <span class="ai-badge" title="Sara is an AI companion">AI companion</span>
         <!-- Phase 75 (stage 2): the command bar (Ctrl+K / ⌘K) and her panel (web/command-bar.js, web/her-panel.js) -->
-        <button id="cmd-open" class="ghost icon head-icon" type="button" aria-label="Search and go (Ctrl+K)" title="Search and go (Ctrl+K)" aria-haspopup="dialog"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.2-4.2"/></svg></button>
-        <button id="panel-toggle" class="ghost icon head-icon" type="button" aria-label="Her panel (Ctrl+\)" title="Her panel (Ctrl+\)" aria-controls="her-panel" aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="4.5" width="17" height="15" rx="3"/><path d="M14.5 4.5v15"/></svg></button>
+        <button id="cmd-open" class="ghost icon head-icon" type="button" aria-label="Search and go (Ctrl+K)" title="Search and go (Ctrl+K)" aria-haspopup="dialog"><i class="ic" data-icon="search"></i></button>
+        <button id="panel-toggle" class="ghost icon head-icon" type="button" aria-label="Her panel (Ctrl+\)" title="Her panel (Ctrl+\)" aria-controls="her-panel" aria-expanded="false"><i class="ic" data-icon="panel"></i></button>
       </header>
       <dialog id="ring" class="ring" aria-labelledby="ring-title" data-required="1">
         <img id="ring-face" class="ring-face" alt="">
@@ -214,7 +217,7 @@
         <p id="ring-reason" class="muted"></p>
         <div class="ring-actions">
           <button id="ring-decline" type="button" class="ring-btn decline">Decline</button>
-          <button id="ring-video" type="button" class="ring-btn answer video" title="Answer with video: see her as you talk">🎥 Video</button>
+          <button id="ring-video" type="button" class="ring-btn answer video" title="Answer with video: see her as you talk"><i class="ic" data-icon="video"></i>Video</button>
           <button id="ring-answer" type="button" class="ring-btn answer">Answer</button>
         </div>
       </dialog>
@@ -222,7 +225,7 @@
         <div id="call-presence"></div>
         <p id="call-status" class="call-status">Listening…</p>
         <div class="call-actions">
-          <button id="call-to-video" type="button" class="ghost small" title="See her full size while you talk">🎥 Video</button>
+          <button id="call-to-video" type="button" class="ghost small" title="See her full size while you talk"><i class="ic" data-icon="video"></i>Video</button>
           <button id="call-end" type="button" class="ghost small">End call</button>
         </div>
       </div>
@@ -233,7 +236,7 @@
           <strong id="vc-name">Sara</strong>
           <span id="vc-time" class="vc-time">0:00</span>
           <span id="vc-status" class="vc-status" role="status"></span>
-          <button id="vc-minimize" type="button" class="vc-icon" title="Voice only: back to the chat, the call goes on" aria-label="Voice only">⤡</button>
+          <button id="vc-minimize" type="button" class="vc-icon" title="Voice only: back to the chat, the call goes on" aria-label="Voice only"><i class="ic" data-icon="minimize"></i></button>
         </div>
         <p id="vc-notice" class="vc-notice" role="alert" hidden></p>
         <div id="vc-stage" class="vc-stage"></div>
@@ -244,16 +247,16 @@
         </div>
         <p id="vc-cam-note" class="vc-cam-note" hidden></p>
         <div class="vc-controls">
-          <button id="vc-mute" type="button" class="vc-btn" aria-pressed="false"><span aria-hidden="true">🎙️</span><small>Mute</small></button>
-          <button id="vc-camera" type="button" class="vc-btn" aria-pressed="false" title="Show her your camera (off until you turn it on)"><span aria-hidden="true">📷</span><small>Camera</small></button>
-          <button id="vc-look" type="button" class="vc-btn" title="Send her a picture from your camera now and ask what she thinks" hidden><span aria-hidden="true">👀</span><small>Look at this</small></button>
-          <button id="vc-sound" type="button" class="vc-btn" aria-pressed="false" title="Her voice on or off"><span aria-hidden="true">🔊</span><small>Sound</small></button>
-          <button id="vc-cc" type="button" class="vc-btn" aria-pressed="true" title="Show what you both say as text"><span aria-hidden="true">💬</span><small>Captions</small></button>
-          <button id="vc-end" type="button" class="vc-btn end" title="Hang up"><span aria-hidden="true">📞</span><small>End</small></button>
+          <button id="vc-mute" type="button" class="vc-btn" aria-pressed="false"><span aria-hidden="true"><i class="ic" data-icon="mic"></i></span><small>Mute</small></button>
+          <button id="vc-camera" type="button" class="vc-btn" aria-pressed="false" title="Show her your camera (off until you turn it on)"><span aria-hidden="true"><i class="ic" data-icon="camera"></i></span><small>Camera</small></button>
+          <button id="vc-look" type="button" class="vc-btn" title="Send her a picture from your camera now and ask what she thinks" hidden><span aria-hidden="true"><i class="ic" data-icon="eye"></i></span><small>Look at this</small></button>
+          <button id="vc-sound" type="button" class="vc-btn" aria-pressed="false" title="Her voice on or off"><span aria-hidden="true"><i class="ic" data-icon="speaker-on"></i></span><small>Sound</small></button>
+          <button id="vc-cc" type="button" class="vc-btn" aria-pressed="true" title="Show what you both say as text"><span aria-hidden="true"><i class="ic" data-icon="captions"></i></span><small>Captions</small></button>
+          <button id="vc-end" type="button" class="vc-btn end" title="Hang up"><span aria-hidden="true"><i class="ic" data-icon="phone-end"></i></span><small>End</small></button>
         </div>
       </div>
       <div id="pins" class="pins" hidden>
-        <button id="pins-toggle" type="button" class="ghost small">📌 <span id="pins-count"></span></button>
+        <button id="pins-toggle" type="button" class="ghost small"><i class="ic" data-icon="pin"></i><span id="pins-count"></span></button>
         <div id="pins-list" class="pins-list" hidden></div>
       </div>
       <div id="messages" aria-live="polite"></div>
@@ -271,19 +274,19 @@
       <form id="composer">
         <textarea id="input" rows="1" placeholder="Message Sara…" autocomplete="off" aria-label="Message Sara…"></textarea>
         <div class="plus-wrap">
-          <button id="composer-plus" class="ghost icon" type="button" aria-label="Add: a file, a photo or something to do together" aria-haspopup="menu" aria-expanded="false" aria-controls="composer-menu">+</button>
+          <button id="composer-plus" class="ghost icon" type="button" aria-label="Add: a file, a photo or something to do together" aria-haspopup="menu" aria-expanded="false" aria-controls="composer-menu"><i class="ic" data-icon="plus"></i></button>
           <div id="composer-menu" class="composer-menu head-pop" role="menu" hidden>
-            <button id="attach" class="pop-item" type="button" role="menuitem" title="Send a photo or a document (or paste / drop one)"><span aria-hidden="true">📎</span> Attach a file</button>
-            <button id="attach-photo" class="pop-item" type="button" role="menuitem" title="Send a photo from this device"><span aria-hidden="true">🖼</span> Photo</button>
-            <button id="together" class="pop-item" type="button" role="menuitem" title="Do something together: games, journaling, watching along, your shared lists"><span aria-hidden="true">🎲</span> Something together</button>
+            <button id="attach" class="pop-item" type="button" role="menuitem" title="Send a photo or a document (or paste / drop one)"><i class="ic" data-icon="attach"></i> Attach a file</button>
+            <button id="attach-photo" class="pop-item" type="button" role="menuitem" title="Send a photo from this device"><i class="ic" data-icon="image"></i> Photo</button>
+            <button id="together" class="pop-item" type="button" role="menuitem" title="Do something together: games, journaling, watching along, your shared lists"><i class="ic" data-icon="dice"></i> Something together</button>
           </div>
         </div>
         <input id="attach-file" type="file" multiple hidden>
         <input id="attach-photo-file" type="file" accept="image/*" multiple hidden>
-        <button id="call" class="ghost icon" type="button" title="Hands-free call: just talk, interrupt her any time" hidden>📞</button>
-        <button id="video-call-btn" class="ghost icon" type="button" title="Video call: see her full size as you talk" hidden>🎥</button>
-        <button id="mic" class="ghost icon" type="button" title="Talk (click to start, click again to send)" hidden>🎙</button>
-        <button id="send" type="submit" aria-label="Send"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5.5 11.5 12 5l6.5 6.5"/></svg></button>
+        <button id="call" class="ghost icon" type="button" title="Hands-free call: just talk, interrupt her any time" hidden><i class="ic" data-icon="phone"></i></button>
+        <button id="video-call-btn" class="ghost icon" type="button" title="Video call: see her full size as you talk" hidden><i class="ic" data-icon="video"></i></button>
+        <button id="mic" class="ghost icon" type="button" title="Talk (click to start, click again to send)" hidden><i class="ic" data-icon="mic"></i></button>
+        <button id="send" type="submit" aria-label="Send"><i class="ic" data-icon="send"></i></button>
         <button id="stop" type="button" class="ghost" hidden>Stop</button>
       </form>
       <!-- Phase 75 (stage 3): Today, the home screen. A view over the chat column (opened with show(), not
@@ -304,7 +307,7 @@
               <button id="td-face-btn" class="td-face-btn" type="button" aria-label="Her page: her day, mood and character"><img id="td-face" class="td-face" src="/sara-portrait.jpg" alt=""></button>
               <span class="ai-badge td-ai" title="Sara is an AI companion">AI companion</span>
             </div>
-            <button id="td-back" type="button" class="ghost small td-back" title="Back to the conversation (Esc)">← Chat</button>
+            <button id="td-back" type="button" class="ghost small td-back" title="Back to the conversation (Esc)"><i class="ic" data-icon="back"></i>Chat</button>
           </header>
           <section id="td-start" class="today-start" hidden>
             <div class="today-start-head"><h3>Getting started</h3><span id="td-start-count" class="muted small"></span><button id="td-start-hide" type="button" class="ghost small">Hide</button></div>
@@ -329,10 +332,10 @@
     </main>
     <!-- Phase 75 (stage 3): the phone's bottom bar (720 px and narrower; web/bottom-bar.js). The drawer (☰) stays for conversations. -->
     <nav id="bottom-bar" class="bottom-bar" aria-label="Places">
-      <button id="bb-chat" class="bb-btn" type="button" data-bb="chat"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 0 1-11.6 7.1L4 20l1-4.1A8 8 0 1 1 20 12z"/></svg><span>Chat</span></button>
-      <button id="bb-today" class="bb-btn" type="button" data-bb="today"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg><span>Today</span></button>
-      <button id="bb-planner" class="bb-btn" type="button" data-bb="planner"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="17" rx="2"/><path d="M8 2v4M16 2v4M8 11l2 2 4-4M8 17h8"/></svg><span>Planner</span></button>
-      <button id="bb-more" class="bb-btn" type="button" data-bb="more" aria-controls="sidebar" aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="3.5" width="7" height="7" rx="1.8"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.8"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.8"/><rect x="13.5" y="13.5" width="7" height="7" rx="1.8"/></svg><span>More</span><i id="bb-dot" class="side-dot" hidden></i></button>
+      <button id="bb-chat" class="bb-btn" type="button" data-bb="chat"><i class="ic" data-icon="chat"></i><span>Chat</span></button>
+      <button id="bb-today" class="bb-btn" type="button" data-bb="today"><i class="ic" data-icon="today"></i><span>Today</span></button>
+      <button id="bb-planner" class="bb-btn" type="button" data-bb="planner"><i class="ic" data-icon="planner"></i><span>Planner</span></button>
+      <button id="bb-more" class="bb-btn" type="button" data-bb="more" aria-controls="sidebar" aria-expanded="false"><i class="ic" data-icon="more"></i><span>More</span><i id="bb-dot" class="side-dot" hidden></i></button>
     </nav>
     <!-- Phase 75 (stage 2): her presence. A fold-away panel on the right on wide screens, an overlay
          below 1100 px, a bottom sheet pulled up from her face on phones (web/her-panel.js). -->
@@ -342,7 +345,7 @@
       <div class="hp-scroll">
         <div class="hp-top">
           <h2 id="hp-name" class="hp-name" data-raw>Sara</h2>
-          <button id="hp-close" class="ghost icon hp-close" type="button" aria-label="Fold her panel away" title="Fold her panel away"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg></button>
+          <button id="hp-close" class="ghost icon hp-close" type="button" aria-label="Fold her panel away" title="Fold her panel away"><i class="ic" data-icon="chevron-right"></i></button>
         </div>
         <div class="hp-her">
           <button id="hp-open-her" class="hp-glow" type="button" data-mood="default" aria-label="Her page: her day, mood and character"><img id="hp-portrait" class="hp-portrait" src="/sara-portrait.jpg" alt=""></button>
@@ -395,9 +398,9 @@
   <!-- Phase 75 (stage 2): the command bar, Ctrl+K / ⌘K (web/command-bar.js) -->
   <dialog id="cmdbar" class="cmdbar" aria-label="Search and go" data-wired="1">
     <div class="cmd-box">
-      <svg class="cmd-glass" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.2-4.2"/></svg>
+      <i class="ic cmd-glass" data-icon="search"></i>
       <input id="search-cmd-q" class="cmd-q" type="text" role="combobox" aria-expanded="true" aria-controls="cmd-list" aria-autocomplete="list" aria-label="Search places, conversations, settings and actions" placeholder="Search places, chats, settings, actions…" autocomplete="off" spellcheck="false">
-      <button id="cmd-close" class="ghost small cmd-close" type="button" aria-label="Close">✕</button>
+      <button id="cmd-close" class="ghost small cmd-close" type="button" aria-label="Close"><i class="ic" data-icon="close"></i></button>
     </div>
     <div id="cmd-list" class="cmd-list" role="listbox" aria-label="Results"></div>
     <p class="cmd-foot muted small" aria-hidden="true"><span>↑↓ move</span><span>Enter open</span><span>Esc close</span></p>
@@ -772,7 +775,7 @@
     <form method="dialog" class="settings-body">
       <h2>Planner</h2>
       <p class="muted small">Your to-dos, reminders and notes. Sara can add, check off and look these up when you ask her; reminders pop up in chat at the time you set.</p>
-      <p class="actions-left"><button id="review-now" type="button" class="ghost small">🗓 Review my week</button> <span id="review-status" class="muted small" role="status"></span></p>
+      <p class="actions-left"><button id="review-now" type="button" class="ghost small"><i class="ic" data-icon="calendar"></i>Review my week</button> <span id="review-status" class="muted small" role="status"></span></p>
       <div class="tabs" role="tablist">
         <button type="button" class="tab active" data-tab="tasks">To-do</button>
         <button type="button" class="tab" data-tab="reminders">Reminders</button>

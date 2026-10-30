@@ -5,6 +5,24 @@ Format: newest first. Semantic versions since 1.0.0 (before that `0.<phase>.<pat
 
 ## Unreleased
 
+## 2.8.0 (2026-10-29): polish
+
+The new look, one notch up, on phones and computers alike.
+
+- **Aurora:** a slow rose / violet glow drifting behind the glass (about 2% of one core; paused when the
+  tab is hidden, still with reduced motion, off with reduced transparency, softer in Day).
+- **Glass and depth:** tiles, cards and panels with a light top edge and soft shadows; one elevation scale.
+- **Type:** an elegant serif (from the system, no downloads) for the greeting, window titles, her name and
+  big numbers.
+- **Her halo:** a ring in her mood's colour around her portrait on Today, in her panel and in the chat
+  header; it turns while she works and pulses while she speaks.
+- **Icons:** 84 drawn line icons replace the emoji in the sidebar, bottom bar, header, message bar, steps,
+  cards, command bar and Today.
+- **Weather art** on the Today tile and the chat card, with a small temperature line for the next hours;
+  **progress rings** for the day's to-dos, getting started, jobs and team tasks (only real numbers).
+- **Phones:** the bottom bar floats as a glass pill with a glow that slides to the current tab.
+- Gentle entrances and hover lifts; all motion off with *reduce motion*.
+
 ## 2.7.1 (2026-10-29): iPhone home-screen fix, Today first, home switches
 
 - **Fix (iPhone, Sara added to the home screen from Safari):** the top of every screen sat under the clock

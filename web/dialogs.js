@@ -7,6 +7,7 @@
 // Windows register their save function with `onSave(dialog, fn)`; anything typed or changed
 // inside a registered window marks it unsaved until it is saved.
 import { t } from './naming.js';
+import { icon } from './icons.js';
 
 const saves = new WeakMap();
 const dirty = new WeakSet();
@@ -159,7 +160,7 @@ function wire(dialog) {
   x.className = 'dialog-x ghost';
   x.setAttribute('aria-label', t('Close'));
   x.title = t('Close (Esc)');
-  x.textContent = '✕';
+  x.append(icon('close') ?? '✕');
   x.addEventListener('click', () => requestClose(dialog));
   if (!dialog.dataset.required) top(dialog).append(x);
   // Esc

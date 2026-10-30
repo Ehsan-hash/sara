@@ -197,11 +197,12 @@ html.ios-short-view { --safe-b: 0px; }
 .ap-swatch[data-accent="mono"] { background: #c9c4d0; }
 
 /* Her glow's colours by mood (her panel and Today). */
-.hp-glow[data-mood="happy"] { --mood-a: #f5b452; --mood-b: #e0607e; }
-.hp-glow[data-mood="caring"] { --mood-a: #e0607e; --mood-b: #f08aa5; }
-.hp-glow[data-mood="playful"] { --mood-a: #ff6bb5; --mood-b: #9b6bff; }
-.hp-glow[data-mood="sleepy"] { --mood-a: #9b6bff; --mood-b: #5f73e6; }
-.hp-glow[data-mood="hurt"] { --mood-a: #7d89c9; --mood-b: #9b6bff; }
+/* 2.8: the same mood colours light her halo on Today and her face in the chat header. */
+.hp-glow[data-mood="happy"], .td-face-btn[data-mood="happy"], .head-face-btn[data-mood="happy"] { --mood-a: #f5b452; --mood-b: #e0607e; }
+.hp-glow[data-mood="caring"], .td-face-btn[data-mood="caring"], .head-face-btn[data-mood="caring"] { --mood-a: #e0607e; --mood-b: #f08aa5; }
+.hp-glow[data-mood="playful"], .td-face-btn[data-mood="playful"], .head-face-btn[data-mood="playful"] { --mood-a: #ff6bb5; --mood-b: #9b6bff; }
+.hp-glow[data-mood="sleepy"], .td-face-btn[data-mood="sleepy"], .head-face-btn[data-mood="sleepy"] { --mood-a: #9b6bff; --mood-b: #5f73e6; }
+.hp-glow[data-mood="hurt"], .td-face-btn[data-mood="hurt"], .head-face-btn[data-mood="hurt"] { --mood-a: #7d89c9; --mood-b: #9b6bff; }
 
 /* The chat background "Night sky". */
 :root[data-chatbg="stars"] #messages {
@@ -213,3 +214,105 @@ html.ios-short-view { --safe-b: 0px; }
   background-attachment: local;
 }
 :root[data-theme="light"][data-chatbg="stars"] #messages { background: linear-gradient(180deg, #e8e6f6 0%, var(--bg) 80%); }
+
+/* ---------- 2.8 polish pass (docs/design/NEW_LOOK.md → "Polish pass"; drawn in web/polish.css) ----------
+   The aurora behind the glass, layered glass with an inner top highlight, one elevation scale, the
+   display serif, her mood halo, the weather art and the small rings and sparklines. Night first, then
+   Day (lighter aurora, hairlines instead of deep shadows). Text pairs are unchanged, so AA holds. */
+:root {
+  /* A display serif for the greeting, window titles and big numbers (system fonts only). */
+  --font-display: "New York", "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
+  --tracking-display: -0.012em;
+  /* Masks for gradient borders and her halo (mask images need a solid colour; it never shows). */
+  --mask-solid: linear-gradient(#000 0 0);
+  --halo-mask: radial-gradient(closest-side, transparent calc(100% - 3.5px), #000 calc(100% - 2.5px));
+  /* A very fine film grain over the aurora (an SVG noise picture, drawn once, never animated). */
+  --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 .55 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  --aurora-speed: 1;
+}
+:root,
+:root[data-theme="dark"] {
+  /* The aurora: plum, rose and violet light drifting slowly behind everything. */
+  --aurora-base: radial-gradient(140% 90% at 50% 0%, #1a1426 0%, #0f0d17 60%);
+  --aurora-1: rgb(224 96 126 / .34);
+  --aurora-2: rgb(155 107 255 / .30);
+  --aurora-3: rgb(150 70 150 / .30);
+  --grain-opacity: .05;
+  /* Glass: a see-through fill, a light top edge fading into a hairline, a soft shadow below. */
+  --glass-fill: linear-gradient(165deg, rgb(44 37 60 / .74), rgb(25 21 35 / .70) 70%);
+  --glass-fill-strong: linear-gradient(165deg, rgb(40 34 55 / .92), rgb(24 20 33 / .9) 70%);
+  --glass-edge: linear-gradient(180deg, rgb(255 255 255 / .2), rgb(255 255 255 / .07) 32%, rgb(255 255 255 / .04) 70%, rgb(255 255 255 / .07));
+  --glass-hi: inset 0 1px 0 rgb(255 255 255 / .07);
+  --glass-tint: rgb(255 255 255 / .03);
+  /* Elevation: 1 cards and tiles, 2 floating bars and popovers, 3 windows and sheets. */
+  --elev-1: 0 1px 2px rgb(0 0 0 / .22), 0 10px 28px -12px rgb(0 0 0 / .55);
+  --elev-2: 0 2px 6px rgb(0 0 0 / .28), 0 18px 44px -14px rgb(0 0 0 / .62), 0 20px 50px -30px var(--accent-glow);
+  --elev-3: 0 4px 14px rgb(0 0 0 / .32), 0 34px 80px -24px rgb(0 0 0 / .7), 0 30px 90px -40px var(--violet-glow);
+  --lift: 0 2px 6px rgb(0 0 0 / .26), 0 18px 40px -14px rgb(0 0 0 / .6), 0 14px 36px -22px var(--accent-glow);
+  --btn-glow: 0 8px 22px -8px var(--accent-glow), 0 4px 18px -10px var(--violet-glow);
+  /* The phone's floating bar and its lit place. */
+  --bbar-fill: linear-gradient(180deg, rgb(46 39 62 / .86), rgb(26 22 36 / .9));
+  --bbar-lit: radial-gradient(60% 90% at 50% 100%, rgb(224 96 126 / .42), rgb(155 107 255 / .16) 60%, transparent 75%);
+  /* Weather art. */
+  --wx-sun-a: #ffd98a;
+  --wx-sun-b: #f59f4f;
+  --wx-glow-a: rgb(255 200 120 / .55);
+  --wx-glow-b: rgb(255 170 120 / 0);
+  --wx-moon-a: #fff4dc;
+  --wx-moon-b: #e3c99a;
+  --wx-cloud-a: #f6f2fb;
+  --wx-cloud-b: #c8bedb;
+  --wx-back-a: #a99dbf;
+  --wx-back-b: #786d8f;
+  --wx-cloud-line: rgb(255 255 255 / 0);
+  --wx-rain: #8fb4ff;
+  --wx-snow: #e9f0ff;
+  --wx-bolt: #ffcf5a;
+  --wx-fog: #b6adc8;
+  --wx-star: #fff3cf;
+  /* Sparklines and rings. */
+  --spark-line: #f08aa5;
+  --spark-a: rgb(240 138 165 / .32);
+  --spark-b: rgb(155 107 255 / 0);
+}
+:root[data-theme="light"] {
+  --aurora-base: radial-gradient(140% 90% at 50% 0%, #fdf6f6 0%, #faf7f5 60%);
+  --aurora-1: rgb(240 140 170 / .22);
+  --aurora-2: rgb(170 140 255 / .2);
+  --aurora-3: rgb(250 190 170 / .22);
+  --grain-opacity: .035;
+  --glass-fill: linear-gradient(165deg, rgb(255 255 255 / .82), rgb(255 255 255 / .7) 70%);
+  --glass-fill-strong: linear-gradient(165deg, rgb(255 255 255 / .96), rgb(252 249 251 / .94) 70%);
+  --glass-edge: linear-gradient(180deg, rgb(255 255 255 / 1), rgb(46 22 54 / .1) 30%, rgb(46 22 54 / .12));
+  --glass-hi: inset 0 1px 0 rgb(255 255 255 / .9);
+  --glass-tint: rgb(255 255 255 / .4);
+  --elev-1: 0 0 0 1px rgb(46 22 54 / .02), 0 1px 2px rgb(60 30 70 / .05), 0 8px 22px -12px rgb(60 30 70 / .14);
+  --elev-2: 0 1px 3px rgb(60 30 70 / .07), 0 16px 36px -16px rgb(60 30 70 / .2);
+  --elev-3: 0 2px 8px rgb(60 30 70 / .08), 0 30px 70px -26px rgb(60 30 70 / .26);
+  --lift: 0 2px 6px rgb(60 30 70 / .07), 0 18px 36px -16px rgb(60 30 70 / .22), 0 12px 30px -22px var(--accent-glow);
+  --btn-glow: 0 8px 20px -8px rgb(194 76 116 / .45);
+  --bbar-fill: linear-gradient(180deg, rgb(255 255 255 / .92), rgb(250 245 248 / .94));
+  --bbar-lit: radial-gradient(60% 90% at 50% 100%, rgb(224 96 126 / .22), rgb(155 107 255 / .08) 60%, transparent 75%);
+  --wx-sun-a: #ffc65c;
+  --wx-sun-b: #ef8a3a;
+  --wx-glow-a: rgb(255 190 100 / .45);
+  --wx-moon-a: #f2cf7e;
+  --wx-moon-b: #c48f35;
+  --wx-cloud-a: #ffffff;
+  --wx-cloud-b: #dcd3ea;
+  --wx-back-a: #cfc5df;
+  --wx-back-b: #a99bc2;
+  --wx-cloud-line: rgb(90 60 120 / .22);
+  --wx-rain: #3d6fd6;
+  --wx-snow: #7d9ad6;
+  --wx-bolt: #e8a21a;
+  --wx-fog: #9a90ad;
+  --wx-star: #d6a94b;
+  --spark-line: #b8436a;
+  --spark-a: rgb(184 67 106 / .2);
+  --spark-b: rgb(155 107 255 / 0);
+}
+/* Less see-through when the system asks for it (or the device saves power): solid surfaces, no blur. */
+@media (prefers-reduced-transparency: reduce) {
+  :root { --glass-filter: none; --glass: var(--surface-2); --glass-strong: var(--surface-2); --glass-fill: linear-gradient(var(--surface-2), var(--surface-1)); --bbar-fill: linear-gradient(var(--surface-2), var(--surface-2)); }
+}

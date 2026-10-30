@@ -45,10 +45,15 @@ function sync() {
   const bar = $('#bottom-bar');
   if (!bar) return;
   const here = place();
-  for (const b of bar.querySelectorAll('.bb-btn')) {
+  const btns = [...bar.querySelectorAll('.bb-btn')];
+  for (const b of btns) {
     if (b.dataset.bb === here) b.setAttribute('aria-current', 'page');
     else b.removeAttribute('aria-current');
   }
+  // 2.8: the glowing indicator slides to the lit place (web/polish.css reads --bb-i).
+  const i = btns.findIndex((b) => b.dataset.bb === here);
+  bar.style.setProperty('--bb-i', String(Math.max(0, i)));
+  bar.dataset.lit = i < 0 ? 'none' : here;
   $('#bb-more')?.setAttribute('aria-expanded', String(Boolean($('#main')?.classList.contains('show-sidebar'))));
 }
 

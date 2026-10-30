@@ -32,9 +32,18 @@ import { renderCard, renderCards } from './result-cards.js';
 import { initLook, setContextRing, setLookBusy, showHeadChips } from './look.js';
 import { closePanel, initHerPanel, openPanel, panelConv, panelFace, panelJobs, panelMessages, panelMood, panelNow, panelOpen, togglePanel } from './her-panel.js';
 import { initCommandBar, openCommandBar, score as cmdScore } from './command-bar.js';
+import { icon, paintIcons, setIcon, TOOL_ICONS } from './icons.js';
+import { ring as progressRing, share as shareOf } from './viz.js';
 /** Phase 71: a household member (their own space; owner-only pages and loaders are left out). */
 const isMember = () => document.body.classList.contains('member');
 const $ = (sel) => document.querySelector(sel);
+
+// 2.8: the chrome's line icons (web/icons.js) go in before anything reads or moves those buttons, and the
+// aurora behind the app rests while nobody can see it (a hidden tab).
+paintIcons(document);
+const markHidden = () => document.documentElement.classList.toggle('page-hidden', document.visibilityState === 'hidden');
+document.addEventListener('visibilitychange', markHidden);
+markHidden();
 
 const state = {
   conversations: [],
@@ -884,28 +893,29 @@ const placeSub = (btn) => {
   return rest.toLowerCase() === name.toLowerCase() ? '' : rest.charAt(0).toLocaleUpperCase() + rest.slice(1);
 };
 const placeKey = { today: 'Alt+T', planner: 'Alt+P', memory: 'Alt+M', library: 'Alt+L', scrapbook: 'Alt+B', story: 'Alt+Y' };
-const PLACE_ICON = { today: '☀️', planner: '🗓', memory: '🧠', library: '📚', scrapbook: '📔', moments: '🖼', story: '🧵', team: '👥' };
+// 2.8: icon names from web/icons.js (the command bar draws them as line icons).
+const PLACE_ICON = { today: 'today', planner: 'planner', memory: 'memory', library: 'library', scrapbook: 'scrapbook', moments: 'moments', story: 'story', team: 'team' };
 initCommandBar({
   api,
   places: () => [
     ...[...document.querySelectorAll('#side-nav .side-dest')]
       .map((row) => ({ row, btn: row.querySelector('.side-go') }))
       .filter(({ row, btn }) => btn && !(isMember() && row.hasAttribute('data-owner-only')) && getComputedStyle(row).display !== 'none')
-      .map(({ row, btn }) => ({ key: `place:${row.dataset.dest}`, icon: PLACE_ICON[row.dataset.dest] ?? '•', label: btn.querySelector('span')?.textContent?.trim() || row.dataset.dest, sub: placeSub(btn), hint: placeKey[row.dataset.dest] ?? '', run: () => btn.click() })),
-    { key: 'place:her', icon: '💗', label: t('Her page'), sub: t('Her day, mood and character'), hint: 'Alt+H', run: () => openSara() },
-    { key: 'place:settings', icon: '⚙️', label: t('Settings'), hint: 'Ctrl+,', run: () => openSettings() },
-    { key: 'place:help', icon: '❓', label: t('Help'), sub: t('Tours and the guide'), run: () => $('#open-help').click() },
+      .map(({ row, btn }) => ({ key: `place:${row.dataset.dest}`, icon: PLACE_ICON[row.dataset.dest] ?? 'dot', label: btn.querySelector('span')?.textContent?.trim() || row.dataset.dest, sub: placeSub(btn), hint: placeKey[row.dataset.dest] ?? '', run: () => btn.click() })),
+    { key: 'place:her', icon: 'heart', label: t('Her page'), sub: t('Her day, mood and character'), hint: 'Alt+H', run: () => openSara() },
+    { key: 'place:settings', icon: 'settings', label: t('Settings'), hint: 'Ctrl+,', run: () => openSettings() },
+    { key: 'place:help', icon: 'help', label: t('Help'), sub: t('Tours and the guide'), run: () => $('#open-help').click() },
   ],
   conversations: () =>
     state.conversations
       .filter((c) => !String(c.channel ?? '').startsWith('import-'))
       .sort((a, b) => Number(Boolean(a.archivedAt)) - Number(Boolean(b.archivedAt)))
-      .map((c) => ({ key: `conv:${c.id}`, icon: c.offRecord ? '🕶' : isGroup(c) ? '👥' : '💬', label: c.title || t('New conversation'), sub: c.archivedAt ? t('Archived') : '', raw: true, run: () => { $('#main').classList.remove('show-sidebar'); return openConversation(c.id); } })),
-  settings: () => settingsPages().map((p) => ({ key: `settings:${p.dataset.page}`, icon: '⚙️', label: t(p.dataset.title), sub: t(p.dataset.group), run: () => openSettings(p.dataset.page) })),
+      .map((c) => ({ key: `conv:${c.id}`, icon: c.offRecord ? 'offrecord' : isGroup(c) ? 'group' : 'chat', label: c.title || t('New conversation'), sub: c.archivedAt ? t('Archived') : '', raw: true, run: () => { $('#main').classList.remove('show-sidebar'); return openConversation(c.id); } })),
+  settings: () => settingsPages().map((p) => ({ key: `settings:${p.dataset.page}`, icon: 'settings', label: t(p.dataset.title), sub: t(p.dataset.group), run: () => openSettings(p.dataset.page) })),
   // The Settings window's own tiered search for pages, plus every setting's label on its own.
   searchSettings: (q) => {
     const pages = settingsPages();
-    const pageItem = (p) => ({ key: `settings:${p.dataset.page}`, icon: '⚙️', label: t(p.dataset.title), sub: t(p.dataset.group), run: () => openSettings(p.dataset.page) });
+    const pageItem = (p) => ({ key: `settings:${p.dataset.page}`, icon: 'settings', label: t(p.dataset.title), sub: t(p.dataset.group), run: () => openSettings(p.dataset.page) });
     // Pages: the ones whose name fits first, then the Settings window's tiered search.
     const named = pages.filter((p) => cmdScore(q, t(p.dataset.title), p.dataset.title));
     const tiered = matchSettings(q, pages).filter((p) => !named.includes(p));
@@ -921,7 +931,7 @@ initCommandBar({
         const sc = cmdScore(q, text);
         if (!sc) continue;
         seen.add(text);
-        labels.push({ sc, key: `settings:${p.dataset.page}`, icon: '🔧', label: text, sub: `${t(p.dataset.group)} → ${t(p.dataset.title)}`, run: async () => {
+        labels.push({ sc, key: `settings:${p.dataset.page}`, icon: 'sliders', label: text, sub: `${t(p.dataset.group)} → ${t(p.dataset.title)}`, run: async () => {
           await openSettings(p.dataset.page);
           n.scrollIntoView({ block: 'center' });
           (n.querySelector('input, select, textarea') ?? n.nextElementSibling?.querySelector?.('input, select, textarea'))?.focus({ preventScroll: true });
@@ -938,26 +948,26 @@ initCommandBar({
   actions: () => {
     const list = [];
     const add = (key, icon, label, run, hint = '', words = '') => list.push({ key: `action:${key}`, icon, label, run, hint, words });
-    if (usable($('#new-chat'))) add('new', '✏️', t('New conversation'), () => $('#new-chat').click(), 'Alt+N');
-    if (usable($('#new-project'))) add('project', '📁', t('New project'), () => $('#new-project').click());
-    if (usable($('#new-offrecord'))) add('offrecord', '🕶', t('Off the record'), () => $('#new-offrecord').click(), '', t('private conversation not saved'));
-    if (usable($('#new-group'))) add('group', '👥', t('New group chat'), () => $('#new-group').click());
-    if (usable($('#call'))) add('call', '📞', t('Start a call'), () => $('#call').click(), '', t('voice talk'));
-    if (usable($('#video-call-btn'))) add('video', '🎥', t('Start a video call'), () => $('#video-call-btn').click());
-    for (const c of state.companions?.companions ?? []) if (!c.current) add(`companion:${c.id}`, '⇄', t('Switch to {name}', { name: c.name }), () => switchCompanion(c.id), '', t('switch companion'));
+    if (usable($('#new-chat'))) add('new', 'edit', t('New conversation'), () => $('#new-chat').click(), 'Alt+N');
+    if (usable($('#new-project'))) add('project', 'project', t('New project'), () => $('#new-project').click());
+    if (usable($('#new-offrecord'))) add('offrecord', 'offrecord', t('Off the record'), () => $('#new-offrecord').click(), '', t('private conversation not saved'));
+    if (usable($('#new-group'))) add('group', 'group', t('New group chat'), () => $('#new-group').click());
+    if (usable($('#call'))) add('call', 'phone', t('Start a call'), () => $('#call').click(), '', t('voice talk'));
+    if (usable($('#video-call-btn'))) add('video', 'video', t('Start a video call'), () => $('#video-call-btn').click());
+    for (const c of state.companions?.companions ?? []) if (!c.current) add(`companion:${c.id}`, 'switch', t('Switch to {name}', { name: c.name }), () => switchCompanion(c.id), '', t('switch companion'));
     const light = document.documentElement.dataset.theme === 'light';
-    add('theme', light ? '🌙' : '☀️', light ? t('Switch to Night') : t('Switch to Day'), () => {
+    add('theme', light ? 'moon' : 'sun', light ? t('Switch to Night') : t('Switch to Day'), () => {
       const sel = $('#ap-theme');
       sel.value = light ? 'dark' : 'light';
       sel.dispatchEvent(new Event('change'));
     }, '', t('switch theme dark light'));
-    add('panel', '◧', panelOpen() ? t('Fold her panel away') : t('Show her panel'), () => togglePanel(), 'Ctrl+\\');
-    if (usable($('#server-btn'))) add('servers', '🖥', t('Open Your Saras'), () => $('#server-btn').click(), '', t('servers switch'));
-    add('search', '🔎', t('Search messages, memories and notes'), () => {
+    add('panel', 'panel', panelOpen() ? t('Fold her panel away') : t('Show her panel'), () => togglePanel(), 'Ctrl+\\');
+    if (usable($('#server-btn'))) add('servers', 'server', t('Open Your Saras'), () => $('#server-btn').click(), '', t('servers switch'));
+    add('search', 'search', t('Search messages, memories and notes'), () => {
       $('#main').classList.add('show-sidebar');
       $('#conv-search').focus();
     });
-    add('tour', '🧭', t('Show me around'), () => runTour('first'), '', t('tour'));
+    add('tour', 'compass', t('Show me around'), () => runTour('first'), '', t('tour'));
     return list;
   },
 });
@@ -1941,7 +1951,14 @@ function flagClaims(el, claims) {
 const STATUS_LABEL = { running: 'running…', ok: 'done', error: 'failed', denied: 'declined' };
 
 // Everyday tools read as plain words with an icon; code tools (files, shell, git) stay monospace.
-const TOOL_ICON = { remind: '⏰', todo: '✅', note: '📝', recall: '🧠', web_search: '🔎', web_fetch: '🌐', calendar: '📅', calendar_add: '📅', calendar_events: '📅', email: '✉️', gmail_search: '✉️', gmail_thread: '✉️', gmail_needs_answer: '✉️', home_control: '🏠', home_status: '🏠', ssh_servers: '🖧', ssh_connect: '🖧', ssh_run: '🖧', ssh_forget_password: '🖧', ssh_revoke_key: '🖧', ssh_remove_server: '🖧', take_photo: '📷', share_photo: '📷', change_outfit: '👗', scrapbook: '📔', shared_list: '🎲', settings_guide: '❓', tune_personality: '🎛️', team_task: '👥', work_on_issue: '👥', start_job: '⏳', project_note: '📝', preview_start: '🖥️', preview_stop: '🖥️', browser_open: '🧭', browser_screenshot: '📸', browser_click: '🖱️', browser_type: '⌨️', browser_read: '🧭', browser_check: '✔️' };
+/** A span holding one of web/icons.js's line icons (decorative; the words beside it say what it is). */
+function iconSpan(cls, name) {
+  const span = el('span', cls);
+  span.setAttribute('aria-hidden', 'true');
+  const svg = icon(name) ?? icon('tool');
+  if (svg) span.append(svg);
+  return span;
+}
 const CODE_TOOL = /^(shell|read_file|write_file|edit_file|list_dir|search|git|git_\w+|github_\w+|review_code|delegate_task)$/;
 
 function toolBlock({ name, summary, status, output, ms, snapshotId }) {
@@ -1951,7 +1968,8 @@ function toolBlock({ name, summary, status, output, ms, snapshotId }) {
   const label = document.createElement('span');
   const plain = name && !CODE_TOOL.test(name);
   label.className = plain ? 'tool-summary plain' : 'tool-summary';
-  label.textContent = `${plain ? `${TOOL_ICON[name] ?? '⚙️'} ` : ''}${summary || name || 'tool'}`;
+  label.textContent = summary || name || 'tool';
+  if (plain) setIcon(label, TOOL_ICONS[name] ?? 'tool');
   const st = document.createElement('span');
   st.className = 'tool-status';
   sum.append(label, st);
@@ -1980,7 +1998,8 @@ function fillBuildingCard(d, ev) {
   const label = d.querySelector('.tool-summary');
   label.classList.toggle('plain', plain);
   // A file shows its path (the tool's name until the path can be read); other tools their name.
-  label.textContent = `${plain ? `${TOOL_ICON[ev.name] ?? '⚙️'} ` : ''}${ev.kind === 'file' && ev.path ? ev.path : ev.name}`;
+  label.textContent = ev.kind === 'file' && ev.path ? ev.path : ev.name;
+  if (plain) setIcon(label, TOOL_ICONS[ev.name] ?? 'tool');
   label.title = `${ev.name}${ev.path ? ` ${ev.path}` : ''}`;
   d.querySelector('.tool-status').textContent = ev.kind === 'file' && ev.lines ? (ev.lines === 1 ? t('writing… 1 line') : t('writing… {n} lines', { n: ev.lines })) : t('writing…');
   const pre = d.querySelector('.building-code');
@@ -2056,7 +2075,7 @@ function approvalCard(ev, block) {
     card.classList.add('approval-tidy');
     title.className = 'approval-title';
     title.append(
-      el('span', 'approval-icon', TOOL_ICON[ev.name] ?? (CODE_TOOL.test(ev.name) ? '⌨️' : '⚙️')),
+      iconSpan('approval-icon', TOOL_ICONS[ev.name] ?? (CODE_TOOL.test(ev.name) ? 'terminal' : 'tool')),
       el('span', 'approval-what', t('{app} wants to: {what}', { app: currentIdentity().name || t('Sara'), what: t(TOOL_NAME[ev.name]) })),
     );
     title.dataset.raw = '';
@@ -2210,7 +2229,7 @@ const TOOL_GROUP_OF = {
   tune_personality: 'her', settings_guide: 'her',
 };
 const TOOL_GROUP_ORDER = ['plan', 'memory', 'pictures', 'web', 'mail', 'home', 'her', 'files', 'run', 'git', 'team', 'browser', 'ssh', 'mcp', 'other'];
-const TOOL_GROUP_ICON = { plan: '✅', memory: '🧠', pictures: '📷', web: '🌐', mail: '✉️', home: '🏠', her: '🎛️', files: '📁', run: '⌨️', git: '🌿', team: '👥', browser: '🧭', ssh: '🖧', mcp: '🧩', other: '⚙️' };
+const TOOL_GROUP_ICON = { plan: 'todo', memory: 'recall', pictures: 'photo', web: 'globe', mail: 'mail', home: 'home', her: 'sliders', files: 'folder', run: 'terminal', git: 'branch', team: 'team', browser: 'compass', ssh: 'server', mcp: 'puzzle', other: 'tool' };
 const TOOL_GROUP_TEXT = {
   plan: 'Planner and notes', memory: 'Memory and know-how', pictures: 'Pictures and keepsakes', web: 'The web', mail: 'Email and calendar', home: 'Smart home',
   her: 'Her and this app', files: 'Files and code', run: 'Running commands', git: 'Git and GitHub', team: 'Her team', browser: 'Test browser and previews',
@@ -2255,8 +2274,7 @@ function toolRow(tool) {
   const row = el('div', 'tool-perm');
   row.dataset.toolRow = tool.name;
   const builtIn = tool.source === 'built-in';
-  const icon = el('span', 'tool-icon', builtIn ? (TOOL_ICON[tool.name] ?? (CODE_TOOL.test(tool.name) ? '⌨️' : '⚙️')) : '🧩');
-  icon.setAttribute('aria-hidden', 'true');
+  const icon = iconSpan('tool-icon', builtIn ? (TOOL_ICONS[tool.name] ?? (CODE_TOOL.test(tool.name) ? 'terminal' : 'tool')) : 'puzzle');
   const text = el('div', 'tool-text');
   const title = el('span', 'tool-name', builtIn ? t(TOOL_NAME[tool.name] ?? tool.name) : tool.name);
   const words = builtIn ? t(TOOL_WORDS[tool.name] ?? '') : tool.description;
@@ -2316,8 +2334,7 @@ async function loadTools() {
       box.dataset.group = g;
       box.open = open.has(g);
       const sum = document.createElement('summary');
-      const icon = el('span', 'tool-group-icon', TOOL_GROUP_ICON[g]);
-      icon.setAttribute('aria-hidden', 'true');
+      const icon = iconSpan('tool-group-icon', TOOL_GROUP_ICON[g]);
       const head = el('span', 'tool-group-head');
       head.append(el('strong', 'tool-group-name', t(TOOL_GROUP_TEXT[g])), el('span', 'tool-group-about', t(TOOL_GROUP_ABOUT[g])));
       sum.append(icon, head, el('span', 'tool-group-sum'));
@@ -2398,7 +2415,7 @@ function renderConvSummary() {
   const plan = kind === 'chatgpt' ? ` · ${t('Using ChatGPT plan')}` : kind === 'claude-code' ? ` · ${t('Claude subscription')}` : kind === 'grok-cli' ? ` · ${t('Grok subscription')}` : '';
   // L11: "main" is the main folder of her workspaces.
   // Phase 71: members have no workspace folders (the file tools are the owner's), so no folder part.
-  const folder = isMember() ? '' : `${c.workspace === 'main' ? `📁 ${t('main folder')}` : `📁 ${c.workspace}`} · `;
+  const folder = isMember() ? '' : `${c.workspace === 'main' ? t('main folder') : c.workspace} · `;
   $('#conv-summary').textContent = `${c.mode === 'coding' ? `${t('Coding')} · ` : ''}${folder}${model || label}${plan}`;
   panelConv();
 }
@@ -3009,7 +3026,7 @@ async function initVoice() {
   $('#v-live-note').textContent = live.available ? t('Live calls now use {engineName}, billed to {billedTo}.', { engineName, billedTo: t(live.billedTo ?? '') }) : t(live.message ?? '');
   $('#speak-toggle').hidden = !canSpeak;
   $('#speak-toggle').setAttribute('aria-pressed', String(localStorage.getItem('sara.speak') === '1'));
-  $('#speak-toggle').textContent = localStorage.getItem('sara.speak') === '1' ? '🔊' : '🔈';
+  setIcon($('#speak-toggle'), localStorage.getItem('sara.speak') === '1' ? 'speaker-on' : 'speaker');
 }
 
 /** Demo server: live calls only for app review, after the reviewer code (asked once per demo session). */
@@ -3042,7 +3059,7 @@ $('#speak-toggle').addEventListener('click', () => {
   const on = localStorage.getItem('sara.speak') !== '1';
   localStorage.setItem('sara.speak', on ? '1' : '0');
   $('#speak-toggle').setAttribute('aria-pressed', String(on));
-  $('#speak-toggle').textContent = on ? '🔊' : '🔈';
+  setIcon($('#speak-toggle'), on ? 'speaker-on' : 'speaker');
   if (!on) speaker.stop();
 });
 
@@ -4115,7 +4132,9 @@ function renderJobs() {
     ...mine.map((j) => {
       const row = el('div', 'job-row');
       const last = j.tail.trim().split('\n').at(-1) ?? '';
-      const label = el('span', 'job-label', `⏳ ${t('Job #{id}', { id: j.id })} · ${j.label}`);
+      const label = el('span', 'job-label', `${t('Job #{id}', { id: j.id })} · ${j.label}`);
+      const jobIcon = icon('job');
+      if (jobIcon) label.prepend(jobIcon);
       label.dataset.raw = '';
       const line = el('span', 'job-last muted small', last.slice(0, 160));
       line.dataset.raw = '';
@@ -7257,6 +7276,9 @@ async function loadChecklist() {
   $('#td-start').hidden = !c || c.hidden || !left.length;
   if ($('#td-start').hidden) return;
   $('#td-start-count').textContent = t('{done} of {total} done', { done: c.items.length - left.length, total: c.items.length });
+  // 2.8: the same count as a small ring before the words (decorative; the words say it).
+  document.querySelector('.today-start-head > .pring')?.remove();
+  $('#td-start-count').before(progressRing(shareOf(c.items.length - left.length, c.items.length), { size: 26, stroke: 3 }));
   $('#td-start-list').replaceChildren(
     ...c.items.map((i) => {
       const b = el('button', `start-item${i.done ? ' done' : ''}`);

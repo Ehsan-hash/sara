@@ -1,0 +1,385 @@
+/* 2.8 polish pass (docs/design/NEW_LOOK.md → "Polish pass"; concepts D and E): the same calm look, one
+   notch more finished. Loaded last; every colour, shadow and font comes from theme.css tokens, so Night
+   and Day both follow and AA contrast stays as it was. Sections:
+     1 the aurora behind the glass · 2 glass and elevation · 3 type · 4 her halo · 5 icons ·
+     6 weather art and sparklines · 7 rings · 8 the phone's floating bar · 9 motion · 10 the sweep
+   Performance: the aurora moves only transform (on the compositor), pauses while the tab is hidden or a
+   window is open, and stands still with reduced motion. backdrop-filter stays on a few surfaces that
+   have moving text behind them (the chat header, the composer, popovers); the big columns are plain
+   see-through fills. */
+
+/* ---------- 1. The aurora ---------- */
+/* The page colour is on <html> (the canvas); <body> stays clear, or it would paint over the aurora. */
+html { background: var(--surface-0); }
+body { background: transparent; }
+.aurora {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  overflow: hidden;
+  pointer-events: none;
+  contain: strict;
+  background: var(--aurora-base);
+}
+.aurora > i { position: absolute; display: block; border-radius: 50%; will-change: transform; }
+/* Rose, high on the right. */
+.aurora > .au-1 {
+  top: -30vmax;
+  right: -24vmax;
+  width: 92vmax;
+  height: 70vmax;
+  background: radial-gradient(closest-side, var(--aurora-1), transparent);
+  animation: au-drift-1 calc(52s * var(--aurora-speed)) ease-in-out infinite alternate;
+}
+/* Violet, low on the left. */
+.aurora > .au-2 {
+  bottom: -34vmax;
+  left: -28vmax;
+  width: 96vmax;
+  height: 74vmax;
+  background: radial-gradient(closest-side, var(--aurora-2), transparent);
+  animation: au-drift-2 calc(60s * var(--aurora-speed)) ease-in-out infinite alternate;
+}
+/* Plum: a long soft band across the middle, like the concept's light. */
+.aurora > .au-3 {
+  top: 18vh;
+  left: -30vw;
+  width: 160vw;
+  height: 34vmax;
+  background: radial-gradient(closest-side, var(--aurora-3), transparent);
+  transform: rotate(-24deg);
+  animation: au-drift-3 calc(44s * var(--aurora-speed)) ease-in-out infinite alternate;
+}
+.aurora > .au-grain { inset: 0; border-radius: 0; background-image: var(--grain); background-size: 160px 160px; opacity: var(--grain-opacity); will-change: auto; }
+@keyframes au-drift-1 { from { transform: translate3d(0, 0, 0) scale(1); } to { transform: translate3d(-9vw, 7vh, 0) scale(1.12); } }
+@keyframes au-drift-2 { from { transform: translate3d(0, 0, 0) scale(1.05); } to { transform: translate3d(10vw, -8vh, 0) scale(.94); } }
+@keyframes au-drift-3 { from { transform: rotate(-24deg) translate3d(-4vw, 0, 0); } to { transform: rotate(-18deg) translate3d(6vw, 6vh, 0) scale(1.06); } }
+/* Paused when nobody sees it: a hidden tab, or a window over the app (its backdrop would re-blur every frame). */
+html.page-hidden .aurora > i, html:has(dialog:modal) .aurora > i { animation-play-state: paused; }
+@media (prefers-reduced-motion: reduce) {
+  .aurora > i { animation: none !important; }
+}
+@media (prefers-reduced-transparency: reduce) {
+  .aurora > .au-1, .aurora > .au-2, .aurora > .au-3 { display: none; }
+}
+
+/* The app lets the aurora through: the page and Today have no paint of their own any more. */
+#main, .card-screen, #chat > dialog.today-view, #today { background: transparent; }
+/* Today lies over the chat column: the conversation under it steps out of sight (it is inert anyway). */
+html.today-open #chat > :not(#today) { visibility: hidden; }
+#sidebar { background: color-mix(in srgb, var(--surface-1) 72%, transparent); }
+.her-panel.mode-side { background: radial-gradient(420px 320px at 50% 0%, color-mix(in srgb, var(--mood-b) 12%, transparent), transparent 70%), color-mix(in srgb, var(--surface-1) 66%, transparent); }
+#chat-head { background: color-mix(in srgb, var(--surface-0) 58%, transparent); box-shadow: var(--glass-hi); }
+@media (max-width: 760px) { #sidebar { background: var(--surface-1); } }
+@media (max-width: 720px) { #chat-head { background: color-mix(in srgb, var(--surface-0) 88%, transparent); } }
+
+/* ---------- 2. Glass and elevation ---------- */
+/* Tiles and cards: a see-through fill, a 1 px edge that is light at the top and fades to a hairline
+   (a masked gradient on ::after, so the fill stays clear), and elevation 1. */
+#today .td-tile, #today .today-start, .rcard, .hp-sec, .td-ask-any, .her-panel.mode-sheet .hp-sec {
+  position: relative;
+  border-color: transparent;
+  background: var(--glass-fill);
+  box-shadow: var(--glass-hi), var(--elev-1);
+}
+#today .td-warm { background: linear-gradient(165deg, color-mix(in srgb, var(--accent-solid) 22%, transparent), color-mix(in srgb, var(--accent-solid) 6%, transparent) 75%), var(--glass-fill); }
+#today .td-tile::after, #today .today-start::after, .rcard::after, .hp-sec::after, .td-ask-any::after, #composer::after {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  z-index: 0;
+  padding: 1px;
+  border-radius: inherit;
+  background: var(--glass-edge);
+  -webkit-mask: var(--mask-solid) content-box, var(--mask-solid);
+  -webkit-mask-composite: xor;
+  mask: var(--mask-solid) content-box exclude, var(--mask-solid);
+  pointer-events: none;
+}
+.rcard.ok::after { background: linear-gradient(180deg, color-mix(in srgb, var(--success) 60%, transparent), color-mix(in srgb, var(--success) 22%, transparent)); }
+.rcard.bad::after { background: linear-gradient(180deg, color-mix(in srgb, var(--danger) 70%, transparent), color-mix(in srgb, var(--danger) 28%, transparent)); }
+#today .td-warm::after { background: linear-gradient(180deg, color-mix(in srgb, var(--accent-text) 55%, transparent), color-mix(in srgb, var(--accent-solid) 20%, transparent)); }
+/* Inner boxes sit a step lower: a quiet tint, no shadow. */
+.td-wx-hour, .td-job, .hp-job, .td-dev, .rc-day, #today .start-item { border-color: var(--hairline); background: var(--glass-tint); box-shadow: var(--glass-hi); }
+#today .start-item.done { background: color-mix(in srgb, var(--accent-solid) 8%, transparent); }
+
+/* Floating bars: the composer and the phone's bar use elevation 2. */
+#composer { position: relative; border-color: transparent; background: var(--glass); box-shadow: var(--glass-hi), var(--elev-2); }
+#composer:focus-within { border-color: transparent; box-shadow: var(--glass-hi), var(--elev-2), 0 0 0 3px var(--accent-soft); }
+.head-pop, .composer-menu, .pop-menu, .side-more-menu, #side-more-menu, .tip-card { box-shadow: var(--glass-hi), var(--elev-2); }
+
+/* Windows and sheets: elevation 3, a light top edge. */
+dialog { box-shadow: var(--glass-hi), var(--elev-3); }
+dialog#cmdbar { box-shadow: var(--glass-hi), var(--elev-3); }
+.card-screen .card { box-shadow: var(--glass-hi), var(--elev-3); }
+.her-panel.mode-sheet, .her-panel.mode-overlay { box-shadow: var(--glass-hi), var(--elev-3); }
+
+/* ---------- 3. Type ---------- */
+#td-greeting {
+  font-family: var(--font-display);
+  font-size: clamp(30px, 4.4vw, 52px);
+  font-weight: 500;
+  line-height: 1.06;
+  letter-spacing: var(--tracking-display);
+}
+.td-date { letter-spacing: .14em; font-size: 12px; }
+@media (max-width: 720px) { #td-greeting { font-size: clamp(32px, 9.4vw, 44px); line-height: 1.04; } }
+#today .today-start-head h3, #today .td-tile-head h3 {
+  font-family: var(--font-display);
+  font-size: 19px;
+  font-weight: 500;
+  letter-spacing: 0;
+}
+.td-count, #td-start-count { font-family: var(--font-ui); }
+#today .td-tile-head .td-count:first-of-type { font-family: var(--font-display); font-size: 14.5px; color: var(--text-2); }
+.td-wx-temp, .rc-temp {
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-variant-numeric: lining-nums tabular-nums;
+  letter-spacing: -0.02em;
+}
+.td-wx-temp { font-size: 52px; }
+.rc-temp { font-size: 40px; }
+/* Window titles. */
+dialog .settings-body > h2, dialog form > h2:first-child, dialog > h2:first-of-type, .settings-body h2, .card-screen .card h1, .card-screen .card h2 {
+  font-family: var(--font-display);
+  font-weight: 500;
+  letter-spacing: var(--tracking-display);
+}
+dialog .settings-body > h2, dialog form > h2:first-child { font-size: 28px; line-height: 1.15; }
+.card-screen .card h1 { font-size: 32px; }
+.hp-name { font-family: var(--font-display); font-size: 21px; font-weight: 500; letter-spacing: 0; }
+.ctx-pct, .hp-job-time, .step-ms, .td-when, .rc-chip, .td-wx-ht, .td-wx-h { font-variant-numeric: tabular-nums; }
+
+/* ---------- 4. Her halo ---------- */
+/* A ring of light in her mood colours around her portrait: still when she is idle, slowly turning
+   and breathing while she works, pulsing while she speaks. */
+.td-face-btn, .hp-glow, .head-face-btn { --mood-a: var(--accent-from); --mood-b: var(--accent-to); }
+.td-face-btn, .head-face-btn { position: relative; isolation: isolate; }
+.td-face-btn::after, .hp-glow::after, .head-face-btn::after {
+  content: "";
+  position: absolute;
+  z-index: 1;
+  inset: -7px;
+  border-radius: 50%;
+  background: conic-gradient(from 210deg, var(--mood-a), var(--mood-b), color-mix(in srgb, var(--mood-b) 25%, transparent) 38%, var(--mood-a) 62%, var(--mood-b) 84%, var(--mood-a));
+  -webkit-mask: var(--halo-mask);
+  mask: var(--halo-mask);
+  opacity: .95;
+  pointer-events: none;
+}
+.head-face-btn::after { inset: -4px; }
+.hp-glow::after { inset: -9px; }
+.td-face { box-shadow: 0 0 0 3px var(--surface-0), 0 0 40px -6px color-mix(in srgb, var(--mood-a) 60%, transparent), 0 20px 60px -18px color-mix(in srgb, var(--mood-b) 70%, transparent); }
+.td-face-btn::before { inset: -26%; background: radial-gradient(closest-side, color-mix(in srgb, var(--mood-a) 45%, transparent), color-mix(in srgb, var(--mood-b) 22%, transparent) 55%, transparent); opacity: .8; }
+.head-face { box-shadow: 0 0 0 2px var(--surface-0), 0 0 16px -2px color-mix(in srgb, var(--mood-a) 70%, transparent); }
+html.sara-busy .td-face-btn::after, html.sara-busy .hp-glow::after, html.sara-busy .head-face-btn::after { animation: halo-turn 9s linear infinite, halo-breathe var(--breathe) ease-in-out infinite; }
+html.sara-speaking .td-face-btn::after, html.sara-speaking .hp-glow::after, html.sara-speaking .head-face-btn::after { animation: halo-turn 6s linear infinite, halo-pulse 1.3s ease-in-out infinite; }
+/* The face itself no longer animates its shadow (a repaint every frame); the halo moves instead. */
+html.sara-busy .td-face, html.sara-busy .head-face, html.sara-speaking .head-face { animation: none; }
+@keyframes halo-turn { to { rotate: 1turn; } }
+@keyframes halo-breathe { 0%, 100% { opacity: .7; scale: 1; } 50% { opacity: 1; scale: 1.035; } }
+@keyframes halo-pulse { 0%, 100% { opacity: .85; scale: 1; } 50% { opacity: 1; scale: 1.06; } }
+@media (prefers-reduced-motion: reduce) {
+  .td-face-btn::after, .hp-glow::after, .head-face-btn::after { animation: none !important; }
+}
+
+/* ---------- 5. Icons ---------- */
+svg.ic { flex: none; width: 1.25em; height: 1.25em; vertical-align: -0.22em; overflow: visible; }
+#composer > button.icon svg.ic, #composer-plus svg.ic { width: 22px; height: 22px; }
+#composer-plus { font-size: 0; }
+#composer #send svg.ic { width: 20px; height: 20px; stroke-width: 2.1; }
+.head-icon svg.ic, #toggle-sidebar svg.ic, .head-more svg.ic { width: 20px; height: 20px; }
+#speak-toggle svg.ic { width: 18px; height: 18px; vertical-align: middle; }
+.side-go svg.ic, .side-more > svg.ic:first-child, .side-icon svg.ic { width: 20px; height: 20px; }
+.side-chev.ic { width: 16px; height: 16px; }
+.bb-btn svg.ic { width: 23px; height: 23px; }
+.pop-item svg.ic { width: 20px; height: 20px; color: var(--text-2); }
+.step-icon { display: grid; place-items: center; color: var(--accent-text); }
+.step-icon svg.ic { width: 16px; height: 16px; }
+.rcard-icon { display: grid; place-items: center; width: 26px; height: 26px; border-radius: 8px; background: var(--accent-soft); color: var(--accent-text); }
+.rcard-icon svg.ic { width: 16px; height: 16px; }
+.rcard.ok .rcard-icon { background: var(--success-soft); color: var(--success); }
+.rcard.bad .rcard-icon { background: var(--danger-soft); color: var(--danger); }
+.cmd-icon { color: var(--text-2); }
+.cmd-icon svg.ic { width: 17px; height: 17px; }
+.cmd-item[aria-selected="true"] .cmd-icon { color: var(--accent-text); }
+.hp-job-icon, .hp-row-icon { display: inline-grid; place-items: center; color: var(--text-3); }
+.hp-job-icon svg.ic, .hp-row-icon svg.ic { width: 15px; height: 15px; }
+.td-tile-ic { display: grid; place-items: center; align-self: center; width: 28px; height: 28px; margin-right: 2px; border-radius: 9px; background: var(--accent-soft); color: var(--accent-text); }
+.td-tile-ic svg.ic { width: 16px; height: 16px; }
+.td-tile-head { align-items: center; }
+.td-what-title svg.ic { width: 14px; height: 14px; margin-right: 4px; color: var(--accent-text); vertical-align: -0.15em; }
+.approval-icon, .tool-icon, .tool-group-icon { display: inline-grid; place-items: center; color: var(--accent-text); }
+.approval-icon svg.ic, .tool-icon svg.ic, .tool-group-icon svg.ic { width: 18px; height: 18px; }
+.dialog-top > .dialog-x svg.ic { width: 16px; height: 16px; }
+button svg.ic + span, button > svg.ic:first-child:not(:only-child) { margin-right: 6px; }
+.bb-btn > svg.ic:first-child, .side-go > svg.ic:first-child, .side-more > svg.ic:first-child { margin-right: 0; }
+.vc-btn > span svg.ic { width: 24px; height: 24px; }
+.ring-btn svg.ic { width: 18px; height: 18px; }
+
+#conv-settings-btn::before, #main.has-preview #conv-settings-btn::before { content: none; }
+#conv-settings-btn svg.ic { width: 15px; height: 15px; margin-right: 0; }
+.job-label svg.ic { width: 15px; height: 15px; margin-right: 6px; color: var(--accent-text); vertical-align: -0.2em; }
+
+/* ---------- 6. Weather art and sparklines ---------- */
+.wx-art { display: block; flex: none; overflow: visible; }
+.td-wx-art { width: 64px; height: 64px; align-self: center; margin: -6px 2px -6px -6px; }
+.rcard-weather .wx-art { width: 54px; height: 54px; }
+.td-wx-hour .wx-art { width: 26px; height: 26px; }
+.wa-stop-sun-a { stop-color: var(--wx-sun-a); }
+.wa-stop-sun-b { stop-color: var(--wx-sun-b); }
+.wa-stop-glow-a { stop-color: var(--wx-glow-a); }
+.wa-stop-glow-b { stop-color: var(--wx-glow-b); stop-opacity: 0; }
+.wa-stop-cloud-a { stop-color: var(--wx-cloud-a); }
+.wa-stop-cloud-b { stop-color: var(--wx-cloud-b); }
+.wa-stop-back-a { stop-color: var(--wx-back-a); }
+.wa-stop-back-b { stop-color: var(--wx-back-b); }
+.wa-stop-moon-a { stop-color: var(--wx-moon-a); }
+.wa-stop-moon-b { stop-color: var(--wx-moon-b); }
+.wa-rays line { stroke: var(--wx-sun-a); stroke-width: 2.6; stroke-linecap: round; }
+.wa-cloud { stroke: var(--wx-cloud-line); stroke-width: 1; }
+.wa-drop { stroke: var(--wx-rain); stroke-width: 2.6; stroke-linecap: round; }
+.wa-flake { stroke: var(--wx-snow); stroke-width: 1.8; stroke-linecap: round; fill: none; }
+.wa-bolt { fill: var(--wx-bolt); }
+.wa-fog { stroke: var(--wx-fog); stroke-width: 2.6; stroke-linecap: round; }
+.wa-star { fill: var(--wx-star); }
+.td-wx-main { align-items: center; }
+.td-wx-words { font-size: 16px; }
+.td-wx-spark { display: block; width: 100%; height: 30px; margin: 2px 0 -2px; }
+.spark-line { fill: none; stroke: var(--spark-line); stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; }
+.spark-stop-a { stop-color: var(--spark-a); }
+.spark-stop-b { stop-color: var(--spark-b); stop-opacity: 0; }
+.td-wx-hour { gap: 3px; }
+
+/* ---------- 7. Rings ---------- */
+.pring { position: relative; display: inline-grid; place-items: center; flex: none; width: var(--pring-size, 36px); height: var(--pring-size, 36px); }
+.pring > svg { display: block; width: 100%; height: 100%; overflow: visible; }
+.pring-track { fill: none; stroke: var(--hairline-strong); }
+.pring-arc { fill: none; stroke-linecap: round; transition: stroke-dasharray var(--dur-slow) var(--ease-out); filter: drop-shadow(0 0 3px var(--accent-glow)); }
+.pring-stop-a { stop-color: var(--accent-from); }
+.pring-stop-b { stop-color: var(--accent-to); }
+.pring-moving > svg { animation: pring-turn 1.6s linear infinite; }
+@keyframes pring-turn { to { rotate: 1turn; } }
+.pring-text { position: absolute; font-size: 10.5px; font-weight: 650; color: var(--text-1); font-variant-numeric: tabular-nums; letter-spacing: -.02em; }
+.td-tile-head > .pring { margin-left: auto; }
+.td-tile-head > .pring + :last-child { margin-left: 0; }
+.today-start-head .pring { margin-left: 4px; }
+.td-job { grid-template-columns: auto minmax(0, 1fr); column-gap: 10px; }
+.td-job > .pring { grid-row: span 2; align-self: start; margin-top: 1px; }
+.td-job > :not(.pring) { grid-column: 2; }
+.hp-job-head > .pring { margin-right: 2px; }
+/* The context meter: a thinner, softer ring with a glow on its filled part. */
+.ctx-ring { background: conic-gradient(var(--accent-from), var(--accent-to) calc(var(--ctx) * 1%), color-mix(in srgb, var(--text-3) 30%, transparent) 0); box-shadow: 0 0 14px -6px var(--accent-glow); }
+.ctx-ring::before { inset: 2.5px; background: color-mix(in srgb, var(--surface-0) 92%, var(--accent-to)); }
+.ctx-ring:hover { box-shadow: 0 0 16px -4px var(--accent-glow); }
+@media (prefers-reduced-motion: reduce) { .pring-moving > svg { animation: none; } }
+
+/* ---------- 8. The phone's floating bar ---------- */
+@media (max-width: 720px) {
+  :root { --bbar-h: calc(76px + var(--safe-b)); }
+  .bottom-bar {
+    --bb-i: 0;
+    margin: 0 12px calc(10px + var(--safe-b));
+    padding: 5px;
+    border: 1px solid transparent;
+    border-radius: 26px;
+    background: var(--bbar-fill) padding-box, var(--glass-edge) border-box;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    box-shadow: var(--glass-hi), var(--elev-2);
+    isolation: isolate;
+  }
+  /* The lit place: a soft glow and a bright line that slide to the tab you are on. */
+  .bottom-bar::before {
+    content: "";
+    position: absolute;
+    z-index: -1;
+    top: 5px;
+    bottom: 5px;
+    left: 5px;
+    width: calc((100% - 10px) / 4);
+    border-radius: 20px;
+    background: var(--bbar-lit), color-mix(in srgb, var(--accent-solid) 10%, transparent);
+    box-shadow: inset 0 -2px 0 color-mix(in srgb, var(--accent-text) 80%, transparent);
+    transform: translateX(calc(var(--bb-i) * 100%));
+    transition: transform 320ms var(--ease-out), opacity var(--dur);
+  }
+  .bottom-bar[data-lit="none"]::before { opacity: 0; }
+  .bb-btn { border-radius: 20px; }
+  .bb-btn[aria-current="page"]::before { content: none; }
+  .bb-btn[aria-current="page"] svg { filter: drop-shadow(0 0 8px var(--accent-glow)); }
+  .bb-btn:hover { background: transparent; }
+  html:not(.kb-up) #composer { margin-bottom: 6px; }
+}
+
+/* ---------- 9. Motion ---------- */
+/* Tiles and cards arrive one after another (30 ms apart), 200 ms, eased out. */
+#today .td-tile, #today .today-start { animation: polish-in var(--dur) var(--ease-out) backwards; }
+#today .today-start { animation-delay: 0ms; }
+#today .td-tile:nth-child(1) { animation-delay: 30ms; }
+#today .td-tile:nth-child(2) { animation-delay: 60ms; }
+#today .td-tile:nth-child(3) { animation-delay: 90ms; }
+#today .td-tile:nth-child(4) { animation-delay: 120ms; }
+#today .td-tile:nth-child(5) { animation-delay: 150ms; }
+#today .td-tile:nth-child(6) { animation-delay: 180ms; }
+#today .td-tile:nth-child(n + 7) { animation-delay: 210ms; }
+.rcard, .hp-sec { animation: polish-in var(--dur) var(--ease-out) backwards; }
+.hp-sec:nth-child(4) { animation-delay: 30ms; }
+.hp-sec:nth-child(5) { animation-delay: 60ms; }
+.hp-sec:nth-child(6) { animation-delay: 90ms; }
+@keyframes polish-in { from { opacity: 0; transform: translateY(8px) scale(.99); } }
+/* Desktop: cards lift a little under the pointer. */
+@media (hover: hover) and (pointer: fine) {
+  #today .td-tile, .rcard, .td-ask-any { transition: transform var(--dur) var(--ease-out), box-shadow var(--dur) var(--ease-out); }
+  #today .td-tile:hover, .rcard:hover, .td-ask-any:hover { transform: translateY(-2px); box-shadow: var(--glass-hi), var(--lift); }
+}
+/* Touch: a pressed state you can feel. */
+@media (pointer: coarse) {
+  button:active:not(:disabled), .bb-btn:active, .side-go:active, .start-item:active { transform: scale(.97); transition: transform 80ms var(--ease-out); }
+  #today .td-tile:active { transform: scale(.995); }
+}
+@media (prefers-reduced-motion: reduce) {
+  #today .td-tile, #today .today-start, .rcard, .hp-sec { animation: none; }
+  #today .td-tile:hover, .rcard:hover, .td-ask-any:hover { transform: none; }
+  button:active:not(:disabled), .bb-btn:active, .side-go:active, .start-item:active, #today .td-tile:active { transform: none; }
+  .bottom-bar::before { transition: none; }
+}
+
+/* ---------- 10. The sweep: buttons, fields, chips, headers, empty states, toasts, windows ---------- */
+/* Primary: the deep gradient, a glow on hover. Secondary: glass. Ghost: text only. Danger: red. */
+#td-ask, #new-chat, #su-next, .card-screen .card button[type="submit"], #disclosure .card button, button.primary, .unsaved-bar button:not(.ghost), dialog .actions button:not(.ghost, .danger, .linkish), #pl-add, #task-add, .wz-next {
+  box-shadow: var(--glass-hi), 0 6px 16px -10px var(--accent-glow);
+}
+#td-ask:hover, #new-chat:hover, #su-next:hover, .card-screen .card button[type="submit"]:hover, #disclosure .card button:hover, button.primary:hover, .unsaved-bar button:not(.ghost):hover, dialog .actions button:not(.ghost, .danger, .linkish):hover {
+  filter: brightness(1.08);
+  box-shadow: var(--glass-hi), var(--btn-glow);
+}
+#td-ask { min-height: 44px; padding: 0 22px; border-radius: var(--r-pill); font-weight: 600; }
+button.ghost, .button-link.ghost { background: var(--glass-tint); box-shadow: var(--glass-hi); }
+button.ghost:hover { background: color-mix(in srgb, var(--surface-3) 70%, transparent); }
+#td-refresh { min-height: 44px; padding: 0 18px; border-radius: var(--r-pill); }
+@media (max-width: 720px) { #td-ask { padding: 0 16px; } #td-refresh { padding: 0 12px; } }
+button.danger { box-shadow: var(--glass-hi); }
+button.danger:hover { box-shadow: var(--glass-hi), 0 6px 18px -8px var(--danger); }
+/* Fields: glass with the accent ring on focus. */
+input:not([type="checkbox"], [type="radio"], [type="range"], [type="color"], [type="file"]), select, textarea { box-shadow: var(--glass-hi); }
+input:focus:not([type="checkbox"], [type="radio"], [type="range"]), select:focus, textarea:focus { box-shadow: var(--glass-hi), 0 0 0 3px var(--accent-soft), 0 0 18px -6px var(--accent-glow); }
+#composer #input, #composer #input:focus, .cmd-q, .cmd-q:focus { box-shadow: none; }
+/* Chips and pills. */
+.chip, .tag-chip, .td-mood, .hp-mood, .rc-chip, .steps-sum { box-shadow: var(--glass-hi); }
+.td-mood, .hp-mood { background: var(--glass-fill); border-color: var(--hairline-strong); }
+.steps-sum { background: var(--glass-tint); }
+/* Section headers in the panel and on cards. */
+.hp-h { color: var(--text-2); }
+/* Empty states: the icon sits in a soft circle. */
+.empty-icon { display: grid; place-items: center; width: 52px; height: 52px; margin: 0 auto 6px; border-radius: 50%; background: var(--accent-soft); box-shadow: var(--glass-hi); }
+/* Toasts and small notices. */
+.other-note, #activity, .jobs-strip { box-shadow: var(--glass-hi), var(--elev-1); }
+/* Windows: solid (text never shows through), a light top edge; the close button is a glass circle. */
+.dialog-top > .dialog-x { display: grid; place-items: center; background: var(--glass-tint); box-shadow: var(--glass-hi); }
+dialog::backdrop { background: var(--scrim); -webkit-backdrop-filter: blur(6px) saturate(120%); backdrop-filter: blur(6px) saturate(120%); }
+@media (max-width: 720px) {
+  dialog::backdrop { -webkit-backdrop-filter: none; backdrop-filter: none; }
+}
+.tour-card { box-shadow: var(--glass-hi), var(--elev-3); }

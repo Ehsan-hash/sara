@@ -98,7 +98,7 @@ Mandatory safety layer unchanged (AI disclosure screens and notices keep their p
 setting keeps a **?** tip; all text through `t()` in six languages; ids, deep links, keyboard shortcuts and
 the tour keep working; 44 px touch targets; screen-reader labels; works at 320 px wide and 200% zoom.
 
-## Polish pass (2.8, planned)
+## Polish pass (2.8) ✅ released 2026-10-29
 
 Owner, 2026-10-29: "I like the look but want to do a polish pass to really push up the graphics feel
 another notch." Concepts `outputs/ui-review/concepts/D-polish-desktop.jpg` and `E-polish-phone.jpg`: a slow

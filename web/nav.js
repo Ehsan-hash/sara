@@ -3,6 +3,7 @@
 // (saved per device in localStorage), so new places land in More instead of making the box bigger.
 // The buttons keep their ids (#open-today…), so shortcuts, /#view= links and the tours still work.
 import { t } from './naming.js';
+import { icon } from './icons.js';
 
 /** Every place, in the order they are listed. */
 export const DESTS = ['today', 'planner', 'memory', 'library', 'scrapbook', 'moments', 'story', 'team'];
@@ -49,7 +50,7 @@ function pinButton(dest) {
   b.type = 'button';
   b.className = 'side-pin';
   b.dataset.pin = dest;
-  b.append(svg(PIN_PATH));
+  b.append(icon('pin') ?? svg(PIN_PATH));
   b.addEventListener('click', (e) => {
     e.stopPropagation();
     const pins = readPins();

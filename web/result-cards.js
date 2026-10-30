@@ -3,6 +3,8 @@
 // notes, calendar events, files changed, test runs and background tasks, smart-home actions,
 // pictures and web searches. Every value goes in as text (no HTML), links only to http(s).
 import { t } from './naming.js';
+import { icon } from './icons.js';
+import { kindFromSky, sparkline, weatherArt } from './viz.js';
 
 const el = (tag, cls, text) => {
   const e = document.createElement(tag);
@@ -11,11 +13,17 @@ const el = (tag, cls, text) => {
   return e;
 };
 
-function shell(kind, icon, title, tone = '') {
+/** A card's frame: a line icon (web/icons.js) or a picture (the weather art) beside its title. */
+function shell(kind, iconName, title, tone = '') {
   const card = el('div', `rcard rcard-${kind}${tone ? ` ${tone}` : ''}`);
   card.setAttribute('role', 'group');
   const head = el('div', 'rcard-head');
-  head.append(el('span', 'rcard-icon', icon), el('span', 'rcard-title', title));
+  const ic = el('span', 'rcard-icon');
+  ic.setAttribute('aria-hidden', 'true');
+  const svg = typeof iconName === 'string' ? icon(iconName) : null;
+  if (svg) ic.append(svg);
+  if (svg) head.append(ic);
+  head.append(el('span', 'rcard-title', title));
   card.append(head);
   card.setAttribute('aria-label', title);
   return card;
@@ -33,14 +41,14 @@ const REPEAT = () => ({ daily: t('every day'), weekdays: t('on weekdays'), weekl
 const SKY = () => [[/☀|🌞/u, t('Sunny')], [/🌤|⛅|🌥/u, t('Partly cloudy')], [/⛈|🌩/u, t('Thunderstorms')], [/🌦|🌧|☔/u, t('Rain')], [/🌨|❄|☃/u, t('Snow')], [/🌫/u, t('Fog')], [/☁/u, t('Cloudy')]];
 const skyWords = (icon) => SKY().find(([re]) => re.test(icon ?? ''))?.[1] ?? '';
 
-// And the other way round: a symbol for the words wttr.in's JSON gives (English, from the service).
-const SKY_ICON = [[/thunder/i, '⛈'], [/snow|sleet|blizzard|ice/i, '❄'], [/rain|drizzle|shower/i, '🌧'], [/fog|mist|haze/i, '🌫'], [/partly/i, '⛅'], [/cloud|overcast/i, '☁'], [/clear|sunny|fair/i, '☀']];
-const skyIcon = (words) => SKY_ICON.find(([re]) => re.test(words ?? ''))?.[1] ?? '🌤';
-
+// 2.8: the sky as a small illustration (wttr.in's symbol or its words → a weather kind → web/viz.js),
+// by day unless wttr.in drew a moon: the picture follows the data, never the clock.
 function weather(c) {
-  const card = shell('weather', c.icon || skyIcon(c.condition), c.place || t('Weather'));
+  const card = shell('weather', 'weather', c.place || t('Weather'));
   const main = el('div', 'rc-weather-main');
-  main.append(el('span', 'rc-temp', c.temp ?? ''), el('span', 'rc-cond', c.condition || skyWords(c.icon)));
+  const kind = kindFromSky(c.icon, c.condition);
+  const art = weatherArt(kind, !/🌙|🌑|🌕/u.test(c.icon ?? ''));
+  main.append(art, el('span', 'rc-temp', c.temp ?? ''), el('span', 'rc-cond', c.condition || skyWords(c.icon)));
   card.append(main);
   const chips = el('div', 'rc-chips');
   if (c.feels) chips.append(el('span', 'rc-chip', t('Feels like {temp}', { temp: c.feels })));
@@ -61,6 +69,9 @@ function weather(c) {
       days.append(day);
     }
     card.append(days);
+    // The highs of the next days as a tiny line (only real numbers from the result).
+    const spark = sparkline(c.days.slice(0, 3).map((d) => Number.parseFloat(String(d.max ?? '').replace(/[^\d.-]/g, ''))), { w: 120, h: 22, cls: 'rc-spark' });
+    if (spark) card.append(spark);
   }
   card.append(el('p', 'rc-source', t('From wttr.in')));
   return card;
@@ -68,7 +79,7 @@ function weather(c) {
 
 function task(c) {
   const title = { added: t('To-do added'), done: t('To-do done'), reopened: t('To-do reopened'), updated: t('To-do changed'), deleted: t('To-do deleted') }[c.action] ?? t('To-do');
-  const card = shell('task', c.action === 'done' ? '✔️' : '✅', title, c.action === 'done' ? 'ok' : '');
+  const card = shell('task', c.action === 'done' ? 'check' : 'todo', title, c.action === 'done' ? 'ok' : '');
   const line = el('p', `rc-main${c.action === 'done' || c.action === 'deleted' ? ' struck' : ''}`, c.title);
   card.append(line);
   const meta = [c.due ? t('Due {when}', { when: c.due }) : '', c.project ? t('Project: {name}', { name: c.project }) : '', c.priority === 'high' ? t('High priority') : ''].filter(Boolean);
@@ -78,7 +89,7 @@ function task(c) {
 }
 
 function reminder(c) {
-  const card = shell('reminder', c.call ? '📞' : '⏰', c.action === 'cancelled' ? t('Reminder cancelled') : t('Reminder set'));
+  const card = shell('reminder', c.call ? 'phone' : 'reminder', c.action === 'cancelled' ? t('Reminder cancelled') : t('Reminder set'));
   card.append(el('p', `rc-main${c.action === 'cancelled' ? ' struck' : ''}`, c.text));
   const when = c.place ? (c.when === 'leave' ? t('When you leave {place}', { place: c.place }) : t('When you get to {place}', { place: c.place })) : c.when ?? '';
   const meta = [when, c.repeat ? REPEAT()[c.repeat] ?? c.repeat : '', c.call ? t('She will call you') : ''].filter(Boolean);
@@ -88,7 +99,7 @@ function reminder(c) {
 }
 
 function note(c) {
-  const card = shell('note', '📝', c.action === 'deleted' ? t('Note deleted') : t('Note saved'));
+  const card = shell('note', 'note', c.action === 'deleted' ? t('Note deleted') : t('Note saved'));
   card.append(el('p', `rc-main${c.action === 'deleted' ? ' struck' : ''}`, c.title));
   if (c.project) card.append(el('p', 'rc-meta', t('Project: {name}', { name: c.project })));
   if (c.action !== 'deleted') card.append(plannerLink());
@@ -96,7 +107,7 @@ function note(c) {
 }
 
 function calendar(c) {
-  const card = shell('calendar', '📅', c.action === 'added' ? t('Added to your calendar') : t('Your calendar'));
+  const card = shell('calendar', 'calendar', c.action === 'added' ? t('Added to your calendar') : t('Your calendar'));
   if (!c.events?.length) {
     card.append(el('p', 'rc-meta', t('Nothing on the calendar then.')));
     return card;
@@ -115,7 +126,7 @@ function calendar(c) {
 /** Every file she wrote or edited in one reply, as one card ("Files changed: 3"). */
 function files(list) {
   const unique = [...new Map(list.map((c) => [c.path, c])).values()];
-  const card = shell('files', '🗂', t('Files changed: {n}', { n: unique.length }));
+  const card = shell('files', 'files', t('Files changed: {n}', { n: unique.length }));
   const ul = el('ul', 'rc-list rc-files');
   for (const f of unique.slice(0, 12)) {
     const li = el('li', 'rc-file');
@@ -129,7 +140,7 @@ function files(list) {
 
 function test(c) {
   const ok = c.ok && !c.failed;
-  const card = shell('test', ok ? '🧪' : '⚠️', ok ? t('Tests passed') : t('Tests failed'), ok ? 'ok' : 'bad');
+  const card = shell('test', ok ? 'flask' : 'warn', ok ? t('Tests passed') : t('Tests failed'), ok ? 'ok' : 'bad');
   const nums = el('div', 'rc-chips');
   if (c.passed !== undefined) nums.append(el('span', 'rc-chip ok', t('Passed: {n}', { n: c.passed })));
   if (c.failed) nums.append(el('span', 'rc-chip bad', t('Failed: {n}', { n: c.failed })));
@@ -144,26 +155,26 @@ function job(c) {
   const done = c.status === 'ok';
   const failed = c.status === 'error' || (c.exitCode !== undefined && c.exitCode !== 0);
   const title = c.status === 'running' ? t('Background task running') : done ? t('Background task finished') : failed ? t('Background task failed') : t('Background task: {status}', { status: c.status });
-  const card = shell('job', '⏳', title, done ? 'ok' : failed ? 'bad' : '');
+  const card = shell('job', 'job', title, done ? 'ok' : failed ? 'bad' : '');
   card.append(el('p', 'rc-main', `#${c.id} · ${c.label}`));
   return card;
 }
 
 function home(c) {
-  const card = shell('home', '🏠', t('Smart home'));
+  const card = shell('home', 'home', t('Smart home'));
   card.append(el('p', 'rc-main', c.name || c.entity));
   if (c.state) card.append(el('p', 'rc-meta', t('Now: {state}', { state: c.state })));
   return card;
 }
 
 function photo(c) {
-  const card = shell('photo', '📷', c.caption ? t('New picture') : t('Picture sent'));
+  const card = shell('photo', 'photo', c.caption ? t('New picture') : t('Picture sent'));
   if (c.caption) card.append(el('p', 'rc-meta', c.caption));
   return card;
 }
 
 function search(c) {
-  const card = shell('search', '🔎', t('Web search: {query}', { query: c.query }));
+  const card = shell('search', 'search', t('Web search: {query}', { query: c.query }));
   const ul = el('ul', 'rc-list rc-sources');
   for (const r of c.results ?? []) {
     if (!/^https?:\/\//i.test(r.url)) continue;

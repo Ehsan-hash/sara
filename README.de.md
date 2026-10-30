@@ -14,7 +14,7 @@ Modellen deiner Wahl.
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="License: MIT"></a>
   <img src="https://img.shields.io/badge/node-%E2%89%A5%2024-339933" alt="Node 24 or newer">
   <img src="https://img.shields.io/badge/runtime%20dependencies-0-brightgreen" alt="Zero runtime dependencies">
-  <img src="https://img.shields.io/badge/tests-914%20passing-brightgreen" alt="914 tests passing">
+  <img src="https://img.shields.io/badge/tests-923%20passing-brightgreen" alt="923 tests passing">
   <a href="docs/RESULTS.md"><img src="https://img.shields.io/badge/HumanEval%20pass%401-96.3%25-informational" alt="HumanEval pass@1 96.3%"></a>
   <a href="https://github.com/farena-ai/sara/releases/latest"><img src="https://img.shields.io/github/v/release/farena-ai/sara?label=release" alt="Latest release"></a>
   <a href="https://github.com/farena-ai/sara/pkgs/container/sara"><img src="https://img.shields.io/badge/docker-amd64%20%7C%20arm64-2496ED" alt="Docker image for amd64 and arm64"></a>
@@ -28,7 +28,7 @@ Modellen deiner Wahl.
   <sub>Eine echte, ungeschnittene Sitzung mit einem lokalen Modell (qwen3.8 27B auf Ollama, eine RTX 5090) auf einem Wegwerf-Testserver: Sie plaudert mit ihrer Persönlichkeit, schreibt die App, fragt, bevor sie einen Server startet, öffnet die Vorschau und testet sie in ihrem eigenen Browser. Das letzte Bild zeigt die App mit eingetippten Zahlen.</sub>
 </p>
 
-> **Status:** 2.7, MIT-Lizenz, mit achtzehn Funktions-Releases seit 1.0 (alle unten). Die
+> **Status:** 2.8, MIT-Lizenz, mit neunzehn Funktions-Releases seit 1.0 (alle unten). Die
 > [Android-App](https://play.google.com/store/apps/details?id=com.backstagecoding.sara) ist bei Google
 > Play; die iPhone-App und die Version für den Mac App Store folgen, sobald Apple sie freigibt.
 > Lies [docs/DISCLOSURES.md](docs/DISCLOSURES.md), bevor du Sara nutzt oder weitergibst.
@@ -37,6 +37,7 @@ Modellen deiner Wahl.
 
 | Version | Was du bekommst |
 |---|---|
+| **2.8** · Feinschliff | **Eine Stufe edler:** ein langsames Polarlicht hinter mattem Glas, eine elegante Serifenschrift für Überschriften, ein leuchtender Stimmungs-Ring um ihr Porträt, gezeichnete Symbole, Wetterbilder und Fortschrittsringe sowie eine schwebende Glas-Leiste auf dem Handy (jede Bewegung aus mit *Bewegung reduzieren*). [Der Plan](docs/design/NEW_LOOK.md) |
 | **2.7** · Der neue Look, Teil 3 | **Heute als Kacheln** (Wetter, dein Tag, Planer, woran sie sich erinnert hat, Momente, Arbeit im Hintergrund, Zuhause), eine Leiste unten auf dem Handy, jeder Bildschirm im neuen Look, und in den Windows- und Mac-Apps **Benachrichtigungen mit Erlauben / Ablehnen und Erledigt / Später**, *Senden an → Sara* für Dateien und Sprache in der Schnellfrage. [Der Plan](docs/design/NEW_LOOK.md) |
 | **2.6** · Der neue Look, Teil 2 | **Ihre Gegenwart:** ein Seitenbereich (auf dem Handy ein Blatt zum Hochziehen) mit ihrer Stimmung, dem, was sie gerade tut, Freigaben, Aufträgen, dem Tag und dem, woran sie sich erinnert hat; Strg+K springt überallhin; und in den Windows- und Mac-Apps ein **Schnellfrage-Fenster per Tastenkürzel** über jeder App, dazu ihre Stimmung und Freigaben im Tray-Menü. [Der Plan](docs/design/NEW_LOOK.md) |
 | **2.5** · Der neue Look, Teil 1 | **Dunkel als Standard und ihre Arbeit sichtbar:** eine Zeile unter jeder Antwort zeigt, was sie getan hat, Ergebnisse kommen als Karten (Wetter, Aufgaben, geänderte Dateien, Testläufe, Suchen), ein leichterer Chat auf Handy und Computer, und die Windows- und Mac-Apps zeichnen die Seite bis in die Titelleiste. [Der Plan](docs/design/NEW_LOOK.md) |
@@ -206,8 +207,8 @@ wurden. Was sie heute beiträgt, ist die Arbeitsweise (sie lässt die Tests lauf
 riskanten Schritten, zeigt, was gelaufen ist), nicht ein höheres Ergebnis bei diesen Sätzen.
 Details, Ergebnisse pro Aufgabe und wie man es wiederholt: [docs/RESULTS.md](docs/RESULTS.md).
 
-Dazu `npm run check`: eine Typprüfung und 922 automatische Tests mit einem geskripteten
-Schein-Modell (ohne Netz, ohne GPU): 914 laufen unter Windows durch, die anderen 8 sind
+Dazu `npm run check`: eine Typprüfung und 931 automatische Tests mit einem geskripteten
+Schein-Modell (ohne Netz, ohne GPU): 923 laufen unter Windows durch, die anderen 8 sind
 Linux-spezifische Sandbox-Tests, die auf einem Linux-Server laufen.
 
 ## Sara im Vergleich

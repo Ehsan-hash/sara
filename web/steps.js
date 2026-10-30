@@ -5,6 +5,7 @@
 // to-do"; live while she works ("Checking the weather…"); one tap or click opens the details of
 // every step (what ran, the output, how long). Replaces the grey "$ command" boxes.
 import { locale, t } from './naming.js';
+import { icon } from './icons.js';
 
 const el = (tag, cls, text) => {
   const e = document.createElement(tag);
@@ -12,6 +13,15 @@ const el = (tag, cls, text) => {
   if (text !== undefined) e.textContent = text;
   return e;
 };
+
+/** The step's line icon (web/icons.js), decorative: the verb beside it says what she did. */
+function stepIcon(name) {
+  const span = el('span', 'step-icon');
+  span.setAttribute('aria-hidden', 'true');
+  const svg = icon(name) ?? icon('tool');
+  if (svg) span.append(svg);
+  return span;
+}
 
 // How long a step took: "0.4 s", "12 s", "2 min".
 export function fmtDuration(ms) {
@@ -33,87 +43,87 @@ export function stepWords(name, args = {}, named = '') {
   const cmd = String(a.command ?? a.url ?? '');
   const act = String(a.action ?? '');
   const pair = (now, done, icon) => [now, done, icon];
-  if (/\bwttr\.in\b/i.test(cmd) && (name === 'shell' || name === 'web_fetch')) return pair(t('Checking the weather…'), t('Checked the weather'), '🌦');
+  if (/\bwttr\.in\b/i.test(cmd) && (name === 'shell' || name === 'web_fetch')) return pair(t('Checking the weather…'), t('Checked the weather'), 'weather');
   switch (name) {
     case 'shell':
-      if (TEST_CMD.test(cmd)) return pair(t('Running the tests…'), t('Ran the tests'), '🧪');
-      if (/^\s*git\b/.test(cmd)) return pair(t('Checking the project…'), t('Checked the project'), '🌿');
-      if (/\b(npm|pnpm|yarn) (i|install|ci|add)\b|\bpip3? install\b/.test(cmd)) return pair(t('Installing packages…'), t('Installed packages'), '📦');
-      if (/\b(npm run build|make\b|tsc\b|cargo build|go build|vite build)/.test(cmd)) return pair(t('Building the project…'), t('Built the project'), '🛠');
-      return pair(t('Running a command…'), t('Ran a command'), '⌨️');
+      if (TEST_CMD.test(cmd)) return pair(t('Running the tests…'), t('Ran the tests'), 'flask');
+      if (/^\s*git\b/.test(cmd)) return pair(t('Checking the project…'), t('Checked the project'), 'branch');
+      if (/\b(npm|pnpm|yarn) (i|install|ci|add)\b|\bpip3? install\b/.test(cmd)) return pair(t('Installing packages…'), t('Installed packages'), 'package');
+      if (/\b(npm run build|make\b|tsc\b|cargo build|go build|vite build)/.test(cmd)) return pair(t('Building the project…'), t('Built the project'), 'wrench');
+      return pair(t('Running a command…'), t('Ran a command'), 'terminal');
     case 'todo':
-      if (act === 'add') return pair(t('Adding a to-do…'), t('Added a to-do'), '✅');
-      if (act === 'done') return pair(t('Ticking off a to-do…'), t('Ticked off a to-do'), '✅');
-      if (act === 'list') return pair(t('Looking at your to-dos…'), t('Looked at your to-dos'), '✅');
-      return pair(t('Updating your to-dos…'), t('Updated your to-dos'), '✅');
+      if (act === 'add') return pair(t('Adding a to-do…'), t('Added a to-do'), 'todo');
+      if (act === 'done') return pair(t('Ticking off a to-do…'), t('Ticked off a to-do'), 'todo');
+      if (act === 'list') return pair(t('Looking at your to-dos…'), t('Looked at your to-dos'), 'todo');
+      return pair(t('Updating your to-dos…'), t('Updated your to-dos'), 'todo');
     case 'remind':
-      if (act === 'set') return pair(t('Setting a reminder…'), t('Set a reminder'), '⏰');
-      if (act === 'cancel') return pair(t('Cancelling a reminder…'), t('Cancelled a reminder'), '⏰');
-      return pair(t('Checking your reminders…'), t('Checked your reminders'), '⏰');
+      if (act === 'set') return pair(t('Setting a reminder…'), t('Set a reminder'), 'reminder');
+      if (act === 'cancel') return pair(t('Cancelling a reminder…'), t('Cancelled a reminder'), 'reminder');
+      return pair(t('Checking your reminders…'), t('Checked your reminders'), 'reminder');
     case 'note':
-      if (act === 'save') return pair(t('Saving a note…'), t('Saved a note'), '📝');
-      return pair(t('Looking through your notes…'), t('Looked through your notes'), '📝');
+      if (act === 'save') return pair(t('Saving a note…'), t('Saved a note'), 'note');
+      return pair(t('Looking through your notes…'), t('Looked through your notes'), 'note');
     case 'recall':
-      return pair(t('Looking back at past chats…'), t('Looked back at past chats'), '🧠');
+      return pair(t('Looking back at past chats…'), t('Looked back at past chats'), 'recall');
     case 'web_search':
-      return pair(t('Searching the web…'), t('Searched the web'), '🔎');
+      return pair(t('Searching the web…'), t('Searched the web'), 'search');
     case 'web_fetch':
-      return pair(t('Reading a web page…'), t('Read a web page'), '🌐');
+      return pair(t('Reading a web page…'), t('Read a web page'), 'globe');
     case 'calendar_events':
-      return pair(t('Looking at your calendar…'), t('Looked at your calendar'), '📅');
+      return pair(t('Looking at your calendar…'), t('Looked at your calendar'), 'calendar');
     case 'calendar_add':
-      return pair(t('Adding to your calendar…'), t('Added to your calendar'), '📅');
+      return pair(t('Adding to your calendar…'), t('Added to your calendar'), 'calendar');
     case 'read_file':
-      return pair(t('Reading a file…'), t('Read a file'), '📄');
+      return pair(t('Reading a file…'), t('Read a file'), 'file');
     case 'write_file':
-      return pair(t('Writing a file…'), t('Wrote a file'), '✍️');
+      return pair(t('Writing a file…'), t('Wrote a file'), 'file-edit');
     case 'edit_file':
-      return pair(t('Editing a file…'), t('Edited a file'), '✍️');
+      return pair(t('Editing a file…'), t('Edited a file'), 'file-edit');
     case 'list_dir':
     case 'search':
     case 'code_map':
     case 'code_find':
     case 'code_refs':
     case 'code_deps':
-      return pair(t('Looking through the files…'), t('Looked through the files'), '🗂');
+      return pair(t('Looking through the files…'), t('Looked through the files'), 'files');
     case 'home_status':
-      return pair(t('Checking your home…'), t('Checked your home'), '🏠');
+      return pair(t('Checking your home…'), t('Checked your home'), 'home');
     case 'home_control':
-      return pair(t('Changing something at home…'), t('Changed something at home'), '🏠');
+      return pair(t('Changing something at home…'), t('Changed something at home'), 'home');
     case 'take_photo':
-      return pair(t('Making a picture…'), t('Made a picture'), '📷');
+      return pair(t('Making a picture…'), t('Made a picture'), 'photo');
     case 'share_photo':
-      return pair(t('Picking a picture…'), t('Sent a picture'), '📷');
+      return pair(t('Picking a picture…'), t('Sent a picture'), 'photo');
     case 'moments':
-      return pair(t('Looking through your moments…'), t('Looked through your moments'), '🖼');
+      return pair(t('Looking through your moments…'), t('Looked through your moments'), 'moments');
     case 'start_job':
-      return pair(t('Starting a background task…'), t('Started a background task'), '⏳');
+      return pair(t('Starting a background task…'), t('Started a background task'), 'job');
     case 'job_status':
-      return pair(t('Checking a background task…'), t('Checked a background task'), '⏳');
+      return pair(t('Checking a background task…'), t('Checked a background task'), 'job');
     case 'gmail_search':
     case 'gmail_read':
     case 'gmail_thread':
     case 'gmail_needs_answer':
-      return pair(t('Checking your email…'), t('Checked your email'), '✉️');
+      return pair(t('Checking your email…'), t('Checked your email'), 'mail');
     case 'gmail_draft':
-      return pair(t('Writing an email draft…'), t('Wrote an email draft'), '✉️');
+      return pair(t('Writing an email draft…'), t('Wrote an email draft'), 'mail');
     case 'gmail_send':
-      return pair(t('Sending an email…'), t('Sent an email'), '✉️');
+      return pair(t('Sending an email…'), t('Sent an email'), 'mail');
     case 'git':
-      return pair(t('Checking the project…'), t('Checked the project'), '🌿');
+      return pair(t('Checking the project…'), t('Checked the project'), 'branch');
     case 'git_commit':
-      return pair(t('Saving a checkpoint…'), t('Saved a checkpoint'), '🌿');
+      return pair(t('Saving a checkpoint…'), t('Saved a checkpoint'), 'branch');
     case 'git_push':
-      return pair(t('Sending work to GitHub…'), t('Sent work to GitHub'), '🌿');
+      return pair(t('Sending work to GitHub…'), t('Sent work to GitHub'), 'branch');
     case 'library':
-      return pair(t('Reading your documents…'), t('Read your documents'), '📚');
+      return pair(t('Reading your documents…'), t('Read your documents'), 'book');
     case 'settings_guide':
-      return pair(t('Looking up how the app works…'), t('Looked up how the app works'), '❓');
+      return pair(t('Looking up how the app works…'), t('Looked up how the app works'), 'help');
     case 'preview_start':
-      return pair(t('Starting a preview…'), t('Started a preview'), '🖥');
+      return pair(t('Starting a preview…'), t('Started a preview'), 'monitor');
     default:
-      if (/^browser_/.test(name)) return pair(t('Using her test browser…'), t('Used her test browser'), '🧭');
-      return [t('Using {tool}…', { tool: named || name }), t('Used {tool}', { tool: named || name }), '⚙️'];
+      if (/^browser_/.test(name)) return pair(t('Using her test browser…'), t('Used her test browser'), 'compass');
+      return [t('Using {tool}…', { tool: named || name }), t('Used {tool}', { tool: named || name }), 'tool'];
   }
 }
 
@@ -141,7 +151,7 @@ function rowFor(box, step) {
   if (step.id) li.dataset.call = step.id;
   const d = el('details', 'step-detail');
   const s = el('summary', 'step-head');
-  s.append(el('span', 'step-icon', step.icon), el('span', 'step-verb'), el('span', 'step-ms'));
+  s.append(stepIcon(step.icon), el('span', 'step-verb'), el('span', 'step-ms'));
   const body = el('div', 'step-body');
   d.append(s, body);
   li.append(d);
@@ -251,10 +261,10 @@ export function finishStep(box, { id, status, output, ms, snapshotId }) {
 export function memoryStep(box, count) {
   if (!count || box._steps.some((s) => s.kind === 'memory')) return;
   const done = count === 1 ? t('Remembered 1 thing') : t('Remembered {n} things', { n: count });
-  const step = { kind: 'memory', name: 'memory', now: done, done, icon: '🧠', status: 'ok' };
+  const step = { kind: 'memory', name: 'memory', now: done, done, icon: 'memory', status: 'ok' };
   const li = el('li', 'step ok memory');
   const row = el('div', 'step-head');
-  row.append(el('span', 'step-icon', '🧠'), el('span', 'step-verb', done));
+  row.append(stepIcon('memory'), el('span', 'step-verb', done));
   const link = el('a', 'step-link small', t('See what she remembers'));
   link.href = '/#view=memory';
   row.append(link);

@@ -7,6 +7,7 @@
 // recently first, then the usual places and actions. Keys: ↑ ↓ (Home/End), Enter, Escape. Built as a
 // combobox + listbox for screen readers (aria-activedescendant follows the highlighted row).
 import { t } from './naming.js';
+import { icon as lineIcon } from './icons.js';
 
 const $ = (s) => document.querySelector(s);
 const RECENT = 'sara.cmdRecent';
@@ -149,7 +150,10 @@ function render() {
         const icon = document.createElement('span');
         icon.className = 'cmd-icon';
         icon.setAttribute('aria-hidden', 'true');
-        icon.textContent = it.icon ?? '•';
+        // 2.8: an icon name from web/icons.js draws a line icon; anything else (a companion's emoji) stays text.
+        const svg = lineIcon(it.icon ?? 'dot');
+        if (svg) icon.append(svg);
+        else icon.textContent = it.icon ?? '•';
         const words = document.createElement('span');
         words.className = 'cmd-words';
         const label = document.createElement('span');
@@ -225,7 +229,7 @@ async function findInside(q) {
   ui.found = hits
     .filter((h) => h.messageId)
     .filter((h) => (seen.has(h.conversationId) ? false : seen.add(h.conversationId)))
-    .map((h) => ({ key: `conv:${h.conversationId}`, group: 'convs', icon: '💬', label: h.title, sub: String(h.snippet ?? '').replace(/[*_`#>~]+/g, ''), raw: true, run: () => ui.ctx.jumpTo(h.conversationId, h.messageId) }));
+    .map((h) => ({ key: `conv:${h.conversationId}`, group: 'convs', icon: 'chat', label: h.title, sub: String(h.snippet ?? '').replace(/[*_`#>~]+/g, ''), raw: true, run: () => ui.ctx.jumpTo(h.conversationId, h.messageId) }));
   if (dialog()?.open && ui.q === q) render();
 }
 
