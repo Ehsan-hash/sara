@@ -5,6 +5,8 @@ Format: newest first. Semantic versions since 1.0.0 (before that `0.<phase>.<pat
 
 ## Unreleased
 
+- Static documentation pages now include previous and next links in sidebar order.
+
 ## 2.20.0 (2026-10-30): computer use, step 1: her own browser on your computer (Phase 87)
 
 - **Let Sara use this computer** (the Windows and Mac apps, Settings → Computer use; off by default,
