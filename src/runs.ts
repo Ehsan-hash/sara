@@ -512,7 +512,11 @@ export class RunStore {
   }
 
   /** Runs that must be kept whatever the age (parents of a branch; M8/M9 add eval runs). */
-  #pinned = 'id NOT IN (SELECT parent_run_id FROM runs WHERE parent_run_id IS NOT NULL)';
+  /** Phase 84 (M9): another table's run ids to keep as well (the eval loop's runs while their eval exists). */
+  keepAlso?: string;
+  get #pinned(): string {
+    return `id NOT IN (SELECT parent_run_id FROM runs WHERE parent_run_id IS NOT NULL)${this.keepAlso ? ` AND id NOT IN (${this.keepAlso})` : ''}`;
+  }
 
   /**
    * Retention: runs older than the setting go (never a branch parent), then each conversation keeps

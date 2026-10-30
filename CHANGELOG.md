@@ -5,6 +5,26 @@ Format: newest first. Semantic versions since 1.0.0 (before that `0.<phase>.<pat
 
 ## Unreleased
 
+## 2.17.0 (2026-10-30): evals on your own work (harness track, Phase 84)
+
+- **Evals** (sidebar → More → Evals): pick your last 5–50 real turns (coding by default), compare your
+  current settings with up to 3 variants (model, memory fading, sandbox mode, budget preset). Each task
+  is replayed from the start for each variant through the time-travel runner, in sandbox copies: your
+  workspaces and conversations are never touched, and anything that would ask for approval is
+  answered No.
+- **An estimate and a hard ceiling first** (tokens, and dollars for paid models); you confirm before
+  it starts. Up to 2 replays at once; Stop keeps what finished.
+- **Transparent scoring:** your project's tests in a sandbox copy (35%), finishing, how you reacted to
+  the original (thanks / corrections), an optional judge model asked twice with positions swapped that
+  must quote the answer it prefers, findings on the changed code, tokens, steps, time and cost. Missing
+  parts are left out, never guessed.
+- **A winner only with evidence:** an exact sign test with a correction for several variants. The card
+  says "+18% on 20 of your coding tasks (wins 14, ties 4, losses 2; p=0.01)" with every pair's diff,
+  or *no clear winner*. **Use this setting** applies it (recorded in a settings history) or *Keep mine*.
+- *Re-check monthly* exists but is off; it would run only when idle, within its own budget, and never
+  change a setting by itself.
+- Tests: the plan-check speed test has a bound that holds on a loaded shared server.
+
 ## 2.16.0 (2026-10-30): time-travel, branch from any step (harness track, Phase 83)
 
 - **Branch from here** on any step of a recorded turn (Run view): edit her message, a tool result, the

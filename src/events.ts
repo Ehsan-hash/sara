@@ -33,6 +33,8 @@ export type HubEvent = (
   | { type: 'story'; what: 'lookback'; id?: number; error?: string }
   /** Phase 81: findings changed (a security pass ended, a fix branch moved on, a finding was dismissed). */
   | { type: 'findings'; conversationId: string | null; workspace: string | null; summary?: unknown; findingId?: number }
+  /** Phase 84: an eval moved on (a run finished, the judge, the result). */
+  | { type: 'eval'; id: number; status: string; progress?: unknown }
 ) & {
   /** Phase 31: which companion it came from (set by her CompanionHub). */
   companion?: string;

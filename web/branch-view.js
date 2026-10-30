@@ -327,7 +327,8 @@ export async function openDiffSheet(aId, bId, ctx, opts = {}) {
     return;
   }
   const named = ctx.named ?? (() => '');
-  const label = (x) => (x.label === 'original' ? t('Original') : t('Branch'));
+  // Phase 84: the eval loop names its two runs (your settings now / the variant).
+  const label = (x) => (x === d.a && opts.labels?.a ? opts.labels.a : x === d.b && opts.labels?.b ? opts.labels.b : x.label === 'original' ? t('Original') : t('Branch'));
   const parts = [];
   const sum = el('div', 'br-summary');
   sum.append(glyph('branch', 'run-icon big'), el('p', 'br-summary-line', summaryWords(d.summary)));

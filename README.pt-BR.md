@@ -14,7 +14,7 @@ em um só app para a web, Windows, Mac e celular.
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="License: MIT"></a>
   <img src="https://img.shields.io/badge/node-%E2%89%A5%2024-339933" alt="Node 24 or newer">
   <img src="https://img.shields.io/badge/runtime%20dependencies-0-brightgreen" alt="Zero runtime dependencies">
-  <img src="https://img.shields.io/badge/tests-1068%20passing-brightgreen" alt="1068 tests passing">
+  <img src="https://img.shields.io/badge/tests-1081%20passing-brightgreen" alt="1081 tests passing">
   <a href="docs/RESULTS.md"><img src="https://img.shields.io/badge/HumanEval%20pass%401-96.3%25-informational" alt="HumanEval pass@1 96.3%"></a>
   <a href="https://github.com/farena-ai/sara/releases/latest"><img src="https://img.shields.io/github/v/release/farena-ai/sara?label=release" alt="Latest release"></a>
   <a href="https://github.com/farena-ai/sara/pkgs/container/sara"><img src="https://img.shields.io/badge/docker-amd64%20%7C%20arm64-2496ED" alt="Docker image for amd64 and arm64"></a>
@@ -28,7 +28,7 @@ em um só app para a web, Windows, Mac e celular.
   <sub>Uma sessão real com um modelo local (qwen3.8 27B no Ollama, uma RTX 5090) em um servidor de teste descartável, no visual Noite: ela anima quem está conversando, escreve um app pequeno e o teste dele enquanto o modelo transmite, pede permissão antes de rodar um comando, pega um bug de verdade com um teste que falha e corrige até os 7 testes passarem. Quadros escolhidos da gravação; nada neles foi editado.</sub>
 </p>
 
-> **Status:** 2.16, licença MIT, com vinte e sete versões com novos recursos desde a 1.0 (todas abaixo). Da
+> **Status:** 2.17, licença MIT, com vinte e oito versões com novos recursos desde a 1.0 (todas abaixo). Da
 > 2.5 à 2.8 o app inteiro ganhou um visual novo. O
 > [app Android](https://play.google.com/store/apps/details?id=com.backstagecoding.sara) está no Google
 > Play; o app de iPhone e a versão da Mac App Store chegam assim que a Apple aprovar. Leia
@@ -69,6 +69,7 @@ para quem mora com você · [chamadas de vídeo](docs/VIDEO_CALLS.md) com o retr
 
 | Versão | O que você ganha |
 |---|---|
+| **2.17** · Avaliações no seu próprio trabalho | **Qual configuração é mesmo melhor para você?** Escolha até 3 variantes (modelo, desbotamento da memória, modo da sandbox, orçamento) e ela repete suas últimas tarefas reais com cada uma, em cópias isoladas. Cada execução é pontuada por testes aprovados, sua reação, achados, tokens, tempo e custo, mais um juiz opcional que precisa citar. Um vencedor só é apontado quando um teste dos sinais confirma ("+18% em 20 das suas tarefas de código, p=0,01"), com a comparação de cada par como prova. Senão: *nenhum vencedor claro*. [Como funciona](docs/design/HARNESS_TRACK.md) |
 | **2.16** · Viagem no tempo | **Crie um ramo de qualquer tarefa passada a partir de qualquer passo:** mude naquele passo a mensagem dela, um resultado de ferramenta, as notas lembradas ou o modelo, e rode de novo. Os passos anteriores vêm do registro (nada é executado de novo). Ramos de código trabalham numa cópia no commit registrado, nunca nos seus arquivos. Uma comparação lado a lado mostra passos, tokens, custo, mudanças nos arquivos e a resposta. *Repetir sem mudanças* é o controle. Você fica com a resposta ou aplica os arquivos só se quiser. [Como funciona](docs/design/HARNESS_TRACK.md) |
 | **2.15** · Modelo de ameaças | **Ela mapeia como o mundo de fora chega ao seu código:** depois de um passo de código ela acha os pontos de entrada (rotas, uploads, tratadores de mensagens, linha de comando em Express, Koa, Fastify, Flask, FastAPI, Django, Go) e segue os valores da requisição entre arquivos até as linhas arriscadas (shell, SQL, caminhos de arquivo, URLs de saída, redirecionamentos, HTML, eval). Uma ameaça só é relatada com as duas linhas citadas e o caminho nomeado. Uma aba **Modelo de ameaças** por projeto e **Corrigir estas**: uma segunda passada que só as corrige, num branch local, rodando seus testes de novo. [Como funciona](docs/design/HARNESS_TRACK.md) |
 | **2.14** · Verificação de segurança | **Depois de um passo de código ela confere o próprio trabalho:** 11 verificações (segredos, SQL montado com texto, caminhos que escapam, TLS desligado, eval, desserialização insegura, CORS, falta de autenticação…) e um modelo revisor, em paralelo. Cada achado cita a linha real ou é descartado: nada de teatro. **Alertas ao vivo** opcionais (OSV.dev) conferem os pacotes que ela instala e param num cartão uma versão com falha conhecida. **Corrigir** cria um branch local, corrige só aquilo, roda seus testes de novo na sandbox e mostra o diff. Nunca faz push. [Como funciona](docs/design/HARNESS_TRACK.md) |
@@ -284,8 +285,8 @@ verificava. O que ela acrescenta hoje é o jeito de trabalhar (roda os testes, p
 de passos arriscados, mostra o que foi executado), não uma nota maior nesses conjuntos. Detalhes,
 resultados por tarefa e como rodar de novo: [docs/RESULTS.md](docs/RESULTS.md).
 
-E também `npm run check`: uma checagem de tipos e 1080 testes automáticos com um modelo falso
-roteirizado (sem rede, sem GPU): 1068 passam no Windows e os outros 8 são testes de isolamento só
+E também `npm run check`: uma checagem de tipos e 1093 testes automáticos com um modelo falso
+roteirizado (sem rede, sem GPU): 1081 passam no Windows e os outros 8 são testes de isolamento só
 para Linux, executados em um servidor Linux.
 
 ## Como a Sara se compara

@@ -790,6 +790,90 @@ branch's `run_messages` are what a nightly comparison would read.
   linked; two equal → cheaper wins and the report says why; a rubric-only difference is labelled
   "tie-breaker"; the existing `bench/tasks` verify mode still passes (shared reader).
 
+**As built (Phase 84, 2026-10-30):** `src/evals.ts` (task picking, the runner, scoring, apply, the
+monthly check), `src/routes/evals.ts`, `web/evals-view.js` (the Evals window, sidebar → More),
+`test/phase84.test.ts`. The owner's brief for this phase replaced the spec-file plan above: the
+tasks are **the owner's own recorded turns**, not `.sara/evals/*.json` specs.
+
+- **Tasks:** the last N (5/10/20/30/50, default 20, max 50) turns of `runs` that are finished
+  (`ok`/`budget`), not branches, rebuildable at step 0 (`rebuildStep`), not a partner's chat, of the
+  chosen kind (coding by default; everyday; both), private only when every model of the eval is on
+  this computer, and gradable: the project's tests (`detectTests`), the owner's next message (a
+  clear correction or thanks, quoted), *Use this answer* on a branch, a report, or the judge.
+  Off-the-record turns have no run, so they can't be picked. The list is frozen in `evals.tasks`
+  (with the original answer and the reaction); *Run again on the same tasks* (`{from}`) reuses it.
+- **Variants:** control = the settings now (the model the conversation would use now,
+  `resolveChain(…, 'turn')`); up to three variants from pick-lists: memory fading (never / slow /
+  normal / custom half-life 30–730 days; applied as an `edits.memory` re-pick of the step-0 notes
+  with `selectMemories` under that policy), model (any configured, local ones marked), sandbox tries
+  (risky / every / off: a per-variant `SandboxGate`), budget preset (tight 50k/10 steps, roomy
+  500k/80 steps).
+- **Runner:** each (task, variant) is `replayRun(app, runId, { fromStep: 0, model, budget, edits,
+  sandbox: { keep: true }, signal, hooks, onEvent })` on a proxied app whose `approvals` answer every
+  request No (`DenyAll`, counted per run): nobody is watching, so nothing that needs the owner's OK
+  runs. Interleaved by task (control first), 1 or 2 at once (replay's own cap is 2; a slot taken by
+  the owner's own branch is waited for). Estimate up front (each task's original tokens per variant
+  + the judge; $ from the price table for paid models; minutes); the hard ceiling (default 1.5× the
+  estimate, a pick-list) is enforced twice: a run starts only with room left (its budget is capped to
+  that room) and a `beforeModelCall` hook stops any run once the live total (finished runs + steps
+  of running ones) reaches it (status `ceiling`). After each run: the project's tests in an M5
+  sandbox copy of the branch copy (no network), M6 `checkFile` + M7 `analyze` hits on the changed
+  files, then the copy is deleted; the run is tagged `branch.eval`. The real workspace and
+  conversation are never written (replay's scratch store + copy), checked by hashes in the tests and
+  live. One eval at a time; Stop aborts the replays and scores the finished pairs.
+- **Scoring (deterministic first):** per pair, parts 0–1: tests (pass share, or exit code) 35 %,
+  finished 10 % (budget stop = ½), the owner's reaction 10 % (word overlap with the accepted
+  original, or distance from a corrected one), judge 15 %, findings 10 % (1/(1+n)), tokens 6 %,
+  steps 5 %, time 4 %, cost 5 % (each "lower is better" part = min(a, b)/x). Parts a task has no data
+  for are left out and the rest scaled. Win/loss when the scores differ by ≥ 0.01, else tie. Per
+  variant: mean, % vs control, wins/ties/losses, exact two-sided sign test; significant only with
+  p < 0.05 / number of variants. Headline: "+18% on 20 of your coding tasks (wins 14, ties 4,
+  losses 2; p=0.004)", or "Your settings now win…" when every variant is significantly worse, else
+  "No clear winner on N tasks (closest: …)".
+- **Judge (optional):** the Reviewing job (falls back to Coding; private conversations local only)
+  compares the two answers twice with the positions swapped and must quote the answer it picks
+  verbatim (≥ 3 words, whitespace-normalised); a vote without a real quote is dropped, and two
+  votes that disagree (position bias) are a tie. Its tokens count toward the ceiling.
+- **Apply:** *Use this setting* writes the variant's fields (`memory.fade`/`decay.halfLifeDays`,
+  `routes.coding` or `routes.chat`, `sandboxGate.mode`, `turnBudgets.coding|chat`) and a row in the
+  new `settings_history` table (before/after per key, source `eval`, the eval id); *Keep mine* writes
+  a row with no change. A variant that didn't clearly win asks "Use it anyway?".
+- **Schedule:** *Re-check monthly* (`settings.evalSchedule`, owner-only, **off by default**;
+  switching it on needs a confirm). When on, an hourly tick re-runs the newest finished eval on fresh
+  tasks once a month, only after 20 idle minutes, inside its own token budget (50k–500k). It never
+  applies a setting. The owner's explicit yes is required before it is ever switched on for him.
+- **Routes:** `GET/POST /api/evals`, `GET/DELETE /api/evals/:id`, `POST /api/evals/:id/start|stop|apply`,
+  `GET/PUT /api/evals/schedule`; live progress as the `eval` event. Owner-only (`evals` isn't a member
+  family: 403 `ownerOnly`; listed in `test/household-isolation.test.ts`), refused on the demo.
+- **Measured:** see [RESULTS.md](../RESULTS.md#eval-loop-phase-84): live, `gemma4:12b` vs
+  `ornith:9b` on six real coding turns: 4 wins, 2 losses, p = 0.69, "No clear winner"; 503k of a 1M
+  ceiling.
+- **Deviations:**
+  1. Tasks come from the owner's history (the brief), not from written specs with hidden tests;
+     the `bench/` task reader is not shared, and a rubric is replaced by the quoted judge, which is a
+     weighted part (15 %), not only a tie-breaker.
+  2. Tables: `evals` + `eval_runs` + `settings_history` (no `eval_specs`).
+  3. The memory-policy variant re-picks notes by words only (no meaning matches: no embedding call
+     during an eval) and edits the recorded notes block; when the reply had memory off it replays
+     with the recorded notes.
+  4. "Threat pass off/on" is not a variant: replays run without the security and threat passes
+     (M8 leaves them out), so findings are counted the same way for every variant instead.
+  5. Every approval during an eval is answered No, so commands that ask first (and the copy-only
+     sandbox's "ask before trying" on Windows) never run inside a variant; the project's tests are
+     run by the eval itself afterwards.
+  6. The judge sees the request and the two answers, not the code: it can prefer an answer whose
+     edit failed the tests (seen live), which is why tests weigh most.
+  7. The settings history is a new table shown on the Evals page; `docs/DECISIONS.md` is not
+     written by the app.
+  8. The M8 diff sheet is reused with its own labels ("Your settings now" / "Variant n"); its title
+     still says "Original and branch".
+- **Hooks for M10/M11:** `eval_runs` (per task and variant: run id, tests, findings, denied
+  approvals) and the frozen tasks are a labelled set of the owner's real turns M10's triggers can be
+  measured on (does a trigger change the tests outcome?); `Evals.create({variants})` accepts new
+  variant fields, so M10 "triggers on/off" and M11 "red-team pass before shipping" plug in as one
+  more pick-list; `countFindings` (M6 + M7 checks on changed files) is where an M11 probe count would
+  join the score; `DenyAll` + `replayRun` is the headless way to run any variant without touching the real project.
+
 ### M10 · Phase 85 · 2.18.0: active recall triggers
 
 - **Ships:** when a new task looks like an old one (the same files, the same tools, the same error

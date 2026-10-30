@@ -113,6 +113,8 @@ export interface Settings {
    */
   contradict?: Partial<import('./contradict.ts').ContradictSettings>;
   /** Phase 78: how long run snapshots are kept (days; 0 = until deleted) and their size cap (MB). */
+  /** Phase 84: the eval loop's "Re-check monthly" (off by default; owner-only). */
+  evalSchedule?: Partial<import('./evals.ts').EvalSchedule>;
   runs?: Partial<import('./runs.ts').RunSettings>;
   /**
    * Phase 79: per-reply budgets (Settings → Abilities → Budgets): coding chats and everyday chats

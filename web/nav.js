@@ -6,11 +6,11 @@ import { t } from './naming.js';
 import { icon } from './icons.js';
 
 /** Every place, in the order they are listed. */
-export const DESTS = ['today', 'planner', 'memory', 'library', 'scrapbook', 'moments', 'story', 'team', 'findings'];
+export const DESTS = ['today', 'planner', 'memory', 'library', 'scrapbook', 'moments', 'story', 'team', 'findings', 'evals'];
 export const DEFAULT_PINS = ['today', 'planner', 'library', 'moments'];
 const KEY = 'sara.navPins';
 /** The window each place opens (to show which one is open). */
-const DIALOG = { today: 'today', planner: 'planner', memory: 'memory', library: 'library', scrapbook: 'scrapbook', moments: 'moments', story: 'story', team: 'team', findings: 'findings' };
+const DIALOG = { today: 'today', planner: 'planner', memory: 'memory', library: 'library', scrapbook: 'scrapbook', moments: 'moments', story: 'story', team: 'team', findings: 'findings', evals: 'evals' };
 
 const $ = (s) => document.querySelector(s);
 const PIN_PATH = 'M9 3h6l-1 6 4 4H6l4-4-1-6zM12 13v8';

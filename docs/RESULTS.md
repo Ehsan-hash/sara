@@ -620,6 +620,39 @@ line.
   turn's edit. The conversation gained a message only on *Use this answer*, labelled "Re-run from
   step 3".
 
+## Eval loop (Phase 84)
+
+The eval loop (`src/evals.ts`) replays real turns from the owner's own run history with the current
+settings (the control) and with each variant, scores every pair in the open and names a winner only
+when an exact two-sided sign test says so (p < 0.05, divided by the number of variants).
+
+- Tests (`test/phase84.test.ts`, fake provider): a synthetic 20-task set with 14 wins, 4 ties and
+  2 losses is detected (p = 0.004, headline "+N% on 20 of your coding tasks (wins 14, ties 4,
+  losses 2; p=0.004)"); 3 wins / 2 losses gives "No clear winner" even with a higher mean; with three
+  variants 6–0 (p = 0.031) is no longer enough (α = 0.017). A 6-task end-to-end run where the variant
+  writes the wrong value fails the project's tests in every sandbox copy and the control wins 6–0.
+- Live (2026-10-30, Windows, throwaway server, private local mode, local models through Ollama):
+  six one-bug JavaScript projects (git, `node --test`), one coding turn each by `gemma4:12b` (all six
+  fixed, 5.5–15 s each). Eval: control (`gemma4:12b`) vs variant `ornith:9b`, 12 replays two at a
+  time, judge = the Reviewing job (`gemma4:12b`). Estimate 546k tokens, ceiling 1M, spent 503k, about
+  5 minutes.
+
+  | Task | Control: tests · tokens · steps | `ornith:9b`: tests · tokens · steps | Judge (both orders) | Pair |
+  |---|---|---|---|---|
+  | `last()` | pass · 32.8k · 3 | pass · 58.2k · 5 | no preference | loss |
+  | `isEven()` | pass · 32.6k · 3 | pass · 36.2k · 3 | variant | win |
+  | `sum()` | pass · 54.5k · 5 | pass · 46.0k · 4 | no preference (one vote's quote wasn't in the answer: dropped) | win |
+  | `capitalize()` | pass · 53.5k · 5 | pass · 33.9k · 3 | variant | win |
+  | `clamp()` | pass · 32.1k · 3 | **fail** · 22.4k · 2 | variant | loss |
+  | `add()` | pass · 52.2k · 5 | pass · 43.9k · 4 | variant | win |
+
+  Result: mean score 89 % vs 82 % (+8 %), wins 4, ties 0, losses 2, **p = 0.69: "No clear winner"**.
+  The judge preferred the smaller model's answer on `clamp()` although its edit failed the tests
+  (the judge reads the answers, not the code): that is why the tests weigh most and the judge is
+  one part of the score. One `ornith:9b` replay tried to start a background job (`npm test`), which asks
+  first, and got the eval's automatic No. The six real workspaces (198 files, sha256 before/after) and the six
+  conversations' message counts were unchanged; all branch copies were deleted.
+
 ## Code map
 
 `scripts/eval-codemap.ts` copies Sara's own code into a workspace and asks 8 "where is…?"

@@ -172,6 +172,7 @@
           <div class="side-dest" data-dest="story"><button class="side-go" id="open-story" type="button" title="Your story: your time together, in order (Alt+Y)"><i class="ic" data-icon="story"></i><span>Your story</span></button></div>
           <div class="side-dest" data-dest="team" data-owner-only><button class="side-go" id="open-team" type="button" data-owner-only title="Team: helpers she leads on bigger jobs"><i class="ic" data-icon="team"></i><span>Team</span><i id="team-dot" class="side-dot" hidden></i></button></div>
           <div class="side-dest" data-dest="findings" data-owner-only><button class="side-go" id="open-findings" type="button" data-owner-only title="Findings: what her security pass found in your code, and fixes on their own branch"><i class="ic" data-icon="shield"></i><span>Findings</span></button></div>
+          <div class="side-dest" data-dest="evals" data-owner-only><button class="side-go" id="open-evals" type="button" data-owner-only title="Evals: try other settings on your own past tasks and see which does better"><i class="ic" data-icon="flask"></i><span>Evals</span></button></div>
           </div>
           <p id="side-more-empty" class="muted small side-more-note" hidden>Everything is pinned to your sidebar.</p>
           <p class="muted small side-more-note">Use the pin to keep a place in your sidebar. Pins are saved on this device.</p>
@@ -969,6 +970,47 @@
       <p id="fnd-status-line" class="muted small" role="status"></p>
       <div id="fnd-list" class="fnd-list"></div>
       <div id="fnd-threats" class="fnd-threats" role="tabpanel" aria-label="Threat model" hidden></div>
+    </form>
+  </dialog>
+
+  <!-- Phase 84: evals (other settings tried on your own past tasks, the winner with evidence) -->
+  <dialog id="evals" aria-label="Evals">
+    <form method="dialog" class="settings-body evals">
+      <h2>Evals</h2>
+      <p class="muted small">Try other settings on your own past tasks: each task is replayed with your settings now and with each variant, in throwaway copies, then scored in the open. A winner is named only when the evidence says so.</p>
+      <section class="ev-new" data-nodirty>
+        <h3>Try other settings <button type="button" class="tip" data-tip="Pick which of your past tasks to use and up to three variants. Nothing runs until you have seen the estimate and the ceiling and said yes.">?</button></h3>
+        <div class="ev-picks">
+          <label class="ev-field"><span>Tasks from</span> <button type="button" class="tip" data-tip="Coding conversations are graded by your project's tests when it has them. Off-the-record chats are never used; private ones only when every model is on this computer.">?</button> <select id="ev-kind"><option value="coding">Coding conversations</option><option value="everyday">Everyday chats</option><option value="both">Coding and everyday</option></select></label>
+          <label class="ev-field"><span>How many</span> <button type="button" class="tip" data-tip="The newest finished replies that can be graded (tests, what you said next, or the judge). More tasks give a clearer answer and cost more.">?</button> <select id="ev-count"></select></label>
+          <label class="ev-field"><span>Second opinion</span> <button type="button" class="tip" data-tip="Your Reviewing model compares each pair of answers twice, with their places swapped, and must quote the answer it picks. A vote without a real quote, or two votes that disagree, count as no preference.">?</button> <select id="ev-judge"><option value="off">Off</option><option value="on">The Reviewing model</option></select></label>
+          <label class="ev-field"><span>At once</span> <button type="button" class="tip" data-tip="How many replays run at the same time. Two is faster; one is gentler on a small computer or a shared GPU.">?</button> <select id="ev-conc"><option value="2">2</option><option value="1">1</option></select></label>
+        </div>
+        <p id="ev-judge-note" class="muted small" hidden>No Reviewing or Coding model is set, so the second opinion has nothing to ask.</p>
+        <div id="ev-variants" class="ev-variants"></div>
+        <div class="add-row ev-actions">
+          <button id="ev-add" type="button" class="ghost">Add a variant</button>
+          <button id="ev-estimate" type="button">Pick the tasks and estimate</button>
+        </div>
+        <p id="ev-status" class="muted small" role="status"></p>
+        <div id="ev-draft" class="ev-draft" hidden></div>
+      </section>
+      <section class="ev-past" data-nodirty>
+        <h3>Results</h3>
+        <div id="ev-list" class="ev-list"></div>
+        <div id="ev-detail" class="ev-detail" hidden></div>
+      </section>
+      <section class="ev-schedule" data-nodirty>
+        <h3>Re-check monthly <button type="button" class="tip" data-tip="Off unless you switch it on. When on: once a month, only when nobody has used Sara for 20 minutes, your last eval runs again on fresh tasks, inside this budget. It never changes a setting by itself.">?</button></h3>
+        <div class="add-row">
+          <label class="ev-field"><span>Re-check monthly</span> <select id="ev-monthly"><option value="off">Off</option><option value="on">On</option></select></label>
+          <label class="ev-field"><span>Budget for each check</span> <button type="button" class="tip" data-tip="The hard ceiling of each monthly check, in tokens. It stops there even in the middle of a task.">?</button> <select id="ev-mbudget"></select></label>
+        </div>
+      </section>
+      <section class="ev-hist" data-nodirty>
+        <h3>Settings changed by evals</h3>
+        <div id="ev-history"></div>
+      </section>
     </form>
   </dialog>
 

@@ -44,6 +44,7 @@
   <a href="#usage">Usage and costs</a>
   <a href="#runs">Show the run</a>
   <a href="#time-travel">Branch from a step</a>
+  <a href="#evals">Evals: which settings work best for you</a>
   <a href="#sandbox">Commands tried in a sandbox first</a>
   <a href="#security">Security pass and fix branches</a>
   <a href="#threat-model">Threat model and the fix pass</a>
@@ -516,6 +517,15 @@
   <li>In coding conversations she works in a copy of your project at the commit of that step, with the uncommitted files that are still as they were (what can't be restored is listed). Your project changes only if you choose <strong>Apply its files to my project</strong>, and files you changed since are left alone.</li>
   <li>The branch is a run of its own; your conversation stays as it was. Then you see both side by side: steps, tokens and cost, tool calls, files, the answers word by word. <strong>Use this answer</strong> adds the branch's answer to the conversation, marked as a re-run.</li>
   <li>Models don't answer the same way twice, so a difference can be chance. <strong>Replay unchanged</strong> runs the step again with nothing changed, to show how much a reply varies. Off-the-record replies are never kept, so they can't be branched; branching is for the owner only.</li>
+</ul>
+
+<h2 id="evals">Evals: which settings work best for you</h2>
+<ul>
+  <li>Open <strong>Evals</strong> in the sidebar (under More). Pick where the tasks come from (your coding conversations by default), how many (the newest, up to 50) and up to three <strong>variants</strong>: another way of fading old memories, another model (also one on this computer), another sandbox setting or another budget.</li>
+  <li>Only your own finished replies are used, and only ones that can be graded: by your project's tests, by what you said next (“thanks, it works” or a correction), or by the optional second opinion. Off-the-record chats are never used; private ones only when every model is on this computer. The list is frozen, so <strong>Run again on the same tasks</strong> compares the same ones later.</li>
+  <li>Before anything runs you see the estimate (tokens, dollars for paid models, minutes) and a <strong>hard ceiling</strong>. Each task is replayed from its first step with your settings now and with each variant, two at a time, in throwaway copies: your project and your conversations are never changed. Anything that would ask you first is answered No.</li>
+  <li>The score is made in the open: the project's tests (run in a sandbox copy after each variant), whether the reply finished, your reaction to the original, findings in the changed files, tokens, steps, time and cost, and the optional judge (your Reviewing model, asked twice with the answers swapped, and it must quote). The weights are shown on the result.</li>
+  <li>A winner is named only when the wins and losses are uneven enough that chance is unlikely (a sign test); otherwise it says <strong>No clear winner</strong>. Each task links to the two runs side by side. <strong>Use this setting</strong> changes your settings and notes it in the settings history; <strong>Keep mine</strong> leaves them. <strong>Re-check monthly</strong> is off unless you switch it on.</li>
 </ul>
 
 <h2 id="budgets">Budgets for her replies</h2>

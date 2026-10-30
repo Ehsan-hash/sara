@@ -42,6 +42,7 @@ import { as400, clientIp, cookies, fromSaraApp, HttpError, isSameOrigin, MAX_BOD
 import { NEXT, type ActiveTurn, type RouteCtx } from './routes/context.ts';
 import { createLibraryRoutes } from './routes/library.ts';
 import { createCodingRoutes } from './routes/coding.ts';
+import { createEvalRoutes } from './routes/evals.ts';
 import { createPlannerRoutes } from './routes/planner.ts';
 import { createMemoryRoutes } from './routes/memory.ts';
 import { createConnectionsRoutes, createHomeAssistantApi } from './routes/connections.ts';
@@ -776,6 +777,7 @@ export function createSaraServer(opts: ServerOptions): Server {
   };
   const libraryRoutes = createLibraryRoutes(ctx);
   const codingRoutes = createCodingRoutes(ctx);
+  const evalRoutes = createEvalRoutes(ctx);
   const plannerRoutes = createPlannerRoutes(ctx);
   const memoryRoutes = createMemoryRoutes(ctx);
   const connectionsRoutes = createConnectionsRoutes(ctx);
@@ -1099,6 +1101,8 @@ export function createSaraServer(opts: ServerOptions): Server {
 
     // Coding: workspaces, approvals, jobs, starters, GitHub, code projects, code map, recipes, team, previews, SSH: src/routes/coding.ts.
     if ((await codingRoutes(req, res, method, parts)) !== NEXT) return;
+    // Phase 84: the eval loop (owner-only; src/routes/evals.ts).
+    if ((await evalRoutes(req, res, method, parts)) !== NEXT) return;
 
     // Connections: Google, Home Assistant, chat bridges, Alexa, other apps, reports, the event stream: src/routes/connections.ts.
     if ((await connectionsRoutes(req, res, method, parts)) !== NEXT) return;

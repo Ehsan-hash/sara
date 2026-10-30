@@ -104,6 +104,7 @@ import { pickCompanion, type HouseholdHooks, type MemberHooks } from './server.t
 import { createServer, type IncomingMessage } from 'node:http';
 import { DeviceFlow } from './device-flow.ts';
 import { SESSION_COOKIE } from './auth.ts';
+import { Evals } from './evals.ts';
 import { cookieValue, HouseholdStore, MEMBER_TOKEN_PREFIX, MemberPolicy, MemberSettings, memberDirs, memberOfToken, memberUsage, memberVault, PairRegistry, peekJson, type MemberRecord, type ModelPick } from './household.ts';
 import type { Vault as VaultT } from './vault.ts';
 import { AlexaService } from './alexa.ts';
@@ -579,6 +580,8 @@ function buildCompanion(space: Space, id: string, dir: string): Companion {
       console.warn(`fix branches: ${(err as Error).message}`);
     }
   }
+  // Phase 84 (harness M9): the eval loop (owner's companions; members have no coding history to replay).
+  if (!isMember) app.evals = new Evals(app);
   // Phase 13: background jobs, git and delegating to Claude Code / Grok Build.
   app.jobs = new JobManager(app, store.db);
   app.reports = new ReportStore(store.db, app.now);
@@ -852,6 +855,13 @@ function householdSweep(): void {
   household.sweepInvites();
   for (const m of household.due()) void deleteMemberSpace(m.id).catch((err: Error) => console.warn(`Household: ${err.message}`));
 }
+// Phase 84: "Re-check monthly" for evals. OFF by default (the owner's explicit yes in Settings);
+// when on, it runs only when nobody has talked to her for 20 minutes, within its own token budget.
+const evalTimer = setInterval(() => guard('evals', () => {
+  for (const c of ownerSpace.companions.all()) c.app.evals?.tick();
+}), 3600_000);
+evalTimer.unref();
+
 const householdTimer = setInterval(() => guard('household', householdSweep), 3600_000);
 householdTimer.unref();
 if (!isDemo) setTimeout(() => guard('household', householdSweep), 60_000).unref();

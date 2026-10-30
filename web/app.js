@@ -32,6 +32,7 @@ import { budgetCard, budgetMeter, fillBudgetSelect, overrideNote } from './budge
 import { sandboxButtons, sandboxFirstNote, sandboxFlag, sandboxSection, teamSandboxRow } from './sandbox-view.js';
 import { advisoryFlag, advisorySection, initFindings, openFindings, refreshFindings, securityCard, threatCard } from './findings-view.js';
 import { openRunView } from './run-view.js';
+import { initEvals, onEvalEvent, openEvals } from './evals-view.js';
 import { renderCard, renderCards } from './result-cards.js';
 import { initLook, setContextRing, setLookBusy, showHeadChips } from './look.js';
 import { closePanel, initHerPanel, openPanel, panelConv, panelFace, panelJobs, panelMessages, panelMood, panelNow, panelOpen, togglePanel } from './her-panel.js';
@@ -4986,6 +4987,8 @@ function startEvents() {
     void refreshFindings();
     if (ev.summary && ev.conversationId === state.currentId && !state.streaming && !state.watch) void openConversation(ev.conversationId);
   });
+  // Phase 84: an eval moved on (a replay finished, the judge, the result).
+  es.addEventListener('eval', (e) => onEvalEvent(JSON.parse(e.data)));
   // Phase 39: a team task moved on.
   es.addEventListener('team', (e) => onTeamEvent(JSON.parse(e.data).task));
   // Phase 52: an app (terminal, VS Code) asks to sign in: the Devices page shows it.
@@ -6974,7 +6977,7 @@ document.addEventListener('keydown', (e) => {
 
 // Links that open a view: /#view=today|planner|memory|scrapbook|her|settings[:page] (Phase 19).
 window.saraCompanionCount = () => state.companions?.companions.length ?? 1;
-const VIEWS = { today: openToday, planner: () => $('#open-planner').click(), memory: () => $('#open-memory').click(), library: () => $('#open-library').click(), scrapbook: () => $('#open-scrapbook').click(), moments: () => $('#open-moments').click(), story: () => $('#open-story').click(), her: () => $('#open-sara').click(), team: () => $('#open-team').click(), help: () => $('#open-help').click() };
+const VIEWS = { today: openToday, planner: () => $('#open-planner').click(), memory: () => $('#open-memory').click(), library: () => $('#open-library').click(), scrapbook: () => $('#open-scrapbook').click(), moments: () => $('#open-moments').click(), story: () => $('#open-story').click(), her: () => $('#open-sara').click(), team: () => $('#open-team').click(), evals: () => $('#open-evals').click(), help: () => $('#open-help').click() };
 function openViewFromHash() {
   const v = /#view=([\w:-]+)/.exec(location.hash)?.[1];
   if (!v || !$('#main') || $('#main').hidden) return false;
@@ -8182,6 +8185,9 @@ $('#open-story').addEventListener('click', () => void openStory());
 // Phase 81: findings (every project; filters inside the window).
 initFindings();
 $('#open-findings').addEventListener('click', () => void openFindings());
+// Phase 84: evals (other settings tried on your own past tasks; the winner with evidence).
+initEvals();
+$('#open-evals').addEventListener('click', () => void openEvals());
 initMoments({ openAtMessage });
 initHousehold({ show, boot, copyText, showSettingsTab });
 for (const b of document.querySelectorAll('[data-story]')) {

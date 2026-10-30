@@ -207,6 +207,8 @@ export interface AppContext {
   noToolModels?: Set<string>;
   /** Phase 52: the cost and token meter (per companion). */
   usage?: import('./usage.ts').UsageStore;
+  /** Phase 84: the eval loop (src/evals.ts; owner's companions only). */
+  evals?: import('./evals.ts').Evals;
   /** Phase 78: run snapshots (per companion; unset off the record and in bare test apps). */
   runs?: import('./runs.ts').RunStore;
   /** Phase 56: every provider's model list, kept current (shared by every companion). */
