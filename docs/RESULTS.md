@@ -16,6 +16,7 @@ replies stay out of the repository).
 | Real-size projects, same model with every file in one prompt, no tools (baseline) | qwen3.8 27B (local) | **3/3** (both runs) | 2026-10-28 | `node scripts/bench-tasks.ts --tier projects --mode raw` |
 | Claim check in 6 languages, held-out replies: patterns only / + local judge | `qwen3.5:9b` (local) as judge | precision / recall **0.92 / 0.38** → **0.95 / 0.88** | 2026-10-28 | `node scripts/eval-claims.ts --judge qwen3.5:9b` |
 | Memory across sessions (recall, no inventing, forgetting) | qwen3.8 27B (local) | **11/12** checks | 2026-10-27 | `node scripts/eval-memory.ts --model <model>` |
+| Memory ranking: the note that should come first (40 notes, 20 messages, no model) | none (code only) | **19/20** | 2026-10-30 | `node scripts/eval-memory.ts --rank` |
 | Library: answers from documents, with the source | qwen3.8 27B (local) | **8/8** in both runs | 2026-10-27 | `node scripts/eval-library.ts --model <model>` |
 | Library with meaning search | qwen3.8 27B (local) + nomic-embed-text | **8/8** in both runs | 2026-10-27 | `node scripts/eval-library.ts --model <model> --embed nomic-embed-text` |
 | Code map: "where is…?" questions on Sara's own code | qwen3.8 27B (local) + nomic-embed-text | **8/8** with code tools, **8/8** without | 2026-10-27 | `node scripts/eval-codemap.ts --embed nomic-embed-text` |
@@ -281,6 +282,26 @@ runs that day found a real gap, fixed in 0.54: a forgotten fact could come back 
 parts. The checks are phrase-based, so runs vary a little with the model's wording; read the
 failing replies in your own run before trusting a score. The previous run with
 `gemma4:31b-cloud` (2026-10-25) passed 12 of 12.
+
+### Which note comes first (Phase 76, offline)
+
+`node scripts/eval-memory.ts --rank` checks the ranking itself, with no model and no meaning
+search (word search, standing notes and fading only: what every install has). 40 notes about the
+example owner Alex (old and new, two pinned, promises, decisions, a reflection, a summary of
+another conversation) and 20 messages, each with the one note that should come first.
+
+Latest run (2026-10-30): **19/20 first** with "Fade like a person" (half-life 120 days) and
+**19/20** with "Never fade"; 19/20 in the top 3 either way. The miss is the same in both: *"Is it
+ok if I watch one more episode at midnight?"* should bring up the decision *"no screens after
+11 pm on weeknights"*, but none of its words are in the message, so only meaning search
+(embeddings) can find it; without it, the decision still comes to mind as a standing note,
+fourth. The set caught three ranking problems before release, all fixed: pinned notes floored at
+0.9 sat above every match (0/20 first), freshness outweighed relevance between two matches, and
+old matched notes fell below standing promises.
+
+The model run above, repeated after the ranking change (2026-10-30, same local model): **11 of 12**
+again. The miss is wording only: asked about a sister never mentioned, she said *"I don't have a
+sister in my notes for you … What's her name?"*, a right answer the phrase list doesn't count.
 
 ## Library (documents)
 

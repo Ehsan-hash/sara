@@ -302,6 +302,9 @@ dialog:not(.settings-dialog) .settings-body > h2 { margin: 0; }
 .mem { min-width: 0; grid-template-columns: minmax(0, 1fr); }
 .mem-head { flex-wrap: wrap; gap: 4px 8px; }
 .mem-head > span:not(.kind) { white-space: nowrap; }
+/* Phase 76: a pinned note (never fades). */
+.mem-head .mem-pinned { padding: 0 8px; border-radius: var(--r-pill); background: var(--accent-soft); color: var(--accent-text); }
+@media (max-width: 720px) { .mem > .row button { min-height: 44px; } }
 .mem-head a { flex: 1 1 10em; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-decoration: none; }
 .mem-head a:hover, .mem-head a:focus-visible { color: var(--text); text-decoration: underline; }
 .mem .row { flex-wrap: wrap; }

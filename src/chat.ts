@@ -57,7 +57,8 @@ import { checkReply, driftMode, shouldCheck } from './drift.ts';
 import { awayLine, CONFLICT, STOP_NOTE, usedStopWord } from './bond.ts';
 import { wearingLine } from './wardrobe.ts';
 import { activityNote } from './together.ts';
-import { FADE_DAYS, isForgotten, localDate, memorySettings } from './memory-worker.ts';
+import { isForgotten, localDate, memorySettings } from './memory-worker.ts';
+import { decayPolicy } from './memory-rank.ts';
 import type { McpManager } from './tools/mcp.ts';
 import { dayStartUtc, type PlannerStore } from './planner.ts';
 import type { EventHub } from './events.ts';
@@ -906,6 +907,7 @@ async function* runTurnInner(app: AppContext, conversationId: string, userText: 
 
   // 3.4: memories for this turn (selected once, small fixed budget).
   let injection: Injection | undefined;
+  let usedMarked = false;
   let lastTime: string | undefined;
   let recalled: string | undefined;
   const memCfg = memorySettings(app);
@@ -917,14 +919,15 @@ async function* runTurnInner(app: AppContext, conversationId: string, userText: 
     const kept = buildHistory(store.messages(conv.id), budget).firstKeptId;
     const oldestHistoryId = kept || (visible.at(-HISTORY_LIMIT)?.id ?? visible[0]?.id ?? 0);
     // Phase 38: notes close in meaning, when the embeddings job is set (word search always runs).
-    const related = app.vectors ? (await app.vectors.related(text).catch(() => [])).map((r) => r.memory) : [];
+    // Phase 76: the meaning scores are kept (they rank the notes and say how sure).
+    const related = app.vectors ? await app.vectors.related(text).catch(() => []) : [];
     injection = selectMemories(app.memory, {
       related,
       userText: text,
       conversationId: conv.id,
       oldestHistoryId,
       budgetChars: memCfg.injectBudgetChars,
-      fadeDays: FADE_DAYS[memCfg.fade ?? 'never'],
+      policy: decayPolicy(memCfg),
       today: localDate(now.toISOString(), s.timeZone),
       extra: sharedOwnerFacts(app, text, opts.externalApp),
       docName: (id) => app.library?.get(id)?.name,
@@ -1135,7 +1138,11 @@ async function* runTurnInner(app: AppContext, conversationId: string, userText: 
     }
     const meta: Record<string, unknown> = { model, provider: provider.config.label, ...(calls.length ? {} : takeImages()) };
     if (calls.length) meta.toolCalls = app.redactor.redactValue(calls);
-    if (injection?.ids.length) meta.memoryIds = injection.ids;
+    if (injection?.ids.length) {
+      meta.memoryIds = injection.ids;
+      // Phase 76: why and how sure, per note (the panel's "She remembered"; M3 copies it per step).
+      meta.memoryPicks = injection.picks;
+    }
     // In shared chats people's lines reach her as "[Name]: text", and models copy the pattern:
     // her own name tag never goes out (or into the history, where it would teach it again).
     const tagless = conv.channel !== 'web' ? stripOwnTag(reply, app.persona.name) : reply;
@@ -1143,6 +1150,13 @@ async function* runTurnInner(app: AppContext, conversationId: string, userText: 
     const untagged = opts.group ? cutOtherSpeakers(stripLeadTag(tagless, [conv.title, app.persona.name, ...opts.group.others]), [...opts.group.others, s.ownerName?.trim() || '']) : tagless;
     const saved = store.addMessage(conv.id, 'assistant', untagged, meta);
     lastAssistantId = saved.id;
+    // Phase 76: notes that went in because they MATCHED count as used today (+1 a day at most);
+    // standing picks (and loose stem-only hits) don't, so injected notes can't keep themselves alive.
+    if (injection && !usedMarked && app.memory) {
+      usedMarked = true;
+      const used = injection.picks.filter((p) => !p.standing && !p.included && !p.fuzzy).map((p) => p.id);
+      if (used.length) app.memory.markUsed(used, localDate(now.toISOString(), s.timeZone));
+    }
     if (untagged.trim()) answered = true;
     if (untagged !== reply) {
       reply = untagged;

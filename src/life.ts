@@ -311,7 +311,7 @@ export class LifeWorker {
           ? `You haven't heard from ${owner} in ${Math.round(gapH / 24)} day${gapH >= 48 ? 's' : ''}.`
           : `${owner} has been quiet for a few hours and something made you think of them.`;
     const lastSummary = app.memory?.list({ kind: 'summary', limit: 1 })[0]?.content ?? '';
-    const injection = app.memory ? selectMemories(app.memory, { userText: `${lastSummary} ${agenda}`, conversationId: '', oldestHistoryId: Number.MAX_SAFE_INTEGER, budgetChars: 1200 }) : undefined;
+    const injection = app.memory ? selectMemories(app.memory, { userText: `${lastSummary} ${agenda}`, conversationId: '', oldestHistoryId: Number.MAX_SAFE_INTEGER, budgetChars: 1200, notes: false }) : undefined;
     const system = buildSystemPrompt(app.persona, {
       now,
       timeZone: tz,

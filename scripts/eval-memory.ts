@@ -3,6 +3,7 @@
 // must not invent things never said → one fact is forgotten → conversation C must not know it.
 //
 //   node scripts/eval-memory.ts [--model gemma4:12b] [--ollama http://127.0.0.1:11434/v1]
+//   node scripts/eval-memory.ts --rank     Phase 76: the offline ranking golden set (no model)
 //
 // Writes evals/results/<date>-memory.{json,md}. Exit code 1 when anything fails.
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -24,8 +25,122 @@ import { Vault } from '../src/vault.ts';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const { values: opt } = parseArgs({
-  options: { model: { type: 'string', default: 'gemma4:12b' }, ollama: { type: 'string', default: 'http://127.0.0.1:11434/v1' } },
+  options: { model: { type: 'string', default: 'gemma4:12b' }, ollama: { type: 'string', default: 'http://127.0.0.1:11434/v1' }, rank: { type: 'boolean', default: false } },
 });
+
+// ---- Phase 76: --rank, an offline golden set for ranked injection (no model, no embeddings) ----
+// 40 notes about Alex (old and new, pinned, promises, decisions), 20 messages × the note that
+// should come first. Word search + standing notes + decay only (what every install has).
+async function rankEval(): Promise<void> {
+  const { decayPolicy } = await import('../src/memory-rank.ts');
+  const dir = mkdtempSync(join(tmpdir(), 'sara-rankeval-'));
+  const st = new Store(join(dir, 'sara.db'));
+  const mem = new MemoryStore(st.db);
+  const TODAY = '2026-10-30';
+  const ago = (n: number) => new Date(Date.parse(`${TODAY}T12:00:00Z`) - n * 86_400_000).toISOString().slice(0, 10);
+  type K = 'fact' | 'self' | 'decision' | 'promise' | 'summary' | 'milestone' | 'reflection';
+  const NOTES: [K, string, number, boolean?][] = [
+    ['fact', "Alex's dog is a beagle named Biscuit.", 200],
+    ['fact', 'Biscuit the beagle hates the vacuum cleaner.', 20],
+    ['fact', "Alex works as a nurse at St. Mary's hospital.", 500],
+    ['fact', 'Alex changed jobs: now a paramedic with the city ambulance service.', 30],
+    ['fact', "Alex's sister Ana lives in Denver and teaches piano.", 300],
+    ['fact', 'Alex is allergic to peanuts.', 700, true],
+    ['decision', 'Alex and Sara agreed: no screens after 11 pm on weeknights.', 60],
+    ['promise', 'Alex will call his mom on Sunday.', 10],
+    ['fact', 'Alex runs 5k every Saturday morning in City Park.', 90],
+    ['fact', 'Alex is training for the Denver half marathon in May.', 15],
+    ['summary', 'Alex and Sara planned a trip to Lisbon in spring.', 40],
+    ['fact', "Alex's favourite food is green curry.", 400],
+    ['fact', "Alex's car is an old blue Subaru Outback.", 250],
+    ['fact', 'The Subaru needs new brakes before winter.', 5],
+    ['self', 'Sara said her favourite season is autumn.', 100],
+    ['decision', 'Alex and Sara decided to save for a new laptop instead of a phone.', 150],
+    ['fact', 'Alex reads fantasy novels; currently The Name of the Wind.', 25],
+    ['fact', 'Alex plays guitar in a garage band called The Late Bloomers.', 600],
+    ['fact', 'The Late Bloomers have a gig at the Bluebird on Friday.', 3],
+    ['fact', "Alex's best friend Marco moved to Chicago.", 180],
+    ['promise', 'Sara will remind Alex about the dentist appointment.', 2],
+    ['fact', 'Alex is learning Portuguese for the Lisbon trip.', 35],
+    ['fact', 'Alex grows tomatoes and basil on the balcony.', 120],
+    ['fact', "Alex's balcony tomatoes got blight this summer.", 45],
+    ['milestone', "Alex and Sara's first long talk about music.", 365],
+    ['fact', 'Alex drinks oat milk flat whites.', 80],
+    ['fact', "Alex's apartment is on the 4th floor with no elevator.", 330],
+    ['fact', "Alex's landlord is raising the rent in January.", 12],
+    ['fact', 'Alex is saving for a Fujifilm camera.', 60],
+    ['fact', 'Alex took photos of the aspens in Breckenridge.', 400],
+    ['reflection', 'Alex has been sleeping badly most of this week.', 6],
+    ['fact', "Alex's grandmother turns 90 in December.", 50, true],
+    ['fact', 'Alex uses Bitwarden as a password manager.', 220],
+    ['fact', 'Alex meditates ten minutes every morning.', 140],
+    ['decision', 'Alex and Sara agreed on tests before every push in SunnyWeather.', 70],
+    ['fact', 'Alex is building SunnyWeather, a weather app in Swift.', 75],
+    ['fact', 'SunnyWeather crashed on iOS 18 because of the location prompt.', 8],
+    ['fact', "Alex's cat Pixel died two years ago.", 800],
+    ['fact', 'Alex wants to adopt a second dog next year.', 22],
+    ['fact', 'Alex likes rainy days and thunderstorms.', 260],
+  ];
+  const ids = NOTES.map(([kind, content, days, pinned]) => {
+    const m = mem.add({ kind, content, conversationId: kind === 'summary' ? 'other' : null, sourceMessageId: null, happenedOn: ago(days) });
+    if (pinned) mem.setPinned(m.id, true);
+    return m.id;
+  });
+  // [message, index (1-based) of the note that should come first]
+  const GOLD: [string, number][] = [
+    ["What's my dog's name again?", 1],
+    ['Does Biscuit still freak out about the vacuum?', 2],
+    ['Long shift on the ambulance today', 4],
+    ['What does my sister teach?', 5],
+    ['Can I eat this satay sauce with peanuts?', 6],
+    ['Is it ok if I watch one more episode at midnight?', 7],
+    ['I should call mom, what did I promise?', 8],
+    ['Did a 5k in City Park this morning', 9],
+    ['How long until the half marathon?', 10],
+    ['What did we plan for spring?', 11],
+    ['What curry should I order tonight?', 12],
+    ['The Subaru is making a grinding noise when I brake', 14],
+    ['What season do you like best?', 15],
+    ['Should I buy the new phone or the laptop?', 16],
+    ['I finished The Name of the Wind!', 17],
+    ['We have a gig on Friday, wish me luck', 19],
+    ['Marco called from Chicago', 20],
+    ['My tomatoes look sick again', 24],
+    ['The landlord sent a letter about the rent', 28],
+    ['SunnyWeather keeps crashing on launch', 37],
+  ];
+  const out: { policy: string; top1: number; top3: number; rows: { message: string; want: string; got: string; rank: number; why: string }[] }[] = [];
+  try {
+    for (const fade of ['normal', 'never'] as const) {
+      const policy = decayPolicy({ fade });
+      const rowsR: { message: string; want: string; got: string; rank: number; why: string }[] = [];
+      for (const [msg, want] of GOLD) {
+        const inj = selectMemories(mem, { userText: msg, conversationId: 'eval', oldestHistoryId: 0, budgetChars: 2500, policy, today: TODAY });
+        const rank = inj.ids.indexOf(ids[want - 1]) + 1;
+        const firstLine = inj.text.split('\n')[0] ?? '';
+        rowsR.push({ message: msg, want: NOTES[want - 1][1], got: mem.get(inj.ids[0])?.content ?? '(nothing)', rank, why: /\[why: [^\]]*\]/.exec(firstLine)?.[0] ?? '' });
+      }
+      const top1 = rowsR.filter((r) => r.rank === 1).length;
+      const top3 = rowsR.filter((r) => r.rank >= 1 && r.rank <= 3).length;
+      out.push({ policy: `${fade} (${policy.id}, half-life ${policy.halfLifeDays} d)`, top1, top3, rows: rowsR });
+      console.log(`\n${fade}: first ${top1}/${GOLD.length}, in the top 3 ${top3}/${GOLD.length}`);
+      for (const r of rowsR) console.log(`${r.rank === 1 ? 'ok  ' : 'MISS'} #${r.rank || '-'} ${r.message}\n      got: ${r.got} ${r.why}`);
+    }
+  } finally {
+    st.close();
+    rmSync(dir, { recursive: true, force: true, maxRetries: 5 });
+  }
+  const date = new Date().toISOString().slice(0, 10);
+  const version = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8')).version;
+  mkdirSync(join(ROOT, 'evals', 'results'), { recursive: true });
+  writeFileSync(join(ROOT, 'evals', 'results', `${date}-memory-rank.json`), JSON.stringify({ date, sara: version, notes: NOTES.length, messages: GOLD.length, results: out }, null, 2) + '\n');
+  const main = out[0];
+  process.exitCode = main.top1 >= 16 ? 0 : 1;
+}
+if (opt.rank) {
+  await rankEval();
+  process.exit();
+}
 
 interface Row {
   step: string;

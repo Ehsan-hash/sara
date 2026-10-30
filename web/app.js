@@ -5142,6 +5142,10 @@ async function openMemory() {
   $('#mem-enabled').checked = s.enabled;
   $('#mem-quiet').value = String([10, 30, 60, 120].reduce((b, v) => (Math.abs(v - s.quietMinutes) < Math.abs(b - s.quietMinutes) ? v : b), 30));
   $('#mem-fade').value = s.fade ?? 'never';
+  // Phase 76: the decay policy (half-life slider for "Custom", and the rule in words).
+  state.memDecay = s.decay ?? { halfLifeDays: 0, reuseWeight: 0.1, minStanding: 0.5 };
+  $('#mem-halflife').value = String(Math.min(1095, Math.max(7, state.memDecay.halfLifeDays || 120)));
+  showDecay();
   $('#mem-sharing').value = s.sharing ?? 'own';
   $('#mem-sharing-row').hidden = !(state.companions?.companions.length > 1);
   $('#mem-budget').value = String([1000, 2500, 4500].reduce((b, v) => (Math.abs(v - s.injectBudgetChars) < Math.abs(b - s.injectBudgetChars) ? v : b), 2500));
@@ -5156,6 +5160,25 @@ $('#mem-q').addEventListener('input', () => {
   memSearchTimer = setTimeout(loadMemories, 250);
 });
 $('#mem-kind').addEventListener('change', loadMemories);
+
+// Phase 76: how fading works, in words (the same rule as the server's decayText, in the app language).
+const FADE_HALF_LIFE = { never: 0, slow: 365, normal: 120 };
+function decayHalfLife() {
+  const f = $('#mem-fade').value;
+  return f === 'custom' ? Number($('#mem-halflife').value) : (FADE_HALF_LIFE[f] ?? 0);
+}
+function decayWords(halfLifeDays, minStanding = 0.5) {
+  if (!halfLifeDays) return t('Nothing fades: every note weighs the same however old it is. Notes that match what you say come first; pinned notes, promises and dates always count.');
+  return t("A note's weight halves every {days} days since it happened or was last used. Notes that match what you say always come to mind, just ranked lower when old; others stay out once they are older than about {out} days. Pinned notes, open promises and dates never fade.", { days: halfLifeDays, out: Math.round(halfLifeDays * Math.log2(1 / Math.max(0.001, minStanding))) });
+}
+function showDecay() {
+  const custom = $('#mem-fade').value === 'custom';
+  $('#mem-halflife-row').hidden = !custom;
+  $('#mem-halflife-n').textContent = t('{n} days', { n: $('#mem-halflife').value });
+  $('#mem-decay-text').textContent = decayWords(decayHalfLife(), state.memDecay?.minStanding ?? 0.5);
+}
+$('#mem-fade').addEventListener('change', showDecay);
+$('#mem-halflife').addEventListener('input', showDecay);
 
 const MEM_KIND_LABEL = { fact: 'about you', self: 'about Sara', date: 'date', reflection: 'noticed', summary: 'conversation note', decision: 'decided together', promise: 'promise', milestone: 'your story' };
 const fmtOnDate = (d) => {
@@ -5209,7 +5232,9 @@ $('#mem-reflect').addEventListener('click', async () => {
 async function loadMemories() {
   void loadUpcoming();
   const params = new URLSearchParams();
-  if ($('#mem-kind').value) params.set('kind', $('#mem-kind').value);
+  // Phase 76: "Pinned" is a filter, not a kind.
+  if ($('#mem-kind').value === 'pinned') params.set('pinned', '1');
+  else if ($('#mem-kind').value) params.set('kind', $('#mem-kind').value);
   if ($('#mem-q').value.trim()) params.set('q', $('#mem-q').value.trim());
   const list = await api(`/memories?${params}`);
   const box = $('#mem-list');
@@ -5237,6 +5262,8 @@ function memoryCard(m) {
   date.textContent = (m.kind === 'date' && m.onDate ? fmtOnDate(m.onDate) : memDay(m.happenedOn)) + (m.kind === 'promise' && m.onDate ? ` · ${t('due {date}', { date: fmtOnDate(m.onDate) })}` : '') + (m.kind === 'promise' && m.resolvedAt ? ` · ${t('kept ✓')}` : '') + (m.edited ? ` · ${t('edited')}` : '');
   if (m.supersededBy || (m.kind === 'promise' && m.resolvedAt)) card.classList.add('replaced');
   head.append(kind, date);
+  // Phase 76: pinned notes never fade.
+  if (m.pinned) head.append(el('span', 'mem-pinned', t('pinned')));
   if (m.source) {
     const link = document.createElement('a');
     link.href = '#';
@@ -5298,6 +5325,18 @@ function memoryCard(m) {
       }),
     );
   }
+  // Phase 76: pin so it never fades (and is always a candidate, still under the budget).
+  const pin = mk(m.pinned ? t('Unpin') : t('Pin'), async () => {
+    try {
+      await api(`/memories/${m.id}`, { method: 'PATCH', body: { pinned: !m.pinned } });
+      await loadMemories();
+    } catch (err) {
+      $('#mem-error').textContent = err.message;
+    }
+  });
+  pin.setAttribute('aria-pressed', String(Boolean(m.pinned)));
+  pin.title = m.pinned ? t('Pinned: this note never fades. Press to let it fade like the others.') : t('Pin this note so it never fades.');
+  row.append(pin);
   if (m.supersededBy) {
     row.append(
       mk(t('Use it again'), async () => {
@@ -5361,7 +5400,15 @@ onSave($('#memory'), async () => {
   $('#mem-error').textContent = '';
   await api('/memory/settings', {
     method: 'PUT',
-    body: { enabled: $('#mem-enabled').checked, quietMinutes: Number($('#mem-quiet').value), injectBudgetChars: Number($('#mem-budget').value), fade: $('#mem-fade').value, sharing: $('#mem-sharing').value },
+    body: {
+      enabled: $('#mem-enabled').checked,
+      quietMinutes: Number($('#mem-quiet').value),
+      injectBudgetChars: Number($('#mem-budget').value),
+      fade: $('#mem-fade').value,
+      sharing: $('#mem-sharing').value,
+      // Phase 76: the half-life only counts for "Custom"; the presets set their own.
+      ...($('#mem-fade').value === 'custom' ? { decay: { halfLifeDays: Number($('#mem-halflife').value) } } : {}),
+    },
   });
 });
 autoSave($('#memory'));

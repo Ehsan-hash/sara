@@ -5,6 +5,7 @@ import { vaultKeyFor } from '../chat.ts';
 import { findEverything } from '../find.ts';
 import { as400, fromPhoneApp, HttpError, readJson, SECURITY_HEADERS, send } from '../http.ts';
 import { forgetMemory, localDate, type MemorySettings, memorySettings } from '../memory-worker.ts';
+import { clampDecay, decayPolicy, explainPolicy, FADE_PRESETS, type FadePreset } from '../memory-rank.ts';
 import { type Memory, MEMORY_KINDS, type MemoryKind, parseOnDate } from '../memory.ts';
 import { captionModel, deletePhotoEverywhere, handEligible, type Moment, MOMENTS_MODES, type MomentsMode, momentsSettings } from '../moments.ts';
 import { DEFAULT_IMAGE_MODEL, PHOTO_KEY_VAULT, photoSettings } from '../photos.ts';
@@ -20,7 +21,12 @@ export function createMemoryRoutes(ctx: RouteCtx): RouteHandler {
       const mem = app.memory;
       if (!mem) throw new HttpError(404, 'Memory is not available');
       if (a === 'memory' && b === 'settings') {
-        if (method === 'GET') return send(res, 200, { ...memorySettings(app), sharing: app.settings.get().memorySharing ?? 'own' });
+        // Phase 76: the decay policy in numbers (`decay`) and in words (`decayText`).
+        const withDecay = (m: MemorySettings) => {
+          const p = decayPolicy(m);
+          return { ...m, fade: p.preset, decay: { halfLifeDays: p.halfLifeDays, reuseWeight: p.reuseWeight, minStanding: p.minStanding }, policyId: p.id, decayText: explainPolicy(p) };
+        };
+        if (method === 'GET') return send(res, 200, { ...withDecay(memorySettings(app)), sharing: app.settings.get().memorySharing ?? 'own' });
         if (method === 'PUT') {
           const body = await readJson(req);
           const cur = memorySettings(app);
@@ -28,10 +34,13 @@ export function createMemoryRoutes(ctx: RouteCtx): RouteHandler {
             enabled: body.enabled === undefined ? cur.enabled : Boolean(body.enabled),
             quietMinutes: body.quietMinutes === undefined ? cur.quietMinutes : Math.min(1440, Math.max(1, Math.round(Number(body.quietMinutes) || cur.quietMinutes))),
             injectBudgetChars: body.injectBudgetChars === undefined ? cur.injectBudgetChars : Math.min(6000, Math.max(200, Math.round(Number(body.injectBudgetChars) || cur.injectBudgetChars))),
-            fade: body.fade === 'slow' || body.fade === 'normal' || body.fade === 'never' ? body.fade : (cur.fade ?? 'never'),
+            fade: FADE_PRESETS.includes(body.fade as FadePreset) ? (body.fade as FadePreset) : (cur.fade ?? 'never'),
+            // Phase 76: clamped (half-life 0 or 7–3650 days, reuse 0–0.3, min standing 0–1).
+            decay: body.decay && typeof body.decay === 'object' ? clampDecay(body.decay, clampDecay(cur.decay)) : cur.decay,
           };
+          if (!next.decay) delete next.decay;
           app.settings.update({ memory: { ...next, budgetMoved: true } as MemorySettings, ...(body.sharing === 'shared' || body.sharing === 'own' ? { memorySharing: body.sharing } : {}) });
-          return send(res, 200, { ...next, sharing: app.settings.get().memorySharing ?? 'own' });
+          return send(res, 200, { ...withDecay(next), sharing: app.settings.get().memorySharing ?? 'own' });
         }
       }
       if (a === 'memories') {
@@ -50,7 +59,7 @@ export function createMemoryRoutes(ctx: RouteCtx): RouteHandler {
             return send(res, 200, want.map((id) => mem.get(id)).filter((m): m is Memory => Boolean(m)).map(view));
           }
           const kind = url.searchParams.get('kind');
-          return send(res, 200, mem.list({ kind: MEMORY_KINDS.includes(kind as MemoryKind) ? (kind as MemoryKind) : undefined, q: url.searchParams.get('q') ?? undefined }).map(view));
+          return send(res, 200, mem.list({ kind: MEMORY_KINDS.includes(kind as MemoryKind) ? (kind as MemoryKind) : undefined, q: url.searchParams.get('q') ?? undefined, pinned: url.searchParams.get('pinned') === '1' }).map(view));
         }
         // Phase 12: tell her something to remember, or a date that matters, yourself.
         if (!b && method === 'POST') {
@@ -81,6 +90,11 @@ export function createMemoryRoutes(ctx: RouteCtx): RouteHandler {
           if (!cur) throw new HttpError(404, 'Memory not found');
           // "Use it again" for a fact the weekly look-back marked as replaced.
           if (body.supersededBy === null) mem.supersede(id, null);
+          // Phase 76: pin (never fades, always a candidate) or unpin.
+          if (body.pinned !== undefined) {
+            if (typeof body.pinned !== 'boolean') throw new HttpError(400, 'Pin must be on or off.');
+            mem.setPinned(id, body.pinned);
+          }
           // Phase 32: mark a promise kept (or open again).
           if (body.resolved !== undefined && cur.kind === 'promise') mem.resolve(id, body.resolved ? app.now().toISOString() : (null as unknown as string));
           const content = body.content === undefined ? cur.content : String(body.content ?? '').trim();

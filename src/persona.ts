@@ -240,7 +240,9 @@ export function buildSystemPrompt(p: Persona, ctx: PromptContext): string {
     const blocks: string[] = [];
     if (ctx.lastTime?.trim()) blocks.push(`### Last time\n${ctx.lastTime.trim()}\nPick up from it naturally when it fits (ask how something went, carry on a plan); don't recite it.`);
     if (ctx.recalled?.trim()) blocks.push(`### Looked up just now in your past conversations\n${ctx.recalled.trim()}`);
-    if (ctx.memories?.trim()) blocks.push(`### Your notes\nYour own notes from earlier conversations with ${owner} (dated). They can be out of date.\n${ctx.memories.trim()}`);
+    // Phase 76: when the notes carry "[why: …; sure: …]" (not in voice calls or her day), one line on how to read them.
+    const why = /\[why: [^\]]*; sure: (high|medium|low)/.test(ctx.memories ?? '') ? " Each note ends with why it came to mind and how sure that is. Lean on 'high', treat 'low' as background." : '';
+    if (ctx.memories?.trim()) blocks.push(`### Your notes\nYour own notes from earlier conversations with ${owner} (dated). They can be out of date.${why}\n${ctx.memories.trim()}`);
     parts.push(`## What you remember from before
 Use your memories naturally, like a person remembering, and let them shape what you say and decide (what ${owner} likes, what you agreed, what's going on in their life). ${lookUp} If what ${owner} says now goes against something you decided together or a promise in your notes, mention it gently, like a friend would ("wait, didn't we say…?"). Never make up specific details you don't have, and never claim you did something (set a reminder, changed a file) that you didn't.${blocks.length ? `\n${blocks.join('\n')}` : ''}`);
   }

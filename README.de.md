@@ -14,7 +14,7 @@ Modellen deiner Wahl, in einer App für Web, Windows, Mac und Handy.
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="License: MIT"></a>
   <img src="https://img.shields.io/badge/node-%E2%89%A5%2024-339933" alt="Node 24 or newer">
   <img src="https://img.shields.io/badge/runtime%20dependencies-0-brightgreen" alt="Zero runtime dependencies">
-  <img src="https://img.shields.io/badge/tests-929%20passing-brightgreen" alt="929 tests passing">
+  <img src="https://img.shields.io/badge/tests-943%20passing-brightgreen" alt="943 tests passing">
   <a href="docs/RESULTS.md"><img src="https://img.shields.io/badge/HumanEval%20pass%401-96.3%25-informational" alt="HumanEval pass@1 96.3%"></a>
   <a href="https://github.com/farena-ai/sara/releases/latest"><img src="https://img.shields.io/github/v/release/farena-ai/sara?label=release" alt="Latest release"></a>
   <a href="https://github.com/farena-ai/sara/pkgs/container/sara"><img src="https://img.shields.io/badge/docker-amd64%20%7C%20arm64-2496ED" alt="Docker image for amd64 and arm64"></a>
@@ -28,7 +28,7 @@ Modellen deiner Wahl, in einer App für Web, Windows, Mac und Handy.
   <sub>Eine echte Sitzung mit einem lokalen Modell (qwen3.8 27B auf Ollama, eine RTX 5090) auf einem Wegwerf-Testserver, im Nacht-Look: Sie muntert ihr Gegenüber auf, schreibt eine kleine App samt Test, während das Modell sie streamt, fragt, bevor sie einen Befehl ausführt, findet über einen fehlschlagenden Test einen echten Fehler und behebt ihn, bis alle 7 Tests grün sind. Ausgewählte Bilder aus der Aufnahme; nichts darin wurde bearbeitet.</sub>
 </p>
 
-> **Status:** 2.8, MIT-Lizenz, mit neunzehn Funktions-Releases seit 1.0 (alle unten). Mit 2.5 bis 2.8
+> **Status:** 2.9, MIT-Lizenz, mit zwanzig Funktions-Releases seit 1.0 (alle unten). Mit 2.5 bis 2.8
 > hat die ganze App einen neuen Look bekommen. Die
 > [Android-App](https://play.google.com/store/apps/details?id=com.backstagecoding.sara) ist bei Google
 > Play; die iPhone-App und die Version für den Mac App Store folgen, sobald Apple sie freigibt.
@@ -70,6 +70,7 @@ für die Menschen, mit denen du lebst · [Videoanrufe](docs/VIDEO_CALLS.md) mit 
 
 | Version | Was du bekommst |
 |---|---|
+| **2.9** · Gewichtete Erinnerung | **Sie sagt dir, warum sie sich an etwas erinnert:** Jede Notiz, die sie nutzt, wird für deine Nachricht bewertet und zeigt, *warum sie ihr eingefallen ist* und *wie sicher* das ist (auch in ihrem Seitenbereich). Alte Notizen verblassen sanft statt zu verschwinden, Notizen, die sie oft nutzt, bleiben stark, und du kannst die wichtigen **anheften**, damit sie nie verblassen. Das Verblassen stellst du mit einem Regler ein. [So funktioniert es](docs/design/HARNESS_TRACK.md) |
 | **2.8** · Feinschliff | **Eine Stufe edler:** ein langsames Polarlicht hinter mattem Glas, eine elegante Serifenschrift für Überschriften, ein leuchtender Stimmungs-Ring um ihr Porträt, gezeichnete Symbole, Wetterbilder und Fortschrittsringe sowie eine schwebende Glas-Leiste auf dem Handy (jede Bewegung aus mit *Bewegung reduzieren*). [Der Plan](docs/design/NEW_LOOK.md) |
 | **2.7** · Der neue Look, Teil 3 | **Heute als Kacheln** (Wetter, dein Tag, Planer, woran sie sich erinnert hat, Momente, Arbeit im Hintergrund, Zuhause), eine Leiste unten auf dem Handy, jeder Bildschirm im neuen Look, und in den Windows- und Mac-Apps **Benachrichtigungen mit Erlauben / Ablehnen und Erledigt / Später**, *Senden an → Sara* für Dateien und Sprache in der Schnellfrage. [Der Plan](docs/design/NEW_LOOK.md) |
 | **2.6** · Der neue Look, Teil 2 | **Ihre Gegenwart:** ein Seitenbereich (auf dem Handy ein Blatt zum Hochziehen) mit ihrer Stimmung, dem, was sie gerade tut, Freigaben, Aufträgen, dem Tag und dem, woran sie sich erinnert hat; Strg+K springt überallhin; und in den Windows- und Mac-Apps ein **Schnellfrage-Fenster per Tastenkürzel** über jeder App, dazu ihre Stimmung und Freigaben im Tray-Menü. [Der Plan](docs/design/NEW_LOOK.md) |
@@ -279,8 +280,8 @@ wurden. Was sie heute beiträgt, ist die Arbeitsweise (sie lässt die Tests lauf
 riskanten Schritten, zeigt, was gelaufen ist), nicht ein höheres Ergebnis bei diesen Sätzen.
 Details, Ergebnisse pro Aufgabe und wie man es wiederholt: [docs/RESULTS.md](docs/RESULTS.md).
 
-Dazu `npm run check`: eine Typprüfung und 937 automatische Tests mit einem geskripteten
-Schein-Modell (ohne Netz, ohne GPU): 929 laufen unter Windows durch, die anderen 8 sind
+Dazu `npm run check`: eine Typprüfung und 951 automatische Tests mit einem geskripteten
+Schein-Modell (ohne Netz, ohne GPU): 943 laufen unter Windows durch, die anderen 8 sind
 Linux-spezifische Sandbox-Tests, die auf einem Linux-Server laufen.
 
 ## Sara im Vergleich

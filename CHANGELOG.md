@@ -5,6 +5,25 @@ Format: newest first. Semantic versions since 1.0.0 (before that `0.<phase>.<pat
 
 ## Unreleased
 
+## 2.9.0 (2026-10-30): ranked memory (harness track, Phase 76)
+
+The first step of the harness track ([docs/design/HARNESS_TRACK.md](docs/design/HARNESS_TRACK.md)).
+
+- **Ranked memory injection:** the notes she gets for a reply are scored for that message (word
+  match, meaning match, kind, freshness, reuse) instead of picked by fixed rules, and only the best
+  fit under the size limit go in.
+- **A confidence note on each one:** in her prompt every note ends with why it came to mind and how
+  sure that is (`[why: words "dog", "biscuit" + meaning; sure: high]`); she's told to lean on "high"
+  and treat "low" as background. Never read aloud in calls. The same shows under *She remembered* in
+  her panel.
+- **Decay you control:** old notes fade gently (a half-life: never, slow, normal or a custom slider)
+  instead of a hard cut-off; notes that keep being useful stay strong. Nothing is deleted.
+- **Pinning:** pin a note (her panel or the Memory page) and it never fades.
+- 19 of 20 on a new offline ranking test (`scripts/eval-memory.ts --rank`); the model memory test
+  stays at 11 of 12.
+- API: `PATCH /api/memories/:id {pinned}`, `GET /api/memories?pinned=1`, `decay` and `decayText` in
+  `/api/memory/settings`; every reply's meta gets `memoryPicks`.
+
 ## 2.8.3 (2026-10-30): a new front page
 
 - **The README and the social preview** show the new look: 13 new screenshots from a real session on

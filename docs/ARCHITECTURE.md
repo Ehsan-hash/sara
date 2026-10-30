@@ -119,13 +119,14 @@ Every module in `src/`, roughly in the order they were added (the phase is noted
 | `src/snapshots.ts` | Content-addressed workspace snapshots outside the workspace; restore (undoable) |
 | `scripts/eval-consistency.ts` | 20-turn consistency eval on a local model (+ reload, + model swap) |
 | `scripts/bench-overhead.ts` | Overhead baseline: raw model vs. through Sara, interleaved pairs |
-| `src/memory.ts` | Memory store (summaries, facts), FTS5 search, per-turn selection under a budget |
+| `src/memory.ts` | Memory store (summaries, facts), FTS5 search (`search()` with the matched words), pinning (`setPinned`), use marks (`markUsed`: +1 per local day, only for notes that matched), per-turn selection under a budget (`selectMemories`, built on `rankMemories` since Phase 76: lines keep their dated kind tag first and end with `[why: …; sure: …]` unless `notes: false`; `picks` go on the reply as `meta.memoryPicks`; `override` include/exclude) |
+| `src/memory-rank.ts` | Phase 76 (harness M1): ranked memory, code only. `rankMemories(mem, {query, related (cosine scores), policy, today, allow, override})` → picks with score, sureness (high = words + meaning or pinned + a match, medium = one signal, low = standing), plain reasons and the policy id; matches before standing notes; `scoreCandidates` (pure); the decay policy (`decayPolicy` from the fade preset never/slow/normal/custom, `clampDecay`, `explainPolicy` in words, `policyId`); `KIND_PRIOR` (standing weights per kind); `bracketNote`, `pickNote`. Design: [design/HARNESS_TRACK.md §4](design/HARNESS_TRACK.md) |
 | `src/memory-worker.ts` | Summaries after quiet, quote-verified facts, forget, background worker |
 | `src/planner.ts` | Projects, tasks, notes, reminders; time parsing in the owner zone; todo/note/remind tools |
 | `src/reminders.ts` | Scheduler that posts due reminders into chat |
 | `src/events.ts` | Push hub for `GET /api/events` (reminders, planner changes, later proactive messages) |
 | `src/export.ts` | Export (scrubbed) / import (merge, remapped ids) |
-| `scripts/eval-memory.ts` | Memory golden set on a local model |
+| `scripts/eval-memory.ts` | Memory golden set on a local model; `--rank`: the offline ranking golden set (40 notes, 20 messages, no model) |
 | `src/inner.ts` | Her inner state: mood/energy/closeness/concern/irritation, signals, decay, words for the prompt |
 | `src/life.ts` | Her day (daily note), proactive messages, `LifeWorker` |
 | `scripts/eval-life.ts` | Inner life on a local model (day, self-memories, texting first, honesty) |

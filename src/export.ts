@@ -211,7 +211,7 @@ export function importAll(app: AppContext, data: unknown): ImportResult {
           }
         }
         const res = db.prepare(
-          'INSERT INTO memories (kind, content, conversation_id, source_message_id, source_from_id, happened_on, evidence, edited, created_at, updated_at, on_date, resolved_at, source_doc_id, mentioned_on) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+          'INSERT INTO memories (kind, content, conversation_id, source_message_id, source_from_id, happened_on, evidence, edited, created_at, updated_at, on_date, resolved_at, source_doc_id, mentioned_on, pinned, last_used_on, use_count) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
         ).run(
           kind,
           content,
@@ -227,6 +227,10 @@ export function importAll(app: AppContext, data: unknown): ImportResult {
           v(m.resolved_at),
           m.source_doc_id === null || m.source_doc_id === undefined ? null : (docMap.get(Number(m.source_doc_id)) ?? null),
           v(m.mentioned_on),
+          // Phase 76: pinned, last used, uses (absent in older export files).
+          Number(m.pinned ?? 0) ? 1 : 0,
+          v(m.last_used_on),
+          Math.max(0, Math.round(Number(m.use_count ?? 0)) || 0),
         );
         const newId = Number(res.lastInsertRowid);
         memMap.set(Number(m.id), newId);

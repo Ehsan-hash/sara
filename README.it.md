@@ -14,7 +14,7 @@ per il web, Windows, Mac e telefono.
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="License: MIT"></a>
   <img src="https://img.shields.io/badge/node-%E2%89%A5%2024-339933" alt="Node 24 or newer">
   <img src="https://img.shields.io/badge/runtime%20dependencies-0-brightgreen" alt="Zero runtime dependencies">
-  <img src="https://img.shields.io/badge/tests-929%20passing-brightgreen" alt="929 tests passing">
+  <img src="https://img.shields.io/badge/tests-943%20passing-brightgreen" alt="943 tests passing">
   <a href="docs/RESULTS.md"><img src="https://img.shields.io/badge/HumanEval%20pass%401-96.3%25-informational" alt="HumanEval pass@1 96.3%"></a>
   <a href="https://github.com/farena-ai/sara/releases/latest"><img src="https://img.shields.io/github/v/release/farena-ai/sara?label=release" alt="Latest release"></a>
   <a href="https://github.com/farena-ai/sara/pkgs/container/sara"><img src="https://img.shields.io/badge/docker-amd64%20%7C%20arm64-2496ED" alt="Docker image for amd64 and arm64"></a>
@@ -28,7 +28,7 @@ per il web, Windows, Mac e telefono.
   <sub>Una sessione reale con un modello locale (qwen3.8 27B su Ollama, una RTX 5090) su un server di prova usa e getta, nel tema Notte: tira su il morale di chi le scrive, scrive una piccola app e il suo test mentre il modello li trasmette, chiede prima di eseguire un comando, scopre un vero bug con un test che fallisce e lo corregge finché tutti e 7 i test passano. Fotogrammi scelti dalla registrazione; nulla al loro interno è stato modificato.</sub>
 </p>
 
-> **Stato:** 2.8, licenza MIT, con diciannove versioni ricche di novità dalla 1.0 (tutte qui sotto).
+> **Stato:** 2.9, licenza MIT, con venti versioni ricche di novità dalla 1.0 (tutte qui sotto).
 > Dalla 2.5 alla 2.8 tutta l'app ha cambiato aspetto. L'[app Android](https://play.google.com/store/apps/details?id=com.backstagecoding.sara)
 > è su Google Play; l'app per iPhone e la versione del Mac App Store arriveranno appena Apple le
 > approverà. Leggi [docs/DISCLOSURES.md](docs/DISCLOSURES.md) prima di usare o condividere Sara.
@@ -69,6 +69,7 @@ citano la pagina · la [modalità locale privata](docs/PRIVATE_LOCAL.md) · le [
 
 | Versione | Cosa ottieni |
 |---|---|
+| **2.9** · Memoria classificata | **Ti dice perché si è ricordata di qualcosa:** ogni nota che usa riceve un punteggio per il tuo messaggio e mostra *perché le è venuta in mente* e *quanto ne è sicura* (anche nel suo pannello). Le note vecchie sbiadiscono piano invece di sparire, quelle che usa spesso restano forti e puoi **fissare** quelle che non devono mai sbiadire. Lo sbiadimento si regola con un cursore. [Come funziona](docs/design/HARNESS_TRACK.md) |
 | **2.8** · Rifinitura | **Un gradino più raffinato:** un'aurora lenta dietro il vetro smerigliato, un elegante carattere con grazie per i titoli, un alone luminoso del colore del suo umore attorno al ritratto, icone disegnate, illustrazioni meteo e anelli di avanzamento, e una barra di vetro fluttuante sul telefono (ogni movimento si spegne con *riduci movimento*). [Il piano](docs/design/NEW_LOOK.md) |
 | **2.7** · Il nuovo aspetto, parte 3 | **Oggi a riquadri** (meteo, la tua giornata, agenda, ciò che ha ricordato, momenti, lavori in corso, casa), una barra in basso sul telefono, ogni schermata con il nuovo aspetto, e nelle app per Windows e Mac **notifiche con Consenti / Nega e Fatto / Più tardi**, *Invia a → Sara* per i file e la voce nella domanda rapida. [Il piano](docs/design/NEW_LOOK.md) |
 | **2.6** · Il nuovo aspetto, parte 2 | **La sua presenza:** un pannello laterale (sul telefono un foglio da tirare su) con il suo umore, cosa sta facendo, autorizzazioni, lavori, la giornata e ciò che ha ricordato; Ctrl+K per andare ovunque; e nelle app per Windows e Mac una **finestra per domande rapide con una scorciatoia** sopra qualsiasi app, più il suo umore e le autorizzazioni nel menu dell'area di notifica. [Il piano](docs/design/NEW_LOOK.md) |
@@ -276,8 +277,8 @@ uno SPEC che nessun test controllava. Quello che aggiunge oggi è il modo di lav
 chiede prima dei passi rischiosi, mostra cosa è stato eseguito), non un punteggio più alto su questi
 insiemi. Dettagli, risultati per compito e come rieseguirlo: [docs/RESULTS.md](docs/RESULTS.md).
 
-In più, `npm run check`: un controllo dei tipi e 937 test automatici con un finto modello guidato
-da script (senza rete, senza GPU): 929 passano su Windows e gli altri 8 sono test dell'isolamento
+In più, `npm run check`: un controllo dei tipi e 951 test automatici con un finto modello guidato
+da script (senza rete, senza GPU): 943 passano su Windows e gli altri 8 sono test dell'isolamento
 solo per Linux, eseguiti su un server Linux.
 
 ## Il confronto

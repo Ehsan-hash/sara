@@ -5,6 +5,7 @@ import { guard } from './log.ts';
 import type { MemoryKind } from './memory.ts';
 import { resolveFor, type AppContext } from './chat.ts';
 import { parseOnDate, type MemoryStore } from './memory.ts';
+import { type DecayPolicy, type FadePreset, PRESET_HALF_LIFE } from './memory-rank.ts';
 import { importedName, type StoredMessage } from './store.ts';
 import { DEFAULT_IDENTITY, type Identity, personalize } from './identity.ts';
 import { identityOf } from './persona.ts';
@@ -14,12 +15,18 @@ export interface MemorySettings {
   enabled: boolean;
   quietMinutes: number;
   injectBudgetChars: number;
-  /** Phase 32: old notes come to mind only when something brings them up (like people). */
-  fade?: 'never' | 'slow' | 'normal';
+  /**
+   * Phase 32: old notes come to mind only when something brings them up (like people).
+   * Phase 76: the preset of the decay policy (half-life 0 / 365 / 120 days), or 'custom'.
+   */
+  fade?: FadePreset;
+  /** Phase 76: the decay policy's own numbers (half-life for 'custom', reuse lift, min standing). */
+  decay?: Partial<DecayPolicy>;
 }
 
-/** Days before a note stops coming to mind on its own, by fade setting. */
-export const FADE_DAYS = { never: 0, slow: 365, normal: 120 } as const;
+/** Days before a note stops coming to mind on its own, by fade setting (Phase 76: the half-life of each preset). */
+export const FADE_DAYS = PRESET_HALF_LIFE;
+export { decayPolicy, explainPolicy, type DecayPolicy } from './memory-rank.ts';
 
 export const DEFAULT_MEMORY_SETTINGS: MemorySettings = { enabled: true, quietMinutes: 30, injectBudgetChars: 2500 };
 

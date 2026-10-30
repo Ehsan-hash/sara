@@ -6,7 +6,9 @@
 //        "ask first" rules are untouched), background jobs with their progress.
 //   Today: the next events, reminders and to-dos (GET /api/today), top 3, with a link to the Planner.
 //   She remembered: the notes she used for the last reply (meta.memoryIds → GET /api/memories?ids=),
-//        each opens to its details. Never in off-the-record or private conversations.
+//        each opens to its details. Never in off-the-record or private conversations. Phase 76:
+//        each row has a sureness chip and a "why" line from the reply's meta.memoryPicks (no extra
+//        request) and a Pin button (PATCH pinned: never fades).
 //   This conversation: model, workspace, privacy and how full it is (the context ring).
 // Wide screens (1100 px and up): a fold-away column on the right, open or closed remembered on this
 // device. Narrower: an overlay over the chat, closed until asked for. Phones (720 px and less): the
@@ -468,7 +470,8 @@ async function loadMemories() {
   }
   if (ui.memKey !== key) return;
   if (!mems.length) return void list.replaceChildren(el('li', 'hp-empty', t('Her last reply used nothing from her memory.')));
-  list.replaceChildren(...mems.map(memoryItem));
+  const picks = memoryPicksOfLastTurn(msgs);
+  list.replaceChildren(...mems.map((m) => memoryItem(m, picks.get(m.id))));
 }
 
 /** "She remembered" starts folded on every page load and in every conversation (privacy); never saved. */
@@ -493,19 +496,74 @@ export function memoryIdsOfLastTurn(msgs) {
   return ids;
 }
 
-function memoryItem(m) {
+/**
+ * Phase 76: why and how sure, per note, from the last turn's replies (meta.memoryPicks; the first
+ * reply that has a note wins). Older replies have none: the rows then show no chip.
+ */
+export function memoryPicksOfLastTurn(msgs) {
+  const from = msgs.findLastIndex((m) => m.role === 'user') + 1;
+  const out = new Map();
+  for (const m of msgs.slice(from)) {
+    if (m.role !== 'assistant' || !Array.isArray(m.meta?.memoryPicks)) continue;
+    for (const p of m.meta.memoryPicks) if (p && Number.isInteger(p.id) && !out.has(p.id) && ['high', 'medium', 'low'].includes(p.sure)) out.set(p.id, p);
+  }
+  return out;
+}
+
+const SURE_WORDS = { high: () => t('Sure: high'), medium: () => t('Sure: medium'), low: () => t('Sure: low') };
+
+/** The "why" line of a pick in plain words (the app language). */
+export function whyWords(p, kindName = (k) => k) {
+  const parts = [];
+  if (p.words?.length) parts.push(t('matched {words}', { words: p.words.map((w) => `“${w}”`).join(', ') }));
+  if (p.fuzzy) parts.push(t('similar words'));
+  if (p.meaning) parts.push(t('close in meaning'));
+  if (p.included) parts.push(t('added by hand for this reply'));
+  else if (p.standing && p.pinned) parts.push(t('pinned'));
+  else if (p.standing) parts.push(t('came to mind on its own ({kind})', { kind: kindName(p.standing) }));
+  else if (p.pinned) parts.push(t('pinned'));
+  if (p.old) parts.push(t('older, may be out of date'));
+  return parts.join(' · ');
+}
+
+function memoryItem(m, pick) {
   const li = el('li', 'hp-item');
   const d = el('details', 'hp-memo');
   const s = el('summary', 'hp-row');
   const text = el('span', 'hp-row-main hp-memo-text', m.content);
   text.dataset.raw = '';
   s.append(rowIcon('hp-row-icon', m.kind === 'date' ? 'calendar' : m.kind === 'promise' ? 'promise' : m.kind === 'summary' ? 'memo' : 'memory'), text);
+  if (pick) s.append(el('span', `hp-sure hp-sure-${pick.sure}`, SURE_WORDS[pick.sure]()));
   d.append(s);
   const body = el('div', 'hp-memo-body');
   const kind = ui.ctx.memKind(m.kind);
   const when = m.happenedOn ? new Date(`${m.happenedOn}T12:00:00`).toLocaleDateString(locale(), { day: 'numeric', month: 'short', year: 'numeric' }) : '';
+  if (pick) body.append(el('p', 'hp-memo-why', `${t('Why:')} ${whyWords(pick, (k) => ui.ctx.memKind(k))}`));
   body.append(el('p', 'hp-memo-meta', [kind, when].filter(Boolean).join(' · ')));
   const actions = el('div', 'hp-memo-actions');
+  // Pin: never fades, always a candidate (Settings → Memory explains fading).
+  const pin = el('button', 'ghost small hp-pin');
+  pin.type = 'button';
+  const drawPin = (on) => {
+    pin.replaceChildren(rowIcon('hp-pin-icon', 'pin'), document.createTextNode(on ? t('Unpin') : t('Pin')));
+    pin.setAttribute('aria-pressed', String(on));
+    pin.title = on ? t('Pinned: this note never fades. Press to let it fade like the others.') : t('Pin this note so it never fades.');
+  };
+  drawPin(Boolean(m.pinned));
+  pin.addEventListener('click', async () => {
+    const next = pin.getAttribute('aria-pressed') !== 'true';
+    pin.disabled = true;
+    try {
+      const r = await ui.ctx.api(`/memories/${m.id}`, { method: 'PATCH', body: { pinned: next } });
+      m.pinned = Boolean(r?.pinned);
+      drawPin(m.pinned);
+    } catch {
+      drawPin(Boolean(m.pinned));
+    } finally {
+      pin.disabled = false;
+    }
+  });
+  actions.append(pin);
   if (m.source?.conversationId && m.source?.messageId) {
     const from = el('button', 'ghost small', t('Where she learned it'));
     from.type = 'button';

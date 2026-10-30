@@ -2,6 +2,7 @@
 // source turn, searched with SQLite FTS5 and injected under a small fixed budget. No embeddings, no
 // second model.
 import type { DatabaseSync } from 'node:sqlite';
+import { bracketNote, DEFAULT_DECAY, type DecayPolicy, matchedWords, type PickNote, pickNote, policyId, type PolicyWithId, PRESET_HALF_LIFE, queryWords, rankMemories } from './memory-rank.ts';
 
 /**
  * fact: about the owner. self: something Sara said about her own life/opinions (her continuity).
@@ -36,6 +37,12 @@ export interface Memory {
   resolvedAt: string | null;
   /** Phase 44: fact: the library document it was learned from (evidence = words from it). */
   sourceDocId: number | null;
+  /** Phase 76: never fades; always a candidate (still under the budget). */
+  pinned: boolean;
+  /** Phase 76: local day it last went into a prompt because it matched. */
+  lastUsedOn: string | null;
+  /** Phase 76: days it was used that way (at most +1 per day). */
+  useCount: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -93,23 +100,17 @@ function toMemory(r: Row): Memory {
     mentionedOn: (r.mentioned_on as string | null) ?? null,
     resolvedAt: (r.resolved_at as string | null) ?? null,
     sourceDocId: r.source_doc_id === null || r.source_doc_id === undefined ? null : Number(r.source_doc_id),
+    pinned: Boolean(r.pinned),
+    lastUsedOn: (r.last_used_on as string | null | undefined) ?? null,
+    useCount: Number(r.use_count ?? 0),
     createdAt: String(r.created_at),
     updatedAt: String(r.updated_at),
   };
 }
 
-const STOP = new Set(
-  'the and for are but not you your yours with this that what when where which who whom why how was were have has had did does do can could would should will shall about from into onto over under than then them they their there these those his her hers him she he its it’s it\'s our ours out just like also very really some any all each more most much many such only own same too again once here been being because while during before after above below off between both few nor other yes no okay ok hey hi hello please thanks thank tell me my mine myself i im i\'m you\'re youre we us remember know think'.split(
-    /\s+/,
-  ),
-);
-
 /** Turns free text into a safe FTS5 OR-query of meaningful words (quoted, so no FTS syntax leaks in). */
 export function ftsQuery(text: string): string | null {
-  const words = (text.toLowerCase().match(/[\p{L}\p{N}][\p{L}\p{N}'-]*/gu) ?? [])
-    .map((w) => w.replace(/'s$/, '').replace(/['"-]/g, ''))
-    .filter((w) => w.length >= 3 && !STOP.has(w));
-  const uniq = [...new Set(words)].slice(0, 24);
+  const uniq = queryWords(text);
   return uniq.length ? uniq.map((w) => `"${w}"`).join(' OR ') : null;
 }
 
@@ -125,7 +126,7 @@ export class MemoryStore {
     db.exec(SCHEMA);
     // Phase 12 columns (added in place on older databases).
     const cols = new Set((db.prepare('PRAGMA table_info(memories)').all() as { name: string }[]).map((c) => c.name));
-    for (const [c, type] of [['on_date', 'TEXT'], ['superseded_by', 'INTEGER'], ['mentioned_on', 'TEXT'], ['resolved_at', 'TEXT'], ['source_doc_id', 'INTEGER']]) if (!cols.has(c)) db.exec(`ALTER TABLE memories ADD COLUMN ${c} ${type}`);
+    for (const [c, type] of [['on_date', 'TEXT'], ['superseded_by', 'INTEGER'], ['mentioned_on', 'TEXT'], ['resolved_at', 'TEXT'], ['source_doc_id', 'INTEGER'], ['pinned', 'INTEGER NOT NULL DEFAULT 0'], ['last_used_on', 'TEXT'], ['use_count', 'INTEGER NOT NULL DEFAULT 0']]) if (!cols.has(c)) db.exec(`ALTER TABLE memories ADD COLUMN ${c} ${type}`);
   }
 
   add(m: { kind: MemoryKind; content: string; conversationId: string | null; sourceMessageId: number | null; sourceFromId?: number | null; happenedOn: string; evidence?: string | null; onDate?: string | null; sourceDocId?: number | null }): Memory {
@@ -143,8 +144,10 @@ export class MemoryStore {
     return r ? toMemory(r) : undefined;
   }
 
-  list(opts: { kind?: MemoryKind; q?: string; limit?: number } = {}): Memory[] {
+  list(opts: { kind?: MemoryKind; q?: string; limit?: number; pinned?: boolean } = {}): Memory[] {
     const limit = Math.min(500, opts.limit ?? 200);
+    // Phase 76: the Memory page's "Pinned" filter.
+    if (opts.pinned) return this.list({ ...opts, pinned: false, limit: 500 }).filter((m) => m.pinned).slice(0, limit);
     const q = opts.q ? ftsQuery(opts.q) : null;
     if (opts.q && !q) return [];
     if (q) {
@@ -157,6 +160,39 @@ export class MemoryStore {
       .prepare(`SELECT * FROM memories ${opts.kind ? 'WHERE kind = ?' : ''} ORDER BY happened_on DESC, id DESC LIMIT ?`)
       .all(...(opts.kind ? [opts.kind, limit] : [limit])) as Row[];
     return rows.map(toMemory);
+  }
+
+  /**
+   * Phase 76: word search with the matched words worked out in code (FTS5 + bm25 order), for the
+   * "why" of each note.
+   */
+  search(q: string, limit = 12): { memory: Memory; matched: string[] }[] {
+    const words = queryWords(q);
+    return this.list({ q, limit }).map((memory) => ({ memory, matched: matchedWords(words, memory.content) }));
+  }
+
+  /** Phase 76: pin a note (never fades) or unpin it. */
+  setPinned(id: number, on: boolean): Memory | undefined {
+    this.db.prepare('UPDATE memories SET pinned = ? WHERE id = ?').run(on ? 1 : 0, id);
+    return this.get(id);
+  }
+
+  /** Phase 76: pinned notes still in use (newest first). */
+  pinnedNotes(limit = 20): Memory[] {
+    return (this.db.prepare('SELECT * FROM memories WHERE pinned = 1 AND superseded_by IS NULL ORDER BY happened_on DESC, id DESC LIMIT ?').all(limit) as Row[]).map(toMemory);
+  }
+
+  /** Phase 76: notes most recently used because they matched (facts, decisions, about her). */
+  recentlyUsed(limit = 4): Memory[] {
+    return (this.db.prepare("SELECT * FROM memories WHERE last_used_on IS NOT NULL AND superseded_by IS NULL AND kind IN ('fact','decision','self','milestone') ORDER BY last_used_on DESC, id DESC LIMIT ?").all(limit) as Row[]).map(toMemory);
+  }
+
+  /** Phase 76: notes that went into a prompt because they matched: +1 use per local day at most. */
+  markUsed(ids: number[], day: string): number {
+    const st = this.db.prepare('UPDATE memories SET use_count = use_count + 1, last_used_on = ? WHERE id = ? AND (last_used_on IS NULL OR last_used_on <> ?)');
+    let n = 0;
+    for (const id of new Set(ids)) n += Number(st.run(day, id, day).changes);
+    return n;
   }
 
   /** Every note, newest first (Phase 38: for meaning-search vectors). */
@@ -404,12 +440,18 @@ export interface Injection {
   text: string;
   ids: number[];
   chars: number;
+  /** Phase 76: why and how sure, per injected note (in the order injected); saved as meta.memoryPicks. */
+  picks: PickNote[];
+  /** Phase 76: the decay policy used (M3 records it per step). */
+  policyId: string;
 }
 
 /**
- * Picks memories for this turn under a fixed character budget: FTS matches for the owner's message
- * first, then the most recent facts, then the latest summary from another conversation. Memories
- * whose source is still inside this conversation's visible history are skipped (already in context).
+ * Picks memories for this turn under a fixed character budget, best first (Phase 76: ranked by
+ * `rankMemories`: word and meaning matches, then standing notes weighted by freshness). Memories
+ * whose source is still inside this conversation's visible history are skipped (already in
+ * context). Each line keeps its dated kind tag first and, unless `notes: false` (voice calls, her
+ * day), ends with a short note: `[why: words "dog" + meaning; sure: high]`.
  */
 export function selectMemories(
   mem: MemoryStore,
@@ -418,53 +460,45 @@ export function selectMemories(
     conversationId: string;
     oldestHistoryId: number;
     budgetChars: number;
+    /** Before Phase 76: days before an un-matched note fades out (kept: maps to a half-life). */
     fadeDays?: number;
+    /** Phase 76: the decay policy (`decayPolicy(memorySettings)`); wins over fadeDays. */
+    policy?: PolicyWithId | DecayPolicy;
     today?: string;
     extra?: string[];
-    related?: Memory[];
+    /** Notes close in meaning; with scores (Phase 76) or plain (older callers). */
+    related?: ({ memory: Memory; score: number } | Memory)[];
     docName?: (id: number) => string | undefined;
     /** Phase 74: the page a document note's words are on (for page citations). */
     docPage?: (id: number, evidence: string | null) => number | undefined;
     importedFrom?: (conversationId: string) => string | undefined;
     /** Hardening M3: only notes this allows (another app's turn: none from private, imported or adult-channel conversations). */
     allow?: (m: Memory) => boolean;
+    /** Phase 76: the bracket note after each line (default on; off for anything spoken aloud). */
+    notes?: boolean;
+    /** Phase 76 (hook for M8 "change one input"): notes forced in or out. */
+    override?: { include?: number[]; exclude?: number[] };
   },
 ): Injection {
-  const inHistory = (m: Memory) => (m.conversationId === opts.conversationId && (m.sourceMessageId ?? 0) >= opts.oldestHistoryId) || m.supersededBy !== null || m.kind === 'date' || (m.kind === 'promise' && m.resolvedAt !== null);
-  const picked: Memory[] = [];
-  const seen = new Set<number>();
-  const push = (m: Memory) => {
-    if (seen.has(m.id) || inHistory(m) || (opts.allow && !opts.allow(m))) return;
-    seen.add(m.id);
-    picked.push(m);
-  };
-  for (const m of mem.list({ q: opts.userText, limit: 12 })) push(m);
-  // Phase 38: notes close in meaning (found by the embeddings job), right after the word matches.
-  for (const m of opts.related ?? []) push(m);
-  // Phase 32: with fading on, old notes come to mind only when the conversation brings them up
-  // (matched above); promises and dates never fade.
-  const cutoff = opts.fadeDays && opts.today ? new Date(Date.parse(`${opts.today}T12:00:00Z`) - opts.fadeDays * 86_400_000).toISOString().slice(0, 10) : '';
-  const fresh = (m: Memory) => !cutoff || m.happenedOn >= cutoff;
-  for (const m of mem.list({ kind: 'fact', limit: 5 })) if (fresh(m)) push(m);
-  for (const m of mem.list({ kind: 'self', limit: 3 })) if (fresh(m)) push(m);
-  // Phase 32: what you decided together, and promises still open, so she acts on them.
-  for (const m of mem.openPromises(4)) push(m);
-  for (const m of mem.list({ kind: 'decision', limit: 4 })) if (fresh(m)) push(m);
-  // The latest thing she noticed in her weekly look back.
-  for (const m of mem.list({ kind: 'reflection', limit: 1 })) push(m);
-  // Phase 32: the latest summaries of up to three other conversations (was one).
-  const convs = new Set<string>();
-  for (const m of mem.list({ kind: 'summary', limit: 12 })) {
-    if (m.conversationId === opts.conversationId || convs.has(m.conversationId ?? '') || convs.size >= 3 || !fresh(m)) continue;
-    convs.add(m.conversationId ?? '');
-    push(m);
-  }
+  const policy = opts.policy ?? (opts.fadeDays ? { ...DEFAULT_DECAY, halfLifeDays: opts.fadeDays } : { ...DEFAULT_DECAY, halfLifeDays: PRESET_HALF_LIFE.never });
+  const ranked = rankMemories(mem, {
+    query: opts.userText,
+    conversationId: opts.conversationId,
+    oldestHistoryId: opts.oldestHistoryId,
+    related: opts.related,
+    policy,
+    today: opts.today,
+    allow: opts.allow,
+    override: opts.override,
+  });
   const lines: string[] = [];
   const ids: number[] = [];
+  const picks: PickNote[] = [];
   let chars = 0;
   // Lines from elsewhere (owner facts shared by the other companions) come after her own.
   const extra = opts.extra ?? [];
-  for (const m of picked) {
+  for (const p of ranked) {
+    const m = p.memory;
     const tag =
       m.kind === 'summary'
         ? ', conversation summary'
@@ -484,10 +518,12 @@ export function selectMemories(
     // Phase 51: a note learned from imported history says so (another assistant was there, not her).
     const other = m.conversationId ? opts.importedFrom?.(m.conversationId) : undefined;
     const page = doc && m.sourceDocId !== null ? opts.docPage?.(m.sourceDocId, m.evidence ?? null) : undefined;
-    const line = `- (${m.happenedOn}${tag}${doc ? `, from the document "${doc}"${page ? `, page ${page}, cite: [p. ${page}](/#view=library:${m.sourceDocId}:${page})` : ''} in your library` : ''}${other ? `, learned from their imported ${other} history: that was ${other} talking with them, not you` : ''}) ${m.content.replace(/\s+/g, ' ').trim()}`;
+    // Phase 76: the note goes AFTER the content, so small models see the same thing first.
+    const line = `- (${m.happenedOn}${tag}${doc ? `, from the document "${doc}"${page ? `, page ${page}, cite: [p. ${page}](/#view=library:${m.sourceDocId}:${page})` : ''} in your library` : ''}${other ? `, learned from their imported ${other} history: that was ${other} talking with them, not you` : ''}) ${m.content.replace(/\s+/g, ' ').trim()}${opts.notes === false ? '' : ` ${bracketNote(p)}`}`;
     if (chars + line.length + 1 > opts.budgetChars) continue;
     lines.push(line);
     ids.push(m.id);
+    picks.push(pickNote(p));
     chars += line.length + 1;
   }
   for (const line of extra) {
@@ -495,5 +531,5 @@ export function selectMemories(
     lines.push(line);
     chars += line.length + 1;
   }
-  return { text: lines.join('\n'), ids, chars };
+  return { text: lines.join('\n'), ids, chars, picks, policyId: 'id' in policy ? (policy as PolicyWithId).id : policyId(policy) };
 }
